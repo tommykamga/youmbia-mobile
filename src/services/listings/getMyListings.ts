@@ -1,0 +1,84 @@
+/**
+ * Current user's listings (seller dashboard).
+ * Same table and image resolution as public feed; includes status and no status filter.
+ */
+
+import { supabase } from '@/lib/supabase';
+import { getSignedUrlsMap, toDisplayImageUrl } from '@/lib/listingImageUrl';
+import type { PublicListing } from './getPublicListings';
+
+export type MyListing = PublicListing & {
+  status: string;
+};
+
+type ListingImageRow = { url: string; sort_order: number | null };
+
+type ListingRow = {
+  id: string;
+  title: string;
+  price: number;
+  city: string;
+  created_at: string;
+  views_count: number | null;
+  user_id: string | null;
+  status: string | null;
+  listing_images: ListingImageRow[] | null;
+};
+
+function mapRow(row: ListingRow, signedMap: Map<string, string>): MyListing {
+  const base = {
+    id: row.id,
+    title: row.title,
+    price: row.price,
+    city: row.city,
+    created_at: row.created_at,
+    views_count: row.views_count ?? 0,
+    seller_id: row.user_id ?? '',
+  };
+  const images = (row.listing_images ?? [])
+    .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
+    .map((img) => toDisplayImageUrl(img.url ?? '', signedMap))
+    .filter((url) => url !== '');
+  return {
+    ...base,
+    images,
+    status: row.status ?? 'active',
+  };
+}
+
+export type GetMyListingsResult =
+  | { data: MyListing[]; error: null }
+  | { data: null; error: { message: string } };
+
+/**
+ * Fetches listings for the current user (any status), ordered by created_at desc.
+ */
+export async function getMyListings(): Promise<GetMyListingsResult> {
+  const {
+    data: { user },
+    error: userError,
+  } = await supabase.auth.getUser();
+
+  if (userError || !user) {
+    return { data: null, error: { message: 'Non connecté' } };
+  }
+
+  const { data, error } = await supabase
+    .from('listings')
+    .select(
+      'id, title, price, city, created_at, views_count, user_id, status, listing_images(url, sort_order)'
+    )
+    .eq('user_id', user.id)
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    return { data: null, error: { message: error.message } };
+  }
+
+  const list = (data ?? []) as ListingRow[];
+  const allPaths = list.flatMap((row) =>
+    (row.listing_images ?? []).map((img) => String(img.url ?? '').trim()).filter(Boolean)
+  );
+  const signedMap = await getSignedUrlsMap(allPaths);
+  return { data: list.map((row) => mapRow(row, signedMap)), error: null };
+}

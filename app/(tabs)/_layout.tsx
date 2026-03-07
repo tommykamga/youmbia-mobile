@@ -1,0 +1,169 @@
+/**
+ * Premium bottom tab bar – YOUMBIA brand, safe-area aware, cross-platform icons.
+ * Order: Home | Search | Vendre (center) | Favoris | Messages | Compte.
+ *
+ * Icons: @expo/vector-icons (Ionicons) – one icon set for iOS and Android, no platform branching.
+ *
+ * Sell tab: Currently a tab that redirects to /sell. It could later be refactored to a
+ * prominent FAB/action that opens the same flow without occupying a tab slot (see product decision).
+ */
+
+import React from 'react';
+import { View, Text, StyleSheet, Platform } from 'react-native';
+import { Tabs } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import Ionicons from '@expo/vector-icons/Ionicons';
+import { colors, spacing, radius, typography } from '@/theme';
+
+const ICON_SIZE = 24;
+const SELL_PILL_ICON_SIZE = 26;
+const SELL_PILL_SIZE = 44;
+
+const TAB_ICONS: Record<string, React.ComponentProps<typeof Ionicons>['name']> = {
+  home: 'home',
+  search: 'search',
+  favorites: 'heart',
+  messages: 'chatbubbles',
+  account: 'person',
+};
+
+function TabIcon({
+  name,
+  color,
+}: {
+  name: keyof typeof TAB_ICONS;
+  color: string;
+}) {
+  return (
+    <Ionicons
+      name={TAB_ICONS[name]}
+      size={ICON_SIZE}
+      color={color}
+    />
+  );
+}
+
+function SellTabIcon({ focused }: { focused: boolean }) {
+  return (
+    <View style={[styles.sellPill, focused && styles.sellPillFocused]}>
+      <Ionicons
+        name="add"
+        size={SELL_PILL_ICON_SIZE}
+        color={colors.surface}
+      />
+    </View>
+  );
+}
+
+export default function TabLayout() {
+  const insets = useSafeAreaInsets();
+  const tabBarPaddingBottom = insets.bottom > 0 ? insets.bottom : spacing.sm;
+
+  return (
+    <Tabs
+      screenOptions={{
+        tabBarActiveTintColor: colors.tabIconSelected,
+        tabBarInactiveTintColor: colors.tabIconDefault,
+        tabBarStyle: [
+          styles.tabBar,
+          { paddingBottom: tabBarPaddingBottom, paddingTop: spacing.sm },
+        ],
+        tabBarLabelStyle: styles.tabBarLabel,
+        tabBarItemStyle: styles.tabBarItem,
+        headerStyle: { backgroundColor: colors.surface },
+        headerTitleStyle: {
+          fontWeight: '700',
+          color: colors.text,
+          fontSize: typography.base.fontSize,
+        },
+        headerShadowVisible: false,
+        headerTintColor: colors.text,
+      }}
+    >
+      <Tabs.Screen
+        name="home"
+        options={{
+          title: 'Accueil',
+          headerShown: false,
+          tabBarIcon: ({ color }) => <TabIcon name="home" color={color} />,
+        }}
+      />
+      <Tabs.Screen
+        name="search"
+        options={{
+          title: 'Recherche',
+          tabBarIcon: ({ color }) => <TabIcon name="search" color={color} />,
+        }}
+      />
+      <Tabs.Screen
+        name="sell"
+        options={{
+          title: 'Vendre',
+          tabBarIcon: ({ focused }) => <SellTabIcon focused={focused} />,
+          tabBarLabelStyle: [styles.tabBarLabel, styles.sellLabel],
+        }}
+      />
+      <Tabs.Screen
+        name="favorites"
+        options={{
+          title: 'Favoris',
+          tabBarIcon: ({ color }) => <TabIcon name="favorites" color={color} />,
+        }}
+      />
+      <Tabs.Screen
+        name="messages"
+        options={{
+          title: 'Messages',
+          tabBarIcon: ({ color }) => <TabIcon name="messages" color={color} />,
+        }}
+      />
+      <Tabs.Screen
+        name="account"
+        options={{
+          title: 'Compte',
+          tabBarIcon: ({ color }) => <TabIcon name="account" color={color} />,
+        }}
+      />
+    </Tabs>
+  );
+}
+
+const styles = StyleSheet.create({
+  tabBar: {
+    backgroundColor: colors.surface,
+    borderTopColor: colors.borderLight,
+    borderTopWidth: 1,
+    minHeight: 56,
+  },
+  tabBarLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  tabBarItem: {
+    paddingVertical: spacing.xs,
+  },
+  sellPill: {
+    width: SELL_PILL_SIZE,
+    height: SELL_PILL_SIZE,
+    borderRadius: radius.full,
+    backgroundColor: colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...Platform.select({
+      ios: {
+        shadowColor: colors.primary,
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.25,
+        shadowRadius: 4,
+      },
+      android: { elevation: 4 },
+    }),
+  },
+  sellPillFocused: {
+    backgroundColor: colors.primaryDark,
+  },
+  sellLabel: {
+    color: colors.primary,
+    fontWeight: '700',
+  },
+});
