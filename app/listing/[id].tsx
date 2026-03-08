@@ -13,6 +13,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Screen, Button, Loader, EmptyState, AppHeader } from '@/components';
 import { getListingById, type ListingDetail } from '@/services/listings';
 import { getFavoriteIds, toggleFavorite } from '@/services/favorites';
+import { addRecentlyViewedListingId } from '@/services/recentlyViewed';
 import { getOrCreateConversation } from '@/services/conversations';
 import { getSession } from '@/services/auth';
 import { reportListing } from '@/services/reports';
@@ -91,6 +92,7 @@ export default function ListingDetailScreen() {
         return;
       }
       setState({ status: 'success', listing: listingResult.data! });
+      addRecentlyViewedListingId(id);
       if (favResult.data && id) {
         setIsFavorite(favResult.data.includes(id));
       }
@@ -236,6 +238,8 @@ export default function ListingDetailScreen() {
             views_count={listing.views_count}
             isFavorite={isFavorite}
             onFavoritePress={handleFavoritePress}
+            district={listing.district}
+            urgent={listing.urgent}
           />
           <ListingSeller
             listing={listing}

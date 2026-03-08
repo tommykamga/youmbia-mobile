@@ -19,6 +19,9 @@ import { colors, spacing, typography, fontWeights, radius } from '@/theme';
 import { createListing, uploadListingImages } from '@/services/listings';
 import { getSession } from '@/services/auth';
 
+/** Galerie améliorée : jusqu'à 12 photos par annonce. */
+const MAX_LISTING_IMAGES = 12;
+
 type PickedImage = { uri: string; base64: string | null };
 
 export default function SellScreen() {
@@ -57,7 +60,7 @@ export default function SellScreen() {
       uri: a.uri,
       base64: a.base64 ?? null,
     }));
-    setImages((prev) => [...prev, ...newImages].slice(0, 10));
+    setImages((prev) => [...prev, ...newImages].slice(0, MAX_LISTING_IMAGES));
     setSubmitError(null);
   };
 
@@ -230,7 +233,7 @@ export default function SellScreen() {
               </Button>
             </View>
           ))}
-          {images.length < 10 && (
+          {images.length < MAX_LISTING_IMAGES && (
             <Button variant="outline" size="md" onPress={pickImages} style={styles.addPhotoBtn}>
               + Photo
             </Button>

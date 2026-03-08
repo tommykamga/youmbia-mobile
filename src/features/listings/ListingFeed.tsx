@@ -1,11 +1,16 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { FlatList, RefreshControl, StyleSheet, View } from 'react-native';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { FlatList, RefreshControl, StyleSheet, View, Pressable, Text, ActivityIndicator } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { getPublicListings, type PublicListing } from '@/services/listings';
 import { getFavoriteIds, toggleFavorite } from '@/services/favorites';
+import { sortListings, type SortOption } from '@/utils/sortListings';
 import { ListingCard } from './ListingCard';
 import { Loader, EmptyState, SkeletonListingCard } from '@/components';
-import { spacing, colors } from '@/theme';
+import { spacing, colors, typography, fontWeights, radius } from '@/theme';
+
+const PAGE_SIZE = 20;
+const INITIAL_NUM_TO_RENDER = 10;
+const WINDOW_SIZE = 6;
 
 type FeedState =
   | { status: 'loading' }
@@ -21,27 +26,49 @@ export type ListingFeedProps = {
 export function ListingFeed({ listHeaderComponent }: ListingFeedProps) {
   const router = useRouter();
   const [state, setState] = useState<FeedState>({ status: 'loading' });
+  const [sortBy, setSortBy] = useState<SortOption>('recent');
   const [favoriteIds, setFavoriteIds] = useState<Set<string>>(new Set());
   const [refreshing, setRefreshing] = useState(false);
   const hasLoadedListingsRef = useRef(false);
+  const loadingMoreRef = useRef(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(true);
+  const [loadMoreError, setLoadMoreError] = useState<string | null>(null);
+  const hasMoreRef = useRef(true);
+  const favoriteIdsRef = useRef<Set<string>>(new Set());
+  favoriteIdsRef.current = favoriteIds;
 
-  const load = useCallback(async () => {
-    const [listResult, favResult] = await Promise.all([
-      getPublicListings(),
-      getFavoriteIds(),
-    ]);
+  const load = useCallback(async (pageOffset: number = 0, append: boolean = false) => {
+    const listResult = await getPublicListings(pageOffset, PAGE_SIZE);
     if (listResult.error) {
-      setState({ status: 'error', message: listResult.error.message });
+      if (!append) setState({ status: 'error', message: listResult.error.message });
+      else setLoadMoreError(listResult.error.message);
       return;
     }
     const list = listResult.data ?? [];
-    setState(
-      list.length === 0
-        ? { status: 'empty' }
-        : { status: 'success', data: list }
-    );
-    if (favResult.data) {
-      setFavoriteIds(new Set(favResult.data));
+    if (append) {
+      setLoadMoreError(null);
+      setState((prev) => {
+        if (prev.status !== 'success') return prev;
+        const seen = new Set(prev.data.map((i) => i.id));
+        const added = list.filter((i) => !seen.has(i.id));
+        if (added.length === 0) return prev;
+        return { status: 'success' as const, data: [...prev.data, ...added] };
+      });
+      const isLastPage = list.length < PAGE_SIZE;
+      hasMoreRef.current = !isLastPage;
+      setHasMore(!isLastPage);
+    } else {
+      setLoadMoreError(null);
+      const favResult = await getFavoriteIds();
+      if (favResult.data) setFavoriteIds(new Set(favResult.data));
+      setState(
+        list.length === 0
+          ? { status: 'empty' }
+          : { status: 'success', data: list }
+      );
+      hasMoreRef.current = true;
+      setHasMore(true);
     }
   }, []);
 
@@ -50,7 +77,7 @@ export function ListingFeed({ listHeaderComponent }: ListingFeedProps) {
     if (hasLoadedListingsRef.current) return;
     hasLoadedListingsRef.current = true;
     let cancelled = false;
-    load().then(() => {
+    load(0, false).then(() => {
       if (!cancelled) setRefreshing(false);
     });
     return () => { cancelled = true; };
@@ -70,12 +97,12 @@ export function ListingFeed({ listHeaderComponent }: ListingFeedProps) {
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
-    load().finally(() => setRefreshing(false));
+    load(0, false).finally(() => setRefreshing(false));
   }, [load]);
 
   const handleFavoritePress = useCallback(
     async (listingId: string) => {
-      const nextFavorite = !favoriteIds.has(listingId);
+      const nextFavorite = !favoriteIdsRef.current.has(listingId);
       setFavoriteIds((prev) => {
         const next = new Set(prev);
         if (nextFavorite) next.add(listingId);
@@ -96,7 +123,7 @@ export function ListingFeed({ listHeaderComponent }: ListingFeedProps) {
         return;
       }
     },
-    [favoriteIds, router]
+    [router]
   );
 
   const keyExtractor = useCallback((item: PublicListing) => item.id, []);
@@ -108,12 +135,108 @@ export function ListingFeed({ listHeaderComponent }: ListingFeedProps) {
         onFavoritePress={() => handleFavoritePress(item.id)}
       />
     ),
-    [favoriteIds, handleFavoritePress]
+    [handleFavoritePress]
   );
   const itemSeparator = useCallback(
     () => <View style={styles.separator} />,
     []
   );
+
+  const loadMore = useCallback(() => {
+    if (state.status !== 'success' || loadingMoreRef.current || !hasMoreRef.current) return;
+    const currentLength = state.data.length;
+    if (currentLength === 0) return;
+    loadingMoreRef.current = true;
+    setLoadingMore(true);
+    load(currentLength, true).finally(() => {
+      loadingMoreRef.current = false;
+      setLoadingMore(false);
+    });
+  }, [state.status, state.status === 'success' ? state.data.length : 0, load]);
+
+  const sortedListings = useMemo(() => {
+    const list = state.status === 'success' ? state.data : [];
+    return sortListings(list, sortBy);
+  }, [state.status, state.status === 'success' ? state.data : null, sortBy]);
+
+  const sortHeader = useMemo(
+    () => (
+      <View style={styles.sortContainer}>
+        <Pressable
+          style={[styles.sortOption, sortBy === 'recent' && styles.sortOptionActive]}
+          onPress={() => setSortBy('recent')}
+        >
+          <Text style={[styles.sortOptionText, sortBy === 'recent' && styles.sortOptionTextActive]}>
+            Plus récentes
+          </Text>
+        </Pressable>
+        <Pressable
+          style={[styles.sortOption, sortBy === 'price_asc' && styles.sortOptionActive]}
+          onPress={() => setSortBy('price_asc')}
+        >
+          <Text style={[styles.sortOptionText, sortBy === 'price_asc' && styles.sortOptionTextActive]}>
+            Prix ↑
+          </Text>
+        </Pressable>
+        <Pressable
+          style={[styles.sortOption, sortBy === 'price_desc' && styles.sortOptionActive]}
+          onPress={() => setSortBy('price_desc')}
+        >
+          <Text style={[styles.sortOptionText, sortBy === 'price_desc' && styles.sortOptionTextActive]}>
+            Prix ↓
+          </Text>
+        </Pressable>
+      </View>
+    ),
+    [sortBy]
+  );
+
+  const listHeader = useMemo(
+    () => (
+      <>
+        {listHeaderComponent}
+        {state.status === 'success' && sortHeader}
+      </>
+    ),
+    [listHeaderComponent, state.status, sortHeader]
+  );
+
+  const listFooter = useMemo(() => {
+    const dataLength = state.status === 'success' ? state.data.length : 0;
+    if (state.status !== 'success' || dataLength === 0) return null;
+    if (loadingMore) {
+      return (
+        <View style={styles.footer}>
+          <ActivityIndicator size="small" color={colors.primary} />
+          <Text style={styles.footerText}>Chargement…</Text>
+        </View>
+      );
+    }
+    if (loadMoreError) {
+      return (
+        <View style={styles.footer}>
+          <Text style={styles.footerError}>{loadMoreError}</Text>
+          <Pressable
+            style={({ pressed }) => [styles.footerRetry, pressed && styles.footerRetryPressed]}
+            onPress={() => {
+              setLoadMoreError(null);
+              load(dataLength, true);
+            }}
+          >
+            <Text style={styles.footerRetryText}>Réessayer</Text>
+          </Pressable>
+        </View>
+      );
+    }
+    if (!hasMore) {
+      return (
+        <View style={styles.footer}>
+          <Text style={styles.footerEnd}>Fin des annonces</Text>
+        </View>
+      );
+    }
+    return null;
+  }, [state.status, state.status === 'success' ? state.data.length : 0, loadingMore, hasMore, loadMoreError, load]);
 
   if (state.status === 'loading') {
     return (
@@ -125,6 +248,9 @@ export function ListingFeed({ listHeaderComponent }: ListingFeedProps) {
         ListHeaderComponent={listHeaderComponent ?? null}
         contentContainerStyle={styles.listContent}
         showsVerticalScrollIndicator={false}
+        initialNumToRender={6}
+        windowSize={4}
+        removeClippedSubviews
       />
     );
   }
@@ -157,13 +283,20 @@ export function ListingFeed({ listHeaderComponent }: ListingFeedProps) {
   /* No key prop on FlatList — preserves scroll position when returning from listing detail. */
   return (
     <FlatList
-      data={state.data}
+      data={sortedListings}
       keyExtractor={keyExtractor}
       renderItem={renderItem}
       ItemSeparatorComponent={itemSeparator}
-      ListHeaderComponent={listHeaderComponent ?? null}
+      ListHeaderComponent={listHeader}
+      ListFooterComponent={listFooter}
       contentContainerStyle={styles.listContent}
       showsVerticalScrollIndicator={false}
+      initialNumToRender={INITIAL_NUM_TO_RENDER}
+      maxToRenderPerBatch={6}
+      windowSize={WINDOW_SIZE}
+      removeClippedSubviews
+      onEndReached={loadMore}
+      onEndReachedThreshold={0.4}
       refreshControl={
         <RefreshControl
           refreshing={refreshing}
@@ -186,5 +319,65 @@ const styles = StyleSheet.create({
   },
   separator: {
     height: spacing.base,
+  },
+  sortContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.base,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.borderLight,
+  },
+  sortOption: {
+    paddingVertical: spacing.xs,
+    paddingHorizontal: spacing.sm,
+    borderRadius: radius.lg,
+  },
+  sortOptionActive: {
+    backgroundColor: colors.primary + '20',
+  },
+  sortOptionText: {
+    ...typography.sm,
+    color: colors.textMuted,
+    fontWeight: fontWeights.medium,
+  },
+  sortOptionTextActive: {
+    color: colors.primary,
+    fontWeight: fontWeights.semibold,
+  },
+  footer: {
+    paddingVertical: spacing['2xl'],
+    paddingHorizontal: spacing.base,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 56,
+  },
+  footerText: {
+    ...typography.xs,
+    color: colors.textMuted,
+    marginTop: spacing.sm,
+  },
+  footerError: {
+    ...typography.sm,
+    color: colors.textMuted,
+    textAlign: 'center',
+    marginBottom: spacing.sm,
+  },
+  footerRetry: {
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.base,
+  },
+  footerRetryPressed: {
+    opacity: 0.8,
+  },
+  footerRetryText: {
+    ...typography.sm,
+    fontWeight: fontWeights.semibold,
+    color: colors.primary,
+  },
+  footerEnd: {
+    ...typography.xs,
+    color: colors.textTertiary,
   },
 });

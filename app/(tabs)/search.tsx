@@ -3,7 +3,7 @@
  * Complete search: query input, loading/error/empty/results, ListingCard, tap → listing detail.
  * Data: searchListings(query) → title/city/description ilike; instant suggestions (debounced).
  */
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -22,6 +22,8 @@ import { ListingCard } from '@/features/listings';
 import { searchListings } from '@/services/listings';
 import { getSearchSuggestions } from '@/services/searchSuggestions';
 import { getFavoriteIds as getFavIds, toggleFavorite as toggleFav } from '@/services/favorites';
+import { sortListings, type SortOption } from '@/utils/sortListings';
+import { saveSearch } from '@/services/savedSearches';
 import type { PublicListing } from '@/services/listings';
 import { colors, spacing, typography, fontWeights, radius } from '@/theme';
 
@@ -36,11 +38,15 @@ type SearchState =
 
 export default function SearchScreen() {
   const router = useRouter();
-  const params = useLocalSearchParams<{ q?: string }>();
+  const params = useLocalSearchParams<{ q?: string; priceMin?: string; priceMax?: string }>();
   const [query, setQuery] = useState('');
   const [submittedQuery, setSubmittedQuery] = useState('');
   const [state, setState] = useState<SearchState>({ status: 'idle' });
+  const [sortBy, setSortBy] = useState<SortOption>('recent');
+  const [priceMin, setPriceMin] = useState<string>('');
+  const [priceMax, setPriceMax] = useState<string>('');
   const [favoriteIds, setFavoriteIds] = useState<Set<string>>(new Set());
+  const [savedSearchFeedback, setSavedSearchFeedback] = useState(false);
   const [suggestions, setSuggestions] = useState<string[]>([]);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const resultsListRef = useRef<FlatList<PublicListing> | null>(null);
@@ -94,6 +100,12 @@ export default function SearchScreen() {
   // eslint-disable-next-line react-hooks/exhaustive-deps -- only run when q param is set from navigation
   }, [params.q]);
 
+  /** Pre-fill price filters from URL (e.g. from saved search). */
+  useEffect(() => {
+    if (typeof params.priceMin === 'string' && params.priceMin.trim()) setPriceMin(params.priceMin.trim());
+    if (typeof params.priceMax === 'string' && params.priceMax.trim()) setPriceMax(params.priceMax.trim());
+  }, [params.priceMin, params.priceMax]);
+
   const runSearch = useCallback(async (q: string) => {
     const trimmed = q.trim();
     if (!trimmed) {
@@ -138,6 +150,16 @@ export default function SearchScreen() {
     [runSearch]
   );
 
+  const handleSaveSearch = useCallback(() => {
+    saveSearch({
+      query: submittedQuery,
+      priceMin: priceMinNum,
+      priceMax: priceMaxNum,
+    });
+    setSavedSearchFeedback(true);
+    setTimeout(() => setSavedSearchFeedback(false), 2000);
+  }, [submittedQuery, priceMinNum, priceMaxNum]);
+
   const handleFavoritePress = useCallback(
     async (listingId: string) => {
       const nextFavorite = !favoriteIds.has(listingId);
@@ -175,6 +197,61 @@ export default function SearchScreen() {
     [favoriteIds, handleFavoritePress]
   );
   const itemSeparator = useCallback(() => <View style={styles.separator} />, []);
+
+  const sortedListings = useMemo(() => {
+    const list = state.status === 'success' ? state.data : [];
+    return sortListings(list, sortBy);
+  }, [state.status, state.status === 'success' ? state.data : null, sortBy]);
+
+  const priceMinNum = useMemo(() => {
+    const n = parseInt(priceMin.trim(), 10);
+    return Number.isNaN(n) ? null : n;
+  }, [priceMin]);
+  const priceMaxNum = useMemo(() => {
+    const n = parseInt(priceMax.trim(), 10);
+    return Number.isNaN(n) ? null : n;
+  }, [priceMax]);
+
+  const filteredListings = useMemo(() => {
+    return sortedListings.filter((l) => {
+      const p = l.price ?? 0;
+      if (priceMinNum != null && p < priceMinNum) return false;
+      if (priceMaxNum != null && p > priceMaxNum) return false;
+      return true;
+    });
+  }, [sortedListings, priceMinNum, priceMaxNum]);
+
+  const sortBar = useMemo(
+    () => (
+      <View style={styles.sortContainer}>
+        <Pressable
+          style={[styles.sortOption, sortBy === 'recent' && styles.sortOptionActive]}
+          onPress={() => setSortBy('recent')}
+        >
+          <Text style={[styles.sortOptionText, sortBy === 'recent' && styles.sortOptionTextActive]}>
+            Plus récentes
+          </Text>
+        </Pressable>
+        <Pressable
+          style={[styles.sortOption, sortBy === 'price_asc' && styles.sortOptionActive]}
+          onPress={() => setSortBy('price_asc')}
+        >
+          <Text style={[styles.sortOptionText, sortBy === 'price_asc' && styles.sortOptionTextActive]}>
+            Prix ↑
+          </Text>
+        </Pressable>
+        <Pressable
+          style={[styles.sortOption, sortBy === 'price_desc' && styles.sortOptionActive]}
+          onPress={() => setSortBy('price_desc')}
+        >
+          <Text style={[styles.sortOptionText, sortBy === 'price_desc' && styles.sortOptionTextActive]}>
+            Prix ↓
+          </Text>
+        </Pressable>
+      </View>
+    ),
+    [sortBy]
+  );
 
   return (
     <Screen>
@@ -273,16 +350,51 @@ export default function SearchScreen() {
         )}
 
         {state.status === 'success' && (
-          <FlatList
-            ref={resultsListRef}
-            data={state.data}
-            keyExtractor={keyExtractor}
-            renderItem={renderItem}
-            ItemSeparatorComponent={itemSeparator}
-            contentContainerStyle={styles.listContent}
-            showsVerticalScrollIndicator={false}
-            keyboardShouldPersistTaps="handled"
-          />
+          <>
+            {sortBar}
+            <View style={styles.filterRow}>
+              <Text style={styles.filterLabel}>Prix min (FCFA)</Text>
+              <TextInput
+                style={styles.filterInput}
+                value={priceMin}
+                onChangeText={setPriceMin}
+                placeholder="Min"
+                placeholderTextColor={colors.textMuted}
+                keyboardType="number-pad"
+              />
+              <Text style={styles.filterLabel}>Prix max (FCFA)</Text>
+              <TextInput
+                style={styles.filterInput}
+                value={priceMax}
+                onChangeText={setPriceMax}
+                placeholder="Max"
+                placeholderTextColor={colors.textMuted}
+                keyboardType="number-pad"
+              />
+            </View>
+            <Pressable
+              style={({ pressed }) => [styles.saveSearchBtn, pressed && styles.saveSearchBtnPressed]}
+              onPress={handleSaveSearch}
+            >
+              <Ionicons name="bookmark-outline" size={18} color={colors.primary} style={styles.saveSearchIcon} />
+              <Text style={styles.saveSearchLabel}>
+                {savedSearchFeedback ? 'Recherche sauvegardée ✓' : 'Sauvegarder cette recherche'}
+              </Text>
+            </Pressable>
+            <FlatList
+              ref={resultsListRef}
+              data={filteredListings}
+              keyExtractor={keyExtractor}
+              renderItem={renderItem}
+              ItemSeparatorComponent={itemSeparator}
+              contentContainerStyle={styles.listContent}
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+              initialNumToRender={10}
+              windowSize={6}
+              removeClippedSubviews
+            />
+          </>
         )}
       </KeyboardAvoidingView>
     </Screen>
@@ -390,5 +502,74 @@ const styles = StyleSheet.create({
   },
   separator: {
     height: spacing.base,
+  },
+  sortContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.base,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.borderLight,
+  },
+  sortOption: {
+    paddingVertical: spacing.xs,
+    paddingHorizontal: spacing.sm,
+    borderRadius: radius.lg,
+  },
+  sortOptionActive: {
+    backgroundColor: colors.primary + '20',
+  },
+  sortOptionText: {
+    ...typography.sm,
+    color: colors.textMuted,
+    fontWeight: fontWeights.medium,
+  },
+  sortOptionTextActive: {
+    color: colors.primary,
+    fontWeight: fontWeights.semibold,
+  },
+  filterRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.base,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.borderLight,
+  },
+  filterLabel: {
+    ...typography.xs,
+    color: colors.textMuted,
+  },
+  filterInput: {
+    minWidth: 72,
+    paddingVertical: spacing.xs,
+    paddingHorizontal: spacing.sm,
+    borderWidth: 1,
+    borderColor: colors.borderLight,
+    borderRadius: radius.lg,
+    ...typography.sm,
+    color: colors.text,
+  },
+  saveSearchBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.base,
+    marginBottom: spacing.sm,
+  },
+  saveSearchBtnPressed: {
+    opacity: 0.8,
+  },
+  saveSearchIcon: {
+    marginRight: spacing.xs,
+  },
+  saveSearchLabel: {
+    ...typography.sm,
+    fontWeight: fontWeights.semibold,
+    color: colors.primary,
   },
 });

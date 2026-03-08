@@ -1,31 +1,25 @@
 /**
- * NearYouSection – "Près de vous" block: 4–6 listings from user's city or latest as fallback.
- * Horizontal FlatList, NearYouCard (variante locale), snap, perfs, "Voir plus" to search.
+ * Pour vous – section recommandations (catégories consultées / favoris).
+ * MVP : affiche les premières annonces du feed ; à brancher plus tard sur un endpoint dédié.
  */
 
 import React, { useCallback, useEffect, useState } from 'react';
-import { View, Text, StyleSheet, FlatList, Pressable } from 'react-native';
+import { View, Text, StyleSheet, FlatList } from 'react-native';
 import { useRouter } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { getListingsByCity, getPublicListings } from '@/services/listings';
+import { getPublicListings } from '@/services/listings';
 import { getFavoriteIds, toggleFavorite } from '@/services/favorites';
-import { NearYouCard } from './NearYouCard';
+import { ListingCard } from './ListingCard';
 import type { PublicListing } from '@/services/listings';
 import { colors, spacing, typography, fontWeights } from '@/theme';
 
-const NEAR_YOU_LIMIT = 6;
+const FOR_YOU_LIMIT = 6;
 const CARD_WIDTH = 168;
 const CARD_GAP = spacing.sm;
 const ITEM_WIDTH = CARD_WIDTH + CARD_GAP;
 const INITIAL_NUM_TO_RENDER = 4;
-const WINDOW_SIZE = 5;
 
-export type NearYouSectionProps = {
-  /** User city for local listings; when null/empty, show latest listings. */
-  userCity?: string | null;
-};
-
-export function NearYouSection({ userCity }: NearYouSectionProps) {
+export function ForYouSection() {
   const router = useRouter();
   const [listings, setListings] = useState<PublicListing[]>([]);
   const [favoriteIds, setFavoriteIds] = useState<Set<string>>(new Set());
@@ -33,23 +27,12 @@ export function NearYouSection({ userCity }: NearYouSectionProps) {
 
   const load = useCallback(async () => {
     setLoading(true);
-    const city = userCity?.trim();
-    if (city) {
-      const result = await getListingsByCity(city, NEAR_YOU_LIMIT);
-      if (result.error) {
-        const fallback = await getPublicListings();
-        setListings((fallback.data ?? []).slice(0, NEAR_YOU_LIMIT));
-      } else {
-        setListings(result.data ?? []);
-      }
-    } else {
-      const result = await getPublicListings();
-      setListings((result.data ?? []).slice(0, NEAR_YOU_LIMIT));
-    }
+    const result = await getPublicListings(0, FOR_YOU_LIMIT);
+    setListings(result.data ?? []);
     const fav = await getFavoriteIds();
     if (fav.data) setFavoriteIds(new Set(fav.data));
     setLoading(false);
-  }, [userCity]);
+  }, []);
 
   useEffect(() => {
     load();
@@ -80,15 +63,6 @@ export function NearYouSection({ userCity }: NearYouSectionProps) {
     [favoriteIds, router]
   );
 
-  const handleVoirPlus = useCallback(() => {
-    const city = userCity?.trim();
-    if (city) {
-      router.push(`/(tabs)/search?q=${encodeURIComponent(city)}`);
-    } else {
-      router.push('/(tabs)/search');
-    }
-  }, [userCity, router]);
-
   if (loading || listings.length === 0) {
     return null;
   }
@@ -96,13 +70,8 @@ export function NearYouSection({ userCity }: NearYouSectionProps) {
   return (
     <View style={styles.section}>
       <View style={styles.titleRow}>
-        <Ionicons
-          name="location-outline"
-          size={18}
-          color={colors.textMuted}
-          style={styles.titleIcon}
-        />
-        <Text style={styles.title}>Près de vous</Text>
+        <Ionicons name="sparkles-outline" size={18} color={colors.textMuted} style={styles.titleIcon} />
+        <Text style={styles.title}>Pour vous</Text>
       </View>
       <FlatList
         data={listings}
@@ -117,29 +86,21 @@ export function NearYouSection({ userCity }: NearYouSectionProps) {
           index,
         })}
         initialNumToRender={INITIAL_NUM_TO_RENDER}
-        windowSize={WINDOW_SIZE}
+        windowSize={5}
         removeClippedSubviews
         snapToInterval={ITEM_WIDTH}
         snapToAlignment="start"
         decelerationRate="fast"
         renderItem={({ item }) => (
           <View style={styles.cardWrap}>
-            <NearYouCard
+            <ListingCard
               listing={item}
               isFavorite={favoriteIds.has(item.id)}
               onFavoritePress={() => handleFavoritePress(item.id)}
-              userCity={userCity}
             />
           </View>
         )}
       />
-      <Pressable
-        style={({ pressed }) => [styles.voirPlus, pressed && styles.voirPlusPressed]}
-        onPress={handleVoirPlus}
-      >
-        <Text style={styles.voirPlusLabel}>Voir plus</Text>
-        <Ionicons name="chevron-forward" size={16} color={colors.primary} />
-      </Pressable>
     </View>
   );
 }
@@ -158,7 +119,7 @@ const styles = StyleSheet.create({
   },
   title: {
     ...typography.sm,
-    fontWeight: fontWeights.bold,
+    fontWeight: fontWeights.semibold,
     color: colors.text,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
@@ -174,21 +135,5 @@ const styles = StyleSheet.create({
   cardWrap: {
     width: ITEM_WIDTH,
     marginRight: 0,
-  },
-  voirPlus: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    alignSelf: 'flex-start',
-    paddingVertical: spacing.sm,
-    paddingRight: spacing.xs,
-    marginTop: spacing.xs,
-  },
-  voirPlusPressed: {
-    opacity: 0.8,
-  },
-  voirPlusLabel: {
-    ...typography.sm,
-    fontWeight: fontWeights.semibold,
-    color: colors.primary,
   },
 });

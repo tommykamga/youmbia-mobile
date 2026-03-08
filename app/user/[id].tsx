@@ -1,17 +1,21 @@
 /**
  * Public seller profile – Sprint 5.2.
- * Header (name, verified, join date), trust section, seller's listings.
+ * Header (name, verified, join date), trust section, seller's listings, report user.
  */
 
-import React, { useCallback, useEffect, useState } from 'react';
-import { View, Text, StyleSheet, FlatList } from 'react-native';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { View, Text, StyleSheet, FlatList, Modal, Pressable, Alert } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
-import { Screen, AppHeader, Loader, EmptyState } from '@/components';
+import { Screen, AppHeader, Loader, EmptyState, Button } from '@/components';
 import { getUserProfile } from '@/services/users';
+import { reportUser } from '@/services/reports';
+import { getSession } from '@/services/auth';
 import { ListingCard, SellerBadge } from '@/features/listings';
 import type { PublicListing } from '@/services/listings';
 import { formatJoinDate } from '@/lib/format';
 import { colors, spacing, typography, fontWeights } from '@/theme';
+
+const REPORT_REASONS = ['Arnaque', 'Comportement inapproprié', 'Spam', 'Autre'] as const;
 
 type State =
   | { status: 'loading' }
@@ -33,6 +37,10 @@ type State =
 export default function UserProfileScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const [state, setState] = useState<State>({ status: 'loading' });
+  const [reportModalVisible, setReportModalVisible] = useState(false);
+  const [reportLoading, setReportLoading] = useState(false);
+  const [reportReason, setReportReason] = useState<string | null>(null);
+  const [reportedUserId, setReportedUserId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     if (!id) {
@@ -64,6 +72,52 @@ export default function UserProfileScreen() {
   useEffect(() => {
     load();
   }, [load]);
+
+  const handleReportPress = useCallback(() => {
+    if (!id) return;
+    getSession().then((session) => {
+      if (!session?.user) {
+        Alert.alert('Connexion requise', 'Connectez-vous pour signaler ce vendeur.');
+        return;
+      }
+      if (session.user.id === id) {
+        Alert.alert('Action impossible', 'Vous ne pouvez pas vous signaler vous-même.');
+        return;
+      }
+      if (reportedUserId === id) {
+        Alert.alert('Déjà signalé', 'Vous avez déjà signalé ce vendeur.');
+        return;
+      }
+      setReportReason(null);
+      setReportModalVisible(true);
+    });
+  }, [id, reportedUserId]);
+
+  const handleReportSubmit = useCallback(() => {
+    if (!id || !reportReason?.trim()) return;
+    Alert.alert(
+      'Confirmer le signalement',
+      'Votre signalement sera envoyé pour modération.',
+      [
+        { text: 'Annuler', style: 'cancel' },
+        {
+          text: 'Envoyer',
+          onPress: async () => {
+            setReportLoading(true);
+            const result = await reportUser(id, reportReason.trim());
+            setReportLoading(false);
+            if (result.error) {
+              Alert.alert('Erreur', result.error.message);
+              return;
+            }
+            setReportModalVisible(false);
+            setReportedUserId(id);
+            Alert.alert('Merci', 'Votre signalement a bien été envoyé.');
+          },
+        },
+      ]
+    );
+  }, [id, reportReason]);
 
   const keyExtractor = useCallback((item: PublicListing) => item.id, []);
   const renderItem = useCallback(
@@ -107,7 +161,7 @@ export default function UserProfileScreen() {
   const showTrustScore = trustScore != null;
   const showReportsCount = reportsCount != null && Number(reportsCount) > 0;
 
-  const renderHeader = () => (
+  const renderHeader = useMemo(() => (
     <View style={styles.header}>
       <View style={styles.titleRow}>
         <Text style={styles.name}>{name}</Text>
@@ -135,12 +189,72 @@ export default function UserProfileScreen() {
         </View>
       )}
       <Text style={styles.sectionTitle}>Annonces</Text>
+      {id && (
+        <Pressable
+          onPress={handleReportPress}
+          style={({ pressed }) => [styles.reportLink, pressed && styles.reportLinkPressed]}
+        >
+          <Text style={styles.reportLinkText}>Signaler ce vendeur</Text>
+        </Pressable>
+      )}
     </View>
-  );
+  ), [name, joinDate, isBanned, isFlagged, showTrustScore, showReportsCount, trustScore, reportsCount, state.profile.is_verified, id, handleReportPress]);
 
   return (
     <Screen scroll={false}>
       <AppHeader title="Profil vendeur" showBack />
+      <Modal
+        visible={reportModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => !reportLoading && setReportModalVisible(false)}
+      >
+        <Pressable
+          style={styles.modalOverlay}
+          onPress={() => !reportLoading && setReportModalVisible(false)}
+        >
+          <Pressable style={styles.modalCard} onPress={(e) => e.stopPropagation()}>
+            <Text style={styles.modalTitle}>Signaler ce vendeur</Text>
+            <Text style={styles.modalSubtitle}>Choisissez un motif</Text>
+            {REPORT_REASONS.map((label) => (
+              <Pressable
+                key={label}
+                style={({ pressed }) => [
+                  styles.reasonOption,
+                  reportReason === label && styles.reasonOptionSelected,
+                  pressed && styles.reasonOptionPressed,
+                ]}
+                onPress={() => setReportReason(reportReason === label ? null : label)}
+              >
+                <Text
+                  style={[
+                    styles.reasonOptionText,
+                    reportReason === label && styles.reasonOptionTextSelected,
+                  ]}
+                >
+                  {label}
+                </Text>
+              </Pressable>
+            ))}
+            <View style={styles.modalActions}>
+              <Button
+                variant="ghost"
+                onPress={() => !reportLoading && setReportModalVisible(false)}
+                disabled={reportLoading}
+              >
+                Annuler
+              </Button>
+              <Button
+                onPress={handleReportSubmit}
+                loading={reportLoading}
+                disabled={reportLoading || !reportReason?.trim()}
+              >
+                Envoyer le signalement
+              </Button>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
       <FlatList
         data={state.listings}
         keyExtractor={keyExtractor}
@@ -154,6 +268,9 @@ export default function UserProfileScreen() {
         }
         contentContainerStyle={styles.listContent}
         showsVerticalScrollIndicator={false}
+        initialNumToRender={10}
+        windowSize={6}
+        removeClippedSubviews
       />
     </Screen>
   );
@@ -207,6 +324,81 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     letterSpacing: 0.5,
     marginTop: spacing.sm,
+  },
+  reportLink: {
+    alignSelf: 'flex-start',
+    paddingVertical: spacing.sm,
+    paddingHorizontal: 0,
+    marginTop: spacing.sm,
+  },
+  reportLinkPressed: {
+    opacity: 0.7,
+  },
+  reportLinkText: {
+    ...typography.sm,
+    color: colors.textMuted,
+    fontWeight: fontWeights.medium,
+    textDecorationLine: 'underline',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: spacing.xl,
+  },
+  modalCard: {
+    alignSelf: 'stretch',
+    maxWidth: 360,
+    backgroundColor: colors.surface,
+    borderRadius: 16,
+    padding: spacing.xl,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  modalTitle: {
+    ...typography.lg,
+    fontWeight: fontWeights.bold,
+    color: colors.text,
+    marginBottom: spacing.xs,
+  },
+  modalSubtitle: {
+    ...typography.sm,
+    color: colors.textMuted,
+    marginBottom: spacing.base,
+  },
+  reasonOption: {
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.base,
+    borderRadius: 12,
+    marginBottom: spacing.xs,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surfaceSubtle,
+  },
+  reasonOptionPressed: {
+    opacity: 0.9,
+  },
+  reasonOptionSelected: {
+    borderColor: colors.primary,
+    backgroundColor: colors.primaryLight + '40',
+  },
+  reasonOptionText: {
+    ...typography.base,
+    color: colors.text,
+  },
+  reasonOptionTextSelected: {
+    fontWeight: fontWeights.semibold,
+    color: colors.primary,
+  },
+  modalActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: spacing.sm,
+    marginTop: spacing.xl,
   },
   listContent: {
     padding: spacing.base,

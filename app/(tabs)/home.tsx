@@ -9,7 +9,7 @@ import { View, Text, StyleSheet, Pressable } from 'react-native';
 import { useRouter } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Screen, AppLogo, CategoryRail } from '@/components';
-import { ListingFeed, NearYouSection } from '@/features/listings';
+import { ListingFeed, NearYouSection, ForYouSection, RecentlyViewedSection } from '@/features/listings';
 import { colors, spacing, typography, fontWeights, radius } from '@/theme';
 
 /** 5–7 primary categories – tap navigates to search with this query. */
@@ -56,6 +56,8 @@ function HomeHeaderContent() {
         onVoirToutPress={handleVoirToutPress}
       />
       <NearYouSection userCity={null} />
+      <ForYouSection />
+      <RecentlyViewedSection />
       <View style={styles.feedIntro}>
         <Text style={styles.sectionTitle}>Nouvelles annonces</Text>
         <Text style={styles.sectionSubtitle}>Les dernières annonces publiées</Text>
@@ -81,7 +83,7 @@ const styles = StyleSheet.create({
     borderRadius: radius['2xl'],
     paddingVertical: spacing.base,
     paddingHorizontal: spacing.base,
-    marginBottom: spacing.lg,
+    marginBottom: spacing.md,
     minHeight: 52,
   },
   searchBarPressed: {

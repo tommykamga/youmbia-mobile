@@ -1,7 +1,13 @@
 {
   "name": "youmbia-mobile",
-  "main": "expo-router/entry",
   "version": "1.0.0",
+  "description": "Application mobile YOUMBIA – marketplace (React Native / Expo)",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/tommykamga/youmbia-mobile.git"
+  },
+  "homepage": "https://github.com/tommykamga/youmbia-mobile#readme",
+  "main": "expo-router/entry",
   "scripts": {
     "start": "expo start",
     "android": "expo start --android",

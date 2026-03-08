@@ -70,7 +70,7 @@ export function ListingActions({
   const callNumber = useMemo(() => normalizePhoneForCall(sellerPhone), [sellerPhone]);
   const sellerRestricted = listing.seller?.is_banned === true;
   const hasContact = !!listing.seller && !sellerRestricted;
-  const canWhatsApp = hasContact;
+  const canWhatsApp = hasContact && !!whatsappNumber;
   const canCall = hasContact && !!callNumber;
   const canMessage = hasContact && !!onMessagePress;
 

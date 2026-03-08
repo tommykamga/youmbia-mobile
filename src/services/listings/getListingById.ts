@@ -6,6 +6,7 @@
 
 import { supabase } from '@/lib/supabase';
 import { getSignedUrlsMap, toDisplayImageUrl } from '@/lib/listingImageUrl';
+import { normalizeListingSchemaFeatures } from '@/lib/listingSchemaFeatures';
 
 export type ListingDetail = {
   id: string;
@@ -17,6 +18,10 @@ export type ListingDetail = {
   views_count: number;
   seller_id: string;
   images: string[];
+  /** Quartier ou zone (localisation améliorée). */
+  district?: string | null;
+  /** Badge "Urgent". */
+  urgent?: boolean;
   seller: {
     full_name: string | null;
     created_at: string | null;
@@ -29,6 +34,8 @@ export type ListingDetail = {
     reports_count?: number | null;
     /** When true, contact CTAs are hidden (backend may use this for banned/restricted sellers). */
     is_banned?: boolean | null;
+    /** Optional: "Répond généralement en quelques heures" – computed from conversation history when backend provides it. */
+    response_hint?: string | null;
   } | null;
 };
 
@@ -44,6 +51,8 @@ type ListingRow = {
   views_count: number | null;
   user_id: string | null;
   status?: string | null;
+  district?: string | null;
+  urgent?: boolean | null;
   listing_images: ListingImageRow[] | null;
 };
 
@@ -134,6 +143,7 @@ export async function getListingById(id: string): Promise<GetListingByIdResult> 
     }
   }
 
+  const { district, urgent } = normalizeListingSchemaFeatures(row);
   const data: ListingDetail = {
     id: row.id,
     title: row.title,
@@ -144,6 +154,8 @@ export async function getListingById(id: string): Promise<GetListingByIdResult> 
     views_count: row.views_count ?? 0,
     seller_id: row.user_id ?? '',
     images: mapImages(row.listing_images, signedMap),
+    district,
+    urgent,
     seller,
   };
 

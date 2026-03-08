@@ -42,6 +42,9 @@ export function ListingSeller({ listing, onPress }: ListingSellerProps) {
       {showTrustScore && (
         <Text style={styles.trustScoreText}>Score confiance : {trustScore}</Text>
       )}
+      {seller?.response_hint?.trim() && (
+        <Text style={styles.responseHint}>{seller.response_hint.trim()}</Text>
+      )}
       {hasAnyBadge && (
         <View style={styles.badges}>
           {isVerified && (
@@ -102,6 +105,12 @@ const styles = StyleSheet.create({
   trustScoreText: {
     ...typography.xs,
     color: colors.textMuted,
+    marginBottom: spacing.xs,
+  },
+  responseHint: {
+    ...typography.xs,
+    color: colors.textMuted,
+    fontStyle: 'italic',
     marginBottom: spacing.xs,
   },
   badges: {

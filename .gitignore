@@ -21,6 +21,13 @@ expo-env.d.ts
 # Metro
 .metro-health-check*
 
+# IDE / Editor
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
 # debug
 npm-debug.*
 yarn-debug.*

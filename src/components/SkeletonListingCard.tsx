@@ -1,40 +1,67 @@
+/**
+ * Skeleton placeholder for a listing card – feed "Nouvelles annonces".
+ * Structure alignée sur ListingCard (image 4/3, body, titre, prix, meta).
+ * Légère variation de teinte image / texte / meta pour un rendu plus crédible.
+ */
+
 import React from 'react';
 import { View, StyleSheet } from 'react-native';
+import { colors, spacing, radius, cardStyles } from '@/theme';
 
-/**
- * Skeleton placeholder for a listing card while the feed is loading.
- * No new dependencies; visual only.
- */
+const IMAGE_ASPECT = 4 / 3;
+
 export function SkeletonListingCard() {
   return (
     <View style={styles.card}>
-      <View style={styles.image} />
-      <View style={styles.line} />
-      <View style={styles.smallLine} />
+      <View style={styles.imageWrap} />
+      <View style={styles.body}>
+        <View style={[styles.titleLine, styles.titleLineFirst]} />
+        <View style={[styles.titleLine, styles.titleLineShort]} />
+        <View style={styles.priceLine} />
+        <View style={styles.metaLine} />
+      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   card: {
+    ...cardStyles.default,
     overflow: 'hidden',
+    padding: 0,
   },
-  image: {
-    height: 180,
-    borderRadius: 12,
-    backgroundColor: '#eee',
+  imageWrap: {
+    width: '100%',
+    aspectRatio: IMAGE_ASPECT,
+    backgroundColor: colors.surfaceMuted,
   },
-  line: {
+  body: {
+    padding: spacing.base,
+  },
+  titleLine: {
     height: 16,
-    marginTop: 12,
-    borderRadius: 6,
-    backgroundColor: '#eee',
+    marginBottom: spacing.xs,
+    maxWidth: '100%',
+    borderRadius: radius.sm,
+    backgroundColor: colors.border,
   },
-  smallLine: {
-    height: 12,
-    marginTop: 8,
+  titleLineFirst: {
+    maxWidth: '100%',
+  },
+  titleLineShort: {
+    maxWidth: '70%',
+  },
+  priceLine: {
+    height: 22,
     width: '40%',
-    borderRadius: 6,
-    backgroundColor: '#eee',
+    marginBottom: spacing.xs,
+    borderRadius: radius.sm,
+    backgroundColor: colors.border,
+  },
+  metaLine: {
+    height: 12,
+    width: '50%',
+    borderRadius: radius.sm,
+    backgroundColor: colors.surfaceMuted,
   },
 });

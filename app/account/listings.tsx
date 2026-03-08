@@ -2,7 +2,7 @@
  * Mes annonces – list of listings published by the current user.
  * Shows status, view entry, and deactivate/reactivate (Sprint 6.2: redirection si non connecté, erreur claire).
  */
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, memo, useState } from 'react';
 import {
   View,
   Text,
@@ -11,7 +11,7 @@ import {
   RefreshControl,
   Alert,
 } from 'react-native';
-import { useRouter, useFocusEffect } from 'expo-router';
+import { useRouter } from 'expo-router';
 import { Screen, AppHeader, EmptyState, Loader, Button } from '@/components';
 import { ListingCard } from '@/features/listings';
 import { getMyListings, updateListingStatus, type MyListing } from '@/services/listings';
@@ -34,7 +34,7 @@ function StatusBadge({ status }: { status: string }) {
   );
 }
 
-function MyListingRow({
+const MyListingRowInner = memo(function MyListingRow({
   listing,
   onRefresh,
 }: {
@@ -101,7 +101,7 @@ function MyListingRow({
       </View>
     </View>
   );
-}
+});
 
 export default function AccountListingsScreen() {
   const router = useRouter();
@@ -128,12 +128,6 @@ export default function AccountListingsScreen() {
     load().then(() => setRefreshing(false));
   }, [load]);
 
-  useFocusEffect(
-    useCallback(() => {
-      if (state.status === 'success') load();
-    }, [load, state.status])
-  );
-
   const onRefresh = useCallback(() => {
     setRefreshing(true);
     load().finally(() => setRefreshing(false));
@@ -142,7 +136,7 @@ export default function AccountListingsScreen() {
   const keyExtractor = useCallback((item: MyListing) => item.id, []);
   const renderItem = useCallback(
     ({ item }: { item: MyListing }) => (
-      <MyListingRow listing={item} onRefresh={onRefresh} />
+      <MyListingRowInner listing={item} onRefresh={onRefresh} />
     ),
     [onRefresh]
   );
@@ -181,6 +175,9 @@ export default function AccountListingsScreen() {
           ItemSeparatorComponent={itemSeparator}
           contentContainerStyle={styles.listContent}
           showsVerticalScrollIndicator={false}
+          initialNumToRender={10}
+          windowSize={6}
+          removeClippedSubviews
           refreshControl={
             <RefreshControl
               refreshing={refreshing}

@@ -5,8 +5,9 @@
 import React from 'react';
 import { View, Text, StyleSheet, Pressable } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { colors, spacing, typography, fontWeights } from '@/theme';
+import { colors, spacing, typography, fontWeights, radius } from '@/theme';
 import { formatPrice, timeAgo } from '@/lib/format';
+import { getDisplayUrgent, getDisplayLocationLine } from '@/lib/listingSchemaFeatures';
 
 const HEART_SIZE = 26;
 
@@ -18,6 +19,10 @@ type ListingMetaProps = {
   views_count: number;
   isFavorite?: boolean;
   onFavoritePress?: () => void;
+  /** Quartier ou zone (localisation améliorée). */
+  district?: string | null;
+  /** Badge "Urgent". */
+  urgent?: boolean;
 };
 
 export function ListingMeta({
@@ -28,10 +33,14 @@ export function ListingMeta({
   views_count,
   isFavorite = false,
   onFavoritePress,
+  district,
+  urgent,
 }: ListingMetaProps) {
   const metaSecondary = views_count > 0
     ? `${views_count} vues`
     : timeAgo(created_at);
+  const locationLine = getDisplayLocationLine(city, district);
+  const showUrgentBadge = getDisplayUrgent({ urgent });
 
   return (
     <View style={styles.block}>
@@ -53,7 +62,12 @@ export function ListingMeta({
       </View>
       <Text style={styles.price}>{formatPrice(price)}</Text>
       <View style={styles.row}>
-        <Text style={styles.city}>{city}</Text>
+        {showUrgentBadge ? (
+          <View style={styles.urgentBadge}>
+            <Text style={styles.urgentBadgeText}>Urgent</Text>
+          </View>
+        ) : null}
+        <Text style={styles.city}>{locationLine || city}</Text>
         <Text style={styles.meta}>{metaSecondary}</Text>
       </View>
     </View>
@@ -95,6 +109,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing.md,
     marginBottom: spacing.lg,
+  },
+  urgentBadge: {
+    backgroundColor: colors.error,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    borderRadius: radius.sm,
+  },
+  urgentBadgeText: {
+    ...typography.xs,
+    fontWeight: fontWeights.semibold,
+    color: colors.surface,
   },
   city: {
     ...typography.sm,

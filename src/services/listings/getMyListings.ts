@@ -5,6 +5,7 @@
 
 import { supabase } from '@/lib/supabase';
 import { getSignedUrlsMap, toDisplayImageUrl } from '@/lib/listingImageUrl';
+import { normalizeListingSchemaFeatures } from '@/lib/listingSchemaFeatures';
 import type { PublicListing } from './getPublicListings';
 
 export type MyListing = PublicListing & {
@@ -22,11 +23,14 @@ type ListingRow = {
   views_count: number | null;
   user_id: string | null;
   status: string | null;
+  urgent?: boolean | null;
+  district?: string | null;
   listing_images: ListingImageRow[] | null;
 };
 
 function mapRow(row: ListingRow, signedMap: Map<string, string>): MyListing {
-  const base = {
+  const schema = normalizeListingSchemaFeatures(row);
+  const base: PublicListing = {
     id: row.id,
     title: row.title,
     price: row.price,
@@ -34,6 +38,7 @@ function mapRow(row: ListingRow, signedMap: Map<string, string>): MyListing {
     created_at: row.created_at,
     views_count: row.views_count ?? 0,
     seller_id: row.user_id ?? '',
+    ...schema,
   };
   const images = (row.listing_images ?? [])
     .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0))

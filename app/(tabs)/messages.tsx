@@ -151,6 +151,9 @@ export default function MessagesScreen() {
         ItemSeparatorComponent={itemSeparator}
         contentContainerStyle={styles.listContent}
         showsVerticalScrollIndicator={false}
+        initialNumToRender={10}
+        windowSize={6}
+        removeClippedSubviews
         refreshControl={
           <RefreshControl
             refreshing={refreshing}

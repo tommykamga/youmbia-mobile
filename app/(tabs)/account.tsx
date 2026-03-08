@@ -99,6 +99,12 @@ export default function AccountScreen() {
       onPress: () => router.push('/account/profile'),
     },
     {
+      id: 'saved-searches',
+      label: 'Recherches sauvegardées',
+      icon: 'search-outline',
+      onPress: () => router.push('/account/saved-searches'),
+    },
+    {
       id: 'settings',
       label: 'Paramètres',
       icon: 'settings-outline',

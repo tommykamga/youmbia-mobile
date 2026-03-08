@@ -1,11 +1,12 @@
-import React from 'react';
+import React, { memo } from 'react';
 import { View, Text, StyleSheet, Pressable, Image } from 'react-native';
 import { useRouter } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { colors, spacing, typography, fontWeights } from '@/theme';
+import { colors, spacing, typography, fontWeights, radius } from '@/theme';
 import { cardStyles } from '@/theme';
 import { formatPrice } from '@/lib/format';
 import { timeAgo } from '@/utils/timeAgo';
+import { getDisplayUrgent, getDisplayLocationLine } from '@/lib/listingSchemaFeatures';
 import type { PublicListing } from '@/services/listings';
 
 const IMAGE_ASPECT = 4 / 3;
@@ -17,7 +18,7 @@ type ListingCardProps = {
   onFavoritePress?: () => void;
 };
 
-export function ListingCard({ listing, isFavorite = false, onFavoritePress }: ListingCardProps) {
+function ListingCardInner({ listing, isFavorite = false, onFavoritePress }: ListingCardProps) {
   const router = useRouter();
   const firstImage =
     listing.images?.length && String(listing.images[0] ?? '').trim()
@@ -26,6 +27,9 @@ export function ListingCard({ listing, isFavorite = false, onFavoritePress }: Li
   const meta = listing.views_count > 0
     ? `${listing.views_count} vues`
     : timeAgo(listing.created_at);
+  const locationLine = getDisplayLocationLine(listing.city, listing.district);
+  const showUrgent = getDisplayUrgent(listing);
+  const showPriceDropped = listing.price_dropped === true;
 
   const handlePress = () => {
     router.push(`/listing/${listing.id}`);
@@ -53,6 +57,20 @@ export function ListingCard({ listing, isFavorite = false, onFavoritePress }: Li
             <Text style={styles.imagePlaceholderText}>Aucune photo</Text>
           </View>
         )}
+        {(showUrgent || showPriceDropped) ? (
+          <View style={styles.badgesWrap}>
+            {showUrgent ? (
+              <View style={styles.urgentBadge}>
+                <Text style={styles.urgentBadgeText}>Urgent</Text>
+              </View>
+            ) : null}
+            {showPriceDropped ? (
+              <View style={styles.priceDroppedBadge}>
+                <Text style={styles.priceDroppedBadgeText}>Prix baissé</Text>
+              </View>
+            ) : null}
+          </View>
+        ) : null}
         {onFavoritePress != null ? (
           <Pressable
             style={({ pressed }) => [styles.heartWrap, pressed && styles.heartWrapPressed]}
@@ -76,13 +94,15 @@ export function ListingCard({ listing, isFavorite = false, onFavoritePress }: Li
         </Text>
         <Text style={styles.price}>{formatPrice(listing.price)}</Text>
         <Text style={styles.city} numberOfLines={1}>
-          {listing.city}
+          {locationLine || listing.city}
         </Text>
         <Text style={styles.meta}>{meta}</Text>
       </View>
     </Pressable>
   );
 }
+
+export const ListingCard = memo(ListingCardInner);
 
 const styles = StyleSheet.create({
   card: {
@@ -123,6 +143,36 @@ const styles = StyleSheet.create({
   },
   heartWrapPressed: {
     opacity: 0.85,
+  },
+  badgesWrap: {
+    position: 'absolute',
+    top: spacing.sm,
+    left: spacing.sm,
+    flexDirection: 'row',
+    gap: spacing.xs,
+    flexWrap: 'wrap',
+  },
+  urgentBadge: {
+    backgroundColor: colors.error,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    borderRadius: radius.sm,
+  },
+  urgentBadgeText: {
+    ...typography.xs,
+    fontWeight: fontWeights.semibold,
+    color: colors.surface,
+  },
+  priceDroppedBadge: {
+    backgroundColor: colors.success,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    borderRadius: radius.sm,
+  },
+  priceDroppedBadgeText: {
+    ...typography.xs,
+    fontWeight: fontWeights.semibold,
+    color: colors.surface,
   },
   body: {
     padding: spacing.base,

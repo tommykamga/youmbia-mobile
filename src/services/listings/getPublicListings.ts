@@ -6,6 +6,7 @@
 
 import { supabase } from '@/lib/supabase';
 import { getSignedUrlsMap, toDisplayImageUrl } from '@/lib/listingImageUrl';
+import { normalizeListingSchemaFeatures } from '@/lib/listingSchemaFeatures';
 
 export type PublicListing = {
   id: string;
@@ -16,6 +17,14 @@ export type PublicListing = {
   images: string[];
   views_count: number;
   seller_id: string;
+  /** When true, listing is boosted and should appear first in feed (sort: boosted then created_at). */
+  boosted?: boolean;
+  /** Badge "Urgent" – vendeur marque l’annonce comme urgente. */
+  urgent?: boolean;
+  /** Quartier ou zone (affichage localisation améliorée). */
+  district?: string | null;
+  /** En contexte favoris : true si le prix a baissé (backend / historique). */
+  price_dropped?: boolean;
 };
 
 type ListingImageRow = { url: string; sort_order: number | null };
@@ -28,6 +37,9 @@ type ListingRow = {
   created_at: string;
   views_count: number | null;
   user_id: string | null;
+  boosted?: boolean | null;
+  urgent?: boolean | null;
+  district?: string | null;
   listing_images: ListingImageRow[] | null;
 };
 
@@ -38,6 +50,7 @@ function mapRow(row: ListingRow, signedMap: Map<string, string>): PublicListing 
     .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
     .map((img) => toDisplayImageUrl(img.url ?? '', signedMap))
     .filter((url) => url !== '');
+  const schema = normalizeListingSchemaFeatures(row);
   return {
     id: row.id,
     title: row.title,
@@ -47,6 +60,7 @@ function mapRow(row: ListingRow, signedMap: Map<string, string>): PublicListing 
     images,
     views_count: row.views_count ?? 0,
     seller_id: row.user_id ?? '',
+    ...schema,
   };
 }
 
@@ -57,8 +71,15 @@ export type GetPublicListingsResult =
 /**
  * Fetches active listings for the feed, ordered by created_at desc.
  * Uses the same RLS as the web app (public select where status = 'active').
+ * Supports pagination via offset/limit (Supabase .range).
  */
-export async function getPublicListings(): Promise<GetPublicListingsResult> {
+export async function getPublicListings(
+  offset: number = 0,
+  limit: number = PAGE_SIZE
+): Promise<GetPublicListingsResult> {
+  const from = Math.max(0, offset);
+  const to = from + Math.max(1, limit) - 1;
+
   const { data, error } = await supabase
     .from('listings')
     .select(
@@ -66,7 +87,7 @@ export async function getPublicListings(): Promise<GetPublicListingsResult> {
     )
     .eq('status', 'active')
     .order('created_at', { ascending: false })
-    .limit(PAGE_SIZE);
+    .range(from, to);
 
   if (error) {
     return { data: null, error: { message: error.message } };
