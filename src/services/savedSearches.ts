@@ -138,6 +138,16 @@ function isSameSearch(
   );
 }
 
+export function buildSavedSearchHref(search: SavedSearch): string {
+  const params = new URLSearchParams();
+  if (search.query) params.set('q', search.query);
+  if (search.priceMin != null) params.set('priceMin', String(search.priceMin));
+  if (search.priceMax != null) params.set('priceMax', String(search.priceMax));
+  if (search.category) params.set('category', search.category);
+  if (search.city) params.set('city', search.city);
+  return `/(tabs)/search?${params.toString()}`;
+}
+
 export function getSavedSearches(): SavedSearch[] {
   return readStore();
 }

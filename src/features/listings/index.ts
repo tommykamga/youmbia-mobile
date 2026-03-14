@@ -1,6 +1,7 @@
 export { ListingCard } from './ListingCard';
 export { ListingFeed } from './ListingFeed';
 export { NearYouSection } from './NearYouSection';
+export { SavedSearchAlertsSection } from './SavedSearchAlertsSection';
 export { ForYouSection } from './ForYouSection';
 export { RecentlyViewedSection } from './RecentlyViewedSection';
 export { ListingGallery } from './ListingGallery';

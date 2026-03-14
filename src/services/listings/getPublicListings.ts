@@ -35,6 +35,7 @@ type ListingRow = {
   title: string;
   price: number;
   city: string;
+  description: string | null;
   created_at: string;
   views_count: number | null;
   user_id: string | null;
@@ -57,6 +58,7 @@ function mapRow(row: ListingRow, signedMap: Map<string, string>): PublicListing 
     title: row.title,
     price: row.price,
     city: row.city,
+    description: row.description ?? null,
     created_at: row.created_at,
     images,
     views_count: row.views_count ?? 0,
@@ -84,7 +86,7 @@ export async function getPublicListings(
   const { data, error } = await supabase
     .from('listings')
     .select(
-      'id, title, price, city, created_at, views_count, user_id, listing_images(url, sort_order)'
+      'id, title, price, city, description, created_at, views_count, user_id, listing_images(url, sort_order)'
     )
     .eq('status', 'active')
     .order('created_at', { ascending: false })

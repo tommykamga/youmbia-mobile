@@ -24,6 +24,7 @@ import {
   getConversations,
 } from '@/services/conversations';
 import { getSession } from '@/services/auth';
+import { markConversationNotificationAsRead, syncMessageNotificationSnapshot } from '@/services/messageNotifications';
 import type { Message } from '@/services/conversations';
 import { spacing, colors, typography, fontWeights, radius } from '@/theme';
 
@@ -105,6 +106,7 @@ export default function ConversationThreadScreen() {
       const conv = convResult.data?.find((c) => c.id === id);
       setTitle(conv?.listing_title ?? conv?.other_party_name ?? 'Conversation');
       setMessages(messagesResult.data ?? []);
+      void syncMessageNotificationSnapshot(convResult.data ?? []);
       setStatus('success');
     } catch {
       setStatus('error');
@@ -119,7 +121,9 @@ export default function ConversationThreadScreen() {
   useFocusEffect(
     useCallback(() => {
       if (id && status === 'success') {
-        void markConversationRead(id).catch(() => {});
+        void markConversationRead(id)
+          .then(() => markConversationNotificationAsRead(id))
+          .catch(() => {});
       }
     }, [id, status])
   );

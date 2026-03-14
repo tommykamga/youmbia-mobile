@@ -10,6 +10,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { Screen, Loader, EmptyState, Button } from '@/components';
 import { getConversations } from '@/services/conversations';
 import { getSession } from '@/services/auth';
+import { syncMessageNotificationSnapshot } from '@/services/messageNotifications';
 import type { Conversation } from '@/services/conversations';
 import { formatListingDate } from '@/lib/format';
 import { spacing, colors, typography, fontWeights } from '@/theme';
@@ -38,6 +39,7 @@ export default function MessagesScreen() {
       return;
     }
     const list = result.data ?? [];
+    void syncMessageNotificationSnapshot(list);
     setState(
       list.length === 0
         ? { status: 'empty' }

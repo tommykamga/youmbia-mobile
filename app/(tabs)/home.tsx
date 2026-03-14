@@ -8,8 +8,14 @@ import React from 'react';
 import { View, Text, StyleSheet, Pressable } from 'react-native';
 import { useRouter } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { Screen, AppLogo, CategoryRail } from '@/components';
-import { ListingFeed, NearYouSection, ForYouSection, RecentlyViewedSection } from '@/features/listings';
+import { Screen, AppLogo, CategoryRail, NotificationsPromptCard } from '@/components';
+import {
+  ListingFeed,
+  NearYouSection,
+  SavedSearchAlertsSection,
+  ForYouSection,
+  RecentlyViewedSection,
+} from '@/features/listings';
 import { colors, spacing, typography, fontWeights, radius } from '@/theme';
 
 /** 5–7 primary categories – tap navigates to search with this query. */
@@ -50,12 +56,14 @@ function HomeHeaderContent() {
         <Ionicons name="search" size={22} color={colors.textMuted} style={styles.searchIcon} />
         <Text style={styles.searchPlaceholder}>Rechercher sur YOUMBIA</Text>
       </Pressable>
+      <NotificationsPromptCard />
       <CategoryRail
         categories={HOME_CATEGORIES}
         onCategoryPress={handleCategoryPress}
         onVoirToutPress={handleVoirToutPress}
       />
       <NearYouSection userCity={null} />
+      <SavedSearchAlertsSection />
       <ForYouSection />
       <RecentlyViewedSection />
       <View style={styles.feedIntro}>
