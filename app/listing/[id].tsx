@@ -63,6 +63,15 @@ function getListingErrorDisplay(message: string): { title: string; body: string 
   return { title: 'Erreur', body: message };
 }
 
+function getActionErrorMessage(message: string, fallback: string): string {
+  const msg = message.toLowerCase();
+  if (msg.includes('non connecté')) return 'Connexion requise';
+  if (msg.includes('network') || msg.includes('fetch') || msg.includes('réseau')) {
+    return 'Réseau indisponible';
+  }
+  return fallback;
+}
+
 export default function ListingDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
@@ -72,6 +81,8 @@ export default function ListingDetailScreen() {
   const [reportModalVisible, setReportModalVisible] = useState(false);
   const [reportLoading, setReportLoading] = useState(false);
   const [reportReason, setReportReason] = useState<string | null>(null);
+  const [favoriteLoading, setFavoriteLoading] = useState(false);
+  const [messageLoading, setMessageLoading] = useState(false);
   /** Évite double signalement immédiat en session (Sprint 7.1). */
   const [reportedListingId, setReportedListingId] = useState<string | null>(null);
 
@@ -111,42 +122,65 @@ export default function ListingDetailScreen() {
   );
 
   const handleFavoritePress = useCallback(async () => {
-    if (!id) return;
+    if (!id || favoriteLoading) return;
     const nextFavorite = !isFavorite;
     setIsFavorite(nextFavorite);
-    const result = await toggleFavorite(id);
-    if (result.error) {
-      setIsFavorite(!nextFavorite);
-      if (result.error.message === 'Non connecté') {
-        router.replace(`/(auth)/login?redirect=${encodeURIComponent(`/listing/${id}`)}`);
-      }
-      return;
-    }
-  }, [id, isFavorite, router]);
+    setFavoriteLoading(true);
+    try {
+      const result = await toggleFavorite(id);
+      if (!result.error) return;
 
-  const handleMessagePress = useCallback(async () => {
-    if (!id) return;
-    const session = await getSession();
-    if (!session?.user) {
-      router.replace(`/(auth)/login?redirect=${encodeURIComponent(`/listing/${id}`)}`);
-      return;
-    }
-    const result = await getOrCreateConversation(id);
-    if (result.error) {
+      setIsFavorite(!nextFavorite);
       if (result.error.message === 'Non connecté') {
         router.replace(`/(auth)/login?redirect=${encodeURIComponent(`/listing/${id}`)}`);
         return;
       }
-      Alert.alert('Erreur', result.error.message);
-      return;
+      Alert.alert(
+        'Erreur',
+        getActionErrorMessage(result.error.message, 'Impossible de mettre à jour le favori.')
+      );
+    } catch {
+      setIsFavorite(!nextFavorite);
+      Alert.alert('Erreur', 'Impossible de mettre à jour le favori.');
+    } finally {
+      setFavoriteLoading(false);
     }
-    const conversationId = result.data?.id;
-    if (!conversationId) {
+  }, [favoriteLoading, id, isFavorite, router]);
+
+  const handleMessagePress = useCallback(async () => {
+    if (!id || messageLoading) return;
+    setMessageLoading(true);
+    try {
+      const session = await getSession();
+      if (!session?.user) {
+        router.replace(`/(auth)/login?redirect=${encodeURIComponent(`/listing/${id}`)}`);
+        return;
+      }
+
+      const result = await getOrCreateConversation(id);
+      if (result.error) {
+        if (result.error.message === 'Non connecté') {
+          router.replace(`/(auth)/login?redirect=${encodeURIComponent(`/listing/${id}`)}`);
+          return;
+        }
+        Alert.alert(
+          'Erreur',
+          getActionErrorMessage(result.error.message, 'Impossible d\'ouvrir la conversation.')
+        );
+        return;
+      }
+      const conversationId = result.data?.id;
+      if (!conversationId) {
+        Alert.alert('Erreur', 'Impossible d\'ouvrir la conversation.');
+        return;
+      }
+      router.push(`/conversation/${conversationId}` as const);
+    } catch {
       Alert.alert('Erreur', 'Impossible d\'ouvrir la conversation.');
-      return;
+    } finally {
+      setMessageLoading(false);
     }
-    router.push(`/conversation/${conversationId}` as const);
-  }, [id, router]);
+  }, [id, messageLoading, router]);
 
   const handleReportPress = useCallback(async () => {
     if (!id) return;

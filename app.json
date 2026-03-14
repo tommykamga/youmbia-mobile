@@ -13,9 +13,11 @@
       "backgroundColor": "#F8FAFC"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.youmbia.mobile"
     },
     "android": {
+      "package": "com.youmbia.mobile",
       "adaptiveIcon": {
         "backgroundColor": "#F8FAFC",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
@@ -45,6 +47,12 @@
     ],
     "experiments": {
       "typedRoutes": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "2869afc2-e13f-48b5-8e78-acbe5186934c"
+      }
     }
   }
 }

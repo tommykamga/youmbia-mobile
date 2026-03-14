@@ -40,7 +40,7 @@ const styles = StyleSheet.create({
   },
   titleLine: {
     height: 16,
-    marginBottom: spacing.xs,
+    marginBottom: spacing.sm,
     maxWidth: '100%',
     borderRadius: radius.sm,
     backgroundColor: colors.border,
@@ -54,13 +54,13 @@ const styles = StyleSheet.create({
   priceLine: {
     height: 22,
     width: '40%',
-    marginBottom: spacing.xs,
+    marginBottom: spacing.sm,
     borderRadius: radius.sm,
     backgroundColor: colors.border,
   },
   metaLine: {
     height: 12,
-    width: '50%',
+    width: '58%',
     borderRadius: radius.sm,
     backgroundColor: colors.surfaceMuted,
   },

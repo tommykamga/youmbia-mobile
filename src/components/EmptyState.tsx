@@ -4,20 +4,26 @@
  */
 
 import React from 'react';
-import { View, Text, StyleSheet, ViewStyle } from 'react-native';
-import { colors, spacing, typography, fontWeights } from '@/theme';
+import { View, Text, StyleSheet, ViewStyle, StyleProp } from 'react-native';
+import { colors, spacing, typography, fontWeights, radius } from '@/theme';
 
 type EmptyStateProps = {
   title: string;
   message?: string;
+  icon?: React.ReactNode;
   /** Optional action (e.g. Button "Voir toutes les annonces"). */
   action?: React.ReactNode;
-  style?: ViewStyle;
+  style?: StyleProp<ViewStyle>;
 };
 
-export function EmptyState({ title, message, action, style }: EmptyStateProps) {
+export function EmptyState({ title, message, icon, action, style }: EmptyStateProps) {
   return (
     <View style={[styles.wrapper, style]}>
+      {icon ? (
+        <View style={styles.iconWrap}>
+          {icon}
+        </View>
+      ) : null}
       <Text style={styles.title}>{title}</Text>
       {message ? (
         <Text style={styles.message}>{message}</Text>
@@ -35,6 +41,20 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.xl,
     alignItems: 'center',
     justifyContent: 'center',
+    backgroundColor: colors.surface,
+    borderRadius: radius['2xl'],
+    borderWidth: 1,
+    borderColor: colors.borderLight,
+    marginHorizontal: spacing.base,
+  },
+  iconWrap: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.surfaceSubtle,
+    marginBottom: spacing.lg,
   },
   title: {
     ...typography.lg,

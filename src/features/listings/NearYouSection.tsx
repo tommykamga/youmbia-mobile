@@ -30,6 +30,8 @@ export function NearYouSection({ userCity }: NearYouSectionProps) {
   const [listings, setListings] = useState<PublicListing[]>([]);
   const [favoriteIds, setFavoriteIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
+  const favoriteIdsRef = React.useRef<Set<string>>(new Set());
+  favoriteIdsRef.current = favoriteIds;
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -57,7 +59,7 @@ export function NearYouSection({ userCity }: NearYouSectionProps) {
 
   const handleFavoritePress = useCallback(
     async (listingId: string) => {
-      const next = !favoriteIds.has(listingId);
+      const next = !favoriteIdsRef.current.has(listingId);
       setFavoriteIds((prev) => {
         const nextSet = new Set(prev);
         if (next) nextSet.add(listingId);
@@ -77,7 +79,22 @@ export function NearYouSection({ userCity }: NearYouSectionProps) {
         }
       }
     },
-    [favoriteIds, router]
+    [router]
+  );
+
+  const keyExtractor = useCallback((item: PublicListing) => item.id, []);
+  const renderItem = useCallback(
+    ({ item }: { item: PublicListing }) => (
+      <View style={styles.cardWrap}>
+        <NearYouCard
+          listing={item}
+          isFavorite={favoriteIdsRef.current.has(item.id)}
+          onFavoritePress={() => handleFavoritePress(item.id)}
+          userCity={userCity}
+        />
+      </View>
+    ),
+    [handleFavoritePress, userCity]
   );
 
   const handleVoirPlus = useCallback(() => {
@@ -106,7 +123,8 @@ export function NearYouSection({ userCity }: NearYouSectionProps) {
       </View>
       <FlatList
         data={listings}
-        keyExtractor={(item) => item.id}
+        extraData={favoriteIds}
+        keyExtractor={keyExtractor}
         horizontal
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
@@ -122,16 +140,7 @@ export function NearYouSection({ userCity }: NearYouSectionProps) {
         snapToInterval={ITEM_WIDTH}
         snapToAlignment="start"
         decelerationRate="fast"
-        renderItem={({ item }) => (
-          <View style={styles.cardWrap}>
-            <NearYouCard
-              listing={item}
-              isFavorite={favoriteIds.has(item.id)}
-              onFavoritePress={() => handleFavoritePress(item.id)}
-              userCity={userCity}
-            />
-          </View>
-        )}
+        renderItem={renderItem}
       />
       <Pressable
         style={({ pressed }) => [styles.voirPlus, pressed && styles.voirPlusPressed]}

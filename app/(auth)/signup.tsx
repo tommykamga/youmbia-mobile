@@ -18,13 +18,16 @@ function getErrorMessage(error: { message: string }): string {
   if (msg.includes('already registered') || msg.includes('already in use')) {
     return 'Un compte existe déjà avec cet email.';
   }
+  if (msg.includes('network') || msg.includes('réseau') || msg.includes('fetch')) {
+    return 'Réseau indisponible. Réessayez.';
+  }
   if (msg.includes('password')) {
     return 'Le mot de passe doit faire au moins 6 caractères.';
   }
   if (msg.includes('email')) {
     return 'Vérifiez votre adresse email.';
   }
-  return error.message || 'Une erreur est survenue.';
+  return error.message || 'Inscription impossible. Réessayez.';
 }
 
 export default function SignupScreen() {
@@ -36,9 +39,11 @@ export default function SignupScreen() {
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   const handleSubmit = async () => {
     setError(null);
+    setSuccessMessage(null);
     const trimmedEmail = email.trim();
     if (!trimmedEmail || !password || !confirmPassword) {
       setError('Renseignez tous les champs.');
@@ -53,18 +58,28 @@ export default function SignupScreen() {
       return;
     }
     setLoading(true);
-    const result = await signUp(trimmedEmail, password);
-    setLoading(false);
-    if (result.ok) {
-      const redirect = getSafeRedirect(params.redirect);
-      router.replace((redirect ?? '/(tabs)/home') as Href);
-    } else {
-      setError(getErrorMessage(result.error));
+    try {
+      const result = await signUp(trimmedEmail, password);
+      if (result.ok) {
+        if (result.requiresEmailConfirmation) {
+          setSuccessMessage('Compte créé. Vérifiez votre email pour confirmer votre inscription.');
+          return;
+        }
+        const redirect = getSafeRedirect(params.redirect);
+        router.replace((redirect ?? '/(tabs)/home') as Href);
+      } else {
+        setError(getErrorMessage(result.error));
+      }
+    } catch {
+      setError('Inscription impossible. Réessayez.');
+    } finally {
+      setLoading(false);
     }
   };
 
   const handleGoogleSignIn = async () => {
     setError(null);
+    setSuccessMessage(null);
     setGoogleLoading(true);
     try {
       const { signInWithGoogle } = await import('@/services/auth/signInWithGoogle');
@@ -73,7 +88,7 @@ export default function SignupScreen() {
         const redirect = getSafeRedirect(params.redirect);
         router.replace((redirect ?? '/(tabs)/home') as Href);
       } else {
-        setError(result.error.message || 'Connexion Google échouée.');
+        setError(getErrorMessage({ message: result.error.message || 'Connexion Google échouée.' }));
       }
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
@@ -97,6 +112,9 @@ export default function SignupScreen() {
         <Text style={styles.subtitle}>
           Rejoignez YOUMBIA pour acheter et vendre en toute confiance.
         </Text>
+        {successMessage ? (
+          <Text style={styles.successMessage}>{successMessage}</Text>
+        ) : null}
 
         <Input
           label="Email"
@@ -177,5 +195,10 @@ const styles = StyleSheet.create({
   },
   secondaryBtn: {
     marginTop: spacing.sm,
+  },
+  successMessage: {
+    fontSize: typography.sm.fontSize,
+    lineHeight: typography.sm.lineHeight,
+    color: colors.primary,
   },
 });

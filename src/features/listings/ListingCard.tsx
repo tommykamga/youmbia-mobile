@@ -1,4 +1,4 @@
-import React, { memo } from 'react';
+import React, { memo, useCallback } from 'react';
 import { View, Text, StyleSheet, Pressable, Image } from 'react-native';
 import { useRouter } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -11,6 +11,7 @@ import type { PublicListing } from '@/services/listings';
 
 const IMAGE_ASPECT = 4 / 3;
 const HEART_SIZE = 28;
+const OVERLAY_INSET = spacing.sm;
 
 type ListingCardProps = {
   listing: PublicListing;
@@ -31,9 +32,14 @@ function ListingCardInner({ listing, isFavorite = false, onFavoritePress }: List
   const showUrgent = getDisplayUrgent(listing);
   const showPriceDropped = listing.price_dropped === true;
 
-  const handlePress = () => {
+  const handlePress = useCallback(() => {
     router.push(`/listing/${listing.id}`);
-  };
+  }, [listing.id, router]);
+
+  const handleFavoriteButtonPress = useCallback((e?: { stopPropagation?: () => void }) => {
+    e?.stopPropagation?.();
+    onFavoritePress?.();
+  }, [onFavoritePress]);
 
   return (
     <Pressable
@@ -74,10 +80,7 @@ function ListingCardInner({ listing, isFavorite = false, onFavoritePress }: List
         {onFavoritePress != null ? (
           <Pressable
             style={({ pressed }) => [styles.heartWrap, pressed && styles.heartWrapPressed]}
-            onPress={(e) => {
-              e?.stopPropagation?.();
-              onFavoritePress();
-            }}
+            onPress={handleFavoriteButtonPress}
             hitSlop={12}
           >
             <Ionicons
@@ -102,7 +105,11 @@ function ListingCardInner({ listing, isFavorite = false, onFavoritePress }: List
   );
 }
 
-export const ListingCard = memo(ListingCardInner);
+export const ListingCard = memo(ListingCardInner, (prev, next) =>
+  prev.listing === next.listing &&
+  prev.isFavorite === next.isFavorite &&
+  (prev.onFavoritePress != null) === (next.onFavoritePress != null)
+);
 
 const styles = StyleSheet.create({
   card: {
@@ -127,27 +134,27 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surfaceMuted,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: spacing.sm,
+    gap: spacing.xs,
   },
   imagePlaceholderText: {
-    ...typography.sm,
+    ...typography.xs,
     color: colors.textTertiary,
   },
   heartWrap: {
     position: 'absolute',
-    top: spacing.sm,
-    right: spacing.sm,
+    top: OVERLAY_INSET,
+    right: OVERLAY_INSET,
     padding: spacing.xs,
     borderRadius: 9999,
-    backgroundColor: 'rgba(0,0,0,0.35)',
+    backgroundColor: 'rgba(15,23,42,0.32)',
   },
   heartWrapPressed: {
     opacity: 0.85,
   },
   badgesWrap: {
     position: 'absolute',
-    top: spacing.sm,
-    left: spacing.sm,
+    top: OVERLAY_INSET,
+    left: OVERLAY_INSET,
     flexDirection: 'row',
     gap: spacing.xs,
     flexWrap: 'wrap',
@@ -155,7 +162,7 @@ const styles = StyleSheet.create({
   urgentBadge: {
     backgroundColor: colors.error,
     paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.xs,
+    paddingVertical: 5,
     borderRadius: radius.sm,
   },
   urgentBadgeText: {
@@ -166,7 +173,7 @@ const styles = StyleSheet.create({
   priceDroppedBadge: {
     backgroundColor: colors.success,
     paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.xs,
+    paddingVertical: 5,
     borderRadius: radius.sm,
   },
   priceDroppedBadgeText: {
@@ -181,18 +188,18 @@ const styles = StyleSheet.create({
     ...typography.base,
     fontWeight: fontWeights.semibold,
     color: colors.text,
-    marginBottom: spacing.xs,
+    marginBottom: spacing.sm,
   },
   price: {
     ...typography.lg,
     fontWeight: fontWeights.bold,
     color: colors.primary,
-    marginBottom: spacing.xs,
+    marginBottom: spacing.sm,
   },
   city: {
     ...typography.sm,
     color: colors.textMuted,
-    marginBottom: spacing.xs,
+    marginBottom: 2,
   },
   meta: {
     ...typography.xs,

@@ -12,6 +12,7 @@ import {
   Alert,
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { Screen, AppHeader, EmptyState, Loader, Button } from '@/components';
 import { ListingCard } from '@/features/listings';
 import { getMyListings, updateListingStatus, type MyListing } from '@/services/listings';
@@ -162,8 +163,16 @@ export default function AccountListingsScreen() {
       )}
       {state.status === 'empty' && (
         <EmptyState
-          title="Vos annonces"
-          message="Les annonces que vous publiez apparaîtront ici."
+          icon={<Ionicons name="pricetags-outline" size={24} color={colors.primary} />}
+          title="Aucune annonce publiee"
+          message="Publiez votre premiere annonce en quelques minutes."
+          action={
+            <View style={styles.emptyAction}>
+              <Button variant="secondary" onPress={() => router.push('/sell')}>
+                Publier une annonce
+              </Button>
+            </View>
+          }
           style={styles.center}
         />
       )}
@@ -176,6 +185,7 @@ export default function AccountListingsScreen() {
           contentContainerStyle={styles.listContent}
           showsVerticalScrollIndicator={false}
           initialNumToRender={10}
+          maxToRenderPerBatch={6}
           windowSize={6}
           removeClippedSubviews
           refreshControl={
@@ -229,6 +239,9 @@ const styles = StyleSheet.create({
   },
   statusTextInactive: {
     color: colors.textMuted,
+  },
+  emptyAction: {
+    minWidth: 220,
   },
   actions: {
     flexDirection: 'row',

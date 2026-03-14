@@ -6,7 +6,8 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { FlatList, View, Text, StyleSheet, Pressable, RefreshControl } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
-import { Screen, Loader, EmptyState } from '@/components';
+import Ionicons from '@expo/vector-icons/Ionicons';
+import { Screen, Loader, EmptyState, Button } from '@/components';
 import { getConversations } from '@/services/conversations';
 import { getSession } from '@/services/auth';
 import type { Conversation } from '@/services/conversations';
@@ -134,8 +135,16 @@ export default function MessagesScreen() {
     return (
       <Screen>
         <EmptyState
-          title="Aucun message"
-          message="Vos conversations apparaîtront ici lorsque vous contacterez un vendeur."
+          icon={<Ionicons name="chatbubble-ellipses-outline" size={24} color={colors.primary} />}
+          title="Aucune conversation"
+          message="Contactez un vendeur pour demarrer une discussion."
+          action={
+            <View style={styles.emptyAction}>
+              <Button variant="secondary" onPress={() => router.replace('/(tabs)/home')}>
+                Explorer les annonces
+              </Button>
+            </View>
+          }
           style={styles.center}
         />
       </Screen>
@@ -152,6 +161,7 @@ export default function MessagesScreen() {
         contentContainerStyle={styles.listContent}
         showsVerticalScrollIndicator={false}
         initialNumToRender={10}
+        maxToRenderPerBatch={6}
         windowSize={6}
         removeClippedSubviews
         refreshControl={
@@ -226,5 +236,8 @@ const styles = StyleSheet.create({
     ...typography.xs,
     fontWeight: fontWeights.bold,
     color: colors.surface,
+  },
+  emptyAction: {
+    minWidth: 220,
   },
 });

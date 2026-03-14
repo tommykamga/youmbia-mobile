@@ -18,10 +18,13 @@ function getErrorMessage(error: { message: string }): string {
   if (msg.includes('invalid login')) {
     return 'Email ou mot de passe incorrect.';
   }
+  if (msg.includes('network') || msg.includes('réseau') || msg.includes('fetch')) {
+    return 'Réseau indisponible. Réessayez.';
+  }
   if (msg.includes('email')) {
     return 'Vérifiez votre adresse email.';
   }
-  return error.message || 'Une erreur est survenue.';
+  return error.message || 'Connexion impossible. Réessayez.';
 }
 
 export default function LoginScreen() {
@@ -41,13 +44,18 @@ export default function LoginScreen() {
       return;
     }
     setLoading(true);
-    const result = await signIn(trimmedEmail, password);
-    setLoading(false);
-    if (result.ok) {
-      const redirect = getSafeRedirect(params.redirect);
-      router.replace((redirect ?? '/(tabs)/home') as Href);
-    } else {
-      setError(getErrorMessage(result.error));
+    try {
+      const result = await signIn(trimmedEmail, password);
+      if (result.ok) {
+        const redirect = getSafeRedirect(params.redirect);
+        router.replace((redirect ?? '/(tabs)/home') as Href);
+      } else {
+        setError(getErrorMessage(result.error));
+      }
+    } catch {
+      setError('Connexion impossible. Réessayez.');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -61,7 +69,7 @@ export default function LoginScreen() {
         const redirect = getSafeRedirect(params.redirect);
         router.replace((redirect ?? '/(tabs)/home') as Href);
       } else {
-        setError(result.error.message || 'Connexion Google échouée.');
+        setError(getErrorMessage({ message: result.error.message || 'Connexion Google échouée.' }));
       }
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);

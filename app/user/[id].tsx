@@ -269,6 +269,7 @@ export default function UserProfileScreen() {
         contentContainerStyle={styles.listContent}
         showsVerticalScrollIndicator={false}
         initialNumToRender={10}
+        maxToRenderPerBatch={6}
         windowSize={6}
         removeClippedSubviews
       />

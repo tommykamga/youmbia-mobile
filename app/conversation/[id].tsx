@@ -47,6 +47,17 @@ function formatMessageTime(iso: string): string {
   }
 }
 
+function getThreadErrorMessage(message: string, fallback: string): string {
+  const msg = message.toLowerCase();
+  if (msg.includes('non connecté') || msg.includes('jwt') || msg.includes('auth')) {
+    return 'Connexion requise';
+  }
+  if (msg.includes('network') || msg.includes('fetch') || msg.includes('internet')) {
+    return 'Réseau indisponible';
+  }
+  return fallback;
+}
+
 export default function ConversationThreadScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
@@ -61,30 +72,44 @@ export default function ConversationThreadScreen() {
   const [userId, setUserId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
-    if (!id) {
+    try {
+      if (!id) {
+        setStatus('error');
+        setErrorMessage('Conversation introuvable');
+        return;
+      }
+      const session = await getSession();
+      if (!session?.user) {
+        router.replace(`/(auth)/login?redirect=${encodeURIComponent(`/conversation/${id}`)}`);
+        return;
+      }
+      setUserId(session.user.id);
+      const [convResult, messagesResult] = await Promise.all([
+        getConversations(),
+        getMessages(id),
+      ]);
+      if (convResult.error) {
+        setStatus('error');
+        setErrorMessage(
+          getThreadErrorMessage(convResult.error.message, 'Impossible de charger la conversation.')
+        );
+        return;
+      }
+      if (messagesResult.error) {
+        setStatus('error');
+        setErrorMessage(
+          getThreadErrorMessage(messagesResult.error.message, 'Impossible de charger la conversation.')
+        );
+        return;
+      }
+      const conv = convResult.data?.find((c) => c.id === id);
+      setTitle(conv?.listing_title ?? conv?.other_party_name ?? 'Conversation');
+      setMessages(messagesResult.data ?? []);
+      setStatus('success');
+    } catch {
       setStatus('error');
-      setErrorMessage('Conversation introuvable');
-      return;
+      setErrorMessage('Impossible de charger la conversation.');
     }
-    const session = await getSession();
-    if (!session?.user) {
-      router.replace(`/(auth)/login?redirect=${encodeURIComponent(`/conversation/${id}`)}`);
-      return;
-    }
-    setUserId(session.user.id);
-    const [convResult, messagesResult] = await Promise.all([
-      getConversations(),
-      getMessages(id),
-    ]);
-    if (messagesResult.error) {
-      setStatus('error');
-      setErrorMessage(messagesResult.error.message);
-      return;
-    }
-    const conv = convResult.data?.find((c) => c.id === id);
-    setTitle(conv?.listing_title ?? conv?.other_party_name ?? 'Conversation');
-    setMessages(messagesResult.data ?? []);
-    setStatus('success');
   }, [id, router]);
 
   useEffect(() => {
@@ -94,7 +119,7 @@ export default function ConversationThreadScreen() {
   useFocusEffect(
     useCallback(() => {
       if (id && status === 'success') {
-        markConversationRead(id);
+        void markConversationRead(id).catch(() => {});
       }
     }, [id, status])
   );
@@ -108,7 +133,10 @@ export default function ConversationThreadScreen() {
       const result = await sendMessage(id, trimmed);
       if (result.error) {
         setInputText(trimmed);
-        Alert.alert('Erreur', result.error.message);
+        Alert.alert(
+          'Erreur',
+          getThreadErrorMessage(result.error.message, "Impossible d'envoyer le message.")
+        );
         return;
       }
       if (result.data) {

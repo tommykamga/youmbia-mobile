@@ -131,7 +131,7 @@ export function ListingFeed({ listHeaderComponent }: ListingFeedProps) {
     ({ item }: { item: PublicListing }) => (
       <ListingCard
         listing={item}
-        isFavorite={favoriteIds.has(item.id)}
+        isFavorite={favoriteIdsRef.current.has(item.id)}
         onFavoritePress={() => handleFavoritePress(item.id)}
       />
     ),
@@ -284,6 +284,7 @@ export function ListingFeed({ listHeaderComponent }: ListingFeedProps) {
   return (
     <FlatList
       data={sortedListings}
+      extraData={favoriteIds}
       keyExtractor={keyExtractor}
       renderItem={renderItem}
       ItemSeparatorComponent={itemSeparator}

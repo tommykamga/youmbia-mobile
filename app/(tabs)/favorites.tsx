@@ -7,7 +7,8 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { FlatList, View, StyleSheet, RefreshControl } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
-import { Screen, Loader, EmptyState } from '@/components';
+import Ionicons from '@expo/vector-icons/Ionicons';
+import { Screen, Loader, EmptyState, Button } from '@/components';
 import { getFavorites, toggleFavorite } from '@/services/favorites';
 import { getSession } from '@/services/auth';
 import { ListingCard } from '@/features/listings';
@@ -27,22 +28,26 @@ export default function FavoritesScreen() {
   const [refreshing, setRefreshing] = useState(false);
 
   const load = useCallback(async () => {
-    const session = await getSession();
-    if (!session?.user) {
-      setState({ status: 'redirect' });
-      return;
+    try {
+      const session = await getSession();
+      if (!session?.user) {
+        setState({ status: 'redirect' });
+        return;
+      }
+      const result = await getFavorites();
+      if (result.error) {
+        setState({ status: 'error', message: 'Impossible de charger' });
+        return;
+      }
+      const list = result.data ?? [];
+      setState(
+        list.length === 0
+          ? { status: 'empty' }
+          : { status: 'success', data: list }
+      );
+    } catch {
+      setState({ status: 'error', message: 'Impossible de charger' });
     }
-    const result = await getFavorites();
-    if (result.error) {
-      setState({ status: 'error', message: result.error.message });
-      return;
-    }
-    const list = result.data ?? [];
-    setState(
-      list.length === 0
-        ? { status: 'empty' }
-        : { status: 'success', data: list }
-    );
   }, []);
 
   useEffect(() => {
@@ -72,10 +77,8 @@ export default function FavoritesScreen() {
     async (listingId: string) => {
       if (state.status !== 'success') return;
       const previousData = state.data;
-      setState({
-        status: 'success',
-        data: state.data.filter((item) => item.id !== listingId),
-      });
+      const nextData = state.data.filter((item) => item.id !== listingId);
+      setState(nextData.length === 0 ? { status: 'empty' } : { status: 'success', data: nextData });
       const result = await toggleFavorite(listingId);
       if (result.error) {
         setState({ status: 'success', data: previousData });
@@ -117,8 +120,16 @@ export default function FavoritesScreen() {
     return (
       <Screen>
         <EmptyState
-          title="Aucun favori"
-          message="Vos annonces favorites apparaîtront ici."
+          icon={<Ionicons name="heart-outline" size={24} color={colors.primary} />}
+          title="Aucune annonce favorite"
+          message="Les annonces que vous aimez apparaîtront ici."
+          action={
+            <View style={styles.emptyAction}>
+              <Button variant="secondary" onPress={() => router.replace('/(tabs)/home')}>
+                Découvrir les annonces
+              </Button>
+            </View>
+          }
           style={styles.center}
         />
       </Screen>
@@ -135,6 +146,7 @@ export default function FavoritesScreen() {
         contentContainerStyle={styles.listContent}
         showsVerticalScrollIndicator={false}
         initialNumToRender={10}
+        maxToRenderPerBatch={6}
         windowSize={6}
         removeClippedSubviews
         refreshControl={
@@ -158,5 +170,8 @@ const styles = StyleSheet.create({
   },
   separator: {
     height: spacing.base,
+  },
+  emptyAction: {
+    minWidth: 220,
   },
 });

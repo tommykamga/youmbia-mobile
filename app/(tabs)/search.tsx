@@ -17,7 +17,7 @@ import {
 } from 'react-native';
 import { useRouter, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { Screen, Loader, EmptyState } from '@/components';
+import { Screen, Loader, EmptyState, Button } from '@/components';
 import { ListingCard } from '@/features/listings';
 import { searchListings } from '@/services/listings';
 import { getSearchSuggestions } from '@/services/searchSuggestions';
@@ -50,6 +50,8 @@ export default function SearchScreen() {
   const [suggestions, setSuggestions] = useState<string[]>([]);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const resultsListRef = useRef<FlatList<PublicListing> | null>(null);
+  const favoriteIdsRef = useRef<Set<string>>(new Set());
+  favoriteIdsRef.current = favoriteIds;
 
   const loadFavorites = useCallback(async () => {
     const res = await getFavIds();
@@ -141,6 +143,15 @@ export default function SearchScreen() {
     runSearch(query);
   }, [query, runSearch]);
 
+  const handleResetSearch = useCallback(() => {
+    setQuery('');
+    setSubmittedQuery('');
+    setSuggestions([]);
+    setPriceMin('');
+    setPriceMax('');
+    setState({ status: 'idle' });
+  }, []);
+
   const handleSuggestionPress = useCallback(
     (suggestion: string) => {
       setQuery(suggestion);
@@ -162,7 +173,7 @@ export default function SearchScreen() {
 
   const handleFavoritePress = useCallback(
     async (listingId: string) => {
-      const nextFavorite = !favoriteIds.has(listingId);
+      const nextFavorite = !favoriteIdsRef.current.has(listingId);
       setFavoriteIds((prev) => {
         const next = new Set(prev);
         if (nextFavorite) next.add(listingId);
@@ -182,7 +193,7 @@ export default function SearchScreen() {
         }
       }
     },
-    [favoriteIds, router]
+    [router]
   );
 
   const keyExtractor = useCallback((item: PublicListing) => item.id, []);
@@ -190,11 +201,11 @@ export default function SearchScreen() {
     ({ item }: { item: PublicListing }) => (
       <ListingCard
         listing={item}
-        isFavorite={favoriteIds.has(item.id)}
+        isFavorite={favoriteIdsRef.current.has(item.id)}
         onFavoritePress={() => handleFavoritePress(item.id)}
       />
     ),
-    [favoriteIds, handleFavoritePress]
+    [handleFavoritePress]
   );
   const itemSeparator = useCallback(() => <View style={styles.separator} />, []);
 
@@ -343,8 +354,16 @@ export default function SearchScreen() {
 
         {state.status === 'empty' && (
           <EmptyState
+            icon={<Ionicons name="search-outline" size={24} color={colors.primary} />}
             title="Aucun résultat"
-            message={`Aucune annonce pour « ${state.query} ». Essayez d'autres termes.`}
+            message={`Essayez un autre mot-cle ou modifiez vos filtres pour "${state.query}".`}
+            action={
+              <View style={styles.emptyAction}>
+                <Button variant="secondary" onPress={handleResetSearch}>
+                  Reinitialiser la recherche
+                </Button>
+              </View>
+            }
             style={styles.centerEdge}
           />
         )}
@@ -384,6 +403,7 @@ export default function SearchScreen() {
             <FlatList
               ref={resultsListRef}
               data={filteredListings}
+              extraData={favoriteIds}
               keyExtractor={keyExtractor}
               renderItem={renderItem}
               ItemSeparatorComponent={itemSeparator}
@@ -391,8 +411,24 @@ export default function SearchScreen() {
               showsVerticalScrollIndicator={false}
               keyboardShouldPersistTaps="handled"
               initialNumToRender={10}
+              maxToRenderPerBatch={6}
               windowSize={6}
               removeClippedSubviews
+              ListEmptyComponent={
+                <EmptyState
+                  icon={<Ionicons name="options-outline" size={24} color={colors.primary} />}
+                  title="Aucun resultat avec ces filtres"
+                  message="Essayez d'elargir votre fourchette de prix ou de reinitialiser la recherche."
+                  action={
+                    <View style={styles.emptyAction}>
+                      <Button variant="secondary" onPress={handleResetSearch}>
+                        Reinitialiser la recherche
+                      </Button>
+                    </View>
+                  }
+                  style={styles.listEmpty}
+                />
+              }
             />
           </>
         )}
@@ -495,6 +531,10 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingHorizontal: spacing.base,
   },
+  listEmpty: {
+    marginHorizontal: 0,
+    marginTop: spacing.base,
+  },
   listContent: {
     padding: spacing.base,
     paddingBottom: spacing['3xl'],
@@ -571,5 +611,8 @@ const styles = StyleSheet.create({
     ...typography.sm,
     fontWeight: fontWeights.semibold,
     color: colors.primary,
+  },
+  emptyAction: {
+    minWidth: 240,
   },
 });

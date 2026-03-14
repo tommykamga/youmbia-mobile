@@ -4,7 +4,7 @@
  * Ne modifie pas ListingCard global.
  */
 
-import React, { memo } from 'react';
+import React, { memo, useCallback } from 'react';
 import { View, Text, StyleSheet, Pressable, Image } from 'react-native';
 import { useRouter } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -27,6 +27,7 @@ export const NEAR_YOU_CARD_HEIGHT = IMAGE_HEIGHT + BODY_HEIGHT;
 
 const HEART_SIZE = 20;
 const NEW_DAYS = 7;
+const OVERLAY_INSET = spacing.sm;
 
 function isNew(createdAt: string): boolean {
   try {
@@ -60,9 +61,14 @@ function NearYouCardInner({
   const city = listing.city?.trim() || null;
   const isNear = Boolean(userCity?.trim() && city && userCity.trim().toLowerCase() === city.toLowerCase());
 
-  const handlePress = () => {
+  const handlePress = useCallback(() => {
     router.push(`/listing/${listing.id}`);
-  };
+  }, [listing.id, router]);
+
+  const handleFavoriteButtonPress = useCallback((e?: { stopPropagation?: () => void }) => {
+    e?.stopPropagation?.();
+    onFavoritePress?.();
+  }, [onFavoritePress]);
 
   return (
     <Pressable
@@ -94,10 +100,7 @@ function NearYouCardInner({
         {onFavoritePress != null ? (
           <Pressable
             style={({ pressed: p }) => [styles.heartWrap, p && styles.heartWrapPressed]}
-            onPress={(e) => {
-              e?.stopPropagation?.();
-              onFavoritePress();
-            }}
+            onPress={handleFavoriteButtonPress}
             hitSlop={10}
           >
             <Ionicons
@@ -125,7 +128,12 @@ function NearYouCardInner({
   );
 }
 
-export const NearYouCard = memo(NearYouCardInner);
+export const NearYouCard = memo(NearYouCardInner, (prev, next) =>
+  prev.listing === next.listing &&
+  prev.isFavorite === next.isFavorite &&
+  prev.userCity === next.userCity &&
+  (prev.onFavoritePress != null) === (next.onFavoritePress != null)
+);
 
 const styles = StyleSheet.create({
   card: {
@@ -151,7 +159,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surfaceMuted,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: spacing.xs,
+    gap: 2,
   },
   imagePlaceholderText: {
     ...typography.xs,
@@ -159,10 +167,10 @@ const styles = StyleSheet.create({
   },
   badgeNew: {
     position: 'absolute',
-    top: 8,
-    left: 8,
+    top: OVERLAY_INSET,
+    left: OVERLAY_INSET,
     paddingHorizontal: spacing.xs,
-    paddingVertical: 2,
+    paddingVertical: 4,
     borderRadius: radius.sm,
     backgroundColor: colors.badgeNeutralBg,
   },
@@ -173,11 +181,11 @@ const styles = StyleSheet.create({
   },
   heartWrap: {
     position: 'absolute',
-    top: 8,
-    right: 8,
+    top: OVERLAY_INSET,
+    right: OVERLAY_INSET,
     padding: spacing.xs,
     borderRadius: 9999,
-    backgroundColor: 'rgba(0,0,0,0.26)',
+    backgroundColor: 'rgba(15,23,42,0.28)',
   },
   heartWrapPressed: {
     opacity: 0.85,
@@ -194,13 +202,14 @@ const styles = StyleSheet.create({
     lineHeight: TITLE_LINE_HEIGHT,
   },
   price: {
-    ...typography.base,
+    ...typography.sm,
     fontWeight: fontWeights.bold,
     color: colors.primary,
   },
   cityRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    marginTop: spacing.xs,
   },
   cityIcon: {
     marginRight: 4,

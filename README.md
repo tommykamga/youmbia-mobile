@@ -29,6 +29,36 @@ Puis scanner le QR code avec Expo Go, ou lancer `npm run ios` / `npm run android
 | `npm run android` | Lancer sur appareil / simulateur Android |
 | `npm run web` | Build / preview web |
 
+## EAS Build (Expo Application Services)
+
+Le projet est configuré pour les builds cloud EAS. Prérequis : [EAS CLI](https://docs.expo.dev/build/setup/#install-eas-cli) (`npm install -g eas-cli`).
+
+**Première fois** : se connecter et lier le projet :
+
+```bash
+eas login
+eas build:configure   # déjà fait si eas.json existe
+```
+
+**Profils disponibles** (`eas.json`) :
+
+| Profil | Usage | iOS | Android |
+|--------|--------|-----|---------|
+| `development` | Tests rapides, simulateur | Simulateur | APK |
+| `preview` | Tests internes / QA | Build device (internal) | APK |
+| `production` | App Store / Play Store | IPA (store) | AAB (bundle) |
+
+**Lancer un build** :
+
+```bash
+eas build --profile development --platform ios
+eas build --profile development --platform android
+eas build --profile preview --platform all
+eas build --profile production --platform all
+```
+
+**Identifiants** : `app.json` contient `ios.bundleIdentifier` et `android.package` (`com.youmbia.mobile`). Pour soumettre aux stores, renseigner les champs dans `eas.json` > `submit.production` (Apple ID, Team ID, compte de service Google Play) ou utiliser `eas submit` interactif.
+
 ## Variables d'environnement
 
 Créer un fichier `.env` à la racine (voir `.env.example`) avec :

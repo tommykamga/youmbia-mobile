@@ -24,9 +24,21 @@ const MAX_LISTING_IMAGES = 12;
 
 type PickedImage = { uri: string; base64: string | null };
 
+type PublishState =
+  | { status: 'idle' }
+  | { status: 'success'; listingId: string }
+  | {
+      status: 'partial';
+      listingId: string;
+      uploadedCount: number;
+      failedCount: number;
+      totalCount: number;
+      message: string;
+    };
+
 export default function SellScreen() {
   const router = useRouter();
-  const [publishedId, setPublishedId] = useState<string | null>(null);
+  const [publishState, setPublishState] = useState<PublishState>({ status: 'idle' });
 
   const [title, setTitle] = useState('');
   const [priceStr, setPriceStr] = useState('');
@@ -36,6 +48,32 @@ export default function SellScreen() {
 
   const [submitLoading, setSubmitLoading] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [retryUploadLoading, setRetryUploadLoading] = useState(false);
+
+  const resetForm = () => {
+    setPublishState({ status: 'idle' });
+    setSubmitError(null);
+    setTitle('');
+    setPriceStr('');
+    setCity('');
+    setDescription('');
+    setImages([]);
+  };
+
+  const buildPartialPublishState = (
+    listingId: string,
+    uploadedCount: number,
+    failedCount: number,
+    totalCount: number,
+    message: string
+  ): PublishState => ({
+    status: 'partial',
+    listingId,
+    uploadedCount,
+    failedCount,
+    totalCount,
+    message,
+  });
 
   const pickImages = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -107,33 +145,120 @@ export default function SellScreen() {
           return;
         }
         setSubmitError(error.message);
-        setSubmitLoading(false);
         return;
       }
 
-      const listingId = data!.id;
+      const listingId = data?.id;
+      if (!listingId) {
+        setSubmitError("Impossible de publier l'annonce");
+        return;
+      }
+
       const withBase64 = images.filter((img): img is PickedImage & { base64: string } => !!img.base64);
+      const missingBase64Count = Math.max(0, images.length - withBase64.length);
+
       if (withBase64.length > 0) {
         const uploadResult = await uploadListingImages(
           listingId,
           withBase64.map((img) => ({ base64: img.base64 }))
         );
-        if (uploadResult.error) {
-          setSubmitError(uploadResult.error.message);
-          setSubmitLoading(false);
+
+        const uploadedCount = uploadResult.data.uploadedCount;
+        const failedCount = uploadResult.data.failedCount + missingBase64Count;
+        const totalCount = images.length;
+
+        if (uploadResult.status === 'ok' && missingBase64Count === 0) {
+          setPublishState({ status: 'success', listingId });
           return;
         }
+
+        setPublishState(
+          buildPartialPublishState(
+            listingId,
+            uploadedCount,
+            failedCount,
+            totalCount,
+            missingBase64Count > 0 && !uploadResult.error
+              ? "Annonce créée, mais certaines photos n'ont pas pu être préparées."
+              : uploadResult.error?.message ?? "Annonce créée, mais certaines photos n'ont pas pu être ajoutées."
+          )
+        );
+        return;
       }
 
-      setPublishedId(listingId);
+      if (missingBase64Count > 0) {
+        setPublishState(
+          buildPartialPublishState(
+            listingId,
+            0,
+            missingBase64Count,
+            images.length,
+            "Annonce créée, mais certaines photos n'ont pas pu être préparées."
+          )
+        );
+        return;
+      }
+
+      setPublishState({ status: 'success', listingId });
     } catch (e) {
-      setSubmitError(e instanceof Error ? e.message : 'Erreur lors de la publication');
+      setSubmitError(e instanceof Error ? e.message : "Impossible de publier l'annonce");
     } finally {
       setSubmitLoading(false);
     }
   };
 
-  if (publishedId) {
+  const handleRetryImageUpload = async () => {
+    if (publishState.status !== 'partial' || retryUploadLoading) return;
+
+    const withBase64 = images.filter((img): img is PickedImage & { base64: string } => !!img.base64);
+    const missingBase64Count = Math.max(0, images.length - withBase64.length);
+
+    if (withBase64.length === 0) {
+      setPublishState(
+        buildPartialPublishState(
+          publishState.listingId,
+          0,
+          missingBase64Count,
+          images.length,
+          "Annonce créée, mais aucune photo exploitable n'a pu être ajoutée."
+        )
+      );
+      return;
+    }
+
+    setRetryUploadLoading(true);
+    try {
+      const uploadResult = await uploadListingImages(
+        publishState.listingId,
+        withBase64.map((img) => ({ base64: img.base64 }))
+      );
+
+      const uploadedCount = uploadResult.data.uploadedCount;
+      const failedCount = uploadResult.data.failedCount + missingBase64Count;
+      const totalCount = images.length;
+
+      if (uploadResult.status === 'ok' && missingBase64Count === 0) {
+        setPublishState({ status: 'success', listingId: publishState.listingId });
+        return;
+      }
+
+      setPublishState(
+        buildPartialPublishState(
+          publishState.listingId,
+          uploadedCount,
+          failedCount,
+          totalCount,
+          missingBase64Count > 0 && !uploadResult.error
+            ? "Annonce créée, mais certaines photos n'ont pas pu être préparées."
+            : uploadResult.error?.message ?? "Annonce créée, mais certaines photos n'ont pas pu être ajoutées."
+        )
+      );
+    } finally {
+      setRetryUploadLoading(false);
+    }
+  };
+
+  if (publishState.status === 'success') {
     /* Sprint 3.2 – post-publish continuity: clear next steps (view listing, publish another, home). */
     return (
       <Screen>
@@ -145,7 +270,7 @@ export default function SellScreen() {
           <View style={styles.successActions}>
             <Button
               size="lg"
-              onPress={() => router.push(`/listing/${publishedId}`)}
+              onPress={() => router.push(`/listing/${publishState.listingId}`)}
               style={styles.successBtn}
             >
               Voir l'annonce
@@ -153,14 +278,7 @@ export default function SellScreen() {
             <Button
               variant="secondary"
               size="lg"
-              onPress={() => {
-                setPublishedId(null);
-                setTitle('');
-                setPriceStr('');
-                setCity('');
-                setDescription('');
-                setImages([]);
-              }}
+              onPress={resetForm}
             >
               Publier une autre annonce
             </Button>
@@ -171,6 +289,48 @@ export default function SellScreen() {
               style={styles.successBtn}
             >
               Retour à l'accueil
+            </Button>
+          </View>
+        </View>
+      </Screen>
+    );
+  }
+
+  if (publishState.status === 'partial') {
+    return (
+      <Screen>
+        <View style={styles.successBlock}>
+          <Text style={styles.partialTitle}>Annonce créée</Text>
+          <Text style={styles.successSubtitle}>
+            {publishState.message}
+          </Text>
+          <Text style={styles.partialMeta}>
+            Photos ajoutées : {publishState.uploadedCount}/{publishState.totalCount}
+          </Text>
+          <View style={styles.successActions}>
+            <Button
+              size="lg"
+              onPress={handleRetryImageUpload}
+              loading={retryUploadLoading}
+              disabled={retryUploadLoading}
+              style={styles.successBtn}
+            >
+              Réessayer les photos
+            </Button>
+            <Button
+              variant="secondary"
+              size="lg"
+              onPress={() => router.push(`/listing/${publishState.listingId}`)}
+            >
+              Voir l'annonce
+            </Button>
+            <Button
+              variant="ghost"
+              size="lg"
+              onPress={resetForm}
+              style={styles.successBtn}
+            >
+              Publier une autre annonce
             </Button>
           </View>
         </View>
@@ -273,10 +433,20 @@ const styles = StyleSheet.create({
     color: colors.primary,
     marginBottom: spacing.sm,
   },
+  partialTitle: {
+    fontSize: typography['2xl'].fontSize,
+    fontWeight: fontWeights.bold,
+    color: colors.text,
+    marginBottom: spacing.sm,
+  },
   successSubtitle: {
     fontSize: typography.base.fontSize,
     color: colors.textSecondary,
     marginBottom: spacing.xl,
+  },
+  partialMeta: {
+    fontSize: typography.sm.fontSize,
+    color: colors.textMuted,
   },
   successActions: {
     gap: spacing.base,

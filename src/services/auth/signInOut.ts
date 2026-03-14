@@ -7,11 +7,21 @@ import type { AuthError } from '@supabase/supabase-js';
 
 export type SignInResult =
   | { ok: true; error: null }
-  | { ok: false; error: AuthError };
+  | { ok: false; error: { message: string } };
 
 export type SignUpResult =
-  | { ok: true; error: null }
-  | { ok: false; error: AuthError };
+  | { ok: true; error: null; requiresEmailConfirmation: false }
+  | { ok: true; error: null; requiresEmailConfirmation: true }
+  | { ok: false; error: { message: string }; requiresEmailConfirmation: false };
+
+function getSafeAuthErrorMessage(error: unknown): string {
+  const raw = error instanceof Error ? error.message : String(error ?? '');
+  const msg = raw.toLowerCase();
+  if (msg.includes('network') || msg.includes('fetch') || msg.includes('internet')) {
+    return 'Réseau indisponible. Réessayez.';
+  }
+  return raw || 'Une erreur est survenue. Réessayez.';
+}
 
 /**
  * Sign in with email and password.
@@ -21,16 +31,20 @@ export async function signIn(
   email: string,
   password: string
 ): Promise<SignInResult> {
-  const { error } = await supabase.auth.signInWithPassword({
-    email: email.trim(),
-    password,
-  });
+  try {
+    const { error } = await supabase.auth.signInWithPassword({
+      email: email.trim(),
+      password,
+    });
 
-  if (error) {
-    return { ok: false, error };
+    if (error) {
+      return { ok: false, error: { message: getSafeAuthErrorMessage(error) } };
+    }
+
+    return { ok: true, error: null };
+  } catch (error) {
+    return { ok: false, error: { message: getSafeAuthErrorMessage(error) } };
   }
-
-  return { ok: true, error: null };
 }
 
 /**
@@ -41,16 +55,32 @@ export async function signUp(
   email: string,
   password: string
 ): Promise<SignUpResult> {
-  const { error } = await supabase.auth.signUp({
-    email: email.trim(),
-    password,
-  });
+  try {
+    const { data, error } = await supabase.auth.signUp({
+      email: email.trim(),
+      password,
+    });
 
-  if (error) {
-    return { ok: false, error };
+    if (error) {
+      return {
+        ok: false,
+        error: { message: getSafeAuthErrorMessage(error) },
+        requiresEmailConfirmation: false,
+      };
+    }
+
+    if (data.user && !data.session) {
+      return { ok: true, error: null, requiresEmailConfirmation: true };
+    }
+
+    return { ok: true, error: null, requiresEmailConfirmation: false };
+  } catch (error) {
+    return {
+      ok: false,
+      error: { message: getSafeAuthErrorMessage(error) },
+      requiresEmailConfirmation: false,
+    };
   }
-
-  return { ok: true, error: null };
 }
 
 /**
