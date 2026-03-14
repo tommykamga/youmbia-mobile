@@ -13,6 +13,7 @@ export type PublicListing = {
   title: string;
   price: number;
   city: string;
+  description?: string | null;
   created_at: string;
   images: string[];
   views_count: number;

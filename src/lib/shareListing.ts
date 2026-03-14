@@ -12,16 +12,28 @@ export type ShareListingPayload = {
   id: string;
   title: string;
   price: number;
+  city?: string | null;
 };
 
+export function getPublicListingUrl(id: string | null | undefined): string | null {
+  const safeId = String(id ?? '').trim();
+  if (!safeId) return null;
+  return `${LISTING_URL_BASE}/${safeId}`;
+}
+
 function buildShareMessage(payload: ShareListingPayload): string {
-  const priceFormatted = formatPrice(payload.price);
-  const url = `${LISTING_URL_BASE}/${payload.id}`;
+  const title = String(payload.title ?? '').trim() || 'Annonce YOUMBIA';
+  const priceFormatted =
+    typeof payload.price === 'number' && Number.isFinite(payload.price)
+      ? formatPrice(payload.price)
+      : null;
+  const city = payload.city?.trim() || null;
+  const url = getPublicListingUrl(payload.id);
+  const summary = [title, priceFormatted, city].filter(Boolean).join(' — ');
   return [
-    `${payload.title} — ${priceFormatted}`,
+    `Découvrez cette annonce sur YOUMBIA : ${summary || title}`,
     '',
-    'Voir cette annonce sur YOUMBIA :',
-    url,
+    url ?? '',
   ].join('\n');
 }
 
@@ -32,6 +44,10 @@ const WHATSAPP_PREFIX = 'https://wa.me';
  * Returns success so the caller can show error feedback when both fail.
  */
 export async function shareListing(payload: ShareListingPayload): Promise<{ success: boolean; error?: string }> {
+  if (!payload.id || !String(payload.title ?? '').trim()) {
+    return { success: false, error: 'Impossible de partager cette annonce' };
+  }
+
   const message = buildShareMessage(payload);
 
   try {
@@ -50,7 +66,10 @@ export async function shareListing(payload: ShareListingPayload): Promise<{ succ
     return { success: true };
   } catch {
     const fallbackOk = await shareListingViaWhatsApp(payload);
-    return { success: fallbackOk, error: fallbackOk ? undefined : 'Partage indisponible' };
+    return {
+      success: fallbackOk,
+      error: fallbackOk ? undefined : 'Partage indisponible',
+    };
   }
 }
 

@@ -8,7 +8,8 @@ import { View, Text, StyleSheet, Pressable, Linking, Alert } from 'react-native'
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Button } from '@/components';
 import { colors, spacing, radius, typography, fontWeights } from '@/theme';
-import { shareListing } from '@/lib/shareListing';
+import { shareListing, getPublicListingUrl } from '@/lib/shareListing';
+import { formatPrice } from '@/lib/format';
 import type { ListingDetail } from '@/services/listings';
 
 const HEART_SIZE = 20;
@@ -62,6 +63,7 @@ export function ListingActions({
   onMessagePress,
 }: ListingActionsProps) {
   const [sharing, setSharing] = useState(false);
+  const [openingWhatsApp, setOpeningWhatsApp] = useState(false);
 
   const sellerId = sellerIdProp ?? listing.seller_id ?? '';
   const sellerName = sellerNameProp ?? listing.seller?.full_name ?? null;
@@ -73,32 +75,46 @@ export function ListingActions({
   const canWhatsApp = hasContact && !!whatsappNumber;
   const canCall = hasContact && !!callNumber;
   const canMessage = hasContact && !!onMessagePress;
+  const publicListingUrl = useMemo(() => getPublicListingUrl(listing.id), [listing.id]);
 
-  const handleWhatsApp = useCallback(() => {
-    const text = buildWhatsAppMessage(listing.title ?? '');
-    const encoded = encodeURIComponent(text);
-    const url = whatsappNumber
-      ? `${WHATSAPP_PREFIX}/${whatsappNumber}?text=${encoded}`
-      : `${WHATSAPP_PREFIX}/?text=${encoded}`;
-    try {
-      Linking.canOpenURL(url)
-        .then((supported) => {
-          if (supported) return Linking.openURL(url);
-          return Linking.openURL(WHATSAPP_PREFIX + '/?text=' + encoded);
-        })
-        .catch(() => {
-          Alert.alert(
-            'WhatsApp indisponible',
-            'Impossible d\'ouvrir WhatsApp. Vérifiez qu\'il est installé.'
-          );
-        });
-    } catch {
-      Alert.alert(
-        'WhatsApp indisponible',
-        'Impossible d\'ouvrir WhatsApp. Vérifiez qu\'il est installé.'
-      );
+  const whatsAppMessage = useMemo(() => {
+    const title = String(listing.title ?? '').trim() || 'Annonce YOUMBIA';
+    const price =
+      typeof listing.price === 'number' && Number.isFinite(listing.price)
+        ? formatPrice(listing.price)
+        : null;
+    const parts = [
+      `Bonjour, je vous contacte au sujet de votre annonce YOUMBIA : ${title}.`,
+      price ? `Prix : ${price}.` : null,
+      publicListingUrl,
+    ].filter(Boolean);
+    return parts.join('\n');
+  }, [listing.price, listing.title, publicListingUrl]);
+
+  const handleWhatsApp = useCallback(async () => {
+    if (openingWhatsApp) return;
+    if (!whatsappNumber) {
+      Alert.alert('WhatsApp indisponible', 'Numero vendeur indisponible.');
+      return;
     }
-  }, [listing.title, whatsappNumber]);
+
+    const encoded = encodeURIComponent(whatsAppMessage || buildWhatsAppMessage(listing.title ?? ''));
+    const url = `${WHATSAPP_PREFIX}/${whatsappNumber}?text=${encoded}`;
+    setOpeningWhatsApp(true);
+    try {
+      const supported = await Linking.canOpenURL(url).catch(() => false);
+      if (!supported) {
+        Alert.alert('WhatsApp indisponible', "Impossible d'ouvrir WhatsApp.");
+        return;
+      }
+
+      await Linking.openURL(url);
+    } catch {
+      Alert.alert('WhatsApp indisponible', "Impossible d'ouvrir WhatsApp.");
+    } finally {
+      setOpeningWhatsApp(false);
+    }
+  }, [listing.title, openingWhatsApp, whatsAppMessage, whatsappNumber]);
 
   const handleCall = useCallback(async () => {
     const num = callNumber;
@@ -125,16 +141,17 @@ export function ListingActions({
         id: listing.id,
         title: String(listing.title),
         price: listing.price,
+        city: listing.city ?? null,
       });
       if (!result.success && result.error) {
-        Alert.alert('Partage indisponible', 'Impossible de partager pour le moment.');
+        Alert.alert('Partage indisponible', result.error || 'Impossible de partager cette annonce.');
       }
     } catch {
-      Alert.alert('Partage indisponible', 'Impossible de partager pour le moment.');
+      Alert.alert('Partage indisponible', 'Impossible de partager cette annonce.');
     } finally {
       setSharing(false);
     }
-  }, [listing?.id, listing?.title, listing?.price, sharing]);
+  }, [listing?.city, listing?.id, listing?.price, listing?.title, sharing]);
 
   return (
     <View style={[styles.footer, { paddingBottom: spacing.xl + safeBottom }]}>
@@ -156,6 +173,8 @@ export function ListingActions({
             size="md"
             style={styles.contactSecondary}
             onPress={handleWhatsApp}
+            loading={openingWhatsApp}
+            disabled={openingWhatsApp}
           >
             WhatsApp
           </Button>

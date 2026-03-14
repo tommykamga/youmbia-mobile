@@ -3,9 +3,9 @@
  * Persistence: in-memory (see src/services/savedSearches). Replace with AsyncStorage or Supabase for production.
  */
 
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import { View, Text, StyleSheet, Pressable, FlatList } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Screen, AppHeader, EmptyState } from '@/components';
 import { getSavedSearches, removeSavedSearch, type SavedSearch } from '@/services/savedSearches';
@@ -19,9 +19,11 @@ export default function SavedSearchesScreen() {
     setList(getSavedSearches());
   }, []);
 
-  useEffect(() => {
-    load();
-  }, [load]);
+  useFocusEffect(
+    useCallback(() => {
+      load();
+    }, [load])
+  );
 
   const handlePress = useCallback(
     (item: SavedSearch) => {
@@ -29,20 +31,28 @@ export default function SavedSearchesScreen() {
       if (item.query) params.set('q', item.query);
       if (item.priceMin != null) params.set('priceMin', String(item.priceMin));
       if (item.priceMax != null) params.set('priceMax', String(item.priceMax));
+      if (item.category) params.set('category', item.category);
+      if (item.city) params.set('city', item.city);
       router.push(`/(tabs)/search?${params.toString()}` as const);
     },
     [router]
   );
 
   const handleDelete = useCallback((id: string) => {
-    removeSavedSearch(id);
+    const ok = removeSavedSearch(id);
+    if (!ok) return;
     setList(getSavedSearches());
   }, []);
 
   const keyExtractor = useCallback((item: SavedSearch) => item.id, []);
   const renderItem = useCallback(
     ({ item }: { item: SavedSearch }) => {
-      const subtitle = [item.priceMin != null && `Min ${item.priceMin} FCFA`, item.priceMax != null && `Max ${item.priceMax} FCFA`]
+      const subtitle = [
+        item.category,
+        item.city,
+        item.priceMin != null && `Min ${item.priceMin} FCFA`,
+        item.priceMax != null && `Max ${item.priceMax} FCFA`,
+      ]
         .filter(Boolean)
         .join(' · ');
       return (
@@ -51,13 +61,13 @@ export default function SavedSearchesScreen() {
           onPress={() => handlePress(item)}
         >
           <View style={styles.rowBody}>
-            <Text style={styles.rowQuery} numberOfLines={1}>{item.query || 'Recherche'}</Text>
+            <Text style={styles.rowQuery} numberOfLines={1}>{item.label || item.query || 'Recherche'}</Text>
             {subtitle ? (
               <Text style={styles.rowSubtitle} numberOfLines={1}>{subtitle}</Text>
             ) : null}
           </View>
           <Pressable
-            style={({ p }) => [styles.deleteBtn, p && styles.deleteBtnPressed]}
+            style={({ pressed }) => [styles.deleteBtn, pressed && styles.deleteBtnPressed]}
             onPress={() => handleDelete(item.id)}
             hitSlop={8}
           >
