@@ -70,7 +70,7 @@ export async function getConversations(): Promise<GetConversationsResult> {
       };
     }
     const listingMap = new Map(
-      (listings ?? []).map((l: { id: string; title: string; user_id: string }) => [l.id, l])
+      (listings ?? []).map((l: { id: string; title: string; user_id: string | null }) => [l.id, l])
     );
 
     const otherIds = list.map((c) => (c.buyer_id === userId ? c.seller_id : c.buyer_id));

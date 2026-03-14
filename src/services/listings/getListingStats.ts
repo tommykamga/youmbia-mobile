@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabase';
+import type { Tables } from '@/types/database';
 
 export type ListingStats = {
   views: number;
@@ -56,7 +57,7 @@ export async function getListingStats(listingId: string): Promise<GetListingStat
     ]);
 
     const data: ListingStats = {
-      views: toSafeCount((listingRow as { views_count?: number | null } | null)?.views_count),
+      views: toSafeCount((listingRow as Pick<Tables<'listings'>, 'views_count'> | null)?.views_count),
       favorites: favoritesError ? 0 : toSafeCount(favoritesCount),
       contacts: contactsError ? 0 : toSafeCount(contactsCount),
     };

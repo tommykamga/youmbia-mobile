@@ -5,13 +5,14 @@
 
 import { supabase } from '@/lib/supabase';
 import type { ListingCategoryId } from '@/lib/listingCategories';
+import type { TablesInsert } from '@/types/database';
 
 export type CreateListingPayload = {
   title: string;
   price: number;
   categoryId: ListingCategoryId;
-  city?: string;
-  description?: string;
+  city?: string | null;
+  description?: string | null;
 };
 
 export type CreateListingResult =
@@ -42,8 +43,8 @@ export async function createListing(payload: CreateListingPayload): Promise<Crea
 
     const title = payload.title?.trim();
     const categoryId = Number(payload.categoryId);
-    const city = payload.city?.trim() ?? '';
-    const description = payload.description?.trim() ?? '';
+    const city = payload.city?.trim() || null;
+    const description = payload.description?.trim() || null;
 
     if (!title || title.length < 2) {
       return { data: null, error: { message: 'Titre requis (2 caractères minimum)' } };
@@ -54,18 +55,20 @@ export async function createListing(payload: CreateListingPayload): Promise<Crea
     if (!Number.isInteger(categoryId) || categoryId <= 0) {
       return { data: null, error: { message: 'Catégorie requise' } };
     }
+    const insertPayload: TablesInsert<'listings'> = {
+      title,
+      price: Math.round(payload.price),
+      category_id: categoryId,
+      city,
+      description,
+      user_id: user.id,
+      status: 'active',
+      views_count: 0,
+    };
+
     const { data, error } = await supabase
       .from('listings')
-      .insert({
-        title,
-        price: Math.round(payload.price),
-        category_id: categoryId,
-        city,
-        description: description || null,
-        user_id: user.id,
-        status: 'active',
-        views_count: 0,
-      } as never)
+      .insert(insertPayload)
       .select('id')
       .single();
 
@@ -73,7 +76,11 @@ export async function createListing(payload: CreateListingPayload): Promise<Crea
       return { data: null, error: { message: getCreateListingErrorMessage(error.message) } };
     }
 
-    return { data: { id: (data as { id: string }).id }, error: null };
+    if (!data?.id) {
+      return { data: null, error: { message: "Impossible de publier l'annonce" } };
+    }
+
+    return { data: { id: data.id }, error: null };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error ?? '');
     return { data: null, error: { message: getCreateListingErrorMessage(message) } };

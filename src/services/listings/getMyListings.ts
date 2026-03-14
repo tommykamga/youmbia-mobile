@@ -6,48 +6,53 @@
 import { supabase } from '@/lib/supabase';
 import { getSignedUrlsMap, toDisplayImageUrl } from '@/lib/listingImageUrl';
 import { normalizeListingSchemaFeatures } from '@/lib/listingSchemaFeatures';
+import type { Tables } from '@/types/database';
 import type { PublicListing } from './getPublicListings';
 
 export type MyListing = PublicListing & {
   status: string;
 };
 
-type ListingImageRow = { url: string; sort_order: number | null };
+type ListingImageRow = Pick<Tables<'listing_images'>, 'url' | 'sort_order'>;
 
-type ListingRow = {
-  id: string;
-  title: string;
-  price: number;
-  city: string;
-  created_at: string;
-  views_count: number | null;
-  user_id: string | null;
-  status: string | null;
-  boosted?: boolean | null;
-  urgent?: boolean | null;
-  district?: string | null;
+type ListingRow = Pick<
+  Tables<'listings'>,
+  | 'id'
+  | 'title'
+  | 'price'
+  | 'city'
+  | 'description'
+  | 'created_at'
+  | 'views_count'
+  | 'user_id'
+  | 'status'
+  | 'boosted'
+  | 'urgent'
+  | 'district'
+> & {
   listing_images: ListingImageRow[] | null;
 };
 
 function mapRow(row: ListingRow, signedMap: Map<string, string>): MyListing {
   const schema = normalizeListingSchemaFeatures(row);
-  const base: PublicListing = {
-    id: row.id,
-    title: row.title,
-    price: row.price,
-    city: row.city,
-    created_at: row.created_at,
-    views_count: row.views_count ?? 0,
-    seller_id: row.user_id ?? '',
-    ...schema,
-  };
   const images = (row.listing_images ?? [])
     .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
     .map((img) => toDisplayImageUrl(img.url ?? '', signedMap))
     .filter((url) => url !== '');
+  const base: PublicListing = {
+    id: row.id,
+    title: row.title,
+    price: row.price,
+    city: row.city ?? '',
+    description: row.description ?? null,
+    created_at: row.created_at,
+    images,
+    views_count: row.views_count ?? 0,
+    seller_id: row.user_id ?? '',
+    ...schema,
+  };
   return {
     ...base,
-    images,
     status: row.status ?? 'active',
   };
 }
@@ -72,7 +77,7 @@ export async function getMyListings(): Promise<GetMyListingsResult> {
   const { data, error } = await supabase
     .from('listings')
     .select(
-      'id, title, price, city, boosted, urgent, district, created_at, views_count, user_id, status, listing_images(url, sort_order)'
+      'id, title, price, city, description, boosted, urgent, district, created_at, views_count, user_id, status, listing_images(url, sort_order)'
     )
     .eq('user_id', user.id)
     .order('created_at', { ascending: false });

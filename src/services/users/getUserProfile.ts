@@ -5,6 +5,7 @@
 
 import { supabase } from '@/lib/supabase';
 import { getSignedUrlsMap, toDisplayImageUrl } from '@/lib/listingImageUrl';
+import type { Tables } from '@/types/database';
 import type { PublicListing } from '@/services/listings';
 
 export type UserProfile = {
@@ -20,16 +21,26 @@ export type UserProfile = {
   is_flagged: boolean | null;
 };
 
-type ListingImageRow = { url: string; sort_order: number | null };
+type UserProfileRow = Pick<
+  Tables<'profiles'>,
+  | 'id'
+  | 'full_name'
+  | 'city'
+  | 'bio'
+  | 'created_at'
+  | 'is_verified'
+  | 'trust_score'
+  | 'reports_count'
+  | 'is_banned'
+  | 'is_flagged'
+>;
 
-type ListingRow = {
-  id: string;
-  title: string;
-  price: number;
-  city: string;
-  created_at: string;
-  views_count: number | null;
-  user_id: string | null;
+type ListingImageRow = Pick<Tables<'listing_images'>, 'url' | 'sort_order'>;
+
+type ListingRow = Pick<
+  Tables<'listings'>,
+  'id' | 'title' | 'price' | 'city' | 'created_at' | 'views_count' | 'user_id'
+> & {
   listing_images: ListingImageRow[] | null;
 };
 
@@ -42,7 +53,7 @@ function mapListingRow(row: ListingRow, signedMap: Map<string, string>): PublicL
     id: row.id,
     title: row.title,
     price: row.price,
-    city: row.city,
+    city: row.city ?? '',
     created_at: row.created_at,
     images,
     views_count: row.views_count ?? 0,
@@ -78,17 +89,18 @@ export async function getUserProfile(userId: string): Promise<GetUserProfileResu
     return { data: null, error: { message: 'Profil introuvable' } };
   }
 
+  const safeProfileRow = profileRow as UserProfileRow;
   const profile: UserProfile = {
-    id: (profileRow as { id: string }).id,
-    full_name: (profileRow as { full_name: string | null }).full_name ?? null,
-    city: (profileRow as { city?: string | null }).city ?? null,
-    bio: (profileRow as { bio?: string | null }).bio ?? null,
-    created_at: (profileRow as { created_at: string | null }).created_at ?? null,
-    is_verified: (profileRow as { is_verified?: boolean | null }).is_verified ?? null,
-    trust_score: (profileRow as { trust_score?: number | null }).trust_score ?? null,
-    reports_count: (profileRow as { reports_count?: number | null }).reports_count ?? null,
-    is_banned: (profileRow as { is_banned?: boolean | null }).is_banned ?? null,
-    is_flagged: (profileRow as { is_flagged?: boolean | null }).is_flagged ?? null,
+    id: safeProfileRow.id,
+    full_name: safeProfileRow.full_name ?? null,
+    city: safeProfileRow.city ?? null,
+    bio: safeProfileRow.bio ?? null,
+    created_at: safeProfileRow.created_at ?? null,
+    is_verified: safeProfileRow.is_verified ?? null,
+    trust_score: safeProfileRow.trust_score ?? null,
+    reports_count: safeProfileRow.reports_count ?? null,
+    is_banned: safeProfileRow.is_banned ?? null,
+    is_flagged: safeProfileRow.is_flagged ?? null,
   };
 
   const { data: listingRows, error: listingsError } = await supabase

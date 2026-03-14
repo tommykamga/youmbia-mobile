@@ -3,7 +3,7 @@
  * Header (name, verified, join date), trust section, seller's listings, report user.
  */
 
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { View, Text, StyleSheet, FlatList, Modal, Pressable, Alert } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
 import { Screen, AppHeader, Loader, EmptyState, Button } from '@/components';
@@ -49,46 +49,62 @@ export default function UserProfileScreen() {
   const [reportReason, setReportReason] = useState<string | null>(null);
   const [reportedUserId, setReportedUserId] = useState<string | null>(null);
   const [sharingProfile, setSharingProfile] = useState(false);
-
-  const load = useCallback(async () => {
-    if (!id) {
-      setState({ status: 'error', message: 'Identifiant manquant' });
-      return;
-    }
-    setState({ status: 'loading' });
-    const [profileResult, statsResult] = await Promise.all([
-      getUserProfile(id),
-      getSellerStats(id),
-    ]);
-    if (profileResult.error) {
-      setState({ status: 'error', message: profileResult.error.message });
-      return;
-    }
-    const { profile, listings } = profileResult.data!;
-    setState({
-      status: 'success',
-      profile: {
-        full_name: profile.full_name,
-        city: profile.city ?? null,
-        bio: profile.bio ?? null,
-        created_at: profile.created_at,
-        is_verified: profile.is_verified,
-        trust_score: profile.trust_score,
-        reports_count: profile.reports_count,
-        is_banned: profile.is_banned,
-        is_flagged: profile.is_flagged,
-      },
-      stats: {
-        memberSince: statsResult.error ? null : statsResult.data.memberSince,
-        listingCount: statsResult.error ? null : statsResult.data.listingCount,
-      },
-      listings,
-    });
-  }, [id]);
+  const loadRequestIdRef = useRef(0);
 
   useEffect(() => {
+    let isActive = true;
+    const requestId = loadRequestIdRef.current + 1;
+    loadRequestIdRef.current = requestId;
+
+    const load = async () => {
+      if (!id) {
+        if (isActive && loadRequestIdRef.current === requestId) {
+          setState({ status: 'error', message: 'Identifiant manquant' });
+        }
+        return;
+      }
+
+      setState({ status: 'loading' });
+      const [profileResult, statsResult] = await Promise.all([
+        getUserProfile(id),
+        getSellerStats(id),
+      ]);
+
+      if (!isActive || loadRequestIdRef.current !== requestId) return;
+
+      if (profileResult.error) {
+        setState({ status: 'error', message: profileResult.error.message });
+        return;
+      }
+
+      const { profile, listings } = profileResult.data;
+      setState({
+        status: 'success',
+        profile: {
+          full_name: profile.full_name,
+          city: profile.city ?? null,
+          bio: profile.bio ?? null,
+          created_at: profile.created_at,
+          is_verified: profile.is_verified,
+          trust_score: profile.trust_score,
+          reports_count: profile.reports_count,
+          is_banned: profile.is_banned,
+          is_flagged: profile.is_flagged,
+        },
+        stats: {
+          memberSince: statsResult.error ? null : statsResult.data.memberSince,
+          listingCount: statsResult.error ? null : statsResult.data.listingCount,
+        },
+        listings,
+      });
+    };
+
     load();
-  }, [load]);
+
+    return () => {
+      isActive = false;
+    };
+  }, [id]);
 
   const handleReportPress = useCallback(() => {
     if (!id) return;

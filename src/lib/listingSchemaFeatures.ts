@@ -18,6 +18,12 @@ export const LISTING_SCHEMA_DEFAULTS = {
   district: null as string | null,
 } as const;
 
+type NormalizedListingSchemaFeatures = {
+  boosted: boolean;
+  urgent: boolean;
+  district: string | null;
+};
+
 /**
  * Normalise les champs optionnels d'une ligne listing (row) pour le mapping côté services.
  * À appeler dans chaque mapRow avant de construire PublicListing / ListingDetail.
@@ -25,7 +31,7 @@ export const LISTING_SCHEMA_DEFAULTS = {
  */
 export function normalizeListingSchemaFeatures(
   row: ListingRowSchemaFeatures | undefined | null
-): typeof LISTING_SCHEMA_DEFAULTS {
+): NormalizedListingSchemaFeatures {
   if (row == null) return LISTING_SCHEMA_DEFAULTS;
   return {
     boosted: row.boosted === true,

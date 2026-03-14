@@ -1,6 +1,7 @@
 import { supabase } from '@/lib/supabase';
 import { getSignedUrlsMap, toDisplayImageUrl } from '@/lib/listingImageUrl';
 import { getDisplayBoosted, normalizeListingSchemaFeatures } from '@/lib/listingSchemaFeatures';
+import type { Tables } from '@/types/database';
 import type { PublicListing } from './getPublicListings';
 
 const CATEGORY_OPTIONS = ['Véhicules', 'Mode', 'Maison', 'Électronique', 'Sport', 'Loisirs', 'Autre'] as const;
@@ -13,20 +14,22 @@ const STOPWORDS = new Set([
   'grande', 'prix', 'annonce', 'vendeur', 'neuf', 'neuve',
 ]);
 
-type ListingImageRow = { url: string; sort_order: number | null };
+type ListingImageRow = Pick<Tables<'listing_images'>, 'url' | 'sort_order'>;
 
-type ListingRow = {
-  id: string;
-  title: string;
-  price: number;
-  city: string;
-  description: string | null;
-  created_at: string;
-  views_count: number | null;
-  user_id: string | null;
-  boosted?: boolean | null;
-  urgent?: boolean | null;
-  district?: string | null;
+type ListingRow = Pick<
+  Tables<'listings'>,
+  | 'id'
+  | 'title'
+  | 'price'
+  | 'city'
+  | 'description'
+  | 'created_at'
+  | 'views_count'
+  | 'user_id'
+  | 'boosted'
+  | 'urgent'
+  | 'district'
+> & {
   listing_images: ListingImageRow[] | null;
 };
 
@@ -85,7 +88,7 @@ function mapRow(row: ListingRow, signedMap: Map<string, string>): PublicListing 
     id: row.id,
     title: row.title,
     price: row.price,
-    city: row.city,
+    city: row.city ?? '',
     description: row.description ?? null,
     created_at: row.created_at,
     images,
@@ -104,7 +107,7 @@ export async function getSimilarListings(
     return { data: [], error: { message: 'Identifiant annonce manquant' } };
   }
 
-  const safeLimit = Math.max(1, Math.min(limit, 8));
+  const safeLimit = Math.max(1, Math.min(limit, DEFAULT_LIMIT));
   const currentCity = normalizeText(input.city);
   const currentCategory = inferCategory(input);
   const currentKeywords = extractKeywords(input);

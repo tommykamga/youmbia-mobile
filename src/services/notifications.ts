@@ -183,12 +183,12 @@ export function shouldShowPushPrompt(): boolean {
   return readStorage(PUSH_PROMPT_DISMISSED_KEY) !== 'true';
 }
 
-export async function getPushPermissionStatus(): Promise<Notifications.PermissionStatus> {
+export async function getPushPermissionStatus(): Promise<'granted' | 'denied'> {
   try {
     const settings = await Notifications.getPermissionsAsync();
-    return settings.status;
+    return settings.status === 'granted' ? 'granted' : 'denied';
   } catch {
-    return 'undetermined';
+    return 'denied';
   }
 }
 
@@ -204,7 +204,7 @@ export async function registerForPushNotifications(): Promise<PushRegistrationRe
     if (permissionStatus !== 'granted') {
       writeStorage(PUSH_PERMISSION_ASKED_KEY, 'true');
       const requested = await Notifications.requestPermissionsAsync();
-      permissionStatus = requested.status;
+      permissionStatus = requested.status === 'granted' ? 'granted' : 'denied';
     }
 
     if (permissionStatus !== 'granted') {

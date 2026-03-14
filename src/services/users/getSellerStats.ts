@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabase';
+import type { Tables } from '@/types/database';
 
 export type SellerStats = {
   memberSince: string | null;
@@ -34,7 +35,7 @@ export async function getSellerStats(userId: string): Promise<GetSellerStatsResu
 
     return {
       data: {
-        memberSince: (profileRow as { created_at?: string | null } | null)?.created_at ?? null,
+        memberSince: (profileRow as Pick<Tables<'profiles'>, 'created_at'> | null)?.created_at ?? null,
         listingCount: Math.max(0, Number(count ?? 0)),
       },
       error: null,

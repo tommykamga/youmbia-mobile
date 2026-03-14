@@ -48,7 +48,7 @@ export default function RootLayout() {
   const router = useRouter();
   const segments = useSegments();
   const pathname = usePathname();
-  const globalParams = useGlobalSearchParams<Record<string, string | string[] | undefined>>();
+  const globalParams = useGlobalSearchParams();
   const lastHandledUrlRef = useRef<string | null>(null);
   const lastHandledNotificationRef = useRef<string | null>(null);
   const pathnameRef = useRef(pathname);
