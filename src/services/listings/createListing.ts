@@ -4,12 +4,14 @@
  */
 
 import { supabase } from '@/lib/supabase';
+import type { ListingCategoryId } from '@/lib/listingCategories';
 
 export type CreateListingPayload = {
   title: string;
   price: number;
-  city: string;
-  description: string;
+  categoryId: ListingCategoryId;
+  city?: string;
+  description?: string;
 };
 
 export type CreateListingResult =
@@ -39,7 +41,8 @@ export async function createListing(payload: CreateListingPayload): Promise<Crea
     }
 
     const title = payload.title?.trim();
-    const city = payload.city?.trim();
+    const categoryId = Number(payload.categoryId);
+    const city = payload.city?.trim() ?? '';
     const description = payload.description?.trim() ?? '';
 
     if (!title || title.length < 2) {
@@ -48,15 +51,15 @@ export async function createListing(payload: CreateListingPayload): Promise<Crea
     if (typeof payload.price !== 'number' || !Number.isFinite(payload.price) || payload.price <= 0) {
       return { data: null, error: { message: 'Prix invalide (doit être supérieur à 0)' } };
     }
-    if (!city) {
-      return { data: null, error: { message: 'Ville requise' } };
+    if (!Number.isInteger(categoryId) || categoryId <= 0) {
+      return { data: null, error: { message: 'Catégorie requise' } };
     }
-
     const { data, error } = await supabase
       .from('listings')
       .insert({
         title,
         price: Math.round(payload.price),
+        category_id: categoryId,
         city,
         description: description || null,
         user_id: user.id,

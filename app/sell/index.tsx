@@ -11,10 +11,12 @@ import {
   ScrollView,
   Alert,
   Platform,
+  Pressable,
 } from 'react-native';
 import { useRouter, type Href } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import { Screen, Button, Input } from '@/components';
+import { LISTING_CATEGORIES, type ListingCategoryId } from '@/lib/listingCategories';
 import { colors, spacing, typography, fontWeights, radius } from '@/theme';
 import { createListing, uploadListingImages } from '@/services/listings';
 import { getSession } from '@/services/auth';
@@ -42,6 +44,7 @@ export default function SellScreen() {
 
   const [title, setTitle] = useState('');
   const [priceStr, setPriceStr] = useState('');
+  const [categoryId, setCategoryId] = useState<ListingCategoryId | null>(null);
   const [city, setCity] = useState('');
   const [description, setDescription] = useState('');
   const [images, setImages] = useState<PickedImage[]>([]);
@@ -55,6 +58,7 @@ export default function SellScreen() {
     setSubmitError(null);
     setTitle('');
     setPriceStr('');
+    setCategoryId(null);
     setCity('');
     setDescription('');
     setImages([]);
@@ -125,8 +129,12 @@ export default function SellScreen() {
       setSubmitError('Prix invalide (doit être supérieur à 0)');
       return;
     }
-    if (!city.trim()) {
-      setSubmitError('Ville requise');
+    if (!categoryId) {
+      setSubmitError('Catégorie requise');
+      return;
+    }
+    if (images.length === 0 || !images.some((img) => !!img.base64 || !!img.uri)) {
+      setSubmitError('Ajoutez au moins une photo');
       return;
     }
 
@@ -135,6 +143,7 @@ export default function SellScreen() {
       const { data, error } = await createListing({
         title: title.trim(),
         price: Math.round(price),
+        categoryId,
         city: city.trim(),
         description: description.trim() || '',
       });
@@ -357,14 +366,45 @@ export default function SellScreen() {
         onChangeText={setPriceStr}
         keyboardType={Platform.OS === 'web' ? 'numeric' : 'decimal-pad'}
       />
+      <View style={styles.categorySection}>
+        <Text style={styles.label}>Catégorie</Text>
+        <View style={styles.categoryChips}>
+          {LISTING_CATEGORIES.map((category) => {
+            const isSelected = categoryId === category.id;
+            return (
+              <Pressable
+                key={category.id}
+                style={({ pressed }) => [
+                  styles.categoryChip,
+                  isSelected && styles.categoryChipSelected,
+                  pressed && styles.categoryChipPressed,
+                ]}
+                onPress={() => {
+                  setCategoryId(category.id);
+                  setSubmitError(null);
+                }}
+              >
+                <Text
+                  style={[
+                    styles.categoryChipText,
+                    isSelected && styles.categoryChipTextSelected,
+                  ]}
+                >
+                  {category.label}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
+      </View>
       <Input
-        label="Ville"
+        label="Ville (optionnel)"
         placeholder="Ex. Paris"
         value={city}
         onChangeText={setCity}
       />
       <Input
-        label="Description"
+        label="Description (optionnelle)"
         placeholder="Décrivez votre article..."
         value={description}
         onChangeText={setDescription}
@@ -478,6 +518,38 @@ const styles = StyleSheet.create({
   },
   imagesSection: {
     marginBottom: spacing.lg,
+  },
+  categorySection: {
+    marginBottom: spacing.lg,
+  },
+  categoryChips: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
+  },
+  categoryChip: {
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.base,
+    borderRadius: radius.full,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+  },
+  categoryChipSelected: {
+    borderColor: colors.primary,
+    backgroundColor: colors.primary + '12',
+  },
+  categoryChipPressed: {
+    opacity: 0.85,
+  },
+  categoryChipText: {
+    ...typography.sm,
+    color: colors.text,
+    fontWeight: fontWeights.medium,
+  },
+  categoryChipTextSelected: {
+    color: colors.primary,
+    fontWeight: fontWeights.semibold,
   },
   thumbsRow: {
     flexDirection: 'row',

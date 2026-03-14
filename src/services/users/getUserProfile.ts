@@ -10,6 +10,8 @@ import type { PublicListing } from '@/services/listings';
 export type UserProfile = {
   id: string;
   full_name: string | null;
+  city?: string | null;
+  bio?: string | null;
   created_at: string | null;
   is_verified: boolean | null;
   trust_score: number | null;
@@ -64,7 +66,7 @@ export async function getUserProfile(userId: string): Promise<GetUserProfileResu
 
   const { data: profileRow, error: profileError } = await supabase
     .from('profiles')
-    .select('id, full_name, created_at, is_verified, trust_score, reports_count, is_banned, is_flagged')
+    .select('id, full_name, city, bio, created_at, is_verified, trust_score, reports_count, is_banned, is_flagged')
     .eq('id', id)
     .maybeSingle();
 
@@ -79,6 +81,8 @@ export async function getUserProfile(userId: string): Promise<GetUserProfileResu
   const profile: UserProfile = {
     id: (profileRow as { id: string }).id,
     full_name: (profileRow as { full_name: string | null }).full_name ?? null,
+    city: (profileRow as { city?: string | null }).city ?? null,
+    bio: (profileRow as { bio?: string | null }).bio ?? null,
     created_at: (profileRow as { created_at: string | null }).created_at ?? null,
     is_verified: (profileRow as { is_verified?: boolean | null }).is_verified ?? null,
     trust_score: (profileRow as { trust_score?: number | null }).trust_score ?? null,

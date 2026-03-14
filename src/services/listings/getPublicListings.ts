@@ -86,7 +86,7 @@ export async function getPublicListings(
   const { data, error } = await supabase
     .from('listings')
     .select(
-      'id, title, price, city, description, created_at, views_count, user_id, listing_images(url, sort_order)'
+      'id, title, price, city, description, boosted, urgent, district, created_at, views_count, user_id, listing_images(url, sort_order)'
     )
     .eq('status', 'active')
     .order('created_at', { ascending: false })

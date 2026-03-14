@@ -20,6 +20,7 @@ type ListingRow = {
   created_at: string;
   views_count: number | null;
   user_id: string | null;
+  boosted?: boolean | null;
   urgent?: boolean | null;
   district?: string | null;
   listing_images: ListingImageRow[] | null;
@@ -67,7 +68,7 @@ export async function searchListings(query: string): Promise<SearchListingsResul
   const { data, error } = await supabase
     .from('listings')
     .select(
-      'id, title, price, city, description, created_at, views_count, user_id, listing_images(url, sort_order)'
+      'id, title, price, city, description, boosted, urgent, district, created_at, views_count, user_id, listing_images(url, sort_order)'
     )
     .eq('status', 'active')
     .or(`title.ilike.${pattern},city.ilike.${pattern},description.ilike.${pattern}`)

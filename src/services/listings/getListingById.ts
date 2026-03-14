@@ -14,6 +14,7 @@ export type ListingDetail = {
   price: number;
   city: string;
   description: string;
+  boosted?: boolean;
   created_at: string;
   views_count: number;
   seller_id: string;
@@ -51,6 +52,7 @@ type ListingRow = {
   views_count: number | null;
   user_id: string | null;
   status?: string | null;
+  boosted?: boolean | null;
   district?: string | null;
   urgent?: boolean | null;
   listing_images: ListingImageRow[] | null;
@@ -78,7 +80,7 @@ export async function getListingById(id: string): Promise<GetListingByIdResult> 
   const { data: listingRow, error: listingError } = await supabase
     .from('listings')
     .select(
-      'id, title, price, city, description, created_at, views_count, user_id, status, listing_images(url, sort_order)'
+      'id, title, price, city, description, boosted, urgent, district, created_at, views_count, user_id, status, listing_images(url, sort_order)'
     )
     .eq('id', id)
     .maybeSingle();
@@ -143,13 +145,14 @@ export async function getListingById(id: string): Promise<GetListingByIdResult> 
     }
   }
 
-  const { district, urgent } = normalizeListingSchemaFeatures(row);
+  const { boosted, district, urgent } = normalizeListingSchemaFeatures(row);
   const data: ListingDetail = {
     id: row.id,
     title: row.title,
     price: row.price,
     city: row.city,
     description: row.description ?? '',
+    boosted,
     created_at: row.created_at,
     views_count: row.views_count ?? 0,
     seller_id: row.user_id ?? '',

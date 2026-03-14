@@ -1,11 +1,7 @@
 /**
  * Features dépendantes du schéma Supabase (boosted, urgent, district).
- * Ces colonnes ne sont pas encore présentes en base ; les requêtes ne les sélectionnent pas.
- * Ce module centralise les fallbacks pour que l'app reste stable et que l'UI soit
- * explicitement tolérante quand une feature n'est pas activée.
- *
- * Réactivation : ajouter les colonnes en base puis réintégrer les champs dans les .select()
- * des services listés dans docs/REACTIVATION_SCHEMA_FEATURES.md.
+ * Ce module centralise les fallbacks pour que l'app reste stable si un champ
+ * n'est pas sélectionné ou absent dans une réponse.
  */
 
 /** Type minimal pour une ligne listing pouvant contenir les champs optionnels (après migration). */

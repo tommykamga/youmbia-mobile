@@ -23,6 +23,7 @@ type ListingRow = {
   views_count: number | null;
   user_id: string | null;
   status: string | null;
+  boosted?: boolean | null;
   urgent?: boolean | null;
   district?: string | null;
   listing_images: ListingImageRow[] | null;
@@ -71,7 +72,7 @@ export async function getMyListings(): Promise<GetMyListingsResult> {
   const { data, error } = await supabase
     .from('listings')
     .select(
-      'id, title, price, city, created_at, views_count, user_id, status, listing_images(url, sort_order)'
+      'id, title, price, city, boosted, urgent, district, created_at, views_count, user_id, status, listing_images(url, sort_order)'
     )
     .eq('user_id', user.id)
     .order('created_at', { ascending: false });

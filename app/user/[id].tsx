@@ -3,17 +3,18 @@
  * Header (name, verified, join date), trust section, seller's listings, report user.
  */
 
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { View, Text, StyleSheet, FlatList, Modal, Pressable, Alert } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
 import { Screen, AppHeader, Loader, EmptyState, Button } from '@/components';
-import { getUserProfile } from '@/services/users';
+import { getSellerStats, getUserProfile } from '@/services/users';
 import { reportUser } from '@/services/reports';
 import { getSession } from '@/services/auth';
 import { ListingCard, SellerBadge } from '@/features/listings';
 import type { PublicListing } from '@/services/listings';
 import { formatJoinDate } from '@/lib/format';
-import { colors, spacing, typography, fontWeights } from '@/theme';
+import { shareSellerProfile } from '@/lib/shareListing';
+import { colors, spacing, typography, fontWeights, cardStyles } from '@/theme';
 
 const REPORT_REASONS = ['Arnaque', 'Comportement inapproprié', 'Spam', 'Autre'] as const;
 
@@ -24,12 +25,18 @@ type State =
       status: 'success';
       profile: {
         full_name: string | null;
+        city: string | null;
+        bio: string | null;
         created_at: string | null;
         is_verified: boolean | null;
         trust_score: number | null;
         reports_count: number | null;
         is_banned: boolean | null;
         is_flagged: boolean | null;
+      };
+      stats: {
+        memberSince: string | null;
+        listingCount: number | null;
       };
       listings: PublicListing[];
     };
@@ -41,6 +48,7 @@ export default function UserProfileScreen() {
   const [reportLoading, setReportLoading] = useState(false);
   const [reportReason, setReportReason] = useState<string | null>(null);
   const [reportedUserId, setReportedUserId] = useState<string | null>(null);
+  const [sharingProfile, setSharingProfile] = useState(false);
 
   const load = useCallback(async () => {
     if (!id) {
@@ -48,22 +56,31 @@ export default function UserProfileScreen() {
       return;
     }
     setState({ status: 'loading' });
-    const result = await getUserProfile(id);
-    if (result.error) {
-      setState({ status: 'error', message: result.error.message });
+    const [profileResult, statsResult] = await Promise.all([
+      getUserProfile(id),
+      getSellerStats(id),
+    ]);
+    if (profileResult.error) {
+      setState({ status: 'error', message: profileResult.error.message });
       return;
     }
-    const { profile, listings } = result.data!;
+    const { profile, listings } = profileResult.data!;
     setState({
       status: 'success',
       profile: {
         full_name: profile.full_name,
+        city: profile.city ?? null,
+        bio: profile.bio ?? null,
         created_at: profile.created_at,
         is_verified: profile.is_verified,
         trust_score: profile.trust_score,
         reports_count: profile.reports_count,
         is_banned: profile.is_banned,
         is_flagged: profile.is_flagged,
+      },
+      stats: {
+        memberSince: statsResult.error ? null : statsResult.data.memberSince,
+        listingCount: statsResult.error ? null : statsResult.data.listingCount,
       },
       listings,
     });
@@ -119,6 +136,25 @@ export default function UserProfileScreen() {
     );
   }, [id, reportReason]);
 
+  const handleShareProfile = useCallback(async () => {
+    if (!id || sharingProfile || state.status !== 'success') return;
+    setSharingProfile(true);
+    try {
+      const result = await shareSellerProfile({
+        id,
+        name: state.profile.full_name ?? null,
+        city: state.profile.city ?? null,
+      });
+      if (!result.success && result.error) {
+        Alert.alert('Partage indisponible', result.error || 'Impossible de partager ce profil vendeur.');
+      }
+    } catch {
+      Alert.alert('Partage indisponible', 'Impossible de partager ce profil vendeur.');
+    } finally {
+      setSharingProfile(false);
+    }
+  }, [id, sharingProfile, state]);
+
   const keyExtractor = useCallback((item: PublicListing) => item.id, []);
   const renderItem = useCallback(
     ({ item }: { item: PublicListing }) => (
@@ -128,7 +164,6 @@ export default function UserProfileScreen() {
     ),
     []
   );
-  const itemSeparator = useCallback(() => <View style={styles.separator} />, []);
 
   if (state.status === 'loading') {
     return (
@@ -153,42 +188,73 @@ export default function UserProfileScreen() {
   }
 
   const name = state.profile.full_name?.trim() || 'Vendeur';
-  const joinDate = formatJoinDate(state.profile.created_at);
+  const city = state.profile.city?.trim() || null;
+  const bio = state.profile.bio?.trim() || null;
+  const joinDate = formatJoinDate(state.stats.memberSince ?? state.profile.created_at);
   const isBanned = state.profile.is_banned === true;
   const isFlagged = state.profile.is_flagged === true || (Number(state.profile.reports_count ?? 0) > 0);
   const trustScore = state.profile.trust_score;
   const reportsCount = state.profile.reports_count;
   const showTrustScore = trustScore != null;
   const showReportsCount = reportsCount != null && Number(reportsCount) > 0;
+  const listingCount =
+    state.stats.listingCount != null ? state.stats.listingCount : state.listings.length;
+  const listingCountLabel = `${listingCount} annonce${listingCount > 1 ? 's' : ''}`;
 
-  const renderHeader = useMemo(() => (
+  const renderHeader = (
     <View style={styles.header}>
-      <View style={styles.titleRow}>
-        <Text style={styles.name}>{name}</Text>
-        {state.profile.is_verified === true && (
-          <SellerBadge variant="verified" label="Vérifié" />
-        )}
-        {isFlagged && (
-          <SellerBadge variant="flagged" label="Profil signalé" />
-        )}
-      </View>
-      {joinDate ? (
-        <Text style={styles.meta}>Inscrit depuis {joinDate}</Text>
-      ) : null}
-      {isBanned && (
-        <Text style={styles.restrictedNotice}>Ce compte ne peut pas être contacté.</Text>
-      )}
-      {(showTrustScore || showReportsCount) && (
-        <View style={styles.trustRow}>
-          {showTrustScore && (
-            <Text style={styles.trustText}>Score confiance : {trustScore}</Text>
+      <View style={[cardStyles.default, styles.heroCard]}>
+        <View style={styles.titleRow}>
+          <Text style={styles.name}>{name}</Text>
+          {state.profile.is_verified === true && (
+            <SellerBadge variant="verified" label="Vérifié" />
           )}
-          {showReportsCount && (
-            <Text style={styles.trustText}>Signalements : {reportsCount}</Text>
+          {isFlagged && (
+            <SellerBadge variant="flagged" label="Profil signalé" />
           )}
         </View>
-      )}
-      <Text style={styles.sectionTitle}>Annonces</Text>
+        {city ? (
+          <Text style={styles.city}>{city}</Text>
+        ) : null}
+        <View style={styles.metaRow}>
+          {joinDate ? <Text style={styles.meta}>Membre depuis {joinDate}</Text> : null}
+          <Text style={styles.meta}>{listingCountLabel}</Text>
+        </View>
+        {isBanned && (
+          <Text style={styles.restrictedNotice}>Ce compte ne peut pas être contacté.</Text>
+        )}
+        {(showTrustScore || showReportsCount) && (
+          <View style={styles.trustRow}>
+            {showTrustScore && (
+              <Text style={styles.trustText}>Score confiance : {trustScore}</Text>
+            )}
+            {showReportsCount && (
+              <Text style={styles.trustText}>Signalements : {reportsCount}</Text>
+            )}
+          </View>
+        )}
+        <View style={styles.headerActions}>
+          <Button
+            variant="secondary"
+            size="sm"
+            onPress={handleShareProfile}
+            disabled={sharingProfile}
+            loading={sharingProfile}
+          >
+            Partager le profil
+          </Button>
+        </View>
+      </View>
+      {bio ? (
+        <View style={[cardStyles.default, styles.bioCard]}>
+          <Text style={styles.bioTitle}>Bio vendeur</Text>
+          <Text style={styles.bioText}>{bio}</Text>
+        </View>
+      ) : null}
+      <View style={styles.sectionRow}>
+        <Text style={styles.sectionTitle}>Ses annonces</Text>
+        <Text style={styles.sectionMeta}>{listingCountLabel}</Text>
+      </View>
       {id && (
         <Pressable
           onPress={handleReportPress}
@@ -198,7 +264,7 @@ export default function UserProfileScreen() {
         </Pressable>
       )}
     </View>
-  ), [name, joinDate, isBanned, isFlagged, showTrustScore, showReportsCount, trustScore, reportsCount, state.profile.is_verified, id, handleReportPress]);
+  );
 
   return (
     <Screen scroll={false}>
@@ -257,16 +323,19 @@ export default function UserProfileScreen() {
       </Modal>
       <FlatList
         data={state.listings}
+        numColumns={2}
         keyExtractor={keyExtractor}
         renderItem={renderItem}
-        ItemSeparatorComponent={itemSeparator}
         ListHeaderComponent={renderHeader}
         ListEmptyComponent={
-          <View style={styles.emptyWrap}>
-            <Text style={styles.emptyText}>Aucune annonce pour le moment.</Text>
-          </View>
+          <EmptyState
+            title="Aucune annonce en ligne"
+            message="Ce vendeur n'a pas encore d'annonce publique disponible."
+            style={styles.emptyWrap}
+          />
         }
         contentContainerStyle={styles.listContent}
+        columnWrapperStyle={styles.gridRow}
         showsVerticalScrollIndicator={false}
         initialNumToRender={10}
         maxToRenderPerBatch={6}
@@ -281,21 +350,33 @@ const styles = StyleSheet.create({
   center: { flex: 1 },
   header: {
     padding: spacing.base,
-    paddingBottom: spacing.md,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.borderLight,
+    paddingBottom: spacing.lg,
+  },
+  heroCard: {
+    padding: spacing.lg,
+    marginBottom: spacing.base,
   },
   titleRow: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     gap: spacing.sm,
     flexWrap: 'wrap',
     marginBottom: spacing.xs,
   },
   name: {
-    ...typography.xl,
+    ...typography['2xl'],
     fontWeight: fontWeights.bold,
     color: colors.text,
+  },
+  city: {
+    ...typography.base,
+    color: colors.textSecondary,
+    marginBottom: spacing.sm,
+  },
+  metaRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.md,
   },
   meta: {
     ...typography.sm,
@@ -314,9 +395,36 @@ const styles = StyleSheet.create({
     gap: spacing.md,
     marginBottom: spacing.sm,
   },
+  headerActions: {
+    marginTop: spacing.sm,
+    alignItems: 'flex-start',
+  },
   trustText: {
     ...typography.sm,
     color: colors.textSecondary,
+  },
+  bioCard: {
+    padding: spacing.lg,
+    marginBottom: spacing.base,
+  },
+  bioTitle: {
+    ...typography.sm,
+    fontWeight: fontWeights.bold,
+    color: colors.text,
+    textTransform: 'uppercase',
+    letterSpacing: 0.4,
+    marginBottom: spacing.sm,
+  },
+  bioText: {
+    ...typography.base,
+    color: colors.textSecondary,
+    lineHeight: 22,
+  },
+  sectionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: spacing.sm,
   },
   sectionTitle: {
     ...typography.sm,
@@ -324,7 +432,10 @@ const styles = StyleSheet.create({
     color: colors.text,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
-    marginTop: spacing.sm,
+  },
+  sectionMeta: {
+    ...typography.sm,
+    color: colors.textMuted,
   },
   reportLink: {
     alignSelf: 'flex-start',
@@ -407,17 +518,15 @@ const styles = StyleSheet.create({
     flexGrow: 1,
   },
   cardWrap: {
-    marginBottom: 0,
+    flex: 1,
+    minWidth: 0,
   },
-  separator: {
-    height: spacing.base,
+  gridRow: {
+    gap: spacing.base,
+    marginBottom: spacing.base,
   },
   emptyWrap: {
-    paddingVertical: spacing['2xl'],
-    alignItems: 'center',
-  },
-  emptyText: {
-    ...typography.sm,
-    color: colors.textMuted,
+    flex: 1,
+    paddingTop: spacing.xl,
   },
 });

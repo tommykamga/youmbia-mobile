@@ -7,16 +7,19 @@ import {
   Pressable,
   Text,
   Alert,
+  FlatList,
 } from 'react-native';
 import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Screen, Button, Loader, EmptyState, AppHeader } from '@/components';
-import { getListingById, type ListingDetail } from '@/services/listings';
+import { getListingById, getSimilarListings, type ListingDetail, type PublicListing } from '@/services/listings';
 import { getFavoriteIds, toggleFavorite } from '@/services/favorites';
 import { addRecentlyViewedListingId } from '@/services/recentlyViewed';
 import { getOrCreateConversation } from '@/services/conversations';
 import { getSession } from '@/services/auth';
 import { reportListing } from '@/services/reports';
+import { getSellerStats } from '@/services/users';
+import { NearYouCard } from '@/features/listings/NearYouCard';
 import {
   ListingGallery,
   ListingMeta,
@@ -83,6 +86,11 @@ export default function ListingDetailScreen() {
   const [reportReason, setReportReason] = useState<string | null>(null);
   const [favoriteLoading, setFavoriteLoading] = useState(false);
   const [messageLoading, setMessageLoading] = useState(false);
+  const [sellerStats, setSellerStats] = useState<{ memberSince: string | null; listingCount: number | null }>({
+    memberSince: null,
+    listingCount: null,
+  });
+  const [similarListings, setSimilarListings] = useState<PublicListing[]>([]);
   /** Évite double signalement immédiat en session (Sprint 7.1). */
   const [reportedListingId, setReportedListingId] = useState<string | null>(null);
 
@@ -91,6 +99,8 @@ export default function ListingDetailScreen() {
       setState({ status: 'error', message: 'Identifiant manquant' });
       return;
     }
+    setSellerStats({ memberSince: null, listingCount: null });
+    setSimilarListings([]);
     let cancelled = false;
     (async () => {
       const [listingResult, favResult] = await Promise.all([
@@ -102,10 +112,29 @@ export default function ListingDetailScreen() {
         setState({ status: 'error', message: listingResult.error.message });
         return;
       }
-      setState({ status: 'success', listing: listingResult.data! });
+      const listing = listingResult.data!;
+      setState({ status: 'success', listing });
       addRecentlyViewedListingId(id);
       if (favResult.data && id) {
         setIsFavorite(favResult.data.includes(id));
+      }
+      if (listing.seller_id) {
+        const statsResult = await getSellerStats(listing.seller_id);
+        if (!cancelled && !statsResult.error) {
+          setSellerStats({
+            memberSince: statsResult.data.memberSince,
+            listingCount: statsResult.data.listingCount,
+          });
+        }
+      }
+      const similarResult = await getSimilarListings({
+        id: listing.id,
+        title: listing.title,
+        description: listing.description,
+        city: listing.city,
+      });
+      if (!cancelled && !similarResult.error) {
+        setSimilarListings(similarResult.data);
       }
     })();
     return () => { cancelled = true; };
@@ -250,6 +279,11 @@ export default function ListingDetailScreen() {
   }
 
   const listing = state.listing;
+  const showSimilarListings = similarListings.length >= 2;
+  const renderSimilarItem = ({ item }: { item: PublicListing }) => (
+    <NearYouCard listing={item} userCity={listing.city} />
+  );
+  const similarKeyExtractor = (item: PublicListing) => item.id;
 
   return (
     <Screen scroll={false} noPadding>
@@ -277,9 +311,29 @@ export default function ListingDetailScreen() {
           />
           <ListingSeller
             listing={listing}
+            memberSince={sellerStats.memberSince}
+            listingCount={sellerStats.listingCount}
             onPress={listing.seller_id ? () => router.push(`/user/${listing.seller_id}` as const) : undefined}
           />
           <ListingDescription description={listing.description} />
+          {showSimilarListings ? (
+            <View style={styles.similarSection}>
+              <Text style={styles.similarTitle}>Annonces similaires</Text>
+              <FlatList
+                data={similarListings}
+                horizontal
+                keyExtractor={similarKeyExtractor}
+                renderItem={renderSimilarItem}
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.similarListContent}
+                ItemSeparatorComponent={() => <View style={styles.similarSeparator} />}
+                initialNumToRender={4}
+                maxToRenderPerBatch={4}
+                windowSize={4}
+                removeClippedSubviews
+              />
+            </View>
+          ) : null}
           <Pressable
             onPress={handleReportPress}
             style={({ pressed }) => [styles.reportLink, pressed && styles.reportLinkPressed]}
@@ -362,6 +416,22 @@ const styles = StyleSheet.create({
   },
   body: {
     padding: spacing.base,
+  },
+  similarSection: {
+    marginTop: spacing.lg,
+    marginBottom: spacing.lg,
+  },
+  similarTitle: {
+    ...typography.lg,
+    fontWeight: fontWeights.bold,
+    color: colors.text,
+    marginBottom: spacing.base,
+  },
+  similarListContent: {
+    paddingRight: spacing.base,
+  },
+  similarSeparator: {
+    width: spacing.sm,
   },
   reportLink: {
     alignSelf: 'flex-start',

@@ -10,6 +10,7 @@ import { useRouter } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { colors, spacing, typography, fontWeights, radius, cardStyles } from '@/theme';
 import { formatPrice } from '@/lib/format';
+import { getDisplayLocationLine, getDisplayUrgent } from '@/lib/listingSchemaFeatures';
 import type { PublicListing } from '@/services/listings';
 
 const CARD_WIDTH = 168;
@@ -58,6 +59,8 @@ function NearYouCardInner({
       ? listing.images[0]
       : undefined;
   const showNew = isNew(listing.created_at);
+  const showUrgent = getDisplayUrgent(listing);
+  const locationLine = getDisplayLocationLine(listing.city, listing.district);
   const city = listing.city?.trim() || null;
   const isNear = Boolean(userCity?.trim() && city && userCity.trim().toLowerCase() === city.toLowerCase());
 
@@ -92,11 +95,20 @@ function NearYouCardInner({
             <Text style={styles.imagePlaceholderText}>Aucune photo</Text>
           </View>
         )}
-        {showNew && (
-          <View style={styles.badgeNew}>
-            <Text style={styles.badgeNewText}>Nouveau</Text>
+        {(showNew || showUrgent) ? (
+          <View style={styles.badgesWrap}>
+            {showNew ? (
+              <View style={styles.badgeNew}>
+                <Text style={styles.badgeNewText}>Nouveau</Text>
+              </View>
+            ) : null}
+            {showUrgent ? (
+              <View style={styles.urgentBadge}>
+                <Text style={styles.urgentBadgeText}>Urgent</Text>
+              </View>
+            ) : null}
           </View>
-        )}
+        ) : null}
         {onFavoritePress != null ? (
           <Pressable
             style={({ pressed: p }) => [styles.heartWrap, p && styles.heartWrapPressed]}
@@ -119,7 +131,7 @@ function NearYouCardInner({
         <View style={styles.cityRow}>
           <Ionicons name="location-outline" size={12} color={colors.textMuted} style={styles.cityIcon} />
           <Text style={styles.city} numberOfLines={1}>
-            {city || 'Ville non précisée'}
+            {locationLine || city || 'Ville non précisée'}
             {isNear ? ' · À proximité' : ''}
           </Text>
         </View>
@@ -165,10 +177,15 @@ const styles = StyleSheet.create({
     ...typography.xs,
     color: colors.textTertiary,
   },
-  badgeNew: {
+  badgesWrap: {
     position: 'absolute',
     top: OVERLAY_INSET,
     left: OVERLAY_INSET,
+    flexDirection: 'row',
+    gap: spacing.xs,
+    flexWrap: 'wrap',
+  },
+  badgeNew: {
     paddingHorizontal: spacing.xs,
     paddingVertical: 4,
     borderRadius: radius.sm,
@@ -178,6 +195,17 @@ const styles = StyleSheet.create({
     ...typography.label.badge,
     color: colors.badgeNeutralText,
     textTransform: 'uppercase',
+  },
+  urgentBadge: {
+    backgroundColor: colors.error,
+    paddingHorizontal: spacing.xs,
+    paddingVertical: 4,
+    borderRadius: radius.sm,
+  },
+  urgentBadgeText: {
+    ...typography.xs,
+    fontWeight: fontWeights.semibold,
+    color: colors.surface,
   },
   heartWrap: {
     position: 'absolute',
