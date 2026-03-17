@@ -8,6 +8,7 @@ export { createListing } from './createListing';
 export { uploadListingImages } from './uploadListingImages';
 export { getMyListings } from './getMyListings';
 export { getListingStats } from './getListingStats';
+export { bumpListing } from './bumpListing';
 export { updateListingStatus } from './updateListingStatus';
 export { updateListingUrgent } from './updateListingUrgent';
 export type { PublicListing, GetPublicListingsResult } from './getPublicListings';
@@ -20,5 +21,6 @@ export type { CreateListingPayload, CreateListingResult } from './createListing'
 export type { UploadListingImagesResult } from './uploadListingImages';
 export type { MyListing, GetMyListingsResult } from './getMyListings';
 export type { ListingStats, GetListingStatsResult } from './getListingStats';
+export type { BumpListingResult } from './bumpListing';
 export type { UpdateListingStatusResult } from './updateListingStatus';
 export type { UpdateListingUrgentResult } from './updateListingUrgent';

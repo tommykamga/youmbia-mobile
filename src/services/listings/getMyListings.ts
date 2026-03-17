@@ -62,7 +62,7 @@ export type GetMyListingsResult =
   | { data: null; error: { message: string } };
 
 /**
- * Fetches listings for the current user (any status), ordered by created_at desc.
+ * Fetches listings for the current user (any status), ordered by updated_at desc then created_at desc.
  */
 export async function getMyListings(): Promise<GetMyListingsResult> {
   const {
@@ -80,6 +80,7 @@ export async function getMyListings(): Promise<GetMyListingsResult> {
       'id, title, price, city, description, boosted, urgent, district, created_at, views_count, user_id, status, listing_images(url, sort_order)'
     )
     .eq('user_id', user.id)
+    .order('updated_at', { ascending: false })
     .order('created_at', { ascending: false });
 
   if (error) {

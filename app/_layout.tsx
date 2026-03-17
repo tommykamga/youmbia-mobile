@@ -1,5 +1,4 @@
 import { Stack, useGlobalSearchParams, usePathname, useRouter, useSegments } from 'expo-router';
-import * as Notifications from 'expo-notifications';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useCallback, useEffect, useRef } from 'react';
@@ -9,10 +8,13 @@ import { colors } from '@/theme';
 import { onAuthStateChange } from '@/services/auth';
 import { getListingHrefFromUrl } from '@/lib/listingDeepLink';
 import {
+  addNotificationResponseReceivedListenerSafe,
   getComparableRouteKey,
   getComparableTargetKey,
+  getLastNotificationResponseAsyncSafe,
   getNotificationNavigationTarget,
   initializeNotifications,
+  isPushNotificationsAvailable,
 } from '@/services/notifications';
 import { syncNewMessageNotifications } from '@/services/messageNotifications';
 import { syncSavedSearchNotifications } from '@/services/savedSearchNotifications';
@@ -67,6 +69,7 @@ export default function RootLayout() {
   }, []);
 
   useEffect(() => {
+    if (!isPushNotificationsAvailable()) return;
     initializeNotifications();
   }, []);
 
@@ -161,23 +164,29 @@ export default function RootLayout() {
 
   useEffect(() => {
     let active = true;
-    let subscription: Notifications.EventSubscription | null = null;
+    let subscription: { remove: () => void } | null = null;
 
-    Notifications.getLastNotificationResponseAsync()
+    getLastNotificationResponseAsyncSafe()
       .then((initialResponse) => {
         if (!active || !initialResponse) return;
         handleNotificationResponse(
-          initialResponse.notification.request.identifier,
+          initialResponse.notification?.request?.identifier,
           getNotificationNavigationTarget(initialResponse)
         );
       })
       .catch(() => {});
 
-    subscription = Notifications.addNotificationResponseReceivedListener((response) => {
+    void addNotificationResponseReceivedListenerSafe((response) => {
       handleNotificationResponse(
-        response.notification.request.identifier,
+        response.notification?.request?.identifier,
         getNotificationNavigationTarget(response)
       );
+    }).then((listenerSubscription) => {
+      if (!active) {
+        listenerSubscription?.remove();
+        return;
+      }
+      subscription = listenerSubscription;
     });
 
     return () => {

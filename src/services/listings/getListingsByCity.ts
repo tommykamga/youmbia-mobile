@@ -50,7 +50,7 @@ export type GetListingsByCityResult =
   | { data: null; error: { message: string } };
 
 /**
- * Fetches active listings in the given city, ordered by created_at desc.
+ * Fetches active listings in the given city, ordered by updated_at desc then created_at desc.
  * City match is case-insensitive (ilike). Use for "Près de vous" when user city is known.
  */
 export async function getListingsByCity(
@@ -69,6 +69,7 @@ export async function getListingsByCity(
     )
     .eq('status', 'active')
     .ilike('city', trimmed)
+    .order('updated_at', { ascending: false })
     .order('created_at', { ascending: false })
     .limit(limit);
 

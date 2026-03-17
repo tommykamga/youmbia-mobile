@@ -16,6 +16,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { Screen, AppHeader, EmptyState, Loader, Button } from '@/components';
 import { ListingCard } from '@/features/listings';
 import {
+  bumpListing,
   getMyListings,
   getListingStats,
   updateListingStatus,
@@ -23,6 +24,7 @@ import {
   type ListingStats,
   type MyListing,
 } from '@/services/listings';
+import { shareListing } from '@/lib/shareListing';
 import { spacing, colors, typography, fontWeights, radius } from '@/theme';
 
 type State =
@@ -139,13 +141,16 @@ const MyListingRowInner = memo(function MyListingRow({
   listing,
   stats,
   onPatchListing,
+  onPromoteListing,
 }: {
   listing: MyListing;
   stats: ListingStats;
   onPatchListing: (listingId: string, patch: Partial<MyListing>) => void;
+  onPromoteListing: (listingId: string) => void;
 }) {
   const router = useRouter();
-  const [pendingAction, setPendingAction] = useState<null | 'status' | 'urgent'>(null);
+  const [pendingAction, setPendingAction] = useState<null | 'status' | 'urgent' | 'bump'>(null);
+  const [sharing, setSharing] = useState(false);
   const isMutating = pendingAction != null;
 
   const handleDeactivate = useCallback(() => {
@@ -213,10 +218,52 @@ const MyListingRowInner = memo(function MyListingRow({
     );
   }, []);
 
+  const handleImproveListing = useCallback(() => {
+    router.push(`/listing/${listing.id}`);
+  }, [listing.id, router]);
+
+  const handleBumpListing = useCallback(async () => {
+    if (isMutating) return;
+    setPendingAction('bump');
+    const result = await bumpListing(listing.id);
+    if (result.error) {
+      Alert.alert('Erreur', "Impossible de remonter l'annonce");
+      setPendingAction(null);
+      return;
+    }
+    onPromoteListing(listing.id);
+    setPendingAction(null);
+  }, [isMutating, listing.id, onPromoteListing]);
+
+  const handleShareListing = useCallback(async () => {
+    const listingId = listing.id?.trim();
+    if (!listingId || sharing) return;
+    setSharing(true);
+    try {
+      const result = await shareListing({
+        id: listingId,
+        title: listing.title,
+        price: listing.price,
+        city: listing.city ?? null,
+      });
+      if (!result.success && result.error) {
+        Alert.alert('Partage indisponible', result.error);
+      }
+    } catch {
+      Alert.alert('Partage indisponible', "Impossible de partager cette annonce");
+    } finally {
+      setSharing(false);
+    }
+  }, [listing.city, listing.id, listing.price, listing.title, sharing]);
+
   const isActive = listing.status === 'active';
   const isUrgent = listing.urgent === true;
   const isBoosted = listing.boosted === true;
   const qualityBadge = getListingQualityBadge(listing, stats);
+  const listingAgeInDays = getAgeInDays(listing.created_at);
+  const canBumpListing = isActive && listingAgeInDays != null && listingAgeInDays > 3;
+  const showImproveAction = qualityBadge?.title === 'Annonce à compléter';
+  const canShareListing = String(listing.id ?? '').trim().length > 0;
 
   return (
     <View style={styles.cardWrap}>
@@ -242,6 +289,18 @@ const MyListingRowInner = memo(function MyListingRow({
             <Text style={styles.qualityBadgeSubtitle}>{qualityBadge.subtitle}</Text>
           </View>
         ) : null}
+        {showImproveAction ? (
+          <View style={styles.improveActionWrap}>
+            <Button
+              variant="secondary"
+              size="sm"
+              onPress={handleImproveListing}
+              disabled={isMutating}
+            >
+              Améliorer l'annonce
+            </Button>
+          </View>
+        ) : null}
         <View style={styles.badgesRow}>
           <StatusBadge status={listing.status} />
           {isUrgent ? <SellerFlagBadge label="Urgent" tone="urgent" /> : null}
@@ -255,6 +314,28 @@ const MyListingRowInner = memo(function MyListingRow({
           ) : null}
         </View>
         <View style={styles.actions}>
+          {canShareListing ? (
+            <Button
+              variant="ghost"
+              size="sm"
+              onPress={handleShareListing}
+              disabled={sharing}
+              loading={sharing}
+            >
+              Partager
+            </Button>
+          ) : null}
+          {canBumpListing ? (
+            <Button
+              variant="outline"
+              size="sm"
+              onPress={handleBumpListing}
+              disabled={isMutating}
+              loading={pendingAction === 'bump'}
+            >
+              Remonter l'annonce
+            </Button>
+          ) : null}
           <Button
             variant={isUrgent ? 'secondary' : 'ghost'}
             size="sm"
@@ -386,6 +467,21 @@ export default function AccountListingsScreen() {
     });
   }, []);
 
+  const promoteListing = useCallback((listingId: string) => {
+    setState((prev) => {
+      if (prev.status !== 'success') return prev;
+      const index = prev.data.findIndex((item) => item.id === listingId);
+      if (index <= 0) return prev;
+      const nextData = [...prev.data];
+      const [promotedListing] = nextData.splice(index, 1);
+      nextData.unshift(promotedListing);
+      return {
+        status: 'success',
+        data: nextData,
+      };
+    });
+  }, []);
+
   const keyExtractor = useCallback((item: MyListing) => item.id, []);
   const renderItem = useCallback(
     ({ item }: { item: MyListing }) => (
@@ -393,9 +489,10 @@ export default function AccountListingsScreen() {
         listing={item}
         stats={statsByListingId[item.id] ?? buildInitialStats(item)}
         onPatchListing={patchListing}
+        onPromoteListing={promoteListing}
       />
     ),
-    [patchListing, statsByListingId]
+    [patchListing, promoteListing, statsByListingId]
   );
   const itemSeparator = useCallback(() => <View style={styles.separator} />, []);
 
@@ -569,5 +666,9 @@ const styles = StyleSheet.create({
   qualityBadgeSubtitle: {
     ...typography.xs,
     color: colors.textMuted,
+  },
+  improveActionWrap: {
+    marginBottom: spacing.sm,
+    alignItems: 'flex-start',
   },
 });

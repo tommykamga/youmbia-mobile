@@ -72,6 +72,7 @@ export async function searchListings(query: string): Promise<SearchListingsResul
     )
     .eq('status', 'active')
     .or(`title.ilike.${pattern},city.ilike.${pattern},description.ilike.${pattern}`)
+    .order('updated_at', { ascending: false })
     .order('created_at', { ascending: false })
     .limit(PAGE_SIZE);
 

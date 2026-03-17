@@ -1,7 +1,6 @@
 import 'expo-sqlite/localStorage/install';
 
 import Constants from 'expo-constants';
-import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 import { getListingHrefFromUrl } from '@/lib/listingDeepLink';
 
@@ -13,12 +12,41 @@ const SEARCH_ROUTE_PREFIXES = ['/(tabs)/search', '/search'] as const;
 
 type NotificationData = Record<string, unknown>;
 type NotificationCooldownMap = Record<string, number>;
+type NotificationResponseLike = {
+  notification?: {
+    request?: {
+      identifier?: string | null;
+      content?: {
+        data?: unknown;
+      };
+    };
+  };
+};
+type NotificationsModule = typeof import('expo-notifications');
 
 export type PushRegistrationResult =
   | { ok: true; status: 'granted'; token: string }
   | { ok: false; status: 'denied' | 'unavailable' | 'error'; message: string };
 
 let notificationsInitialized = false;
+let notificationsInitializing = false;
+let notificationsModulePromise: Promise<NotificationsModule | null> | null = null;
+
+function isExpoGoRuntime(): boolean {
+  return Constants.executionEnvironment === 'storeClient' || Constants.appOwnership === 'expo';
+}
+
+export function isPushNotificationsAvailable(): boolean {
+  return !isExpoGoRuntime();
+}
+
+async function loadNotificationsModule(): Promise<NotificationsModule | null> {
+  if (!isPushNotificationsAvailable()) return null;
+  if (!notificationsModulePromise) {
+    notificationsModulePromise = import('expo-notifications').catch(() => null);
+  }
+  return notificationsModulePromise;
+}
 
 function getProjectId(): string | null {
   const easProjectId =
@@ -139,26 +167,36 @@ function getSafeNotificationData(data: unknown): NotificationData {
 }
 
 export function initializeNotifications(): void {
-  if (notificationsInitialized) return;
+  if (!isPushNotificationsAvailable()) return;
+  if (notificationsInitialized || notificationsInitializing) return;
+  notificationsInitializing = true;
 
-  Notifications.setNotificationHandler({
-    handleNotification: async () => ({
-      shouldShowAlert: true,
-      shouldPlaySound: false,
-      shouldSetBadge: false,
-      shouldShowBanner: true,
-      shouldShowList: true,
-    }),
-  });
+  void loadNotificationsModule()
+    .then((Notifications) => {
+      if (!Notifications || notificationsInitialized) return;
 
-  if (Platform.OS === 'android') {
-    Notifications.setNotificationChannelAsync('default', {
-      name: 'default',
-      importance: Notifications.AndroidImportance.DEFAULT,
-    }).catch(() => {});
-  }
+      Notifications.setNotificationHandler({
+        handleNotification: async () => ({
+          shouldShowAlert: true,
+          shouldPlaySound: false,
+          shouldSetBadge: false,
+          shouldShowBanner: true,
+          shouldShowList: true,
+        }),
+      });
 
-  notificationsInitialized = true;
+      if (Platform.OS === 'android') {
+        Notifications.setNotificationChannelAsync('default', {
+          name: 'default',
+          importance: Notifications.AndroidImportance.DEFAULT,
+        }).catch(() => {});
+      }
+
+      notificationsInitialized = true;
+    })
+    .finally(() => {
+      notificationsInitializing = false;
+    });
 }
 
 export function getStoredPushToken(): string | null {
@@ -179,12 +217,18 @@ export function clearPushPromptDismissed(): void {
 }
 
 export function shouldShowPushPrompt(): boolean {
+  if (!isPushNotificationsAvailable()) return false;
   if (getStoredPushToken()) return false;
   return readStorage(PUSH_PROMPT_DISMISSED_KEY) !== 'true';
 }
 
 export async function getPushPermissionStatus(): Promise<'granted' | 'denied'> {
+  if (!isPushNotificationsAvailable()) {
+    return 'denied';
+  }
   try {
+    const Notifications = await loadNotificationsModule();
+    if (!Notifications) return 'denied';
     const settings = await Notifications.getPermissionsAsync();
     return settings.status === 'granted' ? 'granted' : 'denied';
   } catch {
@@ -194,11 +238,23 @@ export async function getPushPermissionStatus(): Promise<'granted' | 'denied'> {
 
 export async function registerForPushNotifications(): Promise<PushRegistrationResult> {
   try {
+    if (!isPushNotificationsAvailable()) {
+      return {
+        ok: false,
+        status: 'unavailable',
+        message: 'Notifications push indisponibles dans Expo Go. Utilisez un build de développement.',
+      };
+    }
+
     if (!isRunningOnPhysicalDevice()) {
       return { ok: false, status: 'unavailable', message: 'Notifications indisponibles' };
     }
 
     initializeNotifications();
+    const Notifications = await loadNotificationsModule();
+    if (!Notifications) {
+      return { ok: false, status: 'error', message: "Impossible d'activer les notifications" };
+    }
 
     let permissionStatus = await getPushPermissionStatus();
     if (permissionStatus !== 'granted') {
@@ -231,8 +287,34 @@ export async function registerForPushNotifications(): Promise<PushRegistrationRe
   }
 }
 
+export async function getLastNotificationResponseAsyncSafe(): Promise<NotificationResponseLike | null> {
+  if (!isPushNotificationsAvailable()) return null;
+  try {
+    const Notifications = await loadNotificationsModule();
+    if (!Notifications) return null;
+    return (await Notifications.getLastNotificationResponseAsync()) as NotificationResponseLike | null;
+  } catch {
+    return null;
+  }
+}
+
+export async function addNotificationResponseReceivedListenerSafe(
+  listener: (response: NotificationResponseLike) => void
+) : Promise<{ remove: () => void } | null> {
+  if (!isPushNotificationsAvailable()) return null;
+  try {
+    const Notifications = await loadNotificationsModule();
+    if (!Notifications) return null;
+    return Notifications.addNotificationResponseReceivedListener((response) => {
+      listener(response as NotificationResponseLike);
+    });
+  } catch {
+    return null;
+  }
+}
+
 export function getNotificationNavigationTarget(
-  response: Notifications.NotificationResponse | null | undefined
+  response: NotificationResponseLike | null | undefined
 ): string | null {
   const data = getSafeNotificationData(response?.notification?.request?.content?.data);
 

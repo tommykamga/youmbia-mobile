@@ -72,7 +72,7 @@ export type GetPublicListingsResult =
   | { data: null; error: { message: string } };
 
 /**
- * Fetches active listings for the feed, ordered by created_at desc.
+ * Fetches active listings for the feed, ordered by updated_at desc then created_at desc.
  * Uses the same RLS as the web app (public select where status = 'active').
  * Supports pagination via offset/limit (Supabase .range).
  */
@@ -89,6 +89,7 @@ export async function getPublicListings(
       'id, title, price, city, description, boosted, urgent, district, created_at, views_count, user_id, listing_images(url, sort_order)'
     )
     .eq('status', 'active')
+    .order('updated_at', { ascending: false })
     .order('created_at', { ascending: false })
     .range(from, to);
 

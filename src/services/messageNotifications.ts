@@ -1,6 +1,5 @@
 import 'expo-sqlite/localStorage/install';
 
-import * as Notifications from 'expo-notifications';
 import { getSession } from '@/services/auth';
 import { getConversations, type Conversation } from '@/services/conversations';
 import {
@@ -68,6 +67,7 @@ function isConversationAlreadyOpen(currentPath: string | null | undefined, conve
 
 async function scheduleNewMessageNotification(conversation: Conversation): Promise<void> {
   initializeNotifications();
+  const Notifications = await import('expo-notifications');
   await Notifications.scheduleNotificationAsync({
     content: {
       title: 'Nouveau message',

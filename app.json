@@ -2,33 +2,30 @@
   "expo": {
     "name": "youmbia-mobile",
     "slug": "youmbia-mobile",
-    "version": "1.0.0",
+    "version": "2.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "youmbiamobile",
     "userInterfaceStyle": "automatic",
-    "splash": {
-      "image": "./assets/images/splash-icon.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#F8FAFC"
-    },
+
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.youmbia.mobile",
-      "associatedDomains": [
-        "applinks:www.youmbia.com",
-        "applinks:youmbia.com"
-      ]
+      "bundleIdentifier": "com.youmbia.mobile"
     },
+
     "android": {
       "package": "com.youmbia.mobile",
+      "versionCode": 11,
+      "adaptiveIcon": {
+        "backgroundColor": "#F8FAFC",
+        "foregroundImage": "./assets/images/android-icon-foreground.png",
+        "backgroundImage": "./assets/images/android-icon-background.png",
+        "monochromeImage": "./assets/images/android-icon-monochrome.png"
+      },
       "intentFilters": [
         {
           "action": "VIEW",
-          "category": [
-            "BROWSABLE",
-            "DEFAULT"
-          ],
+          "category": ["BROWSABLE", "DEFAULT"],
           "data": [
             {
               "scheme": "https",
@@ -42,40 +39,15 @@
             }
           ]
         }
-      ],
-      "adaptiveIcon": {
-        "backgroundColor": "#F8FAFC",
-        "foregroundImage": "./assets/images/android-icon-foreground.png",
-        "backgroundImage": "./assets/images/android-icon-background.png",
-        "monochromeImage": "./assets/images/android-icon-monochrome.png"
-      },
-      "predictiveBackGestureEnabled": false
+      ]
     },
+
     "web": {
       "bundler": "metro",
-      "output": "static",
-      "favicon": "./assets/images/favicon.png"
+      "output": "static"
     },
-    "plugins": [
-      "expo-router",
-      "expo-font",
-      "expo-web-browser",
-      "expo-notifications",
-      "expo-sqlite",
-      [
-        "expo-image-picker",
-        {
-          "photosPermission": "L'application accède à vos photos pour les ajouter à vos annonces.",
-          "cameraPermission": false,
-          "microphonePermission": false
-        }
-      ]
-    ],
-    "experiments": {
-      "typedRoutes": true
-    },
+
     "extra": {
-      "router": {},
       "eas": {
         "projectId": "2869afc2-e13f-48b5-8e78-acbe5186934c"
       }

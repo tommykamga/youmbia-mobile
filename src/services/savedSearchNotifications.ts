@@ -1,6 +1,5 @@
 import 'expo-sqlite/localStorage/install';
 
-import * as Notifications from 'expo-notifications';
 import { getPublicListings } from '@/services/listings';
 import { getSavedSearchAlertMatches } from '@/services/savedSearchAlerts';
 import { buildSavedSearchHref, getSavedSearches, type SavedSearch } from '@/services/savedSearches';
@@ -96,6 +95,7 @@ async function scheduleSavedSearchNotification(
   params: { newCount: number; title: string | null; city: string | null }
 ): Promise<void> {
   initializeNotifications();
+  const Notifications = await import('expo-notifications');
   await Notifications.scheduleNotificationAsync({
     content: {
       title:
