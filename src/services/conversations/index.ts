@@ -1,11 +1,7 @@
-export { getConversations } from './getConversations';
-export { getOrCreateConversation } from './getOrCreateConversation';
-export { getMessages } from './getMessages';
-export { sendMessage } from './sendMessage';
-export { markConversationRead } from './markConversationRead';
-export type { Conversation, Message } from './types';
-export type { GetConversationsResult } from './getConversations';
-export type { GetOrCreateConversationResult } from './getOrCreateConversation';
-export type { GetMessagesResult } from './getMessages';
-export type { SendMessageResult } from './sendMessage';
-export type { MarkConversationReadResult } from './markConversationRead';
+export * from './getConversations';
+export * from './getMessages';
+export * from './getOrCreateConversation';
+export * from './markConversationRead';
+export * from './sendMessage';
+export * from './getUnreadMessagesCount';
+export * from './types';

@@ -1,10 +1,31 @@
 /**
- * Tab entry for "Vendre": redirects to the stack route /sell.
- * The tab bar styles this tab as the center CTA (see _layout.tsx).
+ * Tab entry for "Vendre": navigates imperatively to the stack route /sell on focus.
+ * Using useFocusEffect + router.push instead of <Redirect> avoids a tab→stack
+ * redirect loop that can crash under Expo Router when Navigation context is ambiguous.
  */
 
-import { Redirect } from 'expo-router';
+import { useCallback, useRef } from 'react';
+import { View } from 'react-native';
+import { useRouter, useFocusEffect } from 'expo-router';
 
 export default function SellTabScreen() {
-  return <Redirect href="/sell" />;
+  const router = useRouter();
+  const hasNavigated = useRef(false);
+
+  useFocusEffect(
+    useCallback(() => {
+      // Push only once per focus cycle to prevent double navigation.
+      if (!hasNavigated.current) {
+        hasNavigated.current = true;
+        router.push('/sell');
+      }
+      return () => {
+        // Reset on blur so re-tapping the tab works again.
+        hasNavigated.current = false;
+      };
+    }, [router])
+  );
+
+  // Render an empty view while navigating – the stack screen takes over immediately.
+  return <View />;
 }

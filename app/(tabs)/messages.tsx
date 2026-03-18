@@ -1,123 +1,104 @@
-/**
- * Inbox screen – list of conversations with unread state.
- * Auth-gated (tab is protected); redirect to login when not authenticated.
- */
-
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import { FlatList, View, Text, StyleSheet, Pressable, RefreshControl } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
-import Ionicons from '@expo/vector-icons/Ionicons';
-import { Screen, Loader, EmptyState, Button } from '@/components';
+import { Ionicons } from '@expo/vector-icons';
+import { Screen, Loader, EmptyState } from '@/components';
 import { getConversations } from '@/services/conversations';
-import { getSession } from '@/services/auth';
-import { syncMessageNotificationSnapshot } from '@/services/messageNotifications';
-import type { Conversation } from '@/services/conversations';
-import { formatListingDate } from '@/lib/format';
-import { spacing, colors, typography, fontWeights } from '@/theme';
+import type { Conversation } from '@/services/conversations/types';
+import { spacing, colors, typography, fontWeights, radius } from '@/theme';
 
-type InboxState =
-  | { status: 'loading' }
-  | { status: 'redirect' }
-  | { status: 'empty' }
-  | { status: 'error'; message: string }
-  | { status: 'success'; data: Conversation[] };
+function formatInboxDate(iso: string | null | undefined): string {
+  if (!iso) return '';
+  try {
+    const d = new Date(iso);
+    const now = new Date();
+    const diff = now.getTime() - d.getTime();
+    const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+
+    if (days === 0) {
+      return d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+    }
+    if (days === 1) return 'Hier';
+    if (days < 7) {
+      const dayNames = ['Dim', 'Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam'];
+      return dayNames[d.getDay()];
+    }
+    return d.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' });
+  } catch {
+    return '';
+  }
+}
 
 export default function MessagesScreen() {
   const router = useRouter();
-  const [state, setState] = useState<InboxState>({ status: 'loading' });
+  const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [status, setStatus] = useState<'loading' | 'error' | 'success' | 'empty'>('loading');
   const [refreshing, setRefreshing] = useState(false);
 
-  const load = useCallback(async () => {
-    const session = await getSession();
-    if (!session?.user) {
-      setState({ status: 'redirect' });
-      return;
+  const fetchInbox = useCallback(async () => {
+    try {
+      const result = await getConversations();
+      if (result.error) {
+        setStatus('error');
+        return;
+      }
+      const data = result.data || [];
+      setConversations(data);
+      setStatus(data.length > 0 ? 'success' : 'empty');
+    } catch {
+      setStatus('error');
     }
-    const result = await getConversations();
-    if (result.error) {
-      setState({ status: 'error', message: result.error.message });
-      return;
-    }
-    const list = result.data ?? [];
-    void syncMessageNotificationSnapshot(list);
-    setState(
-      list.length === 0
-        ? { status: 'empty' }
-        : { status: 'success', data: list }
-    );
   }, []);
-
-  useEffect(() => {
-    load().then(() => setRefreshing(false));
-  }, [load]);
 
   useFocusEffect(
     useCallback(() => {
-      if (state.status === 'success' || state.status === 'empty') {
-        load();
-      }
-    }, [load, state.status])
+      fetchInbox();
+    }, [fetchInbox])
   );
 
-  useEffect(() => {
-    if (state.status === 'redirect') {
-      router.replace(`/(auth)/login?redirect=${encodeURIComponent('/(tabs)/messages')}`);
-    }
-  }, [state.status, router]);
-
-  const onRefresh = useCallback(() => {
+  const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    load().finally(() => setRefreshing(false));
-  }, [load]);
+    await fetchInbox();
+    setRefreshing(false);
+  }, [fetchInbox]);
 
-  const handleConversationPress = useCallback(
-    (conv: Conversation) => {
-      router.push(`/conversation/${conv.id}` as const);
-    },
-    [router]
-  );
-
-  const keyExtractor = useCallback((item: Conversation) => item.id, []);
-  const renderItem = useCallback(
-    ({ item }: { item: Conversation }) => (
-      <Pressable
-        style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
-        onPress={() => handleConversationPress(item)}
-      >
-        <View style={styles.body}>
-          <Text style={styles.name} numberOfLines={1}>
-            {item.other_party_name ?? 'Utilisateur'}
+  const renderItem = ({ item }: { item: Conversation }) => (
+    <Pressable
+      style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
+      onPress={() => router.push(`/conversation/${item.id}`)}
+    >
+      <View style={styles.avatar}>
+        <Text style={styles.avatarText}>
+          {item.other_party_name?.charAt(0).toUpperCase() || '?'}
+        </Text>
+      </View>
+      <View style={styles.body}>
+        <View style={styles.header}>
+          <Text style={styles.participant} numberOfLines={1}>
+            {item.other_party_name || 'Utilisateur'}
           </Text>
-          <Text style={styles.listing} numberOfLines={1}>
-            {item.listing_title ?? 'Annonce'}
-          </Text>
-          {item.last_message_preview ? (
-            <Text style={styles.preview} numberOfLines={1}>
-              {item.last_message_preview}
-            </Text>
-          ) : null}
+          <Text style={styles.date}>{formatInboxDate(item.last_message_at)}</Text>
         </View>
-        <View style={styles.meta}>
-          {item.last_message_at ? (
-            <Text style={styles.date}>
-              {formatListingDate(item.last_message_at)}
-            </Text>
-          ) : null}
-          {(item.unread_count ?? 0) > 0 ? (
+        <Text style={styles.listing} numberOfLines={1}>
+          {item.listing_title || 'Annonce'}
+        </Text>
+        <View style={styles.footer}>
+          <Text style={styles.preview} numberOfLines={1}>
+            {item.last_message_preview || 'Aucun message'}
+          </Text>
+          {(item.unread_count ?? 0) > 0 && (
             <View style={styles.badge}>
               <Text style={styles.badgeText}>
-                {item.unread_count! > 99 ? '99+' : item.unread_count}
+                {item.unread_count! > 9 ? '9+' : item.unread_count}
               </Text>
             </View>
-          ) : null}
+          )}
         </View>
-      </Pressable>
-    ),
-    [handleConversationPress]
+      </View>
+    </Pressable>
   );
-  const itemSeparator = useCallback(() => <View style={styles.separator} />, []);
 
-  if (state.status === 'loading' || state.status === 'redirect') {
+  if (status === 'loading') {
     return (
       <Screen>
         <Loader />
@@ -125,28 +106,25 @@ export default function MessagesScreen() {
     );
   }
 
-  if (state.status === 'error') {
+  if (status === 'error') {
     return (
       <Screen>
-        <EmptyState title="Erreur" message={state.message} style={styles.center} />
+        <EmptyState
+          title="Oups !"
+          message="Impossible de charger vos messages pour le moment."
+          style={styles.center}
+        />
       </Screen>
     );
   }
 
-  if (state.status === 'empty') {
+  if (status === 'empty') {
     return (
       <Screen>
         <EmptyState
-          icon={<Ionicons name="chatbubble-ellipses-outline" size={24} color={colors.primary} />}
+          icon={<Ionicons name="chatbubble-ellipses-outline" size={48} color={colors.primary} />}
           title="Aucune conversation"
-          message="Contactez un vendeur pour demarrer une discussion."
-          action={
-            <View style={styles.emptyAction}>
-              <Button variant="secondary" onPress={() => router.replace('/(tabs)/home')}>
-                Explorer les annonces
-              </Button>
-            </View>
-          }
+          message="Contactez un vendeur depuis une annonce pour démarrer une discussion."
           style={styles.center}
         />
       </Screen>
@@ -154,24 +132,15 @@ export default function MessagesScreen() {
   }
 
   return (
-    <Screen>
+    <Screen noPadding>
       <FlatList
-        data={state.data}
-        keyExtractor={keyExtractor}
+        data={conversations}
         renderItem={renderItem}
-        ItemSeparatorComponent={itemSeparator}
-        contentContainerStyle={styles.listContent}
-        showsVerticalScrollIndicator={false}
-        initialNumToRender={10}
-        maxToRenderPerBatch={6}
-        windowSize={6}
-        removeClippedSubviews
+        keyExtractor={(item) => item.id}
+        ItemSeparatorComponent={() => <View style={styles.separator} />}
+        contentContainerStyle={styles.list}
         refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={onRefresh}
-            tintColor={colors.primary}
-          />
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />
         }
       />
     </Screen>
@@ -180,66 +149,86 @@ export default function MessagesScreen() {
 
 const styles = StyleSheet.create({
   center: { flex: 1 },
-  listContent: {
-    padding: spacing.base,
-    paddingBottom: spacing['3xl'],
-  },
-  separator: {
-    height: 1,
-    backgroundColor: colors.borderLight,
+  list: {
+    paddingBottom: spacing.xl,
   },
   row: {
     flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: spacing.base,
-    paddingHorizontal: 0,
+    padding: spacing.base,
+    backgroundColor: colors.surface,
   },
   rowPressed: {
-    opacity: 0.9,
+    backgroundColor: colors.surfaceSubtle,
+  },
+  avatar: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: colors.primaryLight,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: spacing.sm,
+  },
+  avatarText: {
+    ...typography.base,
+    fontWeight: fontWeights.bold,
+    color: colors.primary,
   },
   body: {
     flex: 1,
-    minWidth: 0,
+    justifyContent: 'center',
   },
-  name: {
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 2,
+  },
+  participant: {
     ...typography.base,
     fontWeight: fontWeights.semibold,
     color: colors.text,
-    marginBottom: spacing.xs,
+    flex: 1,
+    marginRight: spacing.xs,
+  },
+  date: {
+    ...typography.xs,
+    color: colors.textMuted,
   },
   listing: {
     ...typography.sm,
     color: colors.primary,
-    marginBottom: spacing.xs,
+    fontWeight: fontWeights.medium,
+    marginBottom: 4,
+  },
+  footer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
   },
   preview: {
     ...typography.sm,
-    color: colors.textMuted,
-  },
-  meta: {
-    alignItems: 'flex-end',
-    marginLeft: spacing.base,
-  },
-  date: {
-    ...typography.xs,
-    color: colors.textTertiary,
-    marginBottom: spacing.xs,
+    color: colors.textSecondary,
+    flex: 1,
+    marginRight: spacing.sm,
   },
   badge: {
     backgroundColor: colors.primary,
-    minWidth: 22,
-    height: 22,
-    borderRadius: 11,
+    minWidth: 20,
+    height: 20,
+    borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 6,
+    paddingHorizontal: 4,
   },
   badgeText: {
-    ...typography.xs,
-    fontWeight: fontWeights.bold,
-    color: colors.surface,
+    color: 'white',
+    fontSize: 10,
+    fontWeight: 'bold',
   },
-  emptyAction: {
-    minWidth: 220,
+  separator: {
+    height: 1,
+    backgroundColor: colors.borderLight,
+    marginLeft: 50 + spacing.sm + spacing.base, // Align with text start
   },
 });

@@ -14,6 +14,7 @@ import { Tabs } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { colors, spacing, radius, typography } from '@/theme';
+import { useUnreadMessagesCount } from '@/hooks/useUnreadMessagesCount';
 
 const ICON_SIZE = 24;
 const SELL_PILL_ICON_SIZE = 26;
@@ -58,6 +59,7 @@ function SellTabIcon({ focused }: { focused: boolean }) {
 export default function TabLayout() {
   const insets = useSafeAreaInsets();
   const tabBarPaddingBottom = insets.bottom > 0 ? insets.bottom : spacing.sm;
+  const unreadCount = useUnreadMessagesCount();
 
   return (
     <Tabs
@@ -115,6 +117,7 @@ export default function TabLayout() {
         options={{
           title: 'Messages',
           tabBarIcon: ({ color }) => <TabIcon name="messages" color={color} />,
+          tabBarBadge: unreadCount > 0 ? (unreadCount > 9 ? '9+' : unreadCount) : undefined,
         }}
       />
       <Tabs.Screen
