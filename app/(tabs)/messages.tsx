@@ -2,7 +2,8 @@ import React, { useCallback, useState } from 'react';
 import { FlatList, View, Text, StyleSheet, Pressable, RefreshControl } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { Screen, Loader, EmptyState } from '@/components';
+import { Screen, Loader, EmptyState, Button } from '@/components';
+import { getSession } from '@/services/auth';
 import { getConversations } from '@/services/conversations';
 import type { Conversation } from '@/services/conversations/types';
 import { spacing, colors, typography, fontWeights, radius } from '@/theme';
@@ -32,11 +33,16 @@ function formatInboxDate(iso: string | null | undefined): string {
 export default function MessagesScreen() {
   const router = useRouter();
   const [conversations, setConversations] = useState<Conversation[]>([]);
-  const [status, setStatus] = useState<'loading' | 'error' | 'success' | 'empty'>('loading');
+  const [status, setStatus] = useState<'loading' | 'error' | 'success' | 'empty' | 'unauthenticated'>('loading');
   const [refreshing, setRefreshing] = useState(false);
 
   const fetchInbox = useCallback(async () => {
     try {
+      const session = await getSession();
+      if (!session?.user) {
+        setStatus('unauthenticated');
+        return;
+      }
       const result = await getConversations();
       if (result.error) {
         setStatus('error');
@@ -106,6 +112,26 @@ export default function MessagesScreen() {
     );
   }
 
+  if (status === 'unauthenticated') {
+    return (
+      <Screen>
+        <EmptyState
+          icon={<Ionicons name="lock-closed-outline" size={48} color={colors.primary} />}
+          title="Connexion requise"
+          message="Connectez-vous pour lire vos messages."
+          action={
+            <View style={styles.emptyAction}>
+              <Button variant="primary" onPress={() => router.push('/(auth)/login?redirect=/(tabs)/messages')}>
+                Se connecter
+              </Button>
+            </View>
+          }
+          style={styles.center}
+        />
+      </Screen>
+    );
+  }
+
   if (status === 'error') {
     return (
       <Screen>
@@ -149,6 +175,7 @@ export default function MessagesScreen() {
 
 const styles = StyleSheet.create({
   center: { flex: 1 },
+  emptyAction: { minWidth: 220 },
   list: {
     paddingBottom: spacing.xl,
   },

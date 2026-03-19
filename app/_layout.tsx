@@ -39,9 +39,10 @@ function isProtectedSegment(segments: string[]): boolean {
   const second = segments[1];
   if (first === 'sell') return true;
   if (first === 'conversation') return true;
-  if (first === '(tabs)' && second && ['favorites', 'messages', 'account'].includes(second)) {
-    return true;
-  }
+  // TEST D'ISOLATION : Désactivation de la protection des tabs protégés
+  // if (first === '(tabs)' && second && ['favorites', 'messages', 'account'].includes(second)) {
+  //   return true;
+  // }
   if (first === 'account') return true;
   return false;
 }

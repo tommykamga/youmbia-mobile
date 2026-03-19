@@ -14,7 +14,9 @@
         "buildType": "apk"
       },
       "env": {
-        "APP_ENV": "development"
+        "APP_ENV": "development",
+        "EXPO_PUBLIC_SUPABASE_URL": "……",
+        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "……"
       }
     },
     "preview": {
@@ -26,7 +28,9 @@
         "buildType": "apk"
       },
       "env": {
-        "APP_ENV": "preview"
+        "APP_ENV": "preview",
+        "EXPO_PUBLIC_SUPABASE_URL": "……",
+        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "……"
       }
     },
     "production": {

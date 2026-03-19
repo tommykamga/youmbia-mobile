@@ -17,7 +17,7 @@ import { spacing, colors } from '@/theme';
 
 type FavoritesState =
   | { status: 'loading' }
-  | { status: 'redirect' }
+  | { status: 'unauthenticated' }
   | { status: 'empty' }
   | { status: 'error'; message: string }
   | { status: 'success'; data: PublicListing[] };
@@ -31,7 +31,7 @@ export default function FavoritesScreen() {
     try {
       const session = await getSession();
       if (!session?.user) {
-        setState({ status: 'redirect' });
+        setState({ status: 'unauthenticated' });
         return;
       }
       const result = await getFavorites();
@@ -67,11 +67,7 @@ export default function FavoritesScreen() {
     }, [load, state.status])
   );
 
-  useEffect(() => {
-    if (state.status === 'redirect') {
-      router.replace(`/(auth)/login?redirect=${encodeURIComponent('/(tabs)/favorites')}`);
-    }
-  }, [state.status, router]);
+
 
   const handleFavoritePress = useCallback(
     async (listingId: string) => {
@@ -83,7 +79,7 @@ export default function FavoritesScreen() {
       if (result.error) {
         setState({ status: 'success', data: previousData });
         if (result.error.message === 'Non connecté') {
-          router.replace(`/(auth)/login?redirect=${encodeURIComponent('/(tabs)/favorites')}`);
+          setState({ status: 'unauthenticated' });
         }
         return;
       }
@@ -104,8 +100,28 @@ export default function FavoritesScreen() {
   );
   const itemSeparator = useCallback(() => <View style={styles.separator} />, []);
 
-  if (state.status === 'loading' || state.status === 'redirect') {
+  if (state.status === 'loading') {
     return <Loader />;
+  }
+
+  if (state.status === 'unauthenticated') {
+    return (
+      <Screen>
+        <EmptyState
+          icon={<Ionicons name="lock-closed-outline" size={48} color={colors.primary} />}
+          title="Connexion requise"
+          message="Connectez-vous pour retrouver vos annonces favorites."
+          action={
+            <View style={styles.emptyAction}>
+              <Button variant="primary" onPress={() => router.push('/(auth)/login?redirect=/(tabs)/favorites')}>
+                Se connecter
+              </Button>
+            </View>
+          }
+          style={styles.center}
+        />
+      </Screen>
+    );
   }
 
   if (state.status === 'error') {

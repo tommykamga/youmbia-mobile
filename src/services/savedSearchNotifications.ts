@@ -1,5 +1,3 @@
-import 'expo-sqlite/localStorage/install';
-
 import { getPublicListings } from '@/services/listings';
 import { getSavedSearchAlertMatches } from '@/services/savedSearchAlerts';
 import { buildSavedSearchHref, getSavedSearches, type SavedSearch } from '@/services/savedSearches';
@@ -20,12 +18,47 @@ type SavedSearchNotificationSnapshot = {
 
 let syncInFlight = false;
 
+/**
+ * Safe localStorage accessor
+ */
+function getSafeLocalStorage(): Storage | null {
+  try {
+    return typeof globalThis.localStorage !== 'undefined' &&
+      typeof globalThis.localStorage.getItem === 'function' &&
+      typeof globalThis.localStorage.setItem === 'function'
+      ? globalThis.localStorage
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Safe loader for expo-notifications
+ */
+let notificationsModulePromise: Promise<typeof import('expo-notifications') | null> | null = null;
+
+async function loadNotificationsModule(): Promise<typeof import('expo-notifications') | null> {
+  if (!notificationsModulePromise) {
+    notificationsModulePromise = import('expo-notifications')
+      .then((mod) => mod)
+      .catch((error) => {
+        console.error('[savedSearchNotifications] Failed to load expo-notifications', error);
+        return null;
+      });
+  }
+  return notificationsModulePromise;
+}
+
 function readSnapshot(): SavedSearchNotificationSnapshot | null {
   try {
-    const raw = typeof localStorage !== 'undefined' ? localStorage.getItem(SAVED_SEARCH_NOTIFICATION_STATE_KEY) : null;
+    const storage = getSafeLocalStorage();
+    const raw = storage ? storage.getItem(SAVED_SEARCH_NOTIFICATION_STATE_KEY) : null;
     if (!raw) return null;
+
     const parsed = JSON.parse(raw) as Partial<SavedSearchNotificationSnapshot> | null;
     if (!parsed || typeof parsed.notifiedBySearchId !== 'object') return null;
+
     return {
       notifiedBySearchId: parsed.notifiedBySearchId as Record<string, string[]>,
     };
@@ -36,10 +69,11 @@ function readSnapshot(): SavedSearchNotificationSnapshot | null {
 
 function writeSnapshot(snapshot: SavedSearchNotificationSnapshot): void {
   try {
-    if (typeof localStorage !== 'undefined') {
-      localStorage.setItem(SAVED_SEARCH_NOTIFICATION_STATE_KEY, JSON.stringify(snapshot));
+    const storage = getSafeLocalStorage();
+    if (storage) {
+      storage.setItem(SAVED_SEARCH_NOTIFICATION_STATE_KEY, JSON.stringify(snapshot));
     }
-  } catch {}
+  } catch { }
 }
 
 function getMatchesBySearchId(
@@ -84,7 +118,7 @@ function buildNotificationBody(
   if (newCount <= 1) {
     const safeTitle = String(title ?? '').trim();
     const safeCity = String(city ?? '').trim();
-    if (safeTitle && safeCity) return `${safeTitle} a ${safeCity}`;
+    if (safeTitle && safeCity) return `${safeTitle} à ${safeCity}`;
     if (safeTitle) return safeTitle;
   }
   return `${newCount} nouvelles annonces pour "${getSearchNotificationLabel(search)}"`;
@@ -95,7 +129,13 @@ async function scheduleSavedSearchNotification(
   params: { newCount: number; title: string | null; city: string | null }
 ): Promise<void> {
   initializeNotifications();
-  const Notifications = await import('expo-notifications');
+
+  const Notifications = await loadNotificationsModule();
+  if (!Notifications) {
+    console.error('[savedSearchNotifications] Notifications module unavailable');
+    return;
+  }
+
   await Notifications.scheduleNotificationAsync({
     content: {
       title:
@@ -136,6 +176,7 @@ export async function syncSavedSearchNotifications(
     }
 
     const permissionStatus = await getPushPermissionStatus();
+
     const targetSearch = savedSearches.find((search) => {
       const currentIds = matchesBySearchId[search.id] ?? [];
       const newIds = getNewListingIds(currentIds, previousSnapshot.notifiedBySearchId[search.id]);
@@ -145,14 +186,17 @@ export async function syncSavedSearchNotifications(
     const targetHref = targetSearch ? buildSavedSearchHref(targetSearch) : '';
     const isCurrentSearchOpen =
       !!targetHref && getComparableTargetKey(targetHref) === getComparableTargetKey(currentPath);
+
     const canNotify = permissionStatus === 'granted' && !isCurrentSearchOpen;
 
     if (canNotify && targetSearch) {
       const currentIds = matchesBySearchId[targetSearch.id] ?? [];
       const newIds = getNewListingIds(currentIds, previousSnapshot.notifiedBySearchId[targetSearch.id]);
+
       const firstMatch = matches.find(
         (item) => item.searchIds.includes(targetSearch.id) && newIds.includes(item.listing.id)
       );
+
       const notificationKey = `saved-search:${targetSearch.id}:${newIds.sort().join(',')}`;
 
       if (reserveNotificationDispatch(notificationKey, SAVED_SEARCH_NOTIFICATION_COOLDOWN_MS)) {
@@ -160,7 +204,7 @@ export async function syncSavedSearchNotifications(
           newCount: newIds.length,
           title: firstMatch?.listing.title ?? null,
           city: firstMatch?.listing.city ?? null,
-        }).catch(() => {});
+        }).catch(() => { });
       }
     }
 

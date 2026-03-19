@@ -1,5 +1,3 @@
-import 'expo-sqlite/localStorage/install';
-
 import { getSession } from '@/services/auth';
 import { getConversations, type Conversation } from '@/services/conversations';
 import {
@@ -18,14 +16,49 @@ type MessageNotificationSnapshot = {
 
 let syncInFlight = false;
 
+/**
+ * Safe localStorage accessor (release-safe)
+ */
+function getSafeLocalStorage(): Storage | null {
+  try {
+    return typeof globalThis.localStorage !== 'undefined' &&
+      typeof globalThis.localStorage.getItem === 'function' &&
+      typeof globalThis.localStorage.setItem === 'function'
+      ? globalThis.localStorage
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Safe loader for expo-notifications (release-safe)
+ */
+let notificationsModulePromise: Promise<typeof import('expo-notifications') | null> | null = null;
+
+async function loadNotificationsModule(): Promise<typeof import('expo-notifications') | null> {
+  if (!notificationsModulePromise) {
+    notificationsModulePromise = import('expo-notifications')
+      .then((mod) => mod)
+      .catch((error) => {
+        console.error('[messageNotifications] Failed to load expo-notifications', error);
+        return null;
+      });
+  }
+  return notificationsModulePromise;
+}
+
 function readSnapshot(): MessageNotificationSnapshot | null {
   try {
-    const raw = typeof localStorage !== 'undefined' ? localStorage.getItem(MESSAGE_NOTIFICATION_STATE_KEY) : null;
+    const storage = getSafeLocalStorage();
+    const raw = storage ? storage.getItem(MESSAGE_NOTIFICATION_STATE_KEY) : null;
     if (!raw) return null;
+
     const parsed = JSON.parse(raw) as Partial<MessageNotificationSnapshot> | null;
     if (!parsed || typeof parsed.userId !== 'string' || typeof parsed.unreadByConversation !== 'object') {
       return null;
     }
+
     return {
       userId: parsed.userId,
       unreadByConversation: parsed.unreadByConversation as Record<string, number>,
@@ -37,10 +70,11 @@ function readSnapshot(): MessageNotificationSnapshot | null {
 
 function writeSnapshot(snapshot: MessageNotificationSnapshot): void {
   try {
-    if (typeof localStorage !== 'undefined') {
-      localStorage.setItem(MESSAGE_NOTIFICATION_STATE_KEY, JSON.stringify(snapshot));
+    const storage = getSafeLocalStorage();
+    if (storage) {
+      storage.setItem(MESSAGE_NOTIFICATION_STATE_KEY, JSON.stringify(snapshot));
     }
-  } catch {}
+  } catch { }
 }
 
 async function getCurrentUserId(): Promise<string | null> {
@@ -67,7 +101,13 @@ function isConversationAlreadyOpen(currentPath: string | null | undefined, conve
 
 async function scheduleNewMessageNotification(conversation: Conversation): Promise<void> {
   initializeNotifications();
-  const Notifications = await import('expo-notifications');
+
+  const Notifications = await loadNotificationsModule();
+  if (!Notifications) {
+    console.error('[messageNotifications] Notifications module unavailable');
+    return;
+  }
+
   await Notifications.scheduleNotificationAsync({
     content: {
       title: 'Nouveau message',
@@ -127,7 +167,7 @@ export async function syncNewMessageNotifications(
       newestConversation &&
       reserveNotificationDispatch(notificationKey, MESSAGE_NOTIFICATION_COOLDOWN_MS)
     ) {
-      await scheduleNewMessageNotification(newestConversation).catch(() => {});
+      await scheduleNewMessageNotification(newestConversation).catch(() => { });
     }
 
     writeSnapshot({
@@ -142,6 +182,7 @@ export async function syncNewMessageNotifications(
 export async function syncMessageNotificationSnapshot(conversations: Conversation[]): Promise<void> {
   const userId = await getCurrentUserId();
   if (!userId) return;
+
   writeSnapshot({
     userId,
     unreadByConversation: buildUnreadMap(conversations),
@@ -157,6 +198,7 @@ export async function markConversationNotificationAsRead(conversationId: string)
     existing?.userId === userId ? { ...existing.unreadByConversation } : {};
 
   nextUnread[conversationId.trim()] = 0;
+
   writeSnapshot({
     userId,
     unreadByConversation: nextUnread,
