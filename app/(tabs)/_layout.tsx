@@ -10,7 +10,7 @@
 
 import React from 'react';
 import { View, Text, StyleSheet, Platform } from 'react-native';
-import { Tabs } from 'expo-router';
+import { Tabs, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { colors, spacing, radius, typography } from '@/theme';
@@ -57,6 +57,7 @@ function SellTabIcon({ focused }: { focused: boolean }) {
 }
 
 export default function TabLayout() {
+  const router = useRouter();
   const insets = useSafeAreaInsets();
   const tabBarPaddingBottom = insets.bottom > 0 ? insets.bottom : spacing.sm;
   const unreadCount = useUnreadMessagesCount();
@@ -103,6 +104,12 @@ export default function TabLayout() {
           title: 'Vendre',
           tabBarIcon: ({ focused }) => <SellTabIcon focused={focused} />,
           tabBarLabelStyle: [styles.tabBarLabel, styles.sellLabel],
+        }}
+        listeners={{
+          tabPress: (e) => {
+            e.preventDefault();
+            router.push('/sell');
+          },
         }}
       />
       <Tabs.Screen

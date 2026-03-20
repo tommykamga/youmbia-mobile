@@ -33,7 +33,7 @@ function formatInboxDate(iso: string | null | undefined): string {
 export default function MessagesScreen() {
   const router = useRouter();
   const [conversations, setConversations] = useState<Conversation[]>([]);
-  const [status, setStatus] = useState<'loading' | 'error' | 'success' | 'empty' | 'unauthenticated'>('loading');
+  const [status, setStatus] = useState<'loading' | 'error_network' | 'error_generic' | 'success' | 'empty' | 'unauthenticated'>('loading');
   const [refreshing, setRefreshing] = useState(false);
 
   const fetchInbox = useCallback(async () => {
@@ -45,14 +45,24 @@ export default function MessagesScreen() {
       }
       const result = await getConversations();
       if (result.error) {
-        setStatus('error');
+        const msg = String(result.error.message).toLowerCase();
+        if (msg.includes('network') || msg.includes('réseau') || msg.includes('fetch')) {
+          setStatus('error_network');
+        } else {
+          setStatus('error_generic');
+        }
         return;
       }
       const data = result.data || [];
       setConversations(data);
       setStatus(data.length > 0 ? 'success' : 'empty');
-    } catch {
-      setStatus('error');
+    } catch (e: any) {
+      const msg = String(e?.message || e).toLowerCase();
+      if (msg.includes('network') || msg.includes('réseau') || msg.includes('fetch')) {
+        setStatus('error_network');
+      } else {
+        setStatus('error_generic');
+      }
     }
   }, []);
 
@@ -118,7 +128,7 @@ export default function MessagesScreen() {
         <EmptyState
           icon={<Ionicons name="lock-closed-outline" size={48} color={colors.primary} />}
           title="Connexion requise"
-          message="Connectez-vous pour lire vos messages."
+          message="Connectez-vous pour accéder à vos conversations."
           action={
             <View style={styles.emptyAction}>
               <Button variant="primary" onPress={() => router.push('/(auth)/login?redirect=/(tabs)/messages')}>
@@ -132,12 +142,40 @@ export default function MessagesScreen() {
     );
   }
 
-  if (status === 'error') {
+  if (status === 'error_network') {
     return (
       <Screen>
         <EmptyState
-          title="Oups !"
-          message="Impossible de charger vos messages pour le moment."
+          icon={<Ionicons name="cloud-offline-outline" size={48} color={colors.error} />}
+          title="Connexion indisponible"
+          message="Vérifiez votre connexion internet puis réessayez."
+          action={
+            <View style={styles.emptyAction}>
+              <Button variant="secondary" onPress={() => fetchInbox()}>
+                Réessayer
+              </Button>
+            </View>
+          }
+          style={styles.center}
+        />
+      </Screen>
+    );
+  }
+
+  if (status === 'error_generic') {
+    return (
+      <Screen>
+        <EmptyState
+          icon={<Ionicons name="alert-circle-outline" size={48} color={colors.textSecondary} />}
+          title="Vos messages sont indisponibles"
+          message="Nous n’arrivons pas à charger vos conversations pour le moment. Réessayez dans un instant."
+          action={
+            <View style={styles.emptyAction}>
+              <Button variant="secondary" onPress={() => fetchInbox()}>
+                Réessayer
+              </Button>
+            </View>
+          }
           style={styles.center}
         />
       </Screen>
@@ -149,8 +187,8 @@ export default function MessagesScreen() {
       <Screen>
         <EmptyState
           icon={<Ionicons name="chatbubble-ellipses-outline" size={48} color={colors.primary} />}
-          title="Aucune conversation"
-          message="Contactez un vendeur depuis une annonce pour démarrer une discussion."
+          title="Aucune conversation pour le moment"
+          message="Vos échanges avec les vendeurs et acheteurs apparaîtront ici."
           style={styles.center}
         />
       </Screen>
