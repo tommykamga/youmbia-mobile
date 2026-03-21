@@ -16,6 +16,7 @@ import { Screen, Button, Loader, EmptyState, AppHeader } from '@/components';
 import { getListingById, getSimilarListings, type ListingDetail, type PublicListing } from '@/services/listings';
 import { getFavoriteIds, toggleFavorite } from '@/services/favorites';
 import { addRecentlyViewedListingId } from '@/services/recentlyViewed';
+import { LISTING_CATEGORIES } from '@/lib/listingCategories';
 import { getOrCreateConversation } from '@/services/conversations';
 import { getSession } from '@/services/auth';
 import { reportListing } from '@/services/reports';
@@ -29,6 +30,7 @@ import {
   ListingSeller,
   ListingDescription,
   ListingActions,
+  SecondaryActions,
 } from '@/features/listings';
 import { spacing, colors, typography, fontWeights, radius } from '@/theme';
 
@@ -136,16 +138,23 @@ export default function ListingDetailScreen() {
           });
         }
       }
+      const currentCategory = listing.category_id
+        ? LISTING_CATEGORIES.find((c) => c.id === listing.category_id)?.label
+        : null;
+
       const similarResult = await getSimilarListings({
         id: listing.id,
         title: listing.title,
         description: listing.description,
         city: listing.city,
+        category: currentCategory,
+        price: listing.price,
       });
+
       if (!cancelled) {
         setSimilarLoading(false);
         if (!similarResult.error) {
-          setSimilarListings(similarResult.data.slice(0, 10));
+          setSimilarListings(similarResult.data.slice(0, 8));
         }
       }
     })();
@@ -313,7 +322,7 @@ export default function ListingDetailScreen() {
         style={styles.scroll}
         contentContainerStyle={[
           styles.scrollContent,
-          { paddingBottom: FOOTER_HEIGHT_ESTIMATE + spacing['4xl'] + insets.bottom },
+          { paddingBottom: 120 + insets.bottom },
         ]}
         showsVerticalScrollIndicator={false}
       >
@@ -329,6 +338,7 @@ export default function ListingDetailScreen() {
             onFavoritePress={handleFavoritePress}
             district={listing.district}
             urgent={listing.urgent}
+            boosted={listing.boosted}
           />
           <ListingSeller
             listing={listing}
@@ -337,6 +347,13 @@ export default function ListingDetailScreen() {
             onPress={listing.seller_id ? () => router.push(`/user/${listing.seller_id}` as const) : undefined}
           />
           <ListingDescription description={listing.description} />
+
+          <SecondaryActions
+            listing={listing}
+            isFavorite={isFavorite}
+            onFavoritePress={handleFavoritePress}
+            sellerPhone={listing.seller?.phone}
+          />
           {(similarLoading || similarListings.length > 0) ? (
             <View style={styles.similarSection}>
               <Text style={styles.similarTitle}>Annonces similaires</Text>

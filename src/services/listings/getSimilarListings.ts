@@ -5,7 +5,7 @@ import type { Tables } from '@/types/database';
 import type { PublicListing } from './getPublicListings';
 
 const CATEGORY_OPTIONS = ['Véhicules', 'Mode', 'Maison', 'Électronique', 'Sport', 'Loisirs', 'Autre'] as const;
-const DEFAULT_LIMIT = 6;
+const DEFAULT_LIMIT = 8;
 const FETCH_LIMIT = 24;
 const MIN_RESULTS_TO_SHOW = 2;
 const STOPWORDS = new Set([
@@ -40,6 +40,7 @@ export type SimilarListingInput = {
   city?: string | null;
   description?: string | null;
   category?: string | null;
+  price?: number | null;
 };
 
 export type GetSimilarListingsResult =
@@ -111,7 +112,8 @@ export async function getSimilarListings(
 
   const safeLimit = Math.max(1, Math.min(limit, DEFAULT_LIMIT));
   const currentCity = normalizeText(input.city);
-  const currentCategory = inferCategory(input);
+  const currentCategory = input.category || inferCategory(input);
+  const currentPrice = input.price;
   const currentKeywords = extractKeywords(input);
 
   try {
@@ -159,14 +161,23 @@ export async function getSimilarListings(
         );
 
         let score = 0;
+        if (sameCity) score += 150; // Priority
         if (sameCategory) score += 100;
-        if (sameCity) score += 30;
+
+        // Price proximity bonus (+/- 25%)
+        if (currentPrice != null && item.price != null) {
+          const diff = Math.abs(currentPrice - item.price);
+          const ratio = diff / currentPrice;
+          if (ratio <= 0.25) {
+            score += 50;
+          }
+        }
+
         score += Math.min(sharedKeywords, 3) * 10;
 
         const isRelevant =
           sameCategory ||
-          (sameCity && sharedKeywords >= 1) ||
-          (!sameCategory && sameCity && currentCategory == null) ||
+          sameCity ||
           sharedKeywords >= 2;
 
         return { item, sameCategory, sameCity, sharedKeywords, score, isRelevant };

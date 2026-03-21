@@ -6,9 +6,14 @@
 import React, { useCallback, useMemo, useState } from 'react';
 import { View, Text, StyleSheet, Pressable, Linking, Alert } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { Button } from '@/components';
-import { colors, spacing, radius, typography, fontWeights } from '@/theme';
-import { shareListing, getPublicListingUrl } from '@/lib/shareListing';
+import * as Haptics from 'expo-haptics';
+import Animated, { 
+  useAnimatedStyle, 
+  useSharedValue, 
+  withSpring
+} from 'react-native-reanimated';
+import { colors, spacing, radius, typography, fontWeights, shadows } from '@/theme';
+import { getPublicListingUrl } from '@/lib/shareListing';
 import { formatPrice } from '@/lib/format';
 import type { ListingDetail } from '@/services/listings';
 
@@ -54,28 +59,22 @@ function buildWhatsAppMessage(title: string): string {
 
 export function ListingActions({
   listing,
-  sellerId: sellerIdProp,
-  sellerName: sellerNameProp,
   sellerPhone: sellerPhoneProp,
   safeBottom = 0,
-  isFavorite = false,
-  onFavorisPress,
   onMessagePress,
 }: ListingActionsProps) {
-  const [sharing, setSharing] = useState(false);
   const [openingWhatsApp, setOpeningWhatsApp] = useState(false);
 
-  const sellerId = sellerIdProp ?? listing.seller_id ?? '';
-  const sellerName = sellerNameProp ?? listing.seller?.full_name ?? null;
   const sellerPhone = sellerPhoneProp ?? listing.seller?.phone ?? null;
   const whatsappNumber = useMemo(() => normalizePhoneForWhatsApp(sellerPhone), [sellerPhone]);
-  const callNumber = useMemo(() => normalizePhoneForCall(sellerPhone), [sellerPhone]);
   const sellerRestricted = listing.seller?.is_banned === true;
   const hasContact = !!listing.seller && !sellerRestricted;
   const canWhatsApp = hasContact && !!whatsappNumber;
-  const canCall = hasContact && !!callNumber;
   const canMessage = hasContact && !!onMessagePress;
   const publicListingUrl = useMemo(() => getPublicListingUrl(listing.id), [listing.id]);
+
+  const messageScale = useSharedValue(1);
+  const whatsappScale = useSharedValue(1);
 
   const whatsAppMessage = useMemo(() => {
     const title = String(listing.title ?? '').trim() || 'Annonce YOUMBIA';
@@ -92,11 +91,8 @@ export function ListingActions({
   }, [listing.price, listing.title, publicListingUrl]);
 
   const handleWhatsApp = useCallback(async () => {
-    if (openingWhatsApp) return;
-    if (!whatsappNumber) {
-      Alert.alert('WhatsApp indisponible', 'Numero vendeur indisponible.');
-      return;
-    }
+    if (openingWhatsApp || !whatsappNumber) return;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
 
     const encoded = encodeURIComponent(whatsAppMessage || buildWhatsAppMessage(listing.title ?? ''));
     const url = `${WHATSAPP_PREFIX}/${whatsappNumber}?text=${encoded}`;
@@ -107,7 +103,6 @@ export function ListingActions({
         Alert.alert('WhatsApp indisponible', "Impossible d'ouvrir WhatsApp.");
         return;
       }
-
       await Linking.openURL(url);
     } catch {
       Alert.alert('WhatsApp indisponible', "Impossible d'ouvrir WhatsApp.");
@@ -116,116 +111,80 @@ export function ListingActions({
     }
   }, [listing.title, openingWhatsApp, whatsAppMessage, whatsappNumber]);
 
-  const handleCall = useCallback(async () => {
-    const num = callNumber;
-    if (!num || num.length < 9) return;
-    const telUrl = 'tel:+' + num;
-    try {
-      const canOpen = await Linking.canOpenURL(telUrl).catch(() => false);
-      if (canOpen) {
-        await Linking.openURL(telUrl);
-      } else {
-        Alert.alert('Appel indisponible', 'Impossible d\'ouvrir l\'application téléphone.');
-      }
-    } catch {
-      Alert.alert('Appel indisponible', 'Impossible d\'ouvrir l\'application téléphone.');
+  const handleMessage = useCallback(() => {
+    if (onMessagePress) {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      onMessagePress();
     }
-  }, [callNumber]);
+  }, [onMessagePress]);
 
-  const handleShare = useCallback(async () => {
-    if (sharing) return;
-    if (!listing?.id || listing.title == null) return;
-    setSharing(true);
-    try {
-      const result = await shareListing({
-        id: listing.id,
-        title: String(listing.title),
-        price: listing.price,
-        city: listing.city ?? null,
-      });
-      if (!result.success && result.error) {
-        Alert.alert('Partage indisponible', result.error || 'Impossible de partager cette annonce.');
-      }
-    } catch {
-      Alert.alert('Partage indisponible', 'Impossible de partager cette annonce.');
-    } finally {
-      setSharing(false);
-    }
-  }, [listing?.city, listing?.id, listing?.price, listing?.title, sharing]);
+  const messageAnimatedStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: messageScale.value }],
+  }));
+
+  const whatsappAnimatedStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: whatsappScale.value }],
+  }));
+
+  const handlePressIn = (scale: any) => {
+    scale.value = withSpring(0.97, { damping: 10, stiffness: 300 });
+  };
+
+  const handlePressOut = (scale: any) => {
+    scale.value = withSpring(1, { damping: 10, stiffness: 300 });
+  };
+
+  if (!canMessage && !canWhatsApp) {
+    return (
+      <View style={[styles.footer, { paddingBottom: spacing.lg + safeBottom }]}>
+        <View style={styles.unavailableWrap}>
+          <Text style={styles.unavailableText}>
+            {sellerRestricted ? 'Contact du vendeur indisponible' : 'Contact non disponible'}
+          </Text>
+        </View>
+      </View>
+    );
+  }
 
   return (
-    <View style={[styles.footer, { paddingBottom: spacing.xl + safeBottom }]}>
-      {/* Sticky contact bar: Message (primary) + WhatsApp (secondary) */}
-      <View style={styles.contactBar}>
-        {canMessage ? (
-          <Button
-            variant="primary"
-            size="md"
-            style={styles.contactPrimary}
-            onPress={onMessagePress}
-          >
-            Message
-          </Button>
-        ) : null}
-        {canWhatsApp ? (
-          <Button
-            variant="secondary"
-            size="md"
-            style={styles.contactSecondary}
-            onPress={handleWhatsApp}
-            loading={openingWhatsApp}
-            disabled={openingWhatsApp}
-          >
-            WhatsApp
-          </Button>
-        ) : !canMessage && !canWhatsApp ? (
-          <View style={styles.unavailableWrap}>
-            <Text style={styles.unavailableText} numberOfLines={1}>
-              {sellerRestricted ? 'Contact du vendeur indisponible' : 'Contact non disponible'}
-            </Text>
-          </View>
-        ) : null}
-      </View>
-      {/* Secondary actions */}
-      <View style={styles.actionsRow}>
-        <Pressable
-          style={({ pressed }) => [styles.favButton, pressed && styles.pressed]}
-          onPress={onFavorisPress}
-        >
-          <Ionicons
-            name={isFavorite ? 'heart' : 'heart-outline'}
-            size={HEART_SIZE}
-            color={isFavorite ? colors.error : colors.text}
-            style={styles.favIcon}
-          />
-          <Text style={styles.favLabel} numberOfLines={1}>Favoris</Text>
-        </Pressable>
-        <Pressable
-          style={({ pressed }) => [
-            styles.shareButton,
-            (pressed && !sharing) && styles.pressed,
-            sharing && styles.shareButtonDisabled,
-          ]}
-          onPress={handleShare}
-          disabled={sharing}
-        >
-          <Ionicons
-            name="share-outline"
-            size={SHARE_ICON_SIZE}
-            color={colors.textSecondary}
-            style={styles.favIcon}
-          />
-          <Text style={styles.shareLabel} numberOfLines={1}>Partager</Text>
-        </Pressable>
-        {canCall ? (
-          <Pressable
-            style={({ pressed }) => [styles.phoneButton, pressed && styles.pressed]}
-            onPress={handleCall}
-          >
-            <Ionicons name="call-outline" size={SHARE_ICON_SIZE} color={colors.textSecondary} />
-            <Text style={styles.phoneLabel} numberOfLines={1}>Appeler</Text>
-          </Pressable>
-        ) : null}
+    <View style={[styles.footer, { paddingBottom: spacing.base + safeBottom }]}>
+      <View style={styles.container}>
+        {canMessage && (
+          <Animated.View style={[styles.flex, messageAnimatedStyle]}>
+            <Pressable
+              onPress={handleMessage}
+              onPressIn={() => handlePressIn(messageScale)}
+              onPressOut={() => handlePressOut(messageScale)}
+              style={({ pressed }) => [
+                styles.btn,
+                styles.btnPrimary,
+                pressed && styles.btnPressed
+              ]}
+            >
+              <Ionicons name="chatbubble" size={20} color={colors.surface} style={styles.btnIcon} />
+              <Text style={styles.btnTextPrimary}>Message</Text>
+            </Pressable>
+          </Animated.View>
+        )}
+
+        {canWhatsApp && (
+          <Animated.View style={[styles.flex, whatsappAnimatedStyle]}>
+            <Pressable
+              onPress={handleWhatsApp}
+              onPressIn={() => handlePressIn(whatsappScale)}
+              onPressOut={() => handlePressOut(whatsappScale)}
+              style={({ pressed }) => [
+                styles.btn,
+                styles.btnSecondary,
+                pressed && styles.btnPressed
+              ]}
+              disabled={openingWhatsApp}
+            >
+              <Ionicons name="logo-whatsapp" size={20} color={colors.primary} style={styles.btnIcon} />
+              <Text style={styles.btnTextSecondary}>WhatsApp</Text>
+            </Pressable>
+          </Animated.View>
+        )}
       </View>
     </View>
   );
@@ -233,110 +192,65 @@ export function ListingActions({
 
 const styles = StyleSheet.create({
   footer: {
-    flexDirection: 'column',
-    gap: spacing.lg,
-    paddingHorizontal: spacing.base,
-    paddingTop: spacing.lg,
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
     backgroundColor: colors.surface,
+    paddingHorizontal: spacing.base,
+    paddingTop: spacing.base,
     borderTopWidth: 1,
     borderTopColor: colors.borderLight,
-    overflow: 'hidden',
+    ...shadows.soft,
   },
-  contactBar: {
+  container: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
-    minHeight: 48,
   },
-  contactPrimary: {
+  flex: {
     flex: 1,
-    minWidth: 0,
-    minHeight: 48,
   },
-  contactSecondary: {
-    flex: 1,
-    minWidth: 0,
-    minHeight: 48,
-  },
-  actionsRow: {
+  btn: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.sm,
-    minHeight: 48,
-    overflow: 'hidden',
-  },
-  favButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.xs,
-    paddingVertical: spacing.md,
+    justifyContent: 'center',
+    height: 56,
+    borderRadius: radius.full,
     paddingHorizontal: spacing.md,
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surface,
-    minHeight: 48,
-    flexShrink: 0,
   },
-  pressed: {
+  btnPrimary: {
+    backgroundColor: colors.primary,
+  },
+  btnSecondary: {
+    backgroundColor: colors.surface,
+    borderWidth: 1.5,
+    borderColor: colors.primary,
+  },
+  btnPressed: {
     opacity: 0.9,
   },
-  favIcon: {},
-  favLabel: {
-    ...typography.sm,
+  btnIcon: {
+    marginRight: spacing.sm,
+  },
+  btnTextPrimary: {
+    ...typography.base,
     fontWeight: fontWeights.bold,
-    color: colors.text,
+    color: colors.surface,
   },
-  shareButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.xs,
-    paddingVertical: spacing.md,
-    paddingHorizontal: spacing.sm,
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surface,
-    minHeight: 48,
-    flexShrink: 0,
-  },
-  shareButtonDisabled: {
-    opacity: 0.55,
-  },
-  shareLabel: {
-    ...typography.sm,
+  btnTextSecondary: {
+    ...typography.base,
     fontWeight: fontWeights.bold,
-    color: colors.textSecondary,
-  },
-  phoneButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.xs,
-    paddingVertical: spacing.md,
-    paddingHorizontal: spacing.sm,
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surface,
-    minHeight: 48,
-    flexShrink: 0,
-  },
-  phoneLabel: {
-    ...typography.sm,
-    fontWeight: fontWeights.bold,
-    color: colors.textSecondary,
+    color: colors.primary,
   },
   unavailableWrap: {
-    flex: 1,
-    minWidth: 0,
+    height: 56,
     justifyContent: 'center',
     alignItems: 'center',
-    minHeight: 48,
     backgroundColor: colors.surfaceSubtle,
     borderRadius: radius.lg,
     borderWidth: 1,
     borderColor: colors.borderLight,
-    opacity: 0.9,
   },
   unavailableText: {
     ...typography.sm,

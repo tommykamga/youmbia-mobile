@@ -4,8 +4,10 @@
  */
 
 import React from 'react';
-import { View, Text, StyleSheet, Pressable } from 'react-native';
-import { colors, spacing, typography, fontWeights, cardStyles } from '@/theme';
+import { View, Text, StyleSheet } from 'react-native';
+import Ionicons from '@expo/vector-icons/Ionicons';
+import { Button } from '@/components';
+import { colors, spacing, typography, fontWeights, radius, shadows } from '@/theme';
 import { formatJoinDate } from '@/lib/format';
 import { SellerBadge } from './SellerBadge';
 import type { ListingDetail } from '@/services/listings';
@@ -38,51 +40,74 @@ export function ListingSeller({ listing, memberSince, listingCount, onPress }: L
   const listingCountLabel =
     safeListingCount == null ? null : `${safeListingCount} annonce${safeListingCount > 1 ? 's' : ''}`;
 
+  const avatarInitial = name.charAt(0).toUpperCase();
+
   const content = (
     <>
-      <Text style={styles.sectionLabel}>Vendeur</Text>
-      <Text style={styles.name}>{name}</Text>
-      {joinDate ? (
-        <Text style={styles.meta}>Membre depuis {joinDate}</Text>
-      ) : null}
-      {listingCountLabel ? (
-        <Text style={styles.meta}>{listingCountLabel}</Text>
-      ) : null}
+      <View style={styles.header}>
+        <View style={styles.avatar}>
+          <Text style={styles.avatarText}>{avatarInitial}</Text>
+        </View>
+        <View style={styles.headerInfo}>
+          <Text style={styles.name}>{name}</Text>
+          {joinDate ? (
+            <Text style={styles.joinDate}>Membre depuis {joinDate}</Text>
+          ) : null}
+        </View>
+      </View>
+
+      <View style={styles.statsRow}>
+        {listingCountLabel && (
+          <View style={styles.statItem}>
+            <Ionicons name="list" size={16} color={colors.textMuted} />
+            <Text style={styles.statValue}>{listingCountLabel}</Text>
+          </View>
+        )}
+        {isReliable && (
+          <View style={styles.statItem}>
+            <Ionicons name="star" size={16} color={colors.warning} />
+            <Text style={styles.statValue}>Profil fiable</Text>
+          </View>
+        )}
+      </View>
+
       {isBanned && (
         <Text style={styles.restrictedNotice}>Ce vendeur ne peut pas être contacté.</Text>
       )}
-      {showTrustScore && (
-        <Text style={styles.trustScoreText}>Score confiance : {trustScore}</Text>
-      )}
+
       {seller?.response_hint?.trim() && (
-        <Text style={styles.responseHint}>{seller.response_hint.trim()}</Text>
+        <View style={styles.hintContainer}>
+          <Ionicons name="time-outline" size={14} color={colors.success} />
+          <Text style={styles.responseHint}>{seller.response_hint.trim()}</Text>
+        </View>
       )}
+
       {hasAnyBadge && (
         <View style={styles.badges}>
           {isVerified && (
             <SellerBadge variant="verified" label="✔ Vendeur vérifié" />
-          )}
-          {isReliable && (
-            <SellerBadge variant="reliable" label="⭐ Profil fiable" />
           )}
           {isFlagged && (
             <SellerBadge variant="flagged" label="⚠ Vendeur signalé" />
           )}
         </View>
       )}
+
       {onPress && !isBanned ? (
-        <Pressable
+        <Button
+          variant="secondary"
+          size="sm"
           onPress={onPress}
-          style={({ pressed }) => [styles.cta, pressed && styles.ctaPressed]}
+          style={styles.ctaButton}
         >
-          <Text style={styles.ctaText}>Voir les annonces du vendeur</Text>
-        </Pressable>
+          Voir ses annonces
+        </Button>
       ) : null}
     </>
   );
 
   return (
-    <View style={[styles.card, cardStyles.default]}>
+    <View style={styles.card}>
       {content}
     </View>
   );
@@ -90,64 +115,93 @@ export function ListingSeller({ listing, memberSince, listingCount, onPress }: L
 
 const styles = StyleSheet.create({
   card: {
+    backgroundColor: colors.surface,
     padding: spacing.base,
+    borderRadius: radius.xl,
     marginTop: spacing.lg,
     marginBottom: spacing.xl,
+    borderWidth: 1,
+    borderColor: colors.borderLight,
+    ...shadows.sm,
   },
-  sectionLabel: {
-    ...typography.xs,
-    color: colors.textTertiary,
-    fontWeight: fontWeights.semibold,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-    marginBottom: spacing.xs,
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: spacing.base,
+  },
+  avatar: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: colors.primaryLight,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: spacing.md,
+  },
+  avatarText: {
+    ...typography.lg,
+    fontWeight: fontWeights.bold,
+    color: colors.primary,
+  },
+  headerInfo: {
+    flex: 1,
   },
   name: {
     ...typography.base,
-    fontWeight: fontWeights.semibold,
+    fontWeight: fontWeights.bold,
     color: colors.text,
-    marginBottom: spacing.xs,
+    marginBottom: 2,
   },
-  meta: {
-    ...typography.sm,
-    color: colors.textMuted,
-    marginBottom: spacing.sm,
-  },
-  restrictedNotice: {
-    ...typography.sm,
-    color: colors.textMuted,
-    fontStyle: 'italic',
-    marginBottom: spacing.xs,
-  },
-  trustScoreText: {
+  joinDate: {
     ...typography.xs,
     color: colors.textMuted,
-    marginBottom: spacing.xs,
+  },
+  statsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.lg,
+    marginBottom: spacing.base,
+  },
+  statItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+  },
+  statValue: {
+    ...typography.sm,
+    color: colors.textSecondary,
+    fontWeight: fontWeights.medium,
+  },
+  hintContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    backgroundColor: colors.successLight + '40',
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    borderRadius: radius.sm,
+    marginBottom: spacing.base,
+    alignSelf: 'flex-start',
   },
   responseHint: {
     ...typography.xs,
-    color: colors.textMuted,
+    color: colors.success,
+    fontWeight: fontWeights.medium,
+  },
+  restrictedNotice: {
+    ...typography.sm,
+    color: colors.error,
     fontStyle: 'italic',
-    marginBottom: spacing.xs,
+    marginBottom: spacing.base,
   },
   badges: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: spacing.sm,
-    marginTop: spacing.xs,
+    marginBottom: spacing.base,
   },
-  cta: {
-    alignSelf: 'flex-start',
-    marginTop: spacing.base,
-    paddingVertical: spacing.sm,
-  },
-  ctaPressed: {
-    opacity: 0.7,
-  },
-  ctaText: {
-    ...typography.sm,
-    color: colors.primary,
-    fontWeight: fontWeights.semibold,
-    textDecorationLine: 'underline',
+  ctaButton: {
+    alignSelf: 'stretch',
+    borderRadius: radius.full,
   },
 });

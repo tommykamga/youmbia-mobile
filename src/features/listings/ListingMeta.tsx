@@ -21,8 +21,9 @@ type ListingMetaProps = {
   onFavoritePress?: () => void;
   /** Quartier ou zone (localisation améliorée). */
   district?: string | null;
-  /** Badge "Urgent". */
   urgent?: boolean;
+  /** Badge "À la une" (boosted). */
+  boosted?: boolean;
 };
 
 export function ListingMeta({
@@ -35,17 +36,19 @@ export function ListingMeta({
   onFavoritePress,
   district,
   urgent,
+  boosted,
 }: ListingMetaProps) {
-  const metaSecondary = views_count > 0
-    ? `${views_count} vues`
-    : timeAgo(created_at);
   const locationLine = getDisplayLocationLine(city, district);
   const showUrgentBadge = getDisplayUrgent({ urgent });
+  const showBoostedBadge = boosted === true;
+  const timeLabel = timeAgo(created_at);
 
   return (
     <View style={styles.block}>
       <View style={styles.titleRow}>
-        <Text style={styles.title}>{title}</Text>
+        <Text style={styles.title} numberOfLines={2} ellipsizeMode="tail">
+          {title}
+        </Text>
         {onFavoritePress != null ? (
           <Pressable
             onPress={onFavoritePress}
@@ -60,15 +63,46 @@ export function ListingMeta({
           </Pressable>
         ) : null}
       </View>
+
       <Text style={styles.price}>{formatPrice(price)}</Text>
-      <View style={styles.row}>
-        {showUrgentBadge ? (
-          <View style={styles.urgentBadge}>
-            <Text style={styles.urgentBadgeText}>Urgent</Text>
+
+      <View style={styles.badgesRow}>
+        {showUrgentBadge && (
+          <View style={[styles.badge, styles.urgentBadge]}>
+            <Ionicons name="flash" size={12} color={colors.surface} style={styles.badgeIcon} />
+            <Text style={styles.badgeText}>Urgent</Text>
           </View>
-        ) : null}
-        <Text style={styles.city}>{locationLine || city}</Text>
-        <Text style={styles.meta}>{metaSecondary}</Text>
+        )}
+
+        {showBoostedBadge && (
+          <View style={[styles.badge, styles.boostedBadge]}>
+            <Ionicons name="star" size={12} color={colors.surface} style={styles.badgeIcon} />
+            <Text style={styles.badgeText}>À la une</Text>
+          </View>
+        )}
+      </View>
+
+      <View style={styles.essentialInfo}>
+        <View style={styles.infoRow}>
+          <View style={styles.infoItem}>
+            <Ionicons name="location-outline" size={14} color={colors.textTertiary} />
+            <Text style={styles.infoText}>{locationLine || city}</Text>
+          </View>
+
+          {views_count > 0 && (
+            <View style={styles.infoItem}>
+              <Ionicons name="eye-outline" size={14} color={colors.textTertiary} />
+              <Text style={styles.infoText}>{views_count} vues</Text>
+            </View>
+          )}
+
+          {timeLabel && (
+            <View style={styles.infoItem}>
+              <Ionicons name="time-outline" size={14} color={colors.textTertiary} />
+              <Text style={styles.infoText}>{timeLabel}</Text>
+            </View>
+          )}
+        </View>
       </View>
     </View>
   );
@@ -76,20 +110,21 @@ export function ListingMeta({
 
 const styles = StyleSheet.create({
   block: {
-    marginBottom: spacing.xl,
+    marginBottom: spacing.base,
   },
   titleRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     justifyContent: 'space-between',
     gap: spacing.sm,
-    marginBottom: spacing.lg,
+    marginBottom: spacing.sm,
   },
   title: {
     flex: 1,
-    ...typography['2xl'],
-    fontWeight: fontWeights.bold,
+    ...typography.lg,
+    fontWeight: fontWeights.semibold,
     color: colors.text,
+    lineHeight: 28,
   },
   heartButton: {
     padding: spacing.xs,
@@ -98,35 +133,57 @@ const styles = StyleSheet.create({
     opacity: 0.85,
   },
   price: {
-    ...typography['4xl'],
-    fontWeight: fontWeights.black,
-    letterSpacing: -0.3,
+    ...typography['2xl'],
+    fontWeight: fontWeights.bold,
     color: colors.primary,
-    marginBottom: spacing.xl,
+    marginBottom: spacing.lg,
   },
-  row: {
+  badgesRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.md,
-    marginBottom: spacing.lg,
+    gap: spacing.sm,
+    flexWrap: 'wrap',
+    marginBottom: spacing.base,
+  },
+  badge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 4,
+    borderRadius: radius.full,
+  },
+  badgeIcon: {
+    marginRight: 4,
   },
   urgentBadge: {
     backgroundColor: colors.error,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.xs,
-    borderRadius: radius.sm,
   },
-  urgentBadgeText: {
+  boostedBadge: {
+    backgroundColor: colors.primary,
+  },
+  badgeText: {
     ...typography.xs,
-    fontWeight: fontWeights.semibold,
+    fontWeight: fontWeights.bold,
     color: colors.surface,
   },
-  city: {
+  essentialInfo: {
+    marginTop: spacing.xs,
+  },
+  infoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    columnGap: spacing.lg,
+    rowGap: spacing.xs,
+  },
+  infoItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+  },
+  infoText: {
     ...typography.sm,
     color: colors.textMuted,
-  },
-  meta: {
-    ...typography.sm,
-    color: colors.textTertiary,
+    fontWeight: fontWeights.medium,
   },
 });
