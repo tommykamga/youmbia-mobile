@@ -7,6 +7,7 @@ import { getSession } from '@/services/auth';
 import { getConversations } from '@/services/conversations';
 import type { Conversation } from '@/services/conversations/types';
 import { spacing, colors, typography, fontWeights, radius } from '@/theme';
+import Animated, { useSharedValue, useAnimatedStyle, withTiming, Easing, withSpring } from 'react-native-reanimated';
 
 function formatInboxDate(iso: string | null | undefined): string {
   if (!iso) return '';
@@ -104,41 +105,61 @@ export default function MessagesScreen() {
     setRefreshing(false);
   }, [fetchInbox]);
 
-  const renderItem = ({ item }: { item: Conversation }) => (
-    <Pressable
-      style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
-      onPress={() => router.push(`/conversation/${item.id}`)}
-    >
-      <View style={styles.avatar}>
-        <Text style={styles.avatarText}>
-          {item.other_party_name?.charAt(0).toUpperCase() || '?'}
-        </Text>
-      </View>
-      <View style={styles.body}>
-        <View style={styles.header}>
-          <Text style={styles.participant} numberOfLines={1}>
-            {item.other_party_name || 'Utilisateur'}
-          </Text>
-          <Text style={styles.date}>{formatInboxDate(item.last_message_at || item.created_at)}</Text>
-        </View>
-        <Text style={styles.listing} numberOfLines={1}>
-          {item.listing_title || 'Annonce supprimée'}
-        </Text>
-        <View style={styles.footer}>
-          <Text style={[styles.preview, (item.unread_count ?? 0) > 0 && styles.previewUnread]} numberOfLines={1}>
-            {item.last_message_preview || 'Démarrer la conversation'}
-          </Text>
-          {(item.unread_count ?? 0) > 0 && (
-            <View style={styles.badge}>
-              <Text style={styles.badgeText}>
-                {item.unread_count! > 9 ? '9+' : item.unread_count}
+  const MessageItem = ({ item }: { item: Conversation }) => {
+    const scale = useSharedValue(1);
+    const animatedStyle = useAnimatedStyle(() => ({
+      transform: [{ scale: scale.value }]
+    }));
+
+    const onPressIn = () => {
+      scale.value = withTiming(0.98, { duration: 100, easing: Easing.out(Easing.quad) });
+    };
+    const onPressOut = () => {
+      scale.value = withSpring(1);
+    };
+
+    return (
+      <Animated.View style={animatedStyle}>
+        <Pressable
+          style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
+          onPressIn={onPressIn}
+          onPressOut={onPressOut}
+          onPress={() => router.push(`/conversation/${item.id}`)}
+        >
+          <View style={styles.avatar}>
+            <Text style={styles.avatarText}>
+              {item.other_party_name?.charAt(0).toUpperCase() || '?'}
+            </Text>
+          </View>
+          <View style={styles.body}>
+            <View style={styles.header}>
+              <Text style={styles.participant} numberOfLines={1}>
+                {item.other_party_name || 'Utilisateur'}
               </Text>
+              <Text style={styles.date}>{formatInboxDate(item.last_message_at || item.created_at)}</Text>
             </View>
-          )}
-        </View>
-      </View>
-    </Pressable>
-  );
+            <Text style={styles.listing} numberOfLines={1}>
+              {item.listing_title || 'Annonce supprimée'}
+            </Text>
+            <View style={styles.footer}>
+              <Text style={[styles.preview, (item.unread_count ?? 0) > 0 && styles.previewUnread]} numberOfLines={1}>
+                {item.last_message_preview || 'Démarrer la conversation'}
+              </Text>
+              {(item.unread_count ?? 0) > 0 && (
+                <View style={styles.badge}>
+                  <Text style={styles.badgeText}>
+                    {item.unread_count! > 9 ? '9+' : item.unread_count}
+                  </Text>
+                </View>
+              )}
+            </View>
+          </View>
+        </Pressable>
+      </Animated.View>
+    );
+  };
+
+  const renderItem = ({ item }: { item: Conversation }) => <MessageItem item={item} />;
 
   return (
     <Screen noPadding>

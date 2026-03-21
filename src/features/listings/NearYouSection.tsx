@@ -13,6 +13,7 @@ import { NearYouCard } from './NearYouCard';
 import type { PublicListing } from '@/services/listings';
 import { colors, spacing, typography, fontWeights } from '@/theme';
 import { useCardWidth } from '@/hooks/useCardWidth';
+import { useFavorites } from '@/context/FavoritesContext';
 
 const NEAR_YOU_LIMIT = 6;
 const INITIAL_NUM_TO_RENDER = 4;
@@ -27,11 +28,9 @@ export function NearYouSection({ userCity }: NearYouSectionProps) {
   const router = useRouter();
   const cardWidth = useCardWidth();
   const ITEM_WIDTH = cardWidth + spacing.sm;
+  const { isFavorite } = useFavorites();
   const [listings, setListings] = useState<PublicListing[]>([]);
-  const [favoriteIds, setFavoriteIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
-  const favoriteIdsRef = React.useRef<Set<string>>(new Set());
-  favoriteIdsRef.current = favoriteIds;
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -48,8 +47,6 @@ export function NearYouSection({ userCity }: NearYouSectionProps) {
       const result = await getPublicListings();
       setListings((result.data ?? []).slice(0, NEAR_YOU_LIMIT));
     }
-    const fav = await getFavoriteIds();
-    if (fav.data) setFavoriteIds(new Set(fav.data));
     setLoading(false);
   }, [userCity]);
 
@@ -57,44 +54,17 @@ export function NearYouSection({ userCity }: NearYouSectionProps) {
     load();
   }, [load]);
 
-  const handleFavoritePress = useCallback(
-    async (listingId: string) => {
-      const next = !favoriteIdsRef.current.has(listingId);
-      setFavoriteIds((prev) => {
-        const nextSet = new Set(prev);
-        if (next) nextSet.add(listingId);
-        else nextSet.delete(listingId);
-        return nextSet;
-      });
-      const result = await toggleFavorite(listingId);
-      if (result.error) {
-        setFavoriteIds((prev) => {
-          const reverted = new Set(prev);
-          if (next) reverted.delete(listingId);
-          else reverted.add(listingId);
-          return reverted;
-        });
-        if (result.error.message === 'Non connecté') {
-          router.replace(`/(auth)/login?redirect=${encodeURIComponent('/(tabs)/home')}`);
-        }
-      }
-    },
-    [router]
-  );
-
   const keyExtractor = useCallback((item: PublicListing) => item.id, []);
   const renderItem = useCallback(
     ({ item }: { item: PublicListing }) => (
       <View style={{ width: cardWidth }}>
         <NearYouCard
           listing={item}
-          isFavorite={favoriteIdsRef.current.has(item.id)}
-          onFavoritePress={() => handleFavoritePress(item.id)}
           userCity={userCity}
         />
       </View>
     ),
-    [handleFavoritePress, userCity]
+    [cardWidth, userCity]
   );
 
   const handleVoirPlus = useCallback(() => {
@@ -123,7 +93,6 @@ export function NearYouSection({ userCity }: NearYouSectionProps) {
       </View>
       <FlatList
         data={listings}
-        extraData={favoriteIds}
         keyExtractor={keyExtractor}
         horizontal
         showsHorizontalScrollIndicator={false}

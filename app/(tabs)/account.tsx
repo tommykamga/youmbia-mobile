@@ -1,10 +1,11 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useState, memo } from 'react';
 import { ScrollView, View, Text, StyleSheet, Pressable, Alert } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Screen, Loader, EmptyState, Button } from '@/components';
 import { getSession, signOut } from '@/services/auth';
 import { spacing, colors, typography, fontWeights, radius } from '@/theme';
+import Animated, { useSharedValue, useAnimatedStyle, withTiming, Easing, withSpring } from 'react-native-reanimated';
 
 type RouteItem = {
   icon: keyof typeof Ionicons.glyphMap;
@@ -40,11 +41,61 @@ const SECTIONS = [
   },
 ];
 
+const AccountRow = memo(({ item, isLast, onPress }: { item: RouteItem; isLast: boolean; onPress: () => void }) => {
+  const scale = useSharedValue(1);
+  const animatedStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: scale.value }]
+  }));
+
+  const onPressIn = () => {
+    scale.value = withTiming(0.98, { duration: 100, easing: Easing.out(Easing.quad) });
+  };
+  const onPressOut = () => {
+    scale.value = withSpring(1);
+  };
+
+  return (
+    <Animated.View style={animatedStyle}>
+      <Pressable
+        style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
+        onPressIn={onPressIn}
+        onPressOut={onPressOut}
+        onPress={onPress}
+      >
+        <View style={[styles.iconWrap, { backgroundColor: item.isDestructive ? '#FEE2E2' : colors.surfaceSubtle }]}>
+          <Ionicons 
+            name={item.icon} 
+            size={20} 
+            color={item.isDestructive ? colors.error : colors.primary} 
+          />
+        </View>
+        <Text style={[styles.rowLabel, item.isDestructive && { color: colors.error }]}>
+          {item.label}
+        </Text>
+        <Ionicons name="chevron-forward" size={18} color={colors.borderLight} />
+        {!isLast && <View style={styles.rowSeparator} />}
+      </Pressable>
+    </Animated.View>
+  );
+});
+
 export default function AccountScreen() {
   const router = useRouter();
   const [email, setEmail] = useState<string | null>(null);
   const [status, setStatus] = useState<'loading' | 'unauthenticated' | 'authenticated'>('loading');
   const [signingOut, setSigningOut] = useState(false);
+
+  const editScale = useSharedValue(1);
+  const editAnimatedStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: editScale.value }]
+  }));
+
+  const onEditPressIn = () => {
+    editScale.value = withTiming(0.95, { duration: 100, easing: Easing.out(Easing.quad) });
+  };
+  const onEditPressOut = () => {
+    editScale.value = withSpring(1);
+  };
 
   const fetchSession = useCallback(async () => {
     try {
@@ -129,12 +180,16 @@ export default function AccountScreen() {
               {email}
             </Text>
           </View>
-          <Pressable 
-            style={({pressed}) => [styles.editBtn, pressed && { opacity: 0.7 }]}
-            onPress={() => router.push('/account/profile')}
-          >
-            <Text style={styles.editBtnText}>Modifier</Text>
-          </Pressable>
+          <Animated.View style={editAnimatedStyle}>
+            <Pressable 
+              style={styles.editBtn}
+              onPressIn={onEditPressIn}
+              onPressOut={onEditPressOut}
+              onPress={() => router.push('/account/profile')}
+            >
+              <Text style={styles.editBtnText}>Modifier</Text>
+            </Pressable>
+          </Animated.View>
         </View>
 
         {/* Sections */}
@@ -145,24 +200,12 @@ export default function AccountScreen() {
               {section.items.map((item, i) => {
                 const isLast = i === section.items.length - 1;
                 return (
-                  <Pressable
+                  <AccountRow 
                     key={item.label}
-                    style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
+                    item={item}
+                    isLast={isLast}
                     onPress={() => router.push(item.route as any)}
-                  >
-                    <View style={[styles.iconWrap, { backgroundColor: item.isDestructive ? '#FEE2E2' : colors.surfaceSubtle }]}>
-                      <Ionicons 
-                        name={item.icon} 
-                        size={20} 
-                        color={item.isDestructive ? colors.error : colors.primary} 
-                      />
-                    </View>
-                    <Text style={[styles.rowLabel, item.isDestructive && { color: colors.error }]}>
-                      {item.label}
-                    </Text>
-                    <Ionicons name="chevron-forward" size={18} color={colors.borderLight} />
-                    {!isLast && <View style={styles.rowSeparator} />}
-                  </Pressable>
+                  />
                 );
               })}
             </View>

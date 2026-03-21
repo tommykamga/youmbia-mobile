@@ -8,10 +8,11 @@ import { ListingCard } from './ListingCard';
 import { Loader, EmptyState, SkeletonListingCard, Button } from '@/components';
 import { spacing, colors, typography, fontWeights, radius } from '@/theme';
 import Ionicons from '@expo/vector-icons/Ionicons';
+import { useFavorites } from '@/context/FavoritesContext';
 
-const PAGE_SIZE = 20;
-const INITIAL_NUM_TO_RENDER = 10;
-const WINDOW_SIZE = 6;
+const PAGE_SIZE = 15;
+const INITIAL_NUM_TO_RENDER = 8;
+const WINDOW_SIZE = 5;
 
 type FeedState =
   | { status: 'loading' }
@@ -26,9 +27,9 @@ export type ListingFeedProps = {
 
 export function ListingFeed({ listHeaderComponent }: ListingFeedProps) {
   const router = useRouter();
+  const { isFavorite, refresh: refreshFavorites } = useFavorites();
   const [state, setState] = useState<FeedState>({ status: 'loading' });
   const [sortBy, setSortBy] = useState<SortOption>('recent');
-  const [favoriteIds, setFavoriteIds] = useState<Set<string>>(new Set());
   const [refreshing, setRefreshing] = useState(false);
   const hasLoadedListingsRef = useRef(false);
   const loadingMoreRef = useRef(false);
@@ -36,8 +37,6 @@ export function ListingFeed({ listHeaderComponent }: ListingFeedProps) {
   const [hasMore, setHasMore] = useState(true);
   const [loadMoreError, setLoadMoreError] = useState<string | null>(null);
   const hasMoreRef = useRef(true);
-  const favoriteIdsRef = useRef<Set<string>>(new Set());
-  favoriteIdsRef.current = favoriteIds;
 
   const load = useCallback(async (pageOffset: number = 0, append: boolean = false) => {
     const listResult = await getPublicListings(pageOffset, PAGE_SIZE);
@@ -56,13 +55,8 @@ export function ListingFeed({ listHeaderComponent }: ListingFeedProps) {
         if (added.length === 0) return prev;
         return { status: 'success' as const, data: [...prev.data, ...added] };
       });
-      const isLastPage = list.length < PAGE_SIZE;
-      hasMoreRef.current = !isLastPage;
-      setHasMore(!isLastPage);
     } else {
       setLoadMoreError(null);
-      const favResult = await getFavoriteIds();
-      if (favResult.data) setFavoriteIds(new Set(favResult.data));
       setState(
         list.length === 0
           ? { status: 'empty' }
@@ -84,12 +78,6 @@ export function ListingFeed({ listHeaderComponent }: ListingFeedProps) {
     return () => { cancelled = true; };
   }, [load]);
 
-  /** On focus: refresh only favorite state (lightweight). Do not reload listings — preserves scroll position. */
-  const refreshFavorites = useCallback(async () => {
-    const res = await getFavoriteIds();
-    if (res.data) setFavoriteIds(new Set(res.data));
-  }, []);
-
   useFocusEffect(
     useCallback(() => {
       refreshFavorites();
@@ -101,48 +89,15 @@ export function ListingFeed({ listHeaderComponent }: ListingFeedProps) {
     load(0, false).finally(() => setRefreshing(false));
   }, [load]);
 
-  const handleFavoritePress = useCallback(
-    async (listingId: string) => {
-      const nextFavorite = !favoriteIdsRef.current.has(listingId);
-      setFavoriteIds((prev) => {
-        const next = new Set(prev);
-        if (nextFavorite) next.add(listingId);
-        else next.delete(listingId);
-        return next;
-      });
-      const result = await toggleFavorite(listingId);
-      if (result.error) {
-        setFavoriteIds((prev) => {
-          const reverted = new Set(prev);
-          if (nextFavorite) reverted.delete(listingId);
-          else reverted.add(listingId);
-          return reverted;
-        });
-        if (result.error.message === 'Non connecté') {
-          router.replace(`/(auth)/login?redirect=${encodeURIComponent('/(tabs)/home')}`);
-        }
-        return;
-      }
-    },
-    [router]
-  );
-
   const keyExtractor = useCallback((item: any) => String(item.id ?? item), []);
   const renderItem = useCallback(
     ({ item }: { item: any }) => {
       if (typeof item === 'number') {
         return <SkeletonListingCard />;
       }
-      const listing = item as PublicListing;
-      return (
-        <ListingCard
-          listing={listing}
-          isFavorite={favoriteIdsRef.current.has(listing.id)}
-          onFavoritePress={() => handleFavoritePress(listing.id)}
-        />
-      );
+      return <ListingCard listing={item as PublicListing} />;
     },
-    [handleFavoritePress]
+    []
   );
   const itemSeparator = useCallback(
     () => <View style={styles.separator} />,
@@ -285,7 +240,6 @@ export function ListingFeed({ listHeaderComponent }: ListingFeedProps) {
   return (
     <FlatList
       data={feedData}
-      extraData={favoriteIds}
       keyExtractor={keyExtractor}
       renderItem={renderItem}
       ItemSeparatorComponent={itemSeparator}

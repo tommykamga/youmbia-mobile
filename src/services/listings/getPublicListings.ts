@@ -26,6 +26,7 @@ export type PublicListing = {
   district?: string | null;
   /** En contexte favoris : true si le prix a baissé (backend / historique). */
   price_dropped?: boolean;
+  updated_at: string;
 };
 
 type ListingImageRow = { url: string; sort_order: number | null };
@@ -42,6 +43,7 @@ type ListingRow = {
   boosted?: boolean | null;
   urgent?: boolean | null;
   district?: string | null;
+  updated_at: string;
   listing_images: ListingImageRow[] | null;
 };
 
@@ -63,6 +65,7 @@ function mapRow(row: ListingRow, signedMap: Map<string, string>): PublicListing 
     images,
     views_count: row.views_count ?? 0,
     seller_id: row.user_id ?? '',
+    updated_at: row.updated_at,
     ...schema,
   };
 }
@@ -86,7 +89,7 @@ export async function getPublicListings(
   const { data, error } = await supabase
     .from('listings')
     .select(
-      'id, title, price, city, description, boosted, urgent, district, created_at, views_count, user_id, listing_images(url, sort_order)'
+      'id, title, price, city, description, boosted, urgent, district, created_at, updated_at, views_count, user_id, listing_images(url, sort_order)'
     )
     .eq('status', 'active')
     .order('updated_at', { ascending: false })

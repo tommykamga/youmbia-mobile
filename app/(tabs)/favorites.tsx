@@ -4,16 +4,17 @@
  * Loading, error, empty, success with pull-to-refresh; optimistic unfavorite with rollback.
  */
 
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState, useMemo } from 'react';
 import { FlatList, View, StyleSheet, RefreshControl } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Screen, Loader, EmptyState, Button } from '@/components';
-import { getFavorites, toggleFavorite } from '@/services/favorites';
+import { getFavorites } from '@/services/favorites';
 import { getSession } from '@/services/auth';
 import { ListingCard } from '@/features/listings';
 import type { PublicListing } from '@/services/listings';
 import { spacing, colors } from '@/theme';
+import { useFavorites } from '@/context/FavoritesContext';
 
 type FavoritesState =
   | { status: 'loading' }
@@ -23,12 +24,14 @@ type FavoritesState =
   | { status: 'success'; data: PublicListing[] };
 
 export default function FavoritesScreen() {
+  const { favorites, loading: favoritesLoading } = useFavorites();
   const router = useRouter();
   const [state, setState] = useState<FavoritesState>({ status: 'loading' });
   const [refreshing, setRefreshing] = useState(false);
 
   const load = useCallback(async () => {
     try {
+      if (favoritesLoading) return;
       const session = await getSession();
       if (!session?.user) {
         setState({ status: 'unauthenticated' });
@@ -48,7 +51,7 @@ export default function FavoritesScreen() {
     } catch {
       setState({ status: 'error', message: 'Impossible de charger' });
     }
-  }, []);
+  }, [favoritesLoading]);
 
   useEffect(() => {
     load().then(() => setRefreshing(false));
@@ -59,44 +62,18 @@ export default function FavoritesScreen() {
     load().finally(() => setRefreshing(false));
   }, [load]);
 
-  useFocusEffect(
-    useCallback(() => {
-      if (state.status === 'success' || state.status === 'empty') {
-        load();
-      }
-    }, [load, state.status])
-  );
-
-
-
-  const handleFavoritePress = useCallback(
-    async (listingId: string) => {
-      if (state.status !== 'success') return;
-      const previousData = state.data;
-      const nextData = state.data.filter((item) => item.id !== listingId);
-      setState(nextData.length === 0 ? { status: 'empty' } : { status: 'success', data: nextData });
-      const result = await toggleFavorite(listingId);
-      if (result.error) {
-        setState({ status: 'success', data: previousData });
-        if (result.error.message === 'Non connecté') {
-          setState({ status: 'unauthenticated' });
-        }
-        return;
-      }
-    },
-    [state, router]
-  );
+  // Sync state data with global favorites Set (for immediate removal from list)
+  const displayData = useMemo(() => {
+    if (state.status !== 'success') return [];
+    return state.data.filter(item => favorites.has(item.id));
+  }, [state, favorites]);
 
   const keyExtractor = useCallback((item: PublicListing) => item.id, []);
   const renderItem = useCallback(
     ({ item }: { item: PublicListing }) => (
-      <ListingCard
-        listing={item}
-        isFavorite
-        onFavoritePress={() => handleFavoritePress(item.id)}
-      />
+      <ListingCard listing={item} />
     ),
-    [handleFavoritePress]
+    []
   );
   const itemSeparator = useCallback(() => <View style={styles.separator} />, []);
 

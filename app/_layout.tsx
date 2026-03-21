@@ -19,6 +19,7 @@ import {
 } from '@/services/notifications';
 import { syncNewMessageNotifications } from '@/services/messageNotifications';
 import { syncSavedSearchNotifications } from '@/services/savedSearchNotifications';
+import { FavoritesProvider } from '@/context/FavoritesContext';
 
 const MESSAGE_NOTIFICATIONS_POLL_MS = 45000;
 
@@ -248,7 +249,7 @@ export default function RootLayout() {
   }
 
   return (
-    <>
+    <FavoritesProvider>
       <StatusBar style="dark" />
       <Stack
         screenOptions={{
@@ -266,6 +267,6 @@ export default function RootLayout() {
         <Stack.Screen name="sell/index" options={{ headerShown: false }} />
         <Stack.Screen name="categories" options={{ headerShown: false }} />
       </Stack>
-    </>
+    </FavoritesProvider>
   );
 }

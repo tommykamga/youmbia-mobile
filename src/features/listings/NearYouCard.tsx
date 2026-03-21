@@ -5,11 +5,21 @@
  */
 
 import React, { memo, useCallback } from 'react';
-import { View, Text, StyleSheet, Pressable, Image } from 'react-native';
+import { View, Text, StyleSheet, Pressable } from 'react-native';
+import { Image } from 'expo-image';
+import Animated, { 
+  useSharedValue, 
+  useAnimatedStyle, 
+  withSpring,
+  FadeInDown,
+  withTiming,
+  Easing
+} from 'react-native-reanimated';
 import { useRouter } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { colors, spacing, typography, fontWeights, radius, cardStyles } from '@/theme';
 import { formatPrice } from '@/lib/format';
+import { FavoriteButton } from '@/components/FavoriteButton';
 import { getDisplayLocationLine, getDisplayUrgent } from '@/lib/listingSchemaFeatures';
 import type { PublicListing } from '@/services/listings';
 
@@ -33,18 +43,22 @@ function isNew(createdAt: string): boolean {
 
 type NearYouCardProps = {
   listing: PublicListing;
-  isFavorite?: boolean;
-  onFavoritePress?: () => void;
   userCity?: string | null;
 };
 
+const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
+
 function NearYouCardInner({
   listing,
-  isFavorite = false,
-  onFavoritePress,
   userCity,
 }: NearYouCardProps) {
   const router = useRouter();
+  const scale = useSharedValue(1);
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: scale.value }],
+  }));
+
   const firstImage =
     listing.images?.length && String(listing.images[0] ?? '').trim()
       ? listing.images[0]
@@ -59,25 +73,29 @@ function NearYouCardInner({
     router.push(`/listing/${listing.id}`);
   }, [listing.id, router]);
 
-  const handleFavoriteButtonPress = useCallback((e?: { stopPropagation?: () => void }) => {
-    e?.stopPropagation?.();
-    onFavoritePress?.();
-  }, [onFavoritePress]);
+  const onPressIn = () => {
+    scale.value = withTiming(0.97, { duration: 100, easing: Easing.out(Easing.quad) });
+  };
+
+  const onPressOut = () => {
+    scale.value = withSpring(1, { damping: 15, stiffness: 300 });
+  };
 
   return (
-    <Pressable
+    <AnimatedPressable
       onPress={handlePress}
-      style={({ pressed }) => [
-        styles.card,
-        pressed && styles.cardPressed,
-      ]}
+      onPressIn={onPressIn}
+      onPressOut={onPressOut}
+      entering={FadeInDown.duration(400).springify()}
+      style={[styles.card, animatedStyle]}
     >
       <View style={styles.imageWrap}>
         {firstImage ? (
           <Image
             source={{ uri: firstImage }}
             style={styles.image}
-            resizeMode="cover"
+            contentFit="cover"
+            transition={200}
           />
         ) : (
           <View style={styles.imagePlaceholder}>
@@ -99,19 +117,9 @@ function NearYouCardInner({
             ) : null}
           </View>
         ) : null}
-        {onFavoritePress != null ? (
-          <Pressable
-            style={({ pressed: p }) => [styles.heartWrap, p && styles.heartWrapPressed]}
-            onPress={handleFavoriteButtonPress}
-            hitSlop={10}
-          >
-            <Ionicons
-              name={isFavorite ? 'heart' : 'heart-outline'}
-              size={HEART_SIZE}
-              color={isFavorite ? colors.error : colors.surface}
-            />
-          </Pressable>
-        ) : null}
+        <View style={styles.heartPosition}>
+          <FavoriteButton listingId={listing.id} size={HEART_SIZE} />
+        </View>
       </View>
       <View style={styles.body}>
         <Text style={styles.title} numberOfLines={2} ellipsizeMode="tail">
@@ -128,16 +136,17 @@ function NearYouCardInner({
           </Text>
         </View>
       </View>
-    </Pressable>
+    </AnimatedPressable>
   );
 }
 
-export const NearYouCard = memo(NearYouCardInner, (prev, next) =>
-  prev.listing === next.listing &&
-  prev.isFavorite === next.isFavorite &&
-  prev.userCity === next.userCity &&
-  (prev.onFavoritePress != null) === (next.onFavoritePress != null)
-);
+export const NearYouCard = memo(NearYouCardInner, (prev, next) => {
+  return (
+    prev.listing.id === next.listing.id &&
+    prev.listing.updated_at === next.listing.updated_at &&
+    prev.userCity === next.userCity
+  );
+});
 
 const styles = StyleSheet.create({
   card: {
@@ -146,8 +155,7 @@ const styles = StyleSheet.create({
     padding: 0,
   },
   cardPressed: {
-    opacity: 0.96,
-    transform: [{ scale: 0.98 }],
+    opacity: 0.98,
   },
   imageWrap: {
     width: '100%',
@@ -199,16 +207,10 @@ const styles = StyleSheet.create({
     fontWeight: fontWeights.semibold,
     color: colors.surface,
   },
-  heartWrap: {
+  heartPosition: {
     position: 'absolute',
     top: OVERLAY_INSET,
     right: OVERLAY_INSET,
-    padding: spacing.xs,
-    borderRadius: 9999,
-    backgroundColor: 'rgba(15,23,42,0.28)',
-  },
-  heartWrapPressed: {
-    opacity: 0.85,
   },
   body: {
     padding: BODY_PADDING,

@@ -6,9 +6,12 @@
 
 import React from 'react';
 import { View, Text, StyleSheet, Pressable } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
+import { Image } from 'expo-image';
 import Ionicons from '@expo/vector-icons/Ionicons';
+import Animated, { FadeInDown } from 'react-native-reanimated';
 import { Screen, AppLogo, CategoryRail, NotificationsPromptCard } from '@/components';
+import { getPublicListings } from '@/services/listings';
 import {
   ListingFeed,
   NearYouSection,
@@ -31,6 +34,20 @@ const HOME_CATEGORIES = [
 ] as const;
 
 export default function HomeScreen() {
+  // Prefetch first few listing images for instant feeling
+  useFocusEffect(
+    React.useCallback(() => {
+      getPublicListings(0, 10).then(res => {
+        if (res.data) {
+          const urls = res.data
+            .map(l => (l.images?.[0] ? String(l.images[0]) : null))
+            .filter((u): u is string => u != null);
+          Image.prefetch(urls);
+        }
+      });
+    }, [])
+  );
+
   return (
     <Screen noPadding>
       <ListingFeed listHeaderComponent={<HomeHeaderContent />} />
@@ -75,20 +92,38 @@ function HomeHeaderContent() {
         <Ionicons name="search" size={22} color={colors.textMuted} style={styles.searchIcon} />
         <Text style={styles.searchPlaceholder}>Rechercher sur YOUMBIA</Text>
       </Pressable>
-      <NotificationsPromptCard />
-      <CategoryRail
-        categories={HOME_CATEGORIES}
-        onCategoryPress={handleCategoryPress}
-        onVoirToutPress={handleVoirToutPress}
-      />
-      <NearYouSection userCity={null} />
-      <SavedSearchAlertsSection />
-      <ForYouSection />
-      <RecentlyViewedSection />
-      <View style={styles.feedIntro}>
+      <Animated.View entering={FadeInDown.delay(50).duration(400)}>
+        <NotificationsPromptCard />
+      </Animated.View>
+
+      <Animated.View entering={FadeInDown.delay(100).duration(400)}>
+        <CategoryRail
+          categories={HOME_CATEGORIES}
+          onCategoryPress={handleCategoryPress}
+          onVoirToutPress={handleVoirToutPress}
+        />
+      </Animated.View>
+
+      <Animated.View entering={FadeInDown.delay(150).duration(400)}>
+        <NearYouSection userCity={null} />
+      </Animated.View>
+
+      <Animated.View entering={FadeInDown.delay(200).duration(400)}>
+        <SavedSearchAlertsSection />
+      </Animated.View>
+
+      <Animated.View entering={FadeInDown.delay(250).duration(400)}>
+        <ForYouSection />
+      </Animated.View>
+
+      <Animated.View entering={FadeInDown.delay(300).duration(400)}>
+        <RecentlyViewedSection />
+      </Animated.View>
+
+      <Animated.View entering={FadeInDown.delay(350).duration(400)} style={styles.feedIntro}>
         <Text style={styles.sectionTitle}>Nouvelles annonces</Text>
         <Text style={styles.sectionSubtitle}>Les dernières annonces publiées</Text>
-      </View>
+      </Animated.View>
     </View>
   );
 }
