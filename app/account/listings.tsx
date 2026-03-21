@@ -10,6 +10,7 @@ import {
   FlatList,
   RefreshControl,
   Alert,
+  Platform,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -543,8 +544,8 @@ export default function AccountListingsScreen() {
           showsVerticalScrollIndicator={false}
           initialNumToRender={10}
           maxToRenderPerBatch={6}
-          windowSize={6}
-          removeClippedSubviews
+          windowSize={Platform.OS === 'ios' ? 6 : 10}
+          removeClippedSubviews={Platform.OS === 'ios'}
           refreshControl={
             <RefreshControl
               refreshing={refreshing}

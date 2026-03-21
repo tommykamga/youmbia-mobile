@@ -75,7 +75,7 @@ function ListingCardInner({ listing }: ListingCardProps) {
             source={{ uri: firstImage }}
             style={styles.image}
             contentFit="cover"
-            transition={200}
+            transition={Platform.OS === 'ios' ? 200 : 0}
           />
         ) : (
           <View style={styles.imagePlaceholder}>

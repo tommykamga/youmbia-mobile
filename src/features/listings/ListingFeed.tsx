@@ -10,9 +10,11 @@ import { spacing, colors, typography, fontWeights, radius } from '@/theme';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useFavorites } from '@/context/FavoritesContext';
 
+import { Platform } from 'react-native';
+
 const PAGE_SIZE = 15;
-const INITIAL_NUM_TO_RENDER = 8;
-const WINDOW_SIZE = 5;
+const INITIAL_NUM_TO_RENDER = Platform.OS === 'ios' ? 8 : 10;
+const WINDOW_SIZE = Platform.OS === 'ios' ? 5 : 10;
 
 type FeedState =
   | { status: 'loading' }
@@ -251,7 +253,7 @@ export function ListingFeed({ listHeaderComponent }: ListingFeedProps) {
       initialNumToRender={INITIAL_NUM_TO_RENDER}
       maxToRenderPerBatch={6}
       windowSize={WINDOW_SIZE}
-      removeClippedSubviews
+      removeClippedSubviews={Platform.OS === 'ios'}
       onEndReached={loadMore}
       onEndReachedThreshold={0.4}
       refreshControl={

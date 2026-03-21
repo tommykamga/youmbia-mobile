@@ -8,6 +8,7 @@ import {
   Text,
   Alert,
   FlatList,
+  Platform,
 } from 'react-native';
 import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -19,7 +20,9 @@ import { getOrCreateConversation } from '@/services/conversations';
 import { getSession } from '@/services/auth';
 import { reportListing } from '@/services/reports';
 import { getSellerStats } from '@/services/users';
-import { NearYouCard } from '@/features/listings/NearYouCard';
+import { ListingCard } from '@/features/listings/ListingCard';
+import { SkeletonListingCard } from '@/components/SkeletonListingCard';
+import { Dimensions } from 'react-native';
 import {
   ListingGallery,
   ListingMeta,
@@ -76,6 +79,10 @@ function getActionErrorMessage(message: string, fallback: string): string {
 }
 
 export default function ListingDetailScreen() {
+  const { width: SCREEN_WIDTH } = Dimensions.get('window');
+  const CARD_WIDTH = SCREEN_WIDTH * 0.8;
+  const CARD_GAP = spacing.base;
+
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -91,6 +98,7 @@ export default function ListingDetailScreen() {
     listingCount: null,
   });
   const [similarListings, setSimilarListings] = useState<PublicListing[]>([]);
+  const [similarLoading, setSimilarLoading] = useState(true);
   /** Évite double signalement immédiat en session (Sprint 7.1). */
   const [reportedListingId, setReportedListingId] = useState<string | null>(null);
 
@@ -100,6 +108,7 @@ export default function ListingDetailScreen() {
       return;
     }
     setSellerStats({ memberSince: null, listingCount: null });
+    setSimilarLoading(true);
     setSimilarListings([]);
     let cancelled = false;
     (async () => {
@@ -133,8 +142,11 @@ export default function ListingDetailScreen() {
         description: listing.description,
         city: listing.city,
       });
-      if (!cancelled && !similarResult.error) {
-        setSimilarListings(similarResult.data);
+      if (!cancelled) {
+        setSimilarLoading(false);
+        if (!similarResult.error) {
+          setSimilarListings(similarResult.data.slice(0, 10));
+        }
       }
     })();
     return () => { cancelled = true; };
@@ -279,11 +291,20 @@ export default function ListingDetailScreen() {
   }
 
   const listing = state.listing;
-  const showSimilarListings = similarListings.length >= 2;
+
   const renderSimilarItem = ({ item }: { item: PublicListing }) => (
-    <NearYouCard listing={item} userCity={listing.city} />
+    <View style={{ width: CARD_WIDTH }}>
+      <ListingCard listing={item} />
+    </View>
   );
-  const similarKeyExtractor = (item: PublicListing) => item.id;
+
+  const renderSkeletonItem = () => (
+    <View style={{ width: CARD_WIDTH }}>
+      <SkeletonListingCard />
+    </View>
+  );
+
+  const similarKeyExtractor = (item: any, index: number) => item.id || `skele-${index}`;
 
   return (
     <Screen scroll={false} noPadding>
@@ -316,21 +337,23 @@ export default function ListingDetailScreen() {
             onPress={listing.seller_id ? () => router.push(`/user/${listing.seller_id}` as const) : undefined}
           />
           <ListingDescription description={listing.description} />
-          {showSimilarListings ? (
+          {(similarLoading || similarListings.length > 0) ? (
             <View style={styles.similarSection}>
               <Text style={styles.similarTitle}>Annonces similaires</Text>
               <FlatList
-                data={similarListings}
+                data={similarLoading ? ([{ id: 'skele-1' }, { id: 'skele-2' }, { id: 'skele-3' }] as any) : similarListings}
                 horizontal
                 keyExtractor={similarKeyExtractor}
-                renderItem={renderSimilarItem}
+                renderItem={similarLoading ? renderSkeletonItem : renderSimilarItem}
                 showsHorizontalScrollIndicator={false}
                 contentContainerStyle={styles.similarListContent}
                 ItemSeparatorComponent={() => <View style={styles.similarSeparator} />}
-                initialNumToRender={4}
-                maxToRenderPerBatch={4}
-                windowSize={4}
-                removeClippedSubviews
+                initialNumToRender={3}
+                maxToRenderPerBatch={3}
+                windowSize={3}
+                removeClippedSubviews={Platform.OS === 'ios'}
+                snapToInterval={CARD_WIDTH + CARD_GAP}
+                decelerationRate="fast"
               />
             </View>
           ) : null}
@@ -428,10 +451,10 @@ const styles = StyleSheet.create({
     marginBottom: spacing.base,
   },
   similarListContent: {
-    paddingRight: spacing.base,
+    paddingHorizontal: spacing.base,
   },
   similarSeparator: {
-    width: spacing.sm,
+    width: spacing.base,
   },
   reportLink: {
     alignSelf: 'flex-start',

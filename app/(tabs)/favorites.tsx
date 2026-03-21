@@ -5,7 +5,7 @@
  */
 
 import React, { useCallback, useEffect, useState, useMemo } from 'react';
-import { FlatList, View, StyleSheet, RefreshControl } from 'react-native';
+import { FlatList, View, StyleSheet, RefreshControl, Platform } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Screen, Loader, EmptyState, Button, AuthGate } from '@/components';
@@ -124,8 +124,8 @@ export default function FavoritesScreen() {
         showsVerticalScrollIndicator={false}
         initialNumToRender={10}
         maxToRenderPerBatch={6}
-        windowSize={6}
-        removeClippedSubviews
+        windowSize={Platform.OS === 'ios' ? 6 : 10}
+        removeClippedSubviews={Platform.OS === 'ios'}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}

@@ -367,13 +367,9 @@ export default function SearchScreen() {
   const keyExtractor = useCallback((item: PublicListing) => item.id, []);
   const renderItem = useCallback(
     ({ item }: { item: PublicListing }) => (
-      <ListingCard
-        listing={item}
-        isFavorite={favoriteIdsRef.current.has(item.id)}
-        onFavoritePress={() => handleFavoritePress(item.id)}
-      />
+      <ListingCard listing={item} />
     ),
-    [handleFavoritePress]
+    []
   );
   const itemSeparator = useCallback(() => <View style={styles.separator} />, []);
 
@@ -843,10 +839,10 @@ export default function SearchScreen() {
             contentContainerStyle={styles.listContent}
             showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
-            initialNumToRender={10}
-            maxToRenderPerBatch={6}
-            windowSize={6}
-            removeClippedSubviews
+            initialNumToRender={Platform.OS === 'ios' ? 10 : 12}
+            maxToRenderPerBatch={Platform.OS === 'ios' ? 6 : 8}
+            windowSize={Platform.OS === 'ios' ? 6 : 10}
+            removeClippedSubviews={Platform.OS === 'ios'}
             ListEmptyComponent={
               <EmptyState
                 icon={<Ionicons name="options-outline" size={24} color={colors.primary} />}

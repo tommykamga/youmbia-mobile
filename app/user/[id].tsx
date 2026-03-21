@@ -4,7 +4,7 @@
  */
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { View, Text, StyleSheet, FlatList, Modal, Pressable, Alert } from 'react-native';
+import { View, Text, StyleSheet, FlatList, Modal, Pressable, Alert, Platform } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
 import { Screen, AppHeader, Loader, EmptyState, Button } from '@/components';
 import { getSellerStats, getUserProfile } from '@/services/users';
@@ -355,8 +355,8 @@ export default function UserProfileScreen() {
         showsVerticalScrollIndicator={false}
         initialNumToRender={10}
         maxToRenderPerBatch={6}
-        windowSize={6}
-        removeClippedSubviews
+        windowSize={Platform.OS === 'ios' ? 6 : 10}
+        removeClippedSubviews={Platform.OS === 'ios'}
       />
     </Screen>
   );
