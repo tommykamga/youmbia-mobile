@@ -1,27 +1,20 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useCallback, useRef, useState } from 'react';
 import {
   View,
   Text,
   StyleSheet,
-  ScrollView,
   KeyboardAvoidingView,
   Platform,
   Pressable,
-  Dimensions,
-  FlatList,
-  NativeSyntheticEvent,
-  NativeScrollEvent,
   TextInput,
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
-import Animated, { FadeInDown, FadeIn } from 'react-native-reanimated';
+import * as Haptics from 'expo-haptics';
+import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
 import { colors, spacing, typography, fontWeights, radius, neutral } from '@/theme';
-import { Button, Input, HeroMarketplaceGrid } from '@/components';
+import { Button, HeroMarketplaceGrid } from '@/components';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-
-const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 export type AuthGateContext = 'favorites' | 'messages' | 'sell' | 'account' | 'listings';
 
@@ -29,22 +22,27 @@ interface AuthGateProps {
   context: AuthGateContext;
 }
 
-const CONTEXT_CONTENT = {
+const CONTEXT_CONTENT: Record<
+  AuthGateContext,
+  { title: string; subtitle: string }
+> = {
   favorites: {
-    title: 'Sauvegardez vos favoris',
-    subtitle: 'Connectez-vous pour retrouver vos annonces préférées sur tous vos appareils.',
+    title: 'Retrouvez vos coups de cœur',
+    subtitle:
+      'Connectez-vous pour conserver vos annonces préférées et les retrouver facilement.',
   },
   messages: {
-    title: 'Contactez les vendeurs',
-    subtitle: 'Échangez en toute sécurité et gérez vos achats depuis votre messagerie.',
+    title: 'Discutez avec les vendeurs',
+    subtitle: 'Échangez rapidement et en toute sécurité depuis votre messagerie.',
   },
   sell: {
     title: 'Publiez votre annonce',
     subtitle: 'Connectez-vous pour vendre rapidement et toucher plus d’acheteurs.',
   },
   account: {
-    title: 'Accédez à votre espace',
-    subtitle: 'Connectez-vous pour gérer votre compte, vos annonces et vos activités.',
+    title: 'Gérez votre activité',
+    subtitle:
+      'Retrouvez vos annonces, vos favoris et vos informations personnelles.',
   },
   listings: {
     title: 'Gérez vos annonces',
@@ -56,98 +54,131 @@ export function AuthGate({ context }: AuthGateProps) {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const [email, setEmail] = useState('');
-  const scrollViewRef = useRef<ScrollView>(null);
+  const [showEmail, setShowEmail] = useState(false);
+  const emailInputRef = useRef<TextInput>(null);
   const content = CONTEXT_CONTENT[context];
 
-  const handleInputFocus = () => {
-    // Petit délai pour laisser le clavier se déployer
-    setTimeout(() => {
-      scrollViewRef.current?.scrollToEnd({ animated: true });
-    }, 100);
-  };
-
-  const handleContinue = () => {
+  const handleContinue = useCallback(() => {
     router.push({
       pathname: '/(auth)/login',
-      params: { email, redirect: `/(tabs)/${context}` }
+      params: { email, redirect: `/(tabs)/${context}` },
     });
-  };
+  }, [router, email, context]);
+
+  const onPrimaryPress = useCallback(() => {
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    if (!showEmail) {
+      setShowEmail(true);
+      setTimeout(() => emailInputRef.current?.focus(), 160);
+      return;
+    }
+    if (email.includes('@')) {
+      handleContinue();
+    }
+  }, [showEmail, email, handleContinue]);
+
+  const onGooglePress = useCallback(() => {
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    router.push({
+      pathname: '/(auth)/login',
+      params: { provider: 'google', redirect: `/(tabs)/${context}` },
+    });
+  }, [context, router]);
+
+  const primaryDisabled = showEmail && !email.includes('@');
 
   return (
     <View style={styles.container}>
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         style={styles.keyboardView}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? Math.max(insets.top, 12) : 0}
       >
-        <ScrollView
-          ref={scrollViewRef}
-          contentContainerStyle={[
-            styles.scrollContent,
-            {
-              paddingTop: Math.max(insets.top, spacing.xs),
-              paddingBottom: Math.max(insets.bottom, spacing['3xl'])
-            }
+        <View
+          style={[
+            styles.carouselSection,
+            { paddingTop: Math.max(insets.top, spacing.sm) },
           ]}
-          showsVerticalScrollIndicator={false}
-          keyboardShouldPersistTaps="handled"
         >
-          {/* Vinted-Style Market Grid */}
-          <Animated.View entering={FadeIn.duration(800)}>
+          <Animated.View entering={FadeIn.duration(520)} style={styles.carouselInner}>
             <HeroMarketplaceGrid />
           </Animated.View>
+        </View>
 
-          {/* Texts Section */}
-          <View style={styles.textSection}>
-            <Animated.Text entering={FadeInDown.delay(200)} style={styles.title}>
+        <View
+          style={[
+            styles.contentSection,
+            { paddingBottom: Math.max(insets.bottom, spacing.md) },
+          ]}
+        >
+          <Animated.View
+            entering={FadeInDown.duration(480).delay(80)}
+            style={styles.textBlock}
+          >
+            <Text style={styles.title} numberOfLines={2}>
               {content.title}
-            </Animated.Text>
-            <Animated.Text entering={FadeInDown.delay(300)} style={styles.subtitle}>
+            </Text>
+            <Text style={styles.subtitle} numberOfLines={3}>
               {content.subtitle}
-            </Animated.Text>
-          </View>
+            </Text>
+          </Animated.View>
 
-          {/* Refined Email Form */}
-          <View style={styles.formSection}>
-            <View style={styles.labelContainer}>
-              <Text style={styles.label}>Adresse e-mail</Text>
-            </View>
-            <Input
-              placeholder="Entrez votre adresse e-mail"
-              value={email}
-              onChangeText={setEmail}
-              keyboardType="email-address"
-              autoCapitalize="none"
-              style={styles.inputPill}
-              containerStyle={styles.inputContainer}
-              onFocus={handleInputFocus}
-            />
+          <Animated.View
+            entering={FadeInDown.duration(420).delay(140)}
+            style={styles.actions}
+          >
+            {showEmail ? (
+              <Animated.View entering={FadeIn.duration(280)} style={styles.emailWrap}>
+                <TextInput
+                  ref={emailInputRef}
+                  placeholder="E-mail"
+                  placeholderTextColor={colors.textMuted}
+                  value={email}
+                  onChangeText={setEmail}
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  style={styles.emailInput}
+                  returnKeyType="done"
+                  onSubmitEditing={() => {
+                    if (email.includes('@')) {
+                      handleContinue();
+                    }
+                  }}
+                  {...(Platform.OS === 'android' ? { includeFontPadding: false } : {})}
+                />
+              </Animated.View>
+            ) : null}
+
             <Button
-              onPress={handleContinue}
-              disabled={!email.includes('@')}
-              style={styles.buttonPill}
+              onPress={onPrimaryPress}
+              disabled={primaryDisabled}
+              style={styles.primaryBtn}
+              size="lg"
             >
               Continuer
             </Button>
-          </View>
 
-          {/* Social Divider */}
-          <View style={styles.divider}>
-            <View style={styles.line} />
-            <Text style={styles.dividerText}>Ou continuer avec</Text>
-            <View style={styles.line} />
-          </View>
-
-          {/* Google Login Center */}
-          <View style={styles.socialFlow}>
-            <Pressable
-              style={({ pressed }) => [styles.socialBtn, pressed && styles.socialPressed]}
-              onPress={() => router.push({ pathname: '/(auth)/login', params: { provider: 'google', redirect: `/(tabs)/${context}` } })}
-            >
-              <Ionicons name="logo-google" size={20} color={colors.text} />
-              <Text style={styles.socialLabel}>Continuer avec Google</Text>
-            </Pressable>
-          </View>
-        </ScrollView>
+            <View style={styles.googleWrap}>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Continuer avec Google"
+                style={({ pressed }) => [
+                  styles.socialBtn,
+                  pressed && styles.socialPressed,
+                ]}
+                onPress={onGooglePress}
+              >
+                <Ionicons
+                  name="logo-google"
+                  size={18}
+                  color={colors.textSecondary}
+                />
+                <Text style={styles.socialLabel}>Continuer avec Google</Text>
+              </Pressable>
+            </View>
+          </Animated.View>
+        </View>
       </KeyboardAvoidingView>
     </View>
   );
@@ -160,104 +191,91 @@ const styles = StyleSheet.create({
   },
   keyboardView: {
     flex: 1,
+    minHeight: 0,
   },
-  scrollContent: {
-    flexGrow: 1,
+  carouselSection: {
+    flex: 0.45,
+    width: '100%',
+    minHeight: 0,
   },
-  textSection: {
-    alignItems: 'center',
+  carouselInner: {
+    flex: 1,
+    minHeight: 0,
+    paddingHorizontal: spacing.md,
+  },
+  contentSection: {
+    flex: 0.55,
+    minHeight: 0,
     paddingHorizontal: spacing.xl,
-    marginTop: spacing.xl,
-    marginBottom: spacing.xl,
+    justifyContent: 'space-between',
+  },
+  textBlock: {
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.md,
   },
   title: {
     ...typography['3xl'],
     fontWeight: fontWeights.bold,
     color: colors.text,
     textAlign: 'center',
-    marginBottom: spacing.xs,
-    letterSpacing: -1,
+    marginBottom: spacing.sm,
+    letterSpacing: -0.8,
+    ...(Platform.OS === 'android' ? { includeFontPadding: false } : {}),
   },
   subtitle: {
-    ...typography.base,
+    ...typography.sm,
     color: colors.textSecondary,
     textAlign: 'center',
-    lineHeight: 22,
-    opacity: 0.9,
+    lineHeight: 20,
+    opacity: 0.92,
+    paddingHorizontal: spacing.xs,
   },
-  formSection: {
-    paddingHorizontal: spacing.xl,
-    marginBottom: spacing.xl,
+  actions: {
+    gap: spacing.sm,
+    width: '100%',
   },
-  labelContainer: {
-    marginBottom: spacing.xs,
-    paddingLeft: spacing.xs,
+  emailWrap: {
+    width: '100%',
   },
-  label: {
-    ...typography.sm,
-    fontWeight: fontWeights.bold,
-    color: colors.text,
-  },
-  inputContainer: {
-    marginBottom: spacing.sm,
-  },
-  inputPill: {
-    height: 60,
+  emailInput: {
+    height: 52,
     borderRadius: radius.xl,
     paddingHorizontal: spacing.lg,
     backgroundColor: colors.surface,
     borderWidth: 1.5,
     borderColor: neutral[200],
     ...typography.base,
+    color: colors.text,
+    marginBottom: spacing.xs,
   },
-  buttonPill: {
-    height: 60,
+  primaryBtn: {
     borderRadius: radius.full,
-    marginTop: spacing.xs,
-    backgroundColor: colors.primary,
+    minHeight: 52,
   },
-  divider: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: spacing.xl,
-    gap: spacing.md,
-    marginBottom: spacing.xl,
-  },
-  line: {
-    flex: 1,
-    height: 1,
-    backgroundColor: colors.borderLight,
-  },
-  dividerText: {
-    ...typography.xs,
-    color: colors.textMuted,
-    textTransform: 'uppercase',
-    letterSpacing: 1.5,
-  },
-  socialFlow: {
-    paddingHorizontal: spacing.xl,
-    paddingBottom: spacing['2xl'],
+  googleWrap: {
+    width: '100%',
+    marginTop: spacing.md,
   },
   socialBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: spacing.sm,
-    height: 60,
+    gap: spacing.xs,
+    height: 46,
+    paddingHorizontal: spacing.md,
     borderRadius: radius.full,
-    borderWidth: 1.5,
-    borderColor: colors.border,
-    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: neutral[200],
+    backgroundColor: neutral[50],
   },
   socialLabel: {
-    ...typography.base,
-    fontWeight: fontWeights.semibold,
-    color: colors.text,
+    ...typography.sm,
+    fontWeight: fontWeights.medium,
+    color: colors.textSecondary,
   },
   socialPressed: {
-    backgroundColor: neutral[50],
-    transform: [{ scale: 0.98 }],
+    backgroundColor: neutral[100],
+    opacity: 0.92,
+    transform: [{ scale: 0.99 }],
   },
 });
-
-
