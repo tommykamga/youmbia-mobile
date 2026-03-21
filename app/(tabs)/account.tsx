@@ -2,7 +2,7 @@ import React, { useCallback, useState, memo } from 'react';
 import { ScrollView, View, Text, StyleSheet, Pressable, Alert } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { Screen, Loader, EmptyState, Button } from '@/components';
+import { Screen, Loader, EmptyState, Button, AuthGate } from '@/components';
 import { getSession, signOut } from '@/services/auth';
 import { spacing, colors, typography, fontWeights, radius } from '@/theme';
 import Animated, { useSharedValue, useAnimatedStyle, withTiming, Easing, withSpring } from 'react-native-reanimated';
@@ -142,23 +142,7 @@ export default function AccountScreen() {
   }
 
   if (status === 'unauthenticated') {
-    return (
-      <Screen>
-        <EmptyState
-          icon={<Ionicons name="person-circle-outline" size={64} color={colors.primary} />}
-          title="Mon Espace"
-          message="Connectez-vous pour gérer vos annonces, consulter vos favoris et accéder à vos paramètres de compte."
-          action={
-            <View style={styles.emptyAction}>
-              <Button variant="primary" onPress={() => router.push('/(auth)/login?redirect=/(tabs)/account')}>
-                Se connecter ou s'inscrire
-              </Button>
-            </View>
-          }
-          style={styles.center}
-        />
-      </Screen>
-    );
+    return <AuthGate context="account" />;
   }
 
   return (

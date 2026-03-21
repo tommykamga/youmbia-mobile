@@ -26,14 +26,14 @@ function getErrorMessage(error: { message: string }): string {
 export default function LoginScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ redirect?: string }>();
-  
+
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  
+
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
   const [magicLoading, setMagicLoading] = useState(false);
-  
+
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
@@ -117,7 +117,7 @@ export default function LoginScreen() {
     <Screen scroll keyboardAvoid>
       <View style={styles.content}>
         <AppLogo variant="large" style={styles.logo} />
-        
+
         <View style={styles.headerText}>
           <Text style={styles.title}>Bon retour 👋</Text>
           <Text style={styles.subtitle}>
@@ -150,7 +150,7 @@ export default function LoginScreen() {
             autoCorrect={false}
             editable={!isAnyLoading}
           />
-          
+
           <View>
             <Input
               label="Mot de passe"
@@ -294,7 +294,7 @@ const styles = StyleSheet.create({
   alertError: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FEE2E2', 
+    backgroundColor: '#FEE2E2',
     padding: spacing.base,
     borderRadius: radius.md,
     gap: spacing.sm,
@@ -308,7 +308,7 @@ const styles = StyleSheet.create({
   alertSuccess: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#DCFCE7', 
+    backgroundColor: '#DCFCE7',
     padding: spacing.base,
     borderRadius: radius.md,
     gap: spacing.sm,

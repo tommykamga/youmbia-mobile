@@ -8,7 +8,7 @@ import React, { useCallback, useEffect, useState, useMemo } from 'react';
 import { FlatList, View, StyleSheet, RefreshControl } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { Screen, Loader, EmptyState, Button } from '@/components';
+import { Screen, Loader, EmptyState, Button, AuthGate } from '@/components';
 import { getFavorites } from '@/services/favorites';
 import { getSession } from '@/services/auth';
 import { ListingCard } from '@/features/listings';
@@ -82,23 +82,7 @@ export default function FavoritesScreen() {
   }
 
   if (state.status === 'unauthenticated') {
-    return (
-      <Screen>
-        <EmptyState
-          icon={<Ionicons name="lock-closed-outline" size={48} color={colors.primary} />}
-          title="Connexion requise"
-          message="Connectez-vous pour retrouver vos annonces favorites."
-          action={
-            <View style={styles.emptyAction}>
-              <Button variant="primary" onPress={() => router.push('/(auth)/login?redirect=/(tabs)/favorites')}>
-                Se connecter
-              </Button>
-            </View>
-          }
-          style={styles.center}
-        />
-      </Screen>
-    );
+    return <AuthGate context="favorites" />;
   }
 
   if (state.status === 'error') {

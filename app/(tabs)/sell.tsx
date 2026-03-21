@@ -1,31 +1,30 @@
-/**
- * Tab entry for "Vendre": navigates imperatively to the stack route /sell on focus.
- * Using useFocusEffect + router.push instead of <Redirect> avoids a tab→stack
- * redirect loop that can crash under Expo Router when Navigation context is ambiguous.
- */
-
-import { useCallback, useRef } from 'react';
-import { View } from 'react-native';
+import React, { useCallback, useState } from 'react';
 import { useRouter, useFocusEffect } from 'expo-router';
+import { getSession } from '@/services/auth';
+import { AuthGate, Loader } from '@/components';
 
 export default function SellTabScreen() {
   const router = useRouter();
-  const hasNavigated = useRef(false);
+  const [status, setStatus] = useState<'loading' | 'unauthenticated' | 'authenticated'>('loading');
 
   useFocusEffect(
     useCallback(() => {
-      // Push only once per focus cycle to prevent double navigation.
-      if (!hasNavigated.current) {
-        hasNavigated.current = true;
-        router.push('/sell');
+      async function checkAuth() {
+        const session = await getSession();
+        if (!session?.user) {
+          setStatus('unauthenticated');
+        } else {
+          setStatus('authenticated');
+          router.push('/sell');
+        }
       }
-      return () => {
-        // Reset on blur so re-tapping the tab works again.
-        hasNavigated.current = false;
-      };
+      checkAuth();
     }, [router])
   );
 
-  // Render an empty view while navigating – the stack screen takes over immediately.
-  return <View />;
+  if (status === 'loading') return <Loader />;
+  if (status === 'unauthenticated') return <AuthGate context="sell" />;
+
+  // Render nothing while pushing to /sell
+  return null;
 }

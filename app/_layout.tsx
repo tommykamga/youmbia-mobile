@@ -39,13 +39,21 @@ export const unstable_settings = {
 function isProtectedSegment(segments: string[]): boolean {
   const first = segments[0];
   const second = segments[1];
+
+  // Ces segments nécessitent une connexion pour afficher leur contenu RÉEL,
+  // mais nous ne voulons plus de redirection forcée vers /(auth)/login. 
+  // Ils afficheront leur propre UI d'Authentification Contextuelle (AuthGate).
+  const tabsWithAuthGate = ['favorites', 'messages', 'sell', 'account'];
+  
+  if (first === '(tabs)' && second && tabsWithAuthGate.includes(second)) {
+    return false; // Pas de redirection forcée
+  }
+
+  // Segment "sell" à la racine (si accédé directement) : on protège toujours.
   if (first === 'sell') return true;
   if (first === 'conversation') return true;
-  // TEST D'ISOLATION : Désactivation de la protection des tabs protégés
-  // if (first === '(tabs)' && second && ['favorites', 'messages', 'account'].includes(second)) {
-  //   return true;
-  // }
   if (first === 'account') return true;
+  
   return false;
 }
 

@@ -2,7 +2,7 @@ import React, { useCallback, useState } from 'react';
 import { FlatList, View, Text, StyleSheet, Pressable, RefreshControl } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { Screen, EmptyState, Button, AppHeader } from '@/components';
+import { Screen, EmptyState, Button, AppHeader, AuthGate } from '@/components';
 import { getSession } from '@/services/auth';
 import { getConversations } from '@/services/conversations';
 import type { Conversation } from '@/services/conversations/types';
@@ -167,21 +167,8 @@ export default function MessagesScreen() {
       
       {status === 'loading' && <MessagesSkeleton />}
 
-      {status === 'unauthenticated' && (
-        <EmptyState
-          icon={<Ionicons name="lock-closed-outline" size={56} color={colors.primary} />}
-          title="Connexion requise"
-          message="Veuillez vous connecter pour voir vos conversations, poser des questions ou gérer vos ventes."
-          action={
-            <View style={styles.emptyAction}>
-              <Button variant="primary" onPress={() => router.push('/(auth)/login?redirect=/(tabs)/messages')}>
-                Se connecter
-              </Button>
-            </View>
-          }
-          style={styles.center}
-        />
-      )}
+      {status === 'unauthenticated' && <AuthGate context="messages" />}
+
 
       {status === 'error_network' && (
         <EmptyState
