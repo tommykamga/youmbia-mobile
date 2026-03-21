@@ -1,55 +1,87 @@
-/**
- * Account tab – dashboard with access to my listings, favorites, messages, profile, settings.
- * Simple summary when authenticated; sign-in CTA when not.
- */
-import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, Pressable, ScrollView } from 'react-native';
-import { Link, useRouter } from 'expo-router';
-import Ionicons from '@expo/vector-icons/Ionicons';
-import { Screen, Button, Loader } from '@/components';
+import React, { useCallback, useState } from 'react';
+import { ScrollView, View, Text, StyleSheet, Pressable, Alert } from 'react-native';
+import { useRouter, useFocusEffect } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
+import { Screen, Loader, EmptyState, Button } from '@/components';
 import { getSession, signOut } from '@/services/auth';
-import { colors, spacing, typography, fontWeights, radius, cardStyles } from '@/theme';
+import { spacing, colors, typography, fontWeights, radius } from '@/theme';
 
-const ROW_ICON_SIZE = 22;
-const CHEVRON_SIZE = 20;
-
-type DashboardRow = {
-  id: string;
+type RouteItem = {
+  icon: keyof typeof Ionicons.glyphMap;
   label: string;
-  icon: React.ComponentProps<typeof Ionicons>['name'];
-  onPress: () => void;
+  route: string;
+  isDestructive?: boolean;
 };
+
+const SECTIONS = [
+  {
+    title: 'Mes annonces & activités',
+    items: [
+      { icon: 'list', label: 'Mes annonces', route: '/(tabs)/annonces' },
+      { icon: 'heart-outline', label: 'Favoris', route: '/(tabs)/favoris' },
+      { icon: 'time-outline', label: 'Historique', route: '/history' },
+    ] as RouteItem[],
+  },
+  {
+    title: 'Paramètres',
+    items: [
+      { icon: 'person-outline', label: 'Profil public', route: '/account/profile' },
+      { icon: 'notifications-outline', label: 'Notifications', route: '/settings/notifications' },
+      { icon: 'shield-checkmark-outline', label: 'Sécurité & Confidentialité', route: '/settings/security' },
+    ] as RouteItem[],
+  },
+  {
+    title: 'Aide & Informations',
+    items: [
+      { icon: 'help-circle-outline', label: 'Centre d\'aide', route: '/help' },
+      { icon: 'document-text-outline', label: 'Conditions d\'utilisation', route: '/terms' },
+    ] as RouteItem[],
+  },
+];
 
 export default function AccountScreen() {
   const router = useRouter();
-  const [loading, setLoading] = useState(true);
   const [email, setEmail] = useState<string | null>(null);
+  const [status, setStatus] = useState<'loading' | 'unauthenticated' | 'authenticated'>('loading');
   const [signingOut, setSigningOut] = useState(false);
 
-  useEffect(() => {
-    let cancelled = false;
-    getSession()
-      .then((session) => {
-        if (!cancelled) {
-          setEmail(session?.user?.email ?? null);
-        }
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-    return () => { cancelled = true; };
+  const fetchSession = useCallback(async () => {
+    try {
+      const session = await getSession();
+      if (session?.user) {
+        setEmail(session.user.email ?? 'Utilisateur YOUMBIA');
+        setStatus('authenticated');
+      } else {
+        setStatus('unauthenticated');
+      }
+    } catch {
+      setStatus('unauthenticated');
+    }
   }, []);
 
+  useFocusEffect(
+    useCallback(() => {
+      fetchSession();
+    }, [fetchSession])
+  );
+
   const handleSignOut = async () => {
-    setSigningOut(true);
-    const { error } = await signOut();
-    setSigningOut(false);
-    if (!error) {
-      router.replace('/(auth)/login');
-    }
+    Alert.alert('Déconnexion', 'Êtes-vous sûr de vouloir vous déconnecter ?', [
+      { text: 'Annuler', style: 'cancel' },
+      {
+        text: 'Se déconnecter',
+        style: 'destructive',
+        onPress: async () => {
+          setSigningOut(true);
+          await signOut();
+          setSigningOut(false);
+          router.replace('/(auth)/login');
+        },
+      },
+    ]);
   };
 
-  if (loading) {
+  if (status === 'loading') {
     return (
       <Screen>
         <Loader />
@@ -57,160 +89,236 @@ export default function AccountScreen() {
     );
   }
 
-  if (!email) {
+  if (status === 'unauthenticated') {
     return (
       <Screen>
-        <Text style={styles.title}>Mon compte</Text>
-        <Text style={styles.subtitle}>
-          Connectez-vous pour accéder à vos annonces et messages.
-        </Text>
-        <View style={styles.actions}>
-          <Link href="/(auth)/login?redirect=/(tabs)/account" asChild>
-            <Button variant="outline">Se connecter</Button>
-          </Link>
-        </View>
+        <EmptyState
+          icon={<Ionicons name="person-circle-outline" size={64} color={colors.primary} />}
+          title="Mon Espace"
+          message="Connectez-vous pour gérer vos annonces, consulter vos favoris et accéder à vos paramètres de compte."
+          action={
+            <View style={styles.emptyAction}>
+              <Button variant="primary" onPress={() => router.push('/(auth)/login?redirect=/(tabs)/account')}>
+                Se connecter ou s'inscrire
+              </Button>
+            </View>
+          }
+          style={styles.center}
+        />
       </Screen>
     );
   }
 
-  const rows: DashboardRow[] = [
-    {
-      id: 'listings',
-      label: 'Mes annonces',
-      icon: 'list-outline',
-      onPress: () => router.push('/account/listings'),
-    },
-    {
-      id: 'favorites',
-      label: 'Favoris',
-      icon: 'heart-outline',
-      onPress: () => router.replace('/(tabs)/favorites'),
-    },
-    {
-      id: 'messages',
-      label: 'Messages',
-      icon: 'chatbubbles-outline',
-      onPress: () => router.replace('/(tabs)/messages'),
-    },
-    {
-      id: 'profile',
-      label: 'Profil',
-      icon: 'person-outline',
-      onPress: () => router.push('/account/profile'),
-    },
-    {
-      id: 'saved-searches',
-      label: 'Recherches sauvegardées',
-      icon: 'search-outline',
-      onPress: () => router.push('/account/saved-searches'),
-    },
-    {
-      id: 'settings',
-      label: 'Paramètres',
-      icon: 'settings-outline',
-      onPress: () => router.push('/account/settings'),
-    },
-  ];
-
   return (
-    <Screen scroll={false}>
-      <ScrollView
-        style={styles.scroll}
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-      >
-        <Text style={styles.title}>Mon compte</Text>
-        <Text style={styles.email}>{email}</Text>
-
-        <View style={styles.section}>
-          {rows.map((row) => (
-            <Pressable
-              key={row.id}
-              style={({ pressed }) => [styles.row, cardStyles.default, pressed && styles.rowPressed]}
-              onPress={row.onPress}
-            >
-              <Ionicons
-                name={row.icon}
-                size={ROW_ICON_SIZE}
-                color={colors.textSecondary}
-                style={styles.rowIcon}
-              />
-              <Text style={styles.rowLabel}>{row.label}</Text>
-              <Ionicons
-                name="chevron-forward"
-                size={CHEVRON_SIZE}
-                color={colors.textTertiary}
-              />
-            </Pressable>
-          ))}
-        </View>
-
-        <View style={styles.signOutWrap}>
-          <Button
-            variant="secondary"
-            onPress={handleSignOut}
-            loading={signingOut}
-            disabled={signingOut}
+    <Screen noPadding>
+      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+        
+        {/* User Profile Header Card */}
+        <View style={styles.headerCard}>
+          <View style={styles.avatar}>
+            <Text style={styles.avatarText}>
+              {email?.charAt(0).toUpperCase() || '?'}
+            </Text>
+          </View>
+          <View style={styles.userInfo}>
+            <Text style={styles.userName} numberOfLines={1}>
+              {email?.split('@')[0] || 'Mon Compte'}
+            </Text>
+            <Text style={styles.userEmail} numberOfLines={1}>
+              {email}
+            </Text>
+          </View>
+          <Pressable 
+            style={({pressed}) => [styles.editBtn, pressed && { opacity: 0.7 }]}
+            onPress={() => router.push('/account/profile')}
           >
-            Se déconnecter
-          </Button>
+            <Text style={styles.editBtnText}>Modifier</Text>
+          </Pressable>
         </View>
+
+        {/* Sections */}
+        {SECTIONS.map((section, idx) => (
+          <View key={idx} style={styles.section}>
+            <Text style={styles.sectionTitle}>{section.title}</Text>
+            <View style={styles.card}>
+              {section.items.map((item, i) => {
+                const isLast = i === section.items.length - 1;
+                return (
+                  <Pressable
+                    key={item.label}
+                    style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
+                    onPress={() => router.push(item.route as any)}
+                  >
+                    <View style={[styles.iconWrap, { backgroundColor: item.isDestructive ? '#FEE2E2' : colors.surfaceSubtle }]}>
+                      <Ionicons 
+                        name={item.icon} 
+                        size={20} 
+                        color={item.isDestructive ? colors.error : colors.primary} 
+                      />
+                    </View>
+                    <Text style={[styles.rowLabel, item.isDestructive && { color: colors.error }]}>
+                      {item.label}
+                    </Text>
+                    <Ionicons name="chevron-forward" size={18} color={colors.borderLight} />
+                    {!isLast && <View style={styles.rowSeparator} />}
+                  </Pressable>
+                );
+              })}
+            </View>
+          </View>
+        ))}
+
+        {/* Logout Button */}
+        <View style={styles.section}>
+          <View style={styles.card}>
+            <Pressable
+              style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
+              onPress={handleSignOut}
+              disabled={signingOut}
+            >
+              <View style={[styles.iconWrap, { backgroundColor: '#FEE2E2' }]}>
+                {signingOut ? (
+                  <Loader size="small" />
+                ) : (
+                  <Ionicons name="log-out-outline" size={20} color={colors.error} />
+                )}
+              </View>
+              <Text style={[styles.rowLabel, { color: colors.error, fontWeight: fontWeights.bold }]}>
+                {signingOut ? 'Déconnexion...' : 'Se déconnecter'}
+              </Text>
+            </Pressable>
+          </View>
+        </View>
+
+        <Text style={styles.version}>Version 3.0.2</Text>
       </ScrollView>
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  scroll: {
-    flex: 1,
-  },
+  center: { flex: 1, paddingTop: spacing['3xl'] },
+  emptyAction: { minWidth: 240, marginTop: spacing.md },
   scrollContent: {
-    padding: spacing.base,
     paddingBottom: spacing['3xl'],
+    backgroundColor: '#F9FAFB', // very light gray for premium background
   },
-  title: {
-    fontSize: typography['2xl'].fontSize,
+  headerCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: spacing.xl,
+    backgroundColor: colors.surface,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.borderLight,
+    marginBottom: spacing.base,
+  },
+  avatar: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: '#EEF2FF',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: spacing.base,
+    borderWidth: 2,
+    borderColor: 'white',
+    shadowColor: colors.text,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  avatarText: {
+    ...typography['2xl'],
+    color: colors.primary,
+    fontWeight: fontWeights.bold,
+  },
+  userInfo: {
+    flex: 1,
+    paddingRight: spacing.sm,
+  },
+  userName: {
+    ...typography.lg,
     fontWeight: fontWeights.bold,
     color: colors.text,
-    marginBottom: spacing.sm,
+    marginBottom: 2,
   },
-  subtitle: {
-    fontSize: typography.base.fontSize,
+  userEmail: {
+    ...typography.sm,
     color: colors.textSecondary,
-    marginBottom: spacing.xl,
   },
-  email: {
-    fontSize: typography.base.fontSize,
-    color: colors.textMuted,
-    marginBottom: spacing.xl,
+  editBtn: {
+    paddingVertical: spacing.xs,
+    paddingHorizontal: spacing.sm,
+    backgroundColor: colors.surfaceSubtle,
+    borderRadius: radius.full,
+  },
+  editBtnText: {
+    ...typography.xs,
+    color: colors.primary,
+    fontWeight: fontWeights.bold,
   },
   section: {
-    gap: spacing.sm,
-    marginBottom: spacing.xl,
+    marginTop: spacing.md,
+    paddingHorizontal: spacing.base,
+  },
+  sectionTitle: {
+    ...typography.sm,
+    textTransform: 'uppercase',
+    color: colors.textTertiary,
+    fontWeight: fontWeights.bold,
+    marginBottom: spacing.xs,
+    marginLeft: spacing.xs,
+    letterSpacing: 0.5,
+  },
+  card: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.xl,
+    overflow: 'hidden', // to keep pressed feedback inside borders
+    borderWidth: 1,
+    borderColor: colors.borderLight,
+    shadowColor: colors.text,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.02,
+    shadowRadius: 2,
+    elevation: 1,
   },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: spacing.base,
-    paddingHorizontal: spacing.base,
-    borderRadius: radius.xl,
+    padding: spacing.base,
+    backgroundColor: colors.surface,
   },
   rowPressed: {
-    opacity: 0.95,
+    backgroundColor: colors.surfaceSubtle,
   },
-  rowIcon: {
+  iconWrap: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    justifyContent: 'center',
+    alignItems: 'center',
     marginRight: spacing.base,
   },
   rowLabel: {
-    flex: 1,
     ...typography.base,
-    fontWeight: fontWeights.medium,
     color: colors.text,
+    flex: 1,
+    fontWeight: fontWeights.semibold,
   },
-  signOutWrap: {
-    marginTop: spacing.lg,
+  rowSeparator: {
+    position: 'absolute',
+    bottom: 0,
+    right: 0,
+    left: spacing.base + 36 + spacing.base, // align with text
+    height: 1,
+    backgroundColor: colors.borderLight,
   },
-  actions: {
-    gap: spacing.base,
+  version: {
+    ...typography.xs,
+    color: colors.textTertiary,
+    textAlign: 'center',
+    marginTop: spacing.xl,
+    marginBottom: spacing.xl,
   },
 });

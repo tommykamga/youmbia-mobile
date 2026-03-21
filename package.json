@@ -16,6 +16,7 @@
     "postinstall": "node scripts/postinstall-expo-modules-core.js"
   },
   "dependencies": {
+    "@react-native-async-storage/async-storage": "2.2.0",
     "@react-navigation/native": "^7.1.28",
     "@supabase/supabase-js": "^2.98.0",
     "base64-arraybuffer": "^1.0.2",

@@ -1,7 +1,8 @@
 import { Stack, useGlobalSearchParams, usePathname, useRouter, useSegments } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import AnimatedSplash from '@/components/AnimatedSplash';
 import 'react-native-reanimated';
 import { AppState, Linking } from 'react-native';
 import { colors } from '@/theme';
@@ -48,6 +49,8 @@ function isProtectedSegment(segments: string[]): boolean {
 }
 
 export default function RootLayout() {
+  const [isAppReady, setIsAppReady] = useState(false);
+  const [isSplashAnimationComplete, setIsSplashAnimationComplete] = useState(false);
   const router = useRouter();
   const segments = useSegments();
   const pathname = usePathname();
@@ -66,7 +69,23 @@ export default function RootLayout() {
   }, [pathname, globalParams]);
 
   useEffect(() => {
-    SplashScreen.hideAsync();
+    async function prepare() {
+      try {
+        // Préchargement (récupérer session Supabase, préparer données)
+        const { supabase } = await import('@/lib/supabase');
+        await Promise.all([
+          supabase.auth.getSession(),
+          // Ajouter d'autres préchargements parallèles ici si besoin (fonts, configs...)
+        ]);
+      } catch (e) {
+        console.warn(e);
+      } finally {
+        // Signale au composant AnimatedSplash que l'app est prête
+        setIsAppReady(true);
+      }
+    }
+
+    prepare();
   }, []);
 
   useEffect(() => {
@@ -198,14 +217,35 @@ export default function RootLayout() {
 
   useEffect(() => {
     const unsubscribe = onAuthStateChange((_event, session) => {
-      if (session != null) return;
+      // Blocage du "swipe back" vers auth :
+      // Si l'utilisateur est connecté et navigue par erreur sur un écran (auth), on le renvoie vers Home
+      if (session != null) {
+        if (segments[0] === '(auth)') {
+          router.replace('/(tabs)/home');
+        }
+        return;
+      }
+      
+      // Si l'utilisateur n'est PAS connecté et tente d'aller sur une page protégée
       if (!isProtectedSegment(segments)) return;
+      
       // Preserve return context: redirect to login with current path so user lands back after auth.
       const returnPath = segments.length > 0 ? `/${segments.join('/')}` : '/(tabs)/home';
       router.replace(`/(auth)/login?redirect=${encodeURIComponent(returnPath)}`);
     });
     return unsubscribe;
   }, [router, segments]);
+
+  // Affiche le composant Splash tant que l'animation n'est pas complètement terminée,
+  // ce composant va gérer l'attente du préchargement de manière fluide.
+  if (!isSplashAnimationComplete) {
+    return (
+      <AnimatedSplash
+        isAppReady={isAppReady}
+        onFinish={() => setIsSplashAnimationComplete(true)}
+      />
+    );
+  }
 
   return (
     <>

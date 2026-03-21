@@ -3,24 +3,13 @@
  * Uses the same project as the web app (same URL + anon key).
  *
  * Session persistence:
- * - We try to install expo-sqlite localStorage polyfill at runtime.
- * - If unavailable, we do not crash the app at import time.
+ * - Uses @react-native-async-storage/async-storage for reliable RN persistence
  */
 
 import 'react-native-url-polyfill/auto';
 import { createClient } from '@supabase/supabase-js';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { Database } from '@/types/database';
-
-let sqliteStorageInstalled = false;
-
-try {
-  require('expo-sqlite/localStorage/install');
-  sqliteStorageInstalled = true;
-  console.log('[supabase] expo-sqlite localStorage polyfill loaded');
-} catch (error) {
-  sqliteStorageInstalled = false;
-  console.error('[supabase] Failed to load expo-sqlite localStorage polyfill', error);
-}
 
 const supabaseUrl = (process.env.EXPO_PUBLIC_SUPABASE_URL ?? '').trim();
 const supabaseAnonKey = (process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '').trim();
@@ -32,23 +21,16 @@ if (!supabaseUrl || !supabaseAnonKey) {
   );
 }
 
-const authStorage =
-  typeof globalThis.localStorage !== 'undefined' &&
-    typeof globalThis.localStorage.getItem === 'function'
-    ? globalThis.localStorage
-    : undefined;
-
 const isSupabaseConfigured = Boolean(supabaseUrl && supabaseAnonKey);
-const canPersistSession = Boolean(sqliteStorageInstalled && authStorage);
 
 export const supabase = createClient<Database>(
   supabaseUrl || 'https://placeholder.supabase.co',
   supabaseAnonKey || 'placeholder',
   {
     auth: {
-      storage: canPersistSession ? authStorage : undefined,
+      storage: AsyncStorage,
       autoRefreshToken: isSupabaseConfigured,
-      persistSession: canPersistSession,
+      persistSession: true,
       detectSessionInUrl: false,
     },
   }
@@ -56,6 +38,5 @@ export const supabase = createClient<Database>(
 
 export const supabaseRuntime = {
   isConfigured: isSupabaseConfigured,
-  sqliteStorageInstalled,
-  canPersistSession,
+  canPersistSession: true,
 };

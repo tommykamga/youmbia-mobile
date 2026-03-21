@@ -90,3 +90,38 @@ export async function signOut(): Promise<{ error: AuthError | null }> {
   const { error } = await supabase.auth.signOut();
   return { error: error ?? null };
 }
+
+/**
+ * Sign in with Magic Link (OTP).
+ */
+export async function signInWithOtp(email: string, redirectTo?: string): Promise<SignInResult> {
+  try {
+    const { error } = await supabase.auth.signInWithOtp({
+      email: email.trim(),
+      options: { emailRedirectTo: redirectTo },
+    });
+    if (error) {
+      return { ok: false, error: { message: getSafeAuthErrorMessage(error) } };
+    }
+    return { ok: true, error: null };
+  } catch (error) {
+    return { ok: false, error: { message: getSafeAuthErrorMessage(error) } };
+  }
+}
+
+/**
+ * Reset password instruction email.
+ */
+export async function resetPasswordForEmail(email: string, redirectTo?: string): Promise<SignInResult> {
+  try {
+    const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
+      redirectTo,
+    });
+    if (error) {
+      return { ok: false, error: { message: getSafeAuthErrorMessage(error) } };
+    }
+    return { ok: true, error: null };
+  } catch (error) {
+    return { ok: false, error: { message: getSafeAuthErrorMessage(error) } };
+  }
+}

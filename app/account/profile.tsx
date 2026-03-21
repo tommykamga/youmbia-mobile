@@ -1,9 +1,5 @@
-/**
- * Profil – fetch current profile, edit full_name and phone, save with loading/success/error states.
- * Sprint 5.1: persistance fiable, pas de valeurs fictives, normalisation téléphone.
- */
 import React, { useCallback, useEffect, useState } from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet, KeyboardAvoidingView, ScrollView, Platform } from 'react-native';
 import { Screen, AppHeader, Button, Input, Loader, EmptyState } from '@/components';
 import {
   getCurrentProfile,
@@ -11,8 +7,10 @@ import {
   sanitizeProfileDisplayValue,
   normalizePhoneForProfile,
 } from '@/services/profile';
+import { getSession } from '@/services/auth';
 import { useFocusEffect } from 'expo-router';
-import { colors, spacing, typography } from '@/theme';
+import { Ionicons } from '@expo/vector-icons';
+import { colors, spacing, typography, fontWeights, radius } from '@/theme';
 
 type ProfileState =
   | { status: 'loading' }
@@ -23,16 +21,23 @@ export default function AccountProfileScreen() {
   const [state, setState] = useState<ProfileState>({ status: 'loading' });
   const [fullName, setFullName] = useState('');
   const [phone, setPhone] = useState('');
+  const [email, setEmail] = useState('');
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
-  const [savedOnce, setSavedOnce] = useState(false);
+  const [saveSuccess, setSaveSuccess] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setState({ status: 'loading' });
     setSaveError(null);
+    setSaveSuccess(null);
+    
+    // Also fetch email from session for the visual avatar
+    const session = await getSession();
+    setEmail(session?.user?.email ?? '');
+
     const result = await getCurrentProfile();
     if (result.error) {
-      setState({ status: 'error', message: result.error.message });
+      setState({ status: 'error', message: "Nous n'arrivons pas à charger vos informations." });
       return;
     }
     const name = sanitizeProfileDisplayValue(result.data?.full_name);
@@ -56,6 +61,7 @@ export default function AccountProfileScreen() {
 
   const handleSave = useCallback(async () => {
     setSaveError(null);
+    setSaveSuccess(null);
     const phoneNorm = normalizePhoneForProfile(phone);
     if (phoneNorm.error) {
       setSaveError(phoneNorm.error);
@@ -68,10 +74,10 @@ export default function AccountProfileScreen() {
     });
     setSaving(false);
     if (result.error) {
-      setSaveError(result.error.message);
+      setSaveError("Impossible de mettre à jour le profil. Réessayez.");
       return;
     }
-    setSavedOnce(true);
+    setSaveSuccess("Votre profil a été mis à jour avec succès.");
     setFullName(sanitizeProfileDisplayValue(result.data?.full_name));
     setPhone(sanitizeProfileDisplayValue(result.data?.phone));
   }, [fullName, phone]);
@@ -79,7 +85,7 @@ export default function AccountProfileScreen() {
   if (state.status === 'loading') {
     return (
       <Screen>
-        <AppHeader title="Profil" showBack />
+        <AppHeader title="Mon Profil" showBack hideBorder />
         <Loader />
       </Screen>
     );
@@ -88,12 +94,13 @@ export default function AccountProfileScreen() {
   if (state.status === 'error') {
     return (
       <Screen>
-        <AppHeader title="Profil" showBack />
+        <AppHeader title="Mon Profil" showBack hideBorder />
         <EmptyState
-          title="Erreur"
+          icon={<Ionicons name="alert-circle-outline" size={56} color={colors.textSecondary} />}
+          title="Erreur de chargement"
           message={state.message}
           action={
-            <Button variant="secondary" onPress={load}>
+            <Button variant="secondary" onPress={load} style={{ minWidth: 200, marginTop: spacing.lg }}>
               Réessayer
             </Button>
           }
@@ -103,61 +110,192 @@ export default function AccountProfileScreen() {
     );
   }
 
+  const initial = email?.charAt(0).toUpperCase() || '?';
+
   return (
-    <Screen scroll keyboardAvoid>
-      <AppHeader title="Profil" showBack />
-      <View style={styles.form}>
-        <Input
-          label="Nom affiché"
-          placeholder="Votre nom"
-          value={fullName}
-          onChangeText={setFullName}
-          autoCapitalize="words"
-          autoCorrect={false}
-        />
-        <Input
-          label="Téléphone"
-          placeholder="Ex. +237 6 12 34 56 78"
-          value={phone}
-          onChangeText={setPhone}
-          keyboardType="phone-pad"
-          autoCapitalize="none"
-        />
-        {saveError ? (
-          <Text style={styles.saveError}>{saveError}</Text>
-        ) : null}
-        {savedOnce ? (
-          <Text style={styles.savedHint}>Enregistré</Text>
-        ) : null}
-        <Button
-          onPress={handleSave}
-          loading={saving}
-          disabled={saving}
-          style={styles.saveBtn}
-        >
-          Enregistrer
-        </Button>
-      </View>
+    <Screen keyboardAvoid scroll={false} noPadding>
+      <AppHeader title="Modifier profil" showBack hideBorder />
+      
+      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+        
+        {/* Avatar Section */}
+        <View style={styles.avatarSection}>
+          <View style={styles.avatarWrap}>
+            <View style={styles.avatar}>
+              <Text style={styles.avatarText}>{initial}</Text>
+            </View>
+            <View style={styles.cameraBadge}>
+              <Ionicons name="camera" size={14} color={colors.surface} />
+            </View>
+          </View>
+          <Text style={styles.emailText}>{email}</Text>
+        </View>
+
+        <View style={styles.formContainer}>
+          {saveError ? (
+            <View style={styles.alertError}>
+              <Ionicons name="alert-circle" size={20} color={colors.error} />
+              <Text style={styles.alertErrorText}>{saveError}</Text>
+            </View>
+          ) : null}
+
+          {saveSuccess ? (
+            <View style={styles.alertSuccess}>
+              <Ionicons name="checkmark-circle" size={20} color={colors.primary} />
+              <Text style={styles.alertSuccessText}>{saveSuccess}</Text>
+            </View>
+          ) : null}
+
+          <View style={styles.card}>
+            <Input
+              label="Nom affiché"
+              placeholder="e.g. Jean Dupont"
+              value={fullName}
+              onChangeText={(t) => { setFullName(t); setSaveError(null); setSaveSuccess(null); }}
+              autoCapitalize="words"
+              autoCorrect={false}
+              editable={!saving}
+            />
+            
+            <View style={styles.spacer} />
+
+            <Input
+              label="Numéro de téléphone"
+              placeholder="+237 6 12 34 56 78"
+              value={phone}
+              onChangeText={(t) => { setPhone(t); setSaveError(null); setSaveSuccess(null); }}
+              keyboardType="phone-pad"
+              autoCapitalize="none"
+              editable={!saving}
+            />
+          </View>
+
+          <Button
+            onPress={handleSave}
+            loading={saving}
+            disabled={saving}
+            style={styles.saveBtn}
+          >
+            Enregistrer les modifications
+          </Button>
+
+        </View>
+      </ScrollView>
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  center: { flex: 1 },
-  form: {
-    padding: spacing.base,
+  center: { flex: 1, paddingTop: spacing['3xl'] },
+  scrollContent: {
+    paddingBottom: spacing['3xl'],
+    backgroundColor: '#F9FAFB',
+    flexGrow: 1,
   },
-  saveError: {
-    ...typography.sm,
-    color: colors.error,
+  avatarSection: {
+    alignItems: 'center',
+    paddingVertical: spacing['2xl'],
+    backgroundColor: colors.surface,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.borderLight,
+    marginBottom: spacing.lg,
+  },
+  avatarWrap: {
+    position: 'relative',
     marginBottom: spacing.sm,
   },
-  savedHint: {
-    ...typography.sm,
+  avatar: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: '#EEF2FF',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: 'white',
+    shadowColor: colors.text,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 6,
+    elevation: 3,
+  },
+  avatarText: {
+    ...typography['3xl'],
     color: colors.primary,
-    marginBottom: spacing.sm,
+    fontWeight: fontWeights.bold,
+  },
+  cameraBadge: {
+    position: 'absolute',
+    bottom: 0,
+    right: 0,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: colors.primary,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: 'white',
+  },
+  emailText: {
+    ...typography.sm,
+    color: colors.textSecondary,
+    fontWeight: fontWeights.medium,
+  },
+  formContainer: {
+    paddingHorizontal: spacing.base,
+  },
+  card: {
+    backgroundColor: colors.surface,
+    padding: spacing.lg,
+    borderRadius: radius.xl,
+    borderWidth: 1,
+    borderColor: colors.borderLight,
+    shadowColor: colors.text,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.02,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  spacer: {
+    height: spacing.lg,
   },
   saveBtn: {
-    marginTop: spacing.sm,
+    marginTop: spacing.xl,
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  alertError: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FEE2E2', 
+    padding: spacing.base,
+    borderRadius: radius.md,
+    gap: spacing.sm,
+    marginBottom: spacing.base,
+  },
+  alertErrorText: {
+    flex: 1,
+    color: colors.error,
+    fontSize: typography.sm.fontSize,
+    fontWeight: fontWeights.medium,
+  },
+  alertSuccess: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#DCFCE7', 
+    padding: spacing.base,
+    borderRadius: radius.md,
+    gap: spacing.sm,
+    marginBottom: spacing.base,
+  },
+  alertSuccessText: {
+    flex: 1,
+    color: '#15803D',
+    fontSize: typography.sm.fontSize,
+    fontWeight: fontWeights.medium,
   },
 });

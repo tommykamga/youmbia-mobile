@@ -77,7 +77,7 @@ export async function getCurrentProfile(): Promise<GetCurrentProfileResult> {
 
   const { data, error } = await supabase
     .from('profiles')
-    .select('id, full_name, avatar_url, phone, created_at, updated_at')
+    .select('id, full_name, avatar_url, phone, created_at')
     .eq('id', user.id)
     .maybeSingle();
 
@@ -134,7 +134,7 @@ export async function updateProfile(payload: UpdateProfilePayload): Promise<Upda
     .from('profiles')
     .update(updates as never)
     .eq('id', user.id)
-    .select('id, full_name, avatar_url, phone, created_at, updated_at')
+    .select('id, full_name, avatar_url, phone, created_at')
     .single();
 
   if (error) {

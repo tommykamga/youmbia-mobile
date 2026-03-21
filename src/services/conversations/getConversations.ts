@@ -36,9 +36,9 @@ export async function getConversations(): Promise<GetConversationsResult> {
 
     const { data: rows, error } = await supabase
       .from('conversations')
-      .select('id, listing_id, buyer_id, seller_id, created_at, updated_at')
+      .select('id, listing_id, buyer_id, seller_id, created_at')
       .or(`buyer_id.eq.${userId},seller_id.eq.${userId}`)
-      .order('updated_at', { ascending: false });
+      .order('created_at', { ascending: false });
 
     if (error) {
       return {
@@ -53,7 +53,6 @@ export async function getConversations(): Promise<GetConversationsResult> {
       buyer_id: string;
       seller_id: string;
       created_at: string;
-      updated_at: string;
     }>;
 
     if (list.length === 0) return { data: [], error: null };
@@ -149,7 +148,7 @@ export async function getConversations(): Promise<GetConversationsResult> {
         buyer_id: c.buyer_id,
         seller_id: c.seller_id,
         created_at: c.created_at,
-        updated_at: c.updated_at,
+        updated_at: c.created_at, // Fallback to created_at
         listing_title: listing?.title,
         other_party_name: profileMap.get(otherId),
         last_message_at: last?.created_at ?? null,

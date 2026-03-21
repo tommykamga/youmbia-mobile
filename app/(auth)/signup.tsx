@@ -1,11 +1,11 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet, Pressable } from 'react-native';
 import { Link, useRouter, useLocalSearchParams, type Href } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
 import { Screen, Button, Input, AppLogo } from '@/components';
 import { signUp } from '@/services/auth';
-import { colors, spacing, typography, fontWeights } from '@/theme';
+import { colors, spacing, typography, fontWeights, radius } from '@/theme';
 
-/** Safe redirect: only app routes (start with / or () to avoid open redirect. */
 function getSafeRedirect(redirect: string | undefined): string | null {
   if (!redirect || typeof redirect !== 'string') return null;
   const t = redirect.trim();
@@ -15,31 +15,28 @@ function getSafeRedirect(redirect: string | undefined): string | null {
 
 function getErrorMessage(error: { message: string }): string {
   const msg = error.message.toLowerCase();
-  if (msg.includes('already registered') || msg.includes('already in use')) {
-    return 'Un compte existe déjà avec cet email.';
-  }
-  if (msg.includes('network') || msg.includes('réseau') || msg.includes('fetch')) {
-    return 'Réseau indisponible. Réessayez.';
-  }
-  if (msg.includes('password')) {
-    return 'Le mot de passe doit faire au moins 6 caractères.';
-  }
-  if (msg.includes('email')) {
-    return 'Vérifiez votre adresse email.';
-  }
+  if (msg.includes('already registered') || msg.includes('already in use')) return 'Un compte existe déjà avec cet email.';
+  if (msg.includes('network') || msg.includes('réseau') || msg.includes('fetch')) return 'Réseau indisponible. Réessayez.';
+  if (msg.includes('password')) return 'Le mot de passe doit faire au moins 6 caractères.';
+  if (msg.includes('email')) return 'Vérifiez votre adresse email.';
   return error.message || 'Inscription impossible. Réessayez.';
 }
 
 export default function SignupScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ redirect?: string }>();
+  
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
+  
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+
+  const isAnyLoading = loading || googleLoading;
 
   const handleSubmit = async () => {
     setError(null);
@@ -62,7 +59,7 @@ export default function SignupScreen() {
       const result = await signUp(trimmedEmail, password);
       if (result.ok) {
         if (result.requiresEmailConfirmation) {
-          setSuccessMessage('Compte créé. Vérifiez votre email pour confirmer votre inscription.');
+          setSuccessMessage('Compte créé avec succès ! Vérifiez votre boîte mail pour confirmer votre inscription avant de vous connecter.');
           return;
         }
         const redirect = getSafeRedirect(params.redirect);
@@ -93,9 +90,7 @@ export default function SignupScreen() {
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       if (msg.includes('ExpoCryptoAES') || msg.includes('native module')) {
-        setError(
-          'La connexion Google nécessite un build de développement (expo run:ios ou expo run:android). Elle n’est pas disponible dans Expo Go.'
-        );
+        setError('Google Auth nécessite un build natif sécurisé (indisponible via Expo Go seul).');
       } else {
         setError(msg || 'Connexion Google échouée.');
       }
@@ -108,60 +103,92 @@ export default function SignupScreen() {
     <Screen scroll keyboardAvoid>
       <View style={styles.content}>
         <AppLogo variant="large" style={styles.logo} />
-        <Text style={styles.title}>Créer un compte</Text>
-        <Text style={styles.subtitle}>
-          Rejoignez YOUMBIA pour acheter et vendre en toute confiance.
-        </Text>
-        {successMessage ? (
-          <Text style={styles.successMessage}>{successMessage}</Text>
+        
+        <View style={styles.headerText}>
+          <Text style={styles.title}>Créer un compte</Text>
+          <Text style={styles.subtitle}>
+            Rejoignez YOUMBIA pour acheter et vendre en toute confiance.
+          </Text>
+        </View>
+
+        {error ? (
+          <View style={styles.alertError}>
+            <Ionicons name="alert-circle" size={20} color={colors.error} />
+            <Text style={styles.alertErrorText}>{error}</Text>
+          </View>
         ) : null}
 
-        <Input
-          label="Email"
-          placeholder="vous@exemple.com"
-          value={email}
-          onChangeText={(t) => { setEmail(t); setError(null); }}
-          keyboardType="email-address"
-          autoCapitalize="none"
-          autoCorrect={false}
-        />
-        <Input
-          label="Mot de passe"
-          placeholder="Au moins 6 caractères"
-          value={password}
-          onChangeText={(t) => { setPassword(t); setError(null); }}
-          secureTextEntry
-        />
-        <Input
-          label="Confirmer le mot de passe"
-          placeholder="••••••••"
-          value={confirmPassword}
-          onChangeText={(t) => { setConfirmPassword(t); setError(null); }}
-          secureTextEntry
-          error={error ?? undefined}
-        />
+        {successMessage ? (
+          <View style={styles.alertSuccess}>
+            <Ionicons name="checkmark-circle" size={20} color={colors.primary} />
+            <Text style={styles.alertSuccessText}>{successMessage}</Text>
+          </View>
+        ) : null}
 
-        <View style={styles.actions}>
-          <Button onPress={handleSubmit} loading={loading} disabled={loading || googleLoading}>
+        <View style={styles.form}>
+          <Input
+            label="Adresse email"
+            placeholder="vous@exemple.com"
+            value={email}
+            onChangeText={(t) => { setEmail(t); setError(null); setSuccessMessage(null); }}
+            keyboardType="email-address"
+            autoCapitalize="none"
+            autoCorrect={false}
+            editable={!isAnyLoading}
+          />
+          
+          <Input
+            label="Mot de passe"
+            placeholder="Au moins 6 caractères"
+            value={password}
+            onChangeText={(t) => { setPassword(t); setError(null); setSuccessMessage(null); }}
+            secureTextEntry
+            editable={!isAnyLoading}
+          />
+
+          <Input
+            label="Confirmer le mot de passe"
+            placeholder="••••••••"
+            value={confirmPassword}
+            onChangeText={(t) => { setConfirmPassword(t); setError(null); setSuccessMessage(null); }}
+            secureTextEntry
+            editable={!isAnyLoading}
+          />
+
+          <Button onPress={handleSubmit} loading={loading} disabled={isAnyLoading}>
             S'inscrire
           </Button>
+        </View>
+
+        <View style={styles.divider}>
+          <View style={styles.line} />
+          <Text style={styles.dividerText}>ou s'inscrire avec</Text>
+          <View style={styles.line} />
+        </View>
+
+        <View style={styles.socialActions}>
           <Button
             variant="outline"
             onPress={handleGoogleSignIn}
             loading={googleLoading}
-            disabled={loading || googleLoading}
+            disabled={isAnyLoading}
           >
-            Continuer avec Google
+            Google Auth
           </Button>
+        </View>
+
+        <View style={styles.footer}>
+          <Text style={styles.footerText}>Déjà un compte ?</Text>
           <Link
             href={params.redirect ? `/(auth)/login?redirect=${encodeURIComponent(params.redirect)}` : '/(auth)/login'}
             asChild
           >
-            <Button variant="ghost" style={styles.secondaryBtn} disabled={loading || googleLoading}>
-              Déjà un compte ? Se connecter
-            </Button>
+            <Pressable hitSlop={15}>
+              <Text style={styles.footerLink}>Se connecter</Text>
+            </Pressable>
           </Link>
         </View>
+
       </View>
     </Screen>
   );
@@ -169,11 +196,16 @@ export default function SignupScreen() {
 
 const styles = StyleSheet.create({
   content: {
-    paddingTop: spacing['3xl'],
+    paddingTop: spacing.xl,
+    paddingBottom: spacing['3xl'],
     gap: spacing.lg,
   },
   logo: {
     alignSelf: 'center',
+    marginBottom: spacing.xs,
+  },
+  headerText: {
+    alignItems: 'center',
     marginBottom: spacing.sm,
   },
   title: {
@@ -187,18 +219,74 @@ const styles = StyleSheet.create({
     fontSize: typography.base.fontSize,
     lineHeight: typography.base.lineHeight,
     color: colors.textSecondary,
-    marginBottom: spacing.xl,
+    textAlign: 'center',
+    marginTop: spacing.xs,
+    paddingHorizontal: spacing.lg,
   },
-  actions: {
+  form: {
     gap: spacing.base,
-    marginTop: spacing.lg,
   },
-  secondaryBtn: {
-    marginTop: spacing.sm,
+  socialActions: {
+    gap: spacing.base,
   },
-  successMessage: {
+  divider: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginVertical: spacing.xs,
+  },
+  line: {
+    flex: 1,
+    height: 1,
+    backgroundColor: colors.borderLight,
+  },
+  dividerText: {
+    marginHorizontal: spacing.base,
     fontSize: typography.sm.fontSize,
-    lineHeight: typography.sm.lineHeight,
+    color: colors.textTertiary,
+    fontWeight: fontWeights.medium,
+  },
+  footer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: spacing.xl,
+    gap: spacing.xs,
+  },
+  footerText: {
+    fontSize: typography.base.fontSize,
+    color: colors.textSecondary,
+  },
+  footerLink: {
+    fontSize: typography.base.fontSize,
     color: colors.primary,
+    fontWeight: fontWeights.bold,
+  },
+  alertError: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FEE2E2', 
+    padding: spacing.base,
+    borderRadius: radius.md,
+    gap: spacing.sm,
+  },
+  alertErrorText: {
+    flex: 1,
+    color: colors.error,
+    fontSize: typography.sm.fontSize,
+    fontWeight: fontWeights.medium,
+  },
+  alertSuccess: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#DCFCE7', 
+    padding: spacing.base,
+    borderRadius: radius.md,
+    gap: spacing.sm,
+  },
+  alertSuccessText: {
+    flex: 1,
+    color: '#15803D',
+    fontSize: typography.sm.fontSize,
+    fontWeight: fontWeights.medium,
   },
 });
