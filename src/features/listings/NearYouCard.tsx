@@ -13,18 +13,9 @@ import { formatPrice } from '@/lib/format';
 import { getDisplayLocationLine, getDisplayUrgent } from '@/lib/listingSchemaFeatures';
 import type { PublicListing } from '@/services/listings';
 
-const CARD_WIDTH = 168;
 const IMAGE_ASPECT = 4 / 3;
-const IMAGE_HEIGHT = Math.round(CARD_WIDTH / IMAGE_ASPECT);
 const BODY_PADDING = spacing.sm;
-const TITLE_LINES = 1;
 const TITLE_LINE_HEIGHT = 20;
-const BODY_HEIGHT =
-  BODY_PADDING * 2 +
-  TITLE_LINE_HEIGHT * TITLE_LINES +
-  22 +
-  18;
-export const NEAR_YOU_CARD_HEIGHT = IMAGE_HEIGHT + BODY_HEIGHT;
 
 const HEART_SIZE = 20;
 const NEW_DAYS = 7;
@@ -79,7 +70,6 @@ function NearYouCardInner({
       style={({ pressed }) => [
         styles.card,
         pressed && styles.cardPressed,
-        { width: CARD_WIDTH, height: NEAR_YOU_CARD_HEIGHT },
       ]}
     >
       <View style={styles.imageWrap}>
@@ -124,10 +114,12 @@ function NearYouCardInner({
         ) : null}
       </View>
       <View style={styles.body}>
-        <Text style={styles.title} numberOfLines={1} ellipsizeMode="tail">
+        <Text style={styles.title} numberOfLines={2} ellipsizeMode="tail">
           {listing.title || 'Sans titre'}
         </Text>
-        <Text style={styles.price}>{formatPrice(listing.price)}</Text>
+        <Text style={styles.price} numberOfLines={1}>
+          {formatPrice(listing.price)}
+        </Text>
         <View style={styles.cityRow}>
           <Ionicons name="location-outline" size={12} color={colors.textMuted} style={styles.cityIcon} />
           <Text style={styles.city} numberOfLines={1}>
@@ -158,13 +150,13 @@ const styles = StyleSheet.create({
     transform: [{ scale: 0.98 }],
   },
   imageWrap: {
-    width: CARD_WIDTH,
-    height: IMAGE_HEIGHT,
+    width: '100%',
+    aspectRatio: IMAGE_ASPECT,
     backgroundColor: colors.surfaceMuted,
   },
   image: {
-    width: CARD_WIDTH,
-    height: IMAGE_HEIGHT,
+    width: '100%',
+    height: '100%',
   },
   imagePlaceholder: {
     flex: 1,
@@ -220,7 +212,7 @@ const styles = StyleSheet.create({
   },
   body: {
     padding: BODY_PADDING,
-    height: BODY_HEIGHT,
+    minHeight: 96,
     justifyContent: 'space-between',
   },
   title: {

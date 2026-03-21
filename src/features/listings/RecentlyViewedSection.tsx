@@ -12,14 +12,14 @@ import { getRecentlyViewedListingIds } from '@/services/recentlyViewed';
 import { ListingCard } from './ListingCard';
 import type { PublicListing } from '@/services/listings';
 import { colors, spacing, typography, fontWeights } from '@/theme';
+import { useCardWidth } from '@/hooks/useCardWidth';
 
-const CARD_WIDTH = 168;
-const CARD_GAP = spacing.sm;
-const ITEM_WIDTH = CARD_WIDTH + CARD_GAP;
 const INITIAL_NUM_TO_RENDER = 4;
 
 export function RecentlyViewedSection() {
   const router = useRouter();
+  const cardWidth = useCardWidth();
+  const ITEM_WIDTH = cardWidth + spacing.sm;
   const [listings, setListings] = useState<PublicListing[]>([]);
   const [favoriteIds, setFavoriteIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
@@ -98,8 +98,9 @@ export function RecentlyViewedSection() {
         snapToInterval={ITEM_WIDTH}
         snapToAlignment="start"
         decelerationRate="fast"
+        ItemSeparatorComponent={() => <View style={{ width: spacing.sm }} />}
         renderItem={({ item }) => (
-          <View style={styles.cardWrap}>
+          <View style={{ width: cardWidth }}>
             <ListingCard
               listing={item}
               isFavorite={favoriteIds.has(item.id)}
@@ -137,10 +138,5 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingHorizontal: spacing.base,
     paddingBottom: spacing.sm,
-    paddingRight: spacing.base + CARD_GAP,
-  },
-  cardWrap: {
-    width: ITEM_WIDTH,
-    marginRight: 0,
   },
 });

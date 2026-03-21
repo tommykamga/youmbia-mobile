@@ -95,11 +95,15 @@ function ListingCardInner({ listing, isFavorite = false, onFavoritePress }: List
         <Text style={styles.title} numberOfLines={2}>
           {listing.title}
         </Text>
-        <Text style={styles.price}>{formatPrice(listing.price)}</Text>
-        <Text style={styles.city} numberOfLines={1}>
-          {locationLine || listing.city}
+        <Text style={styles.price} numberOfLines={1}>
+          {formatPrice(listing.price)}
         </Text>
-        <Text style={styles.meta}>{meta}</Text>
+        <View style={styles.footerRow}>
+          <Text style={styles.city} numberOfLines={1}>
+            {locationLine || listing.city}
+          </Text>
+          <Text style={styles.meta}>{meta}</Text>
+        </View>
       </View>
     </Pressable>
   );
@@ -183,23 +187,33 @@ const styles = StyleSheet.create({
   },
   body: {
     padding: spacing.base,
+    minHeight: 136,
+    justifyContent: 'space-between',
   },
   title: {
     ...typography.base,
     fontWeight: fontWeights.semibold,
     color: colors.text,
-    marginBottom: spacing.sm,
+    marginBottom: spacing.xs,
+    lineHeight: 22,
   },
   price: {
-    ...typography.lg,
-    fontWeight: fontWeights.bold,
+    ...typography.xl,
+    fontWeight: fontWeights.black,
     color: colors.primary,
+    letterSpacing: -0.3,
     marginBottom: spacing.sm,
+  },
+  footerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
   },
   city: {
     ...typography.sm,
     color: colors.textMuted,
-    marginBottom: 2,
+    flex: 1,
+    marginRight: spacing.sm,
   },
   meta: {
     ...typography.xs,

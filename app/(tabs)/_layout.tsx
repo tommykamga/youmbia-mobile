@@ -59,7 +59,10 @@ function SellTabIcon({ focused }: { focused: boolean }) {
 export default function TabLayout() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const tabBarPaddingBottom = insets.bottom > 0 ? insets.bottom : spacing.sm;
+  
+  // Correction Android & iOS Premium : on force une hauteur explicite qui inclut l'inset système.
+  const TAB_BAR_HEIGHT = 64; 
+  const totalTabBarHeight = TAB_BAR_HEIGHT + insets.bottom;
   const unreadCount = useUnreadMessagesCount();
 
   return (
@@ -69,7 +72,11 @@ export default function TabLayout() {
         tabBarInactiveTintColor: colors.tabIconDefault,
         tabBarStyle: [
           styles.tabBar,
-          { paddingBottom: tabBarPaddingBottom, paddingTop: spacing.sm },
+          { 
+            height: totalTabBarHeight,
+            paddingBottom: Platform.OS === 'ios' ? insets.bottom + 4 : Math.max(insets.bottom, spacing.xs) + 4,
+            paddingTop: spacing.sm,
+          },
         ],
         tabBarLabelStyle: styles.tabBarLabel,
         tabBarItemStyle: styles.tabBarItem,
@@ -94,7 +101,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="search"
         options={{
-          title: 'Recherche',
+          title: 'Rechercher',
           tabBarIcon: ({ color }) => <TabIcon name="search" color={color} />,
         }}
       />
@@ -122,9 +129,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="messages"
         options={{
-          title: 'Messages',
-          tabBarIcon: ({ color }) => <TabIcon name="messages" color={color} />,
-          tabBarBadge: unreadCount > 0 ? (unreadCount > 9 ? '9+' : unreadCount) : undefined,
+          href: null, // Masqué de la Tab Bar mais garde la route active
         }}
       />
       <Tabs.Screen
@@ -143,11 +148,22 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
     borderTopColor: colors.borderLight,
     borderTopWidth: 1,
-    minHeight: 56,
+    ...Platform.select({
+      ios: {
+        shadowColor: colors.text,
+        shadowOffset: { width: 0, height: -4 },
+        shadowOpacity: 0.04,
+        shadowRadius: 12,
+      },
+      android: {
+        elevation: 8,
+      },
+    }),
   },
   tabBarLabel: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: '600',
+    marginTop: 2,
   },
   tabBarItem: {
     paddingVertical: spacing.xs,
@@ -159,14 +175,15 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
+    marginTop: -4,
     ...Platform.select({
       ios: {
         shadowColor: colors.primary,
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.25,
-        shadowRadius: 4,
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.3,
+        shadowRadius: 8,
       },
-      android: { elevation: 4 },
+      android: { elevation: 6 },
     }),
   },
   sellPillFocused: {

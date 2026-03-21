@@ -18,6 +18,7 @@ const SECTIONS = [
     title: 'Mes annonces & activités',
     items: [
       { icon: 'list', label: 'Mes annonces', route: '/(tabs)/annonces' },
+      { icon: 'chatbubbles-outline', label: 'Messages', route: '/(tabs)/messages' },
       { icon: 'heart-outline', label: 'Favoris', route: '/(tabs)/favoris' },
       { icon: 'time-outline', label: 'Historique', route: '/history' },
     ] as RouteItem[],

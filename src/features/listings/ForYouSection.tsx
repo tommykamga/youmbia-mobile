@@ -15,12 +15,10 @@ import { getListingsByIds } from '@/services/listings/getListingsByIds';
 import { ListingCard } from './ListingCard';
 import type { PublicListing } from '@/services/listings';
 import { colors, spacing, typography, fontWeights } from '@/theme';
+import { useCardWidth } from '@/hooks/useCardWidth';
 
 const FOR_YOU_LIMIT = 6;
 const FOR_YOU_FETCH_LIMIT = 24;
-const CARD_WIDTH = 168;
-const CARD_GAP = spacing.sm;
-const ITEM_WIDTH = CARD_WIDTH + CARD_GAP;
 const INITIAL_NUM_TO_RENDER = 4;
 const CATEGORY_OPTIONS = ['Véhicules', 'Mode', 'Maison', 'Électronique', 'Sport', 'Loisirs', 'Autre'] as const;
 
@@ -117,6 +115,8 @@ function buildRecommendationSubtitle(signals: RecommendationSignals): string {
 
 export function ForYouSection() {
   const router = useRouter();
+  const cardWidth = useCardWidth();
+  const ITEM_WIDTH = cardWidth + spacing.sm;
   const [listings, setListings] = useState<PublicListing[]>([]);
   const [favoriteIds, setFavoriteIds] = useState<Set<string>>(new Set());
   const [subtitle, setSubtitle] = useState('Une sélection récente à découvrir');
@@ -206,7 +206,7 @@ export function ForYouSection() {
   const keyExtractor = useCallback((item: PublicListing) => item.id, []);
   const renderItem = useCallback(
     ({ item }: { item: PublicListing }) => (
-      <View style={styles.cardWrap}>
+      <View style={{ width: cardWidth }}>
         <ListingCard
           listing={item}
           isFavorite={favoriteIds.has(item.id)}
@@ -236,6 +236,7 @@ export function ForYouSection() {
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
         style={styles.scroll}
+        ItemSeparatorComponent={() => <View style={{ width: spacing.sm }} />}
         getItemLayout={(_, index) => ({
           length: ITEM_WIDTH,
           offset: index * ITEM_WIDTH,
@@ -283,10 +284,5 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingHorizontal: spacing.base,
     paddingBottom: spacing.sm,
-    paddingRight: spacing.base + CARD_GAP,
-  },
-  cardWrap: {
-    width: ITEM_WIDTH,
-    marginRight: 0,
   },
 });

@@ -12,11 +12,9 @@ import { getFavoriteIds, toggleFavorite } from '@/services/favorites';
 import { NearYouCard } from './NearYouCard';
 import type { PublicListing } from '@/services/listings';
 import { colors, spacing, typography, fontWeights } from '@/theme';
+import { useCardWidth } from '@/hooks/useCardWidth';
 
 const NEAR_YOU_LIMIT = 6;
-const CARD_WIDTH = 168;
-const CARD_GAP = spacing.sm;
-const ITEM_WIDTH = CARD_WIDTH + CARD_GAP;
 const INITIAL_NUM_TO_RENDER = 4;
 const WINDOW_SIZE = 5;
 
@@ -27,6 +25,8 @@ export type NearYouSectionProps = {
 
 export function NearYouSection({ userCity }: NearYouSectionProps) {
   const router = useRouter();
+  const cardWidth = useCardWidth();
+  const ITEM_WIDTH = cardWidth + spacing.sm;
   const [listings, setListings] = useState<PublicListing[]>([]);
   const [favoriteIds, setFavoriteIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
@@ -85,7 +85,7 @@ export function NearYouSection({ userCity }: NearYouSectionProps) {
   const keyExtractor = useCallback((item: PublicListing) => item.id, []);
   const renderItem = useCallback(
     ({ item }: { item: PublicListing }) => (
-      <View style={styles.cardWrap}>
+      <View style={{ width: cardWidth }}>
         <NearYouCard
           listing={item}
           isFavorite={favoriteIdsRef.current.has(item.id)}
@@ -129,6 +129,7 @@ export function NearYouSection({ userCity }: NearYouSectionProps) {
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
         style={styles.scroll}
+        ItemSeparatorComponent={() => <View style={{ width: spacing.sm }} />}
         getItemLayout={(_, index) => ({
           length: ITEM_WIDTH,
           offset: index * ITEM_WIDTH,
@@ -178,11 +179,6 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingHorizontal: spacing.base,
     paddingBottom: spacing.sm,
-    paddingRight: spacing.base + CARD_GAP,
-  },
-  cardWrap: {
-    width: ITEM_WIDTH,
-    marginRight: 0,
   },
   voirPlus: {
     flexDirection: 'row',

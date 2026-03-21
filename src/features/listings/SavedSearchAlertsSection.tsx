@@ -14,12 +14,10 @@ import { getSavedSearchAlertMatches } from '@/services/savedSearchAlerts';
 import { ListingCard } from './ListingCard';
 import type { PublicListing } from '@/services/listings';
 import { colors, spacing, typography, fontWeights, radius } from '@/theme';
+import { useCardWidth } from '@/hooks/useCardWidth';
 
 const ALERT_LIMIT = 3;
 const ALERT_FETCH_LIMIT = 24;
-const CARD_WIDTH = 168;
-const CARD_GAP = spacing.sm;
-const ITEM_WIDTH = CARD_WIDTH + CARD_GAP;
 const INITIAL_NUM_TO_RENDER = 3;
 
 function buildSubtitle(matchCount: number, searchCount: number): string {
@@ -31,6 +29,8 @@ function buildSubtitle(matchCount: number, searchCount: number): string {
 
 export function SavedSearchAlertsSection() {
   const router = useRouter();
+  const cardWidth = useCardWidth();
+  const ITEM_WIDTH = cardWidth + spacing.sm;
   const [listings, setListings] = useState<PublicListing[]>([]);
   const [favoriteIds, setFavoriteIds] = useState<Set<string>>(new Set());
   const [subtitle, setSubtitle] = useState('');
@@ -108,7 +108,7 @@ export function SavedSearchAlertsSection() {
   const keyExtractor = useCallback((item: PublicListing) => item.id, []);
   const renderItem = useCallback(
     ({ item }: { item: PublicListing }) => (
-      <View style={styles.cardWrap}>
+      <View style={{ width: cardWidth }}>
         <ListingCard
           listing={item}
           isFavorite={favoriteIds.has(item.id)}
@@ -160,6 +160,7 @@ export function SavedSearchAlertsSection() {
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
         style={styles.scroll}
+        ItemSeparatorComponent={() => <View style={{ width: spacing.sm }} />}
         getItemLayout={(_, index) => ({
           length: ITEM_WIDTH,
           offset: index * ITEM_WIDTH,
@@ -233,10 +234,5 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingHorizontal: spacing.base,
     paddingBottom: spacing.sm,
-    paddingRight: spacing.base + CARD_GAP,
-  },
-  cardWrap: {
-    width: ITEM_WIDTH,
-    marginRight: 0,
   },
 });

@@ -37,31 +37,34 @@ const styles = StyleSheet.create({
   },
   body: {
     padding: spacing.base,
+    minHeight: 136,
+    justifyContent: 'space-between',
   },
   titleLine: {
     height: 16,
-    marginBottom: spacing.sm,
+    marginBottom: spacing.xs,
     maxWidth: '100%',
     borderRadius: radius.sm,
-    backgroundColor: colors.border,
+    backgroundColor: colors.borderLight,
   },
   titleLineFirst: {
     maxWidth: '100%',
   },
   titleLineShort: {
     maxWidth: '70%',
+    marginBottom: spacing.sm,
   },
   priceLine: {
-    height: 22,
+    height: 24,
     width: '40%',
     marginBottom: spacing.sm,
     borderRadius: radius.sm,
-    backgroundColor: colors.border,
+    backgroundColor: colors.borderLight,
   },
   metaLine: {
-    height: 12,
+    height: 14,
     width: '58%',
     borderRadius: radius.sm,
-    backgroundColor: colors.surfaceMuted,
+    backgroundColor: colors.surfaceSubtle,
   },
 });

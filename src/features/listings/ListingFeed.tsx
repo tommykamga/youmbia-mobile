@@ -5,8 +5,9 @@ import { getPublicListings, type PublicListing } from '@/services/listings';
 import { getFavoriteIds, toggleFavorite } from '@/services/favorites';
 import { sortListings, type SortOption } from '@/utils/sortListings';
 import { ListingCard } from './ListingCard';
-import { Loader, EmptyState, SkeletonListingCard } from '@/components';
+import { Loader, EmptyState, SkeletonListingCard, Button } from '@/components';
 import { spacing, colors, typography, fontWeights, radius } from '@/theme';
+import Ionicons from '@expo/vector-icons/Ionicons';
 
 const PAGE_SIZE = 20;
 const INITIAL_NUM_TO_RENDER = 10;
@@ -126,15 +127,21 @@ export function ListingFeed({ listHeaderComponent }: ListingFeedProps) {
     [router]
   );
 
-  const keyExtractor = useCallback((item: PublicListing) => item.id, []);
+  const keyExtractor = useCallback((item: any) => String(item.id ?? item), []);
   const renderItem = useCallback(
-    ({ item }: { item: PublicListing }) => (
-      <ListingCard
-        listing={item}
-        isFavorite={favoriteIdsRef.current.has(item.id)}
-        onFavoritePress={() => handleFavoritePress(item.id)}
-      />
-    ),
+    ({ item }: { item: any }) => {
+      if (typeof item === 'number') {
+        return <SkeletonListingCard />;
+      }
+      const listing = item as PublicListing;
+      return (
+        <ListingCard
+          listing={listing}
+          isFavorite={favoriteIdsRef.current.has(listing.id)}
+          onFavoritePress={() => handleFavoritePress(listing.id)}
+        />
+      );
+    },
     [handleFavoritePress]
   );
   const itemSeparator = useCallback(
@@ -158,6 +165,11 @@ export function ListingFeed({ listHeaderComponent }: ListingFeedProps) {
     const list = state.status === 'success' ? state.data : [];
     return sortListings(list, sortBy);
   }, [state.status, state.status === 'success' ? state.data : null, sortBy]);
+
+  const feedData = useMemo(() => {
+    if (state.status === 'loading') return [1, 2, 3, 4, 5, 6];
+    return sortedListings;
+  }, [state.status, sortedListings]);
 
   const sortHeader = useMemo(
     () => (
@@ -195,11 +207,41 @@ export function ListingFeed({ listHeaderComponent }: ListingFeedProps) {
     () => (
       <>
         {listHeaderComponent}
-        {state.status === 'success' && sortHeader}
+        {state.status === 'success' && feedData.length > 0 && sortHeader}
       </>
     ),
-    [listHeaderComponent, state.status, sortHeader]
+    [listHeaderComponent, state.status, feedData.length, sortHeader]
   );
+
+  const listEmpty = useMemo(() => {
+    if (state.status === 'loading') return null;
+    if (state.status === 'error') {
+      return (
+        <EmptyState
+          title="Oups, une erreur est survenue"
+          message={state.message}
+          icon={<Ionicons name="alert-circle-outline" size={32} color={colors.error} />}
+          action={
+            <Button variant="secondary" onPress={() => load(0, false)}>
+              Réessayer
+            </Button>
+          }
+          style={styles.emptyWrap}
+        />
+      );
+    }
+    if (state.status === 'empty') {
+      return (
+        <EmptyState
+          title="Aucune annonce trouvée"
+          message="Modifiez vos critères ou revenez plus tard."
+          icon={<Ionicons name="search-outline" size={32} color={colors.textMuted} />}
+          style={styles.emptyWrap}
+        />
+      );
+    }
+    return null;
+  }, [state.status, state.status === 'error' ? state.message : null, load]);
 
   const listFooter = useMemo(() => {
     const dataLength = state.status === 'success' ? state.data.length : 0;
@@ -228,68 +270,28 @@ export function ListingFeed({ listHeaderComponent }: ListingFeedProps) {
         </View>
       );
     }
-    if (!hasMore) {
+    if (!hasMore && state.status === 'success' && dataLength > 0) {
       return (
-        <View style={styles.footer}>
-          <Text style={styles.footerEnd}>Fin des annonces</Text>
+        <View style={styles.footerEndWrap}>
+          <Ionicons name="checkmark-circle-outline" size={18} color={colors.textTertiary} />
+          <Text style={styles.footerEnd}>Toutes les annonces ont été chargées</Text>
         </View>
       );
     }
     return null;
   }, [state.status, state.status === 'success' ? state.data.length : 0, loadingMore, hasMore, loadMoreError, load]);
 
-  if (state.status === 'loading') {
-    return (
-      <FlatList
-        data={[1, 2, 3, 4, 5, 6]}
-        keyExtractor={(key) => String(key)}
-        renderItem={() => <SkeletonListingCard />}
-        ItemSeparatorComponent={itemSeparator}
-        ListHeaderComponent={listHeaderComponent ?? null}
-        contentContainerStyle={styles.listContent}
-        showsVerticalScrollIndicator={false}
-        initialNumToRender={6}
-        windowSize={4}
-        removeClippedSubviews
-      />
-    );
-  }
-
-  if (state.status === 'error') {
-    return (
-      <View style={styles.center}>
-        {listHeaderComponent}
-        <EmptyState
-          title="Erreur"
-          message={state.message}
-          style={styles.center}
-        />
-      </View>
-    );
-  }
-
-  if (state.status === 'empty') {
-    return (
-      <View style={styles.center}>
-        {listHeaderComponent}
-        <EmptyState
-          title="Aucune annonce disponible"
-          style={styles.center}
-        />
-      </View>
-    );
-  }
-
   /* No key prop on FlatList — preserves scroll position when returning from listing detail. */
   return (
     <FlatList
-      data={sortedListings}
+      data={feedData}
       extraData={favoriteIds}
       keyExtractor={keyExtractor}
       renderItem={renderItem}
       ItemSeparatorComponent={itemSeparator}
       ListHeaderComponent={listHeader}
       ListFooterComponent={listFooter}
+      ListEmptyComponent={listEmpty}
       contentContainerStyle={styles.listContent}
       showsVerticalScrollIndicator={false}
       initialNumToRender={INITIAL_NUM_TO_RENDER}
@@ -377,8 +379,19 @@ const styles = StyleSheet.create({
     fontWeight: fontWeights.semibold,
     color: colors.primary,
   },
+  footerEndWrap: {
+    paddingVertical: spacing['2xl'],
+    paddingHorizontal: spacing.base,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.xs,
+  },
   footerEnd: {
     ...typography.xs,
     color: colors.textTertiary,
+  },
+  emptyWrap: {
+    marginTop: spacing['2xl'],
   },
 });
