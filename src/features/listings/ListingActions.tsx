@@ -4,7 +4,7 @@
  */
 
 import React, { useCallback, useMemo, useState } from 'react';
-import { View, Text, StyleSheet, Pressable, Linking, Alert } from 'react-native';
+import { View, Text, StyleSheet, Pressable } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import * as Haptics from 'expo-haptics';
 import Animated, { 
@@ -13,12 +13,8 @@ import Animated, {
   withSpring
 } from 'react-native-reanimated';
 import { colors, spacing, radius, typography, fontWeights, shadows } from '@/theme';
-import { getPublicListingUrl } from '@/lib/shareListing';
-import { formatPrice } from '@/lib/format';
+import { normalizePhoneForWhatsApp, openWhatsAppForListing } from '@/lib/sellerContact';
 import type { ListingDetail } from '@/services/listings';
-
-const HEART_SIZE = 20;
-const SHARE_ICON_SIZE = 20;
 
 type ListingActionsProps = {
   listing: ListingDetail;
@@ -33,35 +29,18 @@ type ListingActionsProps = {
   onFavorisPress?: () => void;
   /** Opens internal messaging thread (conversation). When provided, shows "Message" CTA. */
   onMessagePress?: () => void;
+  /**
+   * Si défini (ex. gate auth sur la fiche), remplace l’ouverture WhatsApp par défaut.
+   */
+  onWhatsAppPress?: () => void | Promise<void>;
 };
-
-const WHATSAPP_PREFIX = 'https://wa.me';
-
-/** Normalize to digits only for wa.me. French: 0xxxxxxxxx → 33xxxxxxxxx; 9 digits → 33 + digits. */
-function normalizePhoneForWhatsApp(raw: string | null | undefined): string | null {
-  if (!raw || typeof raw !== 'string') return null;
-  const digits = raw.replace(/\D/g, '');
-  if (digits.length < 9) return null;
-  if (digits.length === 10 && digits.startsWith('0')) return '33' + digits.slice(1);
-  if (digits.length === 9) return '33' + digits;
-  if (digits.length >= 10) return digits;
-  return null;
-}
-
-/** Normalized phone for tel: URI. Same as WhatsApp (international format). Returns null if invalid. */
-function normalizePhoneForCall(raw: string | null | undefined): string | null {
-  return normalizePhoneForWhatsApp(raw);
-}
-
-function buildWhatsAppMessage(title: string): string {
-  return `Bonjour, je suis intéressé(e) par votre annonce : ${title}`;
-}
 
 export function ListingActions({
   listing,
   sellerPhone: sellerPhoneProp,
   safeBottom = 0,
   onMessagePress,
+  onWhatsAppPress,
 }: ListingActionsProps) {
   const [openingWhatsApp, setOpeningWhatsApp] = useState(false);
 
@@ -71,45 +50,27 @@ export function ListingActions({
   const hasContact = !!listing.seller && !sellerRestricted;
   const canWhatsApp = hasContact && !!whatsappNumber;
   const canMessage = hasContact && !!onMessagePress;
-  const publicListingUrl = useMemo(() => getPublicListingUrl(listing.id), [listing.id]);
 
   const messageScale = useSharedValue(1);
   const whatsappScale = useSharedValue(1);
 
-  const whatsAppMessage = useMemo(() => {
-    const title = String(listing.title ?? '').trim() || 'Annonce YOUMBIA';
-    const price =
-      typeof listing.price === 'number' && Number.isFinite(listing.price)
-        ? formatPrice(listing.price)
-        : null;
-    const parts = [
-      `Bonjour, je vous contacte au sujet de votre annonce YOUMBIA : ${title}.`,
-      price ? `Prix : ${price}.` : null,
-      publicListingUrl,
-    ].filter(Boolean);
-    return parts.join('\n');
-  }, [listing.price, listing.title, publicListingUrl]);
-
   const handleWhatsApp = useCallback(async () => {
-    if (openingWhatsApp || !whatsappNumber) return;
+    if (openingWhatsApp) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
 
-    const encoded = encodeURIComponent(whatsAppMessage || buildWhatsAppMessage(listing.title ?? ''));
-    const url = `${WHATSAPP_PREFIX}/${whatsappNumber}?text=${encoded}`;
+    if (onWhatsAppPress) {
+      await onWhatsAppPress();
+      return;
+    }
+
+    if (!whatsappNumber) return;
     setOpeningWhatsApp(true);
     try {
-      const supported = await Linking.canOpenURL(url).catch(() => false);
-      if (!supported) {
-        Alert.alert('WhatsApp indisponible', "Impossible d'ouvrir WhatsApp.");
-        return;
-      }
-      await Linking.openURL(url);
-    } catch {
-      Alert.alert('WhatsApp indisponible', "Impossible d'ouvrir WhatsApp.");
+      await openWhatsAppForListing(listing);
     } finally {
       setOpeningWhatsApp(false);
     }
-  }, [listing.title, openingWhatsApp, whatsAppMessage, whatsappNumber]);
+  }, [listing, onWhatsAppPress, openingWhatsApp, whatsappNumber]);
 
   const handleMessage = useCallback(() => {
     if (onMessagePress) {

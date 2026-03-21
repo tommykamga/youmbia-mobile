@@ -11,6 +11,9 @@ type SecondaryActionsProps = {
   isFavorite: boolean;
   onFavoritePress: () => void;
   sellerPhone?: string | null;
+  /** Si défini, remplace l’appel direct (ex. gate auth). */
+  onCallPress?: () => void | Promise<void>;
+  onSmsPress?: () => void | Promise<void>;
 };
 
 export function SecondaryActions({
@@ -18,6 +21,8 @@ export function SecondaryActions({
   isFavorite,
   onFavoritePress,
   sellerPhone,
+  onCallPress,
+  onSmsPress,
 }: SecondaryActionsProps) {
   const [sharing, setSharing] = React.useState(false);
 
@@ -42,6 +47,10 @@ export function SecondaryActions({
   };
 
   const handleCall = async () => {
+    if (onCallPress) {
+      await onCallPress();
+      return;
+    }
     if (!sellerPhone) {
       Alert.alert('Appel', 'Numéro de téléphone non disponible.');
       return;
@@ -56,6 +65,28 @@ export function SecondaryActions({
       }
     } catch {
       Alert.alert('Appel', 'Une erreur est survenue.');
+    }
+  };
+
+  const handleSms = async () => {
+    if (onSmsPress) {
+      await onSmsPress();
+      return;
+    }
+    if (!sellerPhone) {
+      Alert.alert('SMS', 'Numéro de téléphone non disponible.');
+      return;
+    }
+    const smsUrl = `sms:${sellerPhone}`;
+    try {
+      const canOpen = await Linking.canOpenURL(smsUrl);
+      if (canOpen) {
+        await Linking.openURL(smsUrl);
+      } else {
+        Alert.alert('SMS', "Impossible d'ouvrir l'application Messages.");
+      }
+    } catch {
+      Alert.alert('SMS', 'Une erreur est survenue.');
     }
   };
 
@@ -89,15 +120,26 @@ export function SecondaryActions({
       </Button>
 
       {sellerPhone ? (
-        <Button
-          variant="secondary"
-          size="sm"
-          onPress={handleCall}
-          style={styles.button}
-          leftIcon={<Ionicons name="call-outline" size={18} />}
-        >
-          Appeler
-        </Button>
+        <>
+          <Button
+            variant="secondary"
+            size="sm"
+            onPress={handleCall}
+            style={styles.button}
+            leftIcon={<Ionicons name="call-outline" size={18} />}
+          >
+            Appeler
+          </Button>
+          <Button
+            variant="secondary"
+            size="sm"
+            onPress={handleSms}
+            style={styles.button}
+            leftIcon={<Ionicons name="chatbox-ellipses-outline" size={18} />}
+          >
+            SMS
+          </Button>
+        </>
       ) : null}
     </View>
   );

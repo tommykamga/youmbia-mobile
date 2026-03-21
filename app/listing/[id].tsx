@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   View,
   ScrollView,
@@ -10,7 +10,7 @@ import {
   FlatList,
   Platform,
 } from 'react-native';
-import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
+import { useLocalSearchParams, useRouter, useFocusEffect, type Href } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Screen, Button, Loader, EmptyState, AppHeader } from '@/components';
 import { getListingById, getSimilarListings, type ListingDetail, type PublicListing } from '@/services/listings';
@@ -33,6 +33,13 @@ import {
   SecondaryActions,
 } from '@/features/listings';
 import { spacing, colors, typography, fontWeights, radius } from '@/theme';
+import { buildLoginHrefForListingContact } from '@/lib/authRedirect';
+import {
+  isSellerContactAction,
+  openSellerPhoneCall,
+  openSellerSms,
+  openWhatsAppForListing,
+} from '@/lib/sellerContact';
 
 type State =
   | { status: 'loading' }
@@ -85,7 +92,7 @@ export default function ListingDetailScreen() {
   const CARD_WIDTH = SCREEN_WIDTH * 0.8;
   const CARD_GAP = spacing.base;
 
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, contact: contactParam } = useLocalSearchParams<{ id: string; contact?: string }>();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const [state, setState] = useState<State>({ status: 'loading' });
@@ -103,6 +110,12 @@ export default function ListingDetailScreen() {
   const [similarLoading, setSimilarLoading] = useState(true);
   /** Évite double signalement immédiat en session (Sprint 7.1). */
   const [reportedListingId, setReportedListingId] = useState<string | null>(null);
+  /** Évite de rejouer l’action contact après retour auth (pas de boucle). */
+  const contactHandledRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    contactHandledRef.current = null;
+  }, [id]);
 
   useEffect(() => {
     if (!id) {
@@ -197,40 +210,127 @@ export default function ListingDetailScreen() {
     }
   }, [favoriteLoading, id, isFavorite, router]);
 
+  const openConversationForListing = useCallback(async (): Promise<boolean> => {
+    if (!id) return false;
+    const result = await getOrCreateConversation(id);
+    if (result.error) {
+      if (result.error.message === 'Non connecté') {
+        router.push(buildLoginHrefForListingContact(id, 'message'));
+        return false;
+      }
+      Alert.alert(
+        'Erreur',
+        getActionErrorMessage(result.error.message, 'Impossible d\'ouvrir la conversation.')
+      );
+      return false;
+    }
+    const conversationId = result.data?.id;
+    if (!conversationId) {
+      Alert.alert('Erreur', 'Impossible d\'ouvrir la conversation.');
+      return false;
+    }
+    router.push(`/conversation/${conversationId}` as const);
+    return true;
+  }, [id, router]);
+
   const handleMessagePress = useCallback(async () => {
     if (!id || messageLoading) return;
     setMessageLoading(true);
     try {
       const session = await getSession();
       if (!session?.user) {
-        router.replace(`/(auth)/login?redirect=${encodeURIComponent(`/listing/${id}`)}`);
+        router.push(buildLoginHrefForListingContact(id, 'message'));
         return;
       }
-
-      const result = await getOrCreateConversation(id);
-      if (result.error) {
-        if (result.error.message === 'Non connecté') {
-          router.replace(`/(auth)/login?redirect=${encodeURIComponent(`/listing/${id}`)}`);
-          return;
-        }
-        Alert.alert(
-          'Erreur',
-          getActionErrorMessage(result.error.message, 'Impossible d\'ouvrir la conversation.')
-        );
-        return;
-      }
-      const conversationId = result.data?.id;
-      if (!conversationId) {
-        Alert.alert('Erreur', 'Impossible d\'ouvrir la conversation.');
-        return;
-      }
-      router.push(`/conversation/${conversationId}` as const);
+      await openConversationForListing();
     } catch {
       Alert.alert('Erreur', 'Impossible d\'ouvrir la conversation.');
     } finally {
       setMessageLoading(false);
     }
-  }, [id, messageLoading, router]);
+  }, [id, messageLoading, router, openConversationForListing]);
+
+  const handleSecureWhatsApp = useCallback(async () => {
+    if (!id || state.status !== 'success') return;
+    const session = await getSession();
+    if (!session?.user) {
+      router.push(buildLoginHrefForListingContact(id, 'whatsapp'));
+      return;
+    }
+    await openWhatsAppForListing(state.listing);
+  }, [id, state, router]);
+
+  const handleSecureCall = useCallback(async () => {
+    if (!id || state.status !== 'success') return;
+    const session = await getSession();
+    if (!session?.user) {
+      router.push(buildLoginHrefForListingContact(id, 'call'));
+      return;
+    }
+    await openSellerPhoneCall(state.listing);
+  }, [id, state, router]);
+
+  const handleSecureSms = useCallback(async () => {
+    if (!id || state.status !== 'success') return;
+    const session = await getSession();
+    if (!session?.user) {
+      router.push(buildLoginHrefForListingContact(id, 'sms'));
+      return;
+    }
+    await openSellerSms(state.listing);
+  }, [id, state, router]);
+
+  useEffect(() => {
+    const contact = typeof contactParam === 'string' ? contactParam : undefined;
+    if (!contact || !isSellerContactAction(contact) || state.status !== 'success' || !id) return;
+
+    const listing = state.listing;
+
+    const key = `${id}:${contact}`;
+    if (contactHandledRef.current === key) return;
+
+    const ac = new AbortController();
+
+    (async () => {
+      const session = await getSession();
+      if (ac.signal.aborted) return;
+      if (!session?.user) return;
+      if (contactHandledRef.current === key) return;
+
+      contactHandledRef.current = key;
+
+      if (contact !== 'message') {
+        router.replace(`/listing/${id}` as Href);
+      }
+
+      if (ac.signal.aborted) return;
+
+      try {
+        switch (contact) {
+          case 'whatsapp':
+            await openWhatsAppForListing(listing);
+            break;
+          case 'call':
+            await openSellerPhoneCall(listing);
+            break;
+          case 'sms':
+            await openSellerSms(listing);
+            break;
+          case 'message':
+            await openConversationForListing();
+            break;
+          default:
+            break;
+        }
+      } catch {
+        // Les helpers affichent déjà les alertes.
+      }
+    })();
+
+    return () => {
+      ac.abort();
+    };
+  }, [contactParam, state, id, router, openConversationForListing]);
 
   const handleReportPress = useCallback(async () => {
     if (!id) return;
@@ -353,6 +453,8 @@ export default function ListingDetailScreen() {
             isFavorite={isFavorite}
             onFavoritePress={handleFavoritePress}
             sellerPhone={listing.seller?.phone}
+            onCallPress={handleSecureCall}
+            onSmsPress={handleSecureSms}
           />
           {(similarLoading || similarListings.length > 0) ? (
             <View style={styles.similarSection}>
@@ -443,6 +545,7 @@ export default function ListingDetailScreen() {
         isFavorite={isFavorite}
         onFavorisPress={handleFavoritePress}
         onMessagePress={handleMessagePress}
+        onWhatsAppPress={handleSecureWhatsApp}
       />
     </Screen>
   );

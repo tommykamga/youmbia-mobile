@@ -1,17 +1,11 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, Pressable } from 'react-native';
-import { Link, useRouter, useLocalSearchParams, type Href } from 'expo-router';
+import { Link, useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Screen, Button, Input, AppLogo } from '@/components';
-import { signUp } from '@/services/auth';
+import { signUp, getSession } from '@/services/auth';
 import { colors, spacing, typography, fontWeights, radius } from '@/theme';
-
-function getSafeRedirect(redirect: string | undefined): string | null {
-  if (!redirect || typeof redirect !== 'string') return null;
-  const t = redirect.trim();
-  if (t.startsWith('/') || t.startsWith('(')) return t;
-  return null;
-}
+import { buildPostAuthHref, buildLoginHref } from '@/lib/authRedirect';
 
 function getErrorMessage(error: { message: string }): string {
   const msg = error.message.toLowerCase();
@@ -24,8 +18,8 @@ function getErrorMessage(error: { message: string }): string {
 
 export default function SignupScreen() {
   const router = useRouter();
-  const params = useLocalSearchParams<{ redirect?: string }>();
-  
+  const params = useLocalSearchParams<{ redirect?: string; contact?: string }>();
+
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -37,6 +31,17 @@ export default function SignupScreen() {
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   const isAnyLoading = loading || googleLoading;
+
+  useEffect(() => {
+    let mounted = true;
+    getSession().then((s) => {
+      if (!mounted || !s?.user) return;
+      router.replace(buildPostAuthHref(params.redirect, params.contact));
+    });
+    return () => {
+      mounted = false;
+    };
+  }, [router, params.redirect, params.contact]);
 
   const handleSubmit = async () => {
     setError(null);
@@ -62,8 +67,7 @@ export default function SignupScreen() {
           setSuccessMessage('Compte créé avec succès ! Vérifiez votre boîte mail pour confirmer votre inscription avant de vous connecter.');
           return;
         }
-        const redirect = getSafeRedirect(params.redirect);
-        router.replace((redirect ?? '/(tabs)/home') as Href);
+        router.replace(buildPostAuthHref(params.redirect, params.contact));
       } else {
         setError(getErrorMessage(result.error));
       }
@@ -82,8 +86,7 @@ export default function SignupScreen() {
       const { signInWithGoogle } = await import('@/services/auth/signInWithGoogle');
       const result = await signInWithGoogle();
       if (result.ok) {
-        const redirect = getSafeRedirect(params.redirect);
-        router.replace((redirect ?? '/(tabs)/home') as Href);
+        router.replace(buildPostAuthHref(params.redirect, params.contact));
       } else {
         setError(getErrorMessage({ message: result.error.message || 'Connexion Google échouée.' }));
       }
@@ -180,7 +183,10 @@ export default function SignupScreen() {
         <View style={styles.footer}>
           <Text style={styles.footerText}>Déjà un compte ?</Text>
           <Link
-            href={params.redirect ? `/(auth)/login?redirect=${encodeURIComponent(params.redirect)}` : '/(auth)/login'}
+            href={buildLoginHref(
+              typeof params.redirect === 'string' ? params.redirect : undefined,
+              typeof params.contact === 'string' ? params.contact : undefined
+            )}
             asChild
           >
             <Pressable hitSlop={15}>

@@ -1,17 +1,19 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, Pressable } from 'react-native';
-import { Link, useRouter, useLocalSearchParams, type Href } from 'expo-router';
+import { Link, useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Screen, Button, Input, AppLogo } from '@/components';
-import { signIn, signInWithOtp } from '@/services/auth';
+import { signIn, signInWithOtp, getSession } from '@/services/auth';
 import { makeRedirectUri } from 'expo-auth-session';
 import { colors, spacing, typography, fontWeights, radius } from '@/theme';
+import { buildPostAuthHref, buildSignupHref } from '@/lib/authRedirect';
 
-function getSafeRedirect(redirect: string | undefined): string | null {
-  if (!redirect || typeof redirect !== 'string') return null;
-  const t = redirect.trim();
-  if (t.startsWith('/') || t.startsWith('(')) return t;
-  return null;
+function buildMagicLinkOtpPath(redirect?: string, contact?: string): string | undefined {
+  const parts: string[] = [];
+  if (redirect) parts.push(`redirect=${encodeURIComponent(redirect)}`);
+  if (contact) parts.push(`contact=${encodeURIComponent(contact)}`);
+  if (parts.length === 0) return undefined;
+  return parts.join('&');
 }
 
 function getErrorMessage(error: { message: string }): string {
@@ -25,7 +27,7 @@ function getErrorMessage(error: { message: string }): string {
 
 export default function LoginScreen() {
   const router = useRouter();
-  const params = useLocalSearchParams<{ redirect?: string }>();
+  const params = useLocalSearchParams<{ redirect?: string; contact?: string }>();
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -39,6 +41,17 @@ export default function LoginScreen() {
 
   const isAnyLoading = loading || googleLoading || magicLoading;
 
+  useEffect(() => {
+    let mounted = true;
+    getSession().then((s) => {
+      if (!mounted || !s?.user) return;
+      router.replace(buildPostAuthHref(params.redirect, params.contact));
+    });
+    return () => {
+      mounted = false;
+    };
+  }, [router, params.redirect, params.contact]);
+
   const handleSubmit = async () => {
     setError(null);
     setSuccess(null);
@@ -51,8 +64,7 @@ export default function LoginScreen() {
     try {
       const result = await signIn(trimmedEmail, password);
       if (result.ok) {
-        const redirect = getSafeRedirect(params.redirect);
-        router.replace((redirect ?? '/(tabs)/home') as Href);
+        router.replace(buildPostAuthHref(params.redirect, params.contact));
       } else {
         setError(getErrorMessage(result.error));
       }
@@ -74,7 +86,12 @@ export default function LoginScreen() {
     setMagicLoading(true);
     try {
       // makeRedirectUri handles exp:// (dev) or youmbiamobile:// (prod)
-      const redirectTo = makeRedirectUri({ path: params.redirect ? `redirect=${encodeURIComponent(params.redirect)}` : undefined });
+      const redirectTo = makeRedirectUri({
+        path: buildMagicLinkOtpPath(
+          typeof params.redirect === 'string' ? params.redirect : undefined,
+          typeof params.contact === 'string' ? params.contact : undefined
+        ),
+      });
       const result = await signInWithOtp(trimmedEmail, redirectTo);
       if (result.ok) {
         setSuccess('Lien magique envoyé ! Vérifiez votre boîte mail pour vous connecter.');
@@ -96,8 +113,7 @@ export default function LoginScreen() {
       const { signInWithGoogle } = await import('@/services/auth/signInWithGoogle');
       const result = await signInWithGoogle();
       if (result.ok) {
-        const redirect = getSafeRedirect(params.redirect);
-        router.replace((redirect ?? '/(tabs)/home') as Href);
+        router.replace(buildPostAuthHref(params.redirect, params.contact));
       } else {
         setError(getErrorMessage({ message: result.error.message || 'Connexion Google échouée.' }));
       }
@@ -201,7 +217,10 @@ export default function LoginScreen() {
         <View style={styles.footer}>
           <Text style={styles.footerText}>Pas encore de compte ?</Text>
           <Link
-            href={params.redirect ? `/(auth)/signup?redirect=${encodeURIComponent(params.redirect)}` : '/(auth)/signup'}
+            href={buildSignupHref(
+              typeof params.redirect === 'string' ? params.redirect : undefined,
+              typeof params.contact === 'string' ? params.contact : undefined
+            )}
             asChild
           >
             <Pressable hitSlop={15}>

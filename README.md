@@ -68,6 +68,8 @@ Créer un fichier `.env` à la racine (voir `.env.example`) avec :
 
 Ne pas commiter `.env` (déjà ignoré par Git).
 
+**Auth Supabase (mobile)** : pour que le **lien magique** et les redirections OAuth ne renvoient pas vers le site web par erreur, configurer les **Redirect URLs** et les modèles d’e-mail comme décrit dans [`docs/SUPABASE_MAGIC_LINK_AND_REDIRECTS.md`](docs/SUPABASE_MAGIC_LINK_AND_REDIRECTS.md) (complément de [`docs/GOOGLE_SIGNIN.md`](docs/GOOGLE_SIGNIN.md)).
+
 ## Structure principale
 
 ```

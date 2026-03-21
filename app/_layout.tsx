@@ -4,9 +4,10 @@ import { StatusBar } from 'expo-status-bar';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import SplashScreenCustom from '@/features/splash/SplashScreen';
 import 'react-native-reanimated';
-import { AppState, Linking } from 'react-native';
+import { Alert, AppState, Linking } from 'react-native';
 import { colors } from '@/theme';
 import { onAuthStateChange } from '@/services/auth';
+import { handleSupabaseAuthDeepLink } from '@/services/auth/handleSupabaseAuthDeepLink';
 import { getListingHrefFromUrl } from '@/lib/listingDeepLink';
 import {
   addNotificationResponseReceivedListenerSafe,
@@ -141,8 +142,21 @@ export default function RootLayout() {
   }, []);
 
   const handleIncomingUrl = useCallback(
-    (url: string | null | undefined) => {
+    async (url: string | null | undefined) => {
       const raw = String(url ?? '').trim();
+      if (!raw) return;
+
+      const authResult = await handleSupabaseAuthDeepLink(raw);
+      if (authResult.consumed) {
+        if (authResult.errorMessage) {
+          Alert.alert('Connexion', authResult.errorMessage);
+        }
+        if (authResult.navigateTo !== null) {
+          router.replace(authResult.navigateTo as never);
+        }
+        return;
+      }
+
       const target = getListingHrefFromUrl(raw);
       if (!target) return;
       if (raw && lastHandledUrlRef.current === raw) return;
@@ -162,12 +176,12 @@ export default function RootLayout() {
     Linking.getInitialURL()
       .then((url) => {
         if (!active) return;
-        handleIncomingUrl(url);
+        void handleIncomingUrl(url);
       })
       .catch(() => {});
 
     const subscription = Linking.addEventListener('url', ({ url }) => {
-      handleIncomingUrl(url);
+      void handleIncomingUrl(url);
     });
 
     return () => {
@@ -226,18 +240,17 @@ export default function RootLayout() {
 
   useEffect(() => {
     const unsubscribe = onAuthStateChange((_event, session) => {
-      // Blocage du "swipe back" vers auth :
-      // Si l'utilisateur est connecté et navigue par erreur sur un écran (auth), on le renvoie vers Home
+      // Ne pas forcer Home depuis (auth) après connexion : les écrans login/signup
+      // font router.replace vers redirect (ex. fiche annonce + contact) — sinon la course
+      // avec onAuthStateChange écrase le retour contextuel.
+
       if (session != null) {
-        if (segments[0] === '(auth)') {
-          router.replace('/(tabs)/home');
-        }
         return;
       }
-      
+
       // Si l'utilisateur n'est PAS connecté et tente d'aller sur une page protégée
       if (!isProtectedSegment(segments)) return;
-      
+
       // Preserve return context: redirect to login with current path so user lands back after auth.
       const returnPath = segments.length > 0 ? `/${segments.join('/')}` : '/(tabs)/home';
       router.replace(`/(auth)/login?redirect=${encodeURIComponent(returnPath)}`);

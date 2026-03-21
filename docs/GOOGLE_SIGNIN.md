@@ -84,3 +84,9 @@ Si vous n’ajoutez que le client Web et l’URL de redirect Supabase, le flux i
 - [ ] Session persistée après connexion Google (même storage que l’email).
 - [ ] Redirect après login Google identique à l’email (paramètre `redirect`, fallback `/(tabs)/home`).
 - [ ] Pas d’autre provider ajouté (uniquement Google en plus de l’email).
+
+---
+
+## Voir aussi
+
+- **[SUPABASE_MAGIC_LINK_AND_REDIRECTS.md](./SUPABASE_MAGIC_LINK_AND_REDIRECTS.md)** — liste blanche **Redirect URLs** (dont `youmbiamobile://`), Expo Go / prod, et modèles d’e-mail pour le **lien magique** sans retomber sur le site web.
