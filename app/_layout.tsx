@@ -2,7 +2,7 @@ import { Stack, useGlobalSearchParams, usePathname, useRouter, useSegments } fro
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import AnimatedSplash from '@/components/AnimatedSplash';
+import SplashScreenCustom from '@/features/splash/SplashScreen';
 import 'react-native-reanimated';
 import { AppState, Linking } from 'react-native';
 import { colors } from '@/theme';
@@ -80,16 +80,16 @@ export default function RootLayout() {
   useEffect(() => {
     async function prepare() {
       try {
-        // Préchargement (récupérer session Supabase, préparer données)
-        const { supabase } = await import('@/lib/supabase');
-        await Promise.all([
-          supabase.auth.getSession(),
-          // Ajouter d'autres préchargements parallèles ici si besoin (fonts, configs...)
+        // Chargement parallèle des ressources critiques (ex: Session Supabase)
+        const [{ supabase }] = await Promise.all([
+          import('@/lib/supabase'),
+          // Ajouter d'autres préchargements ici si besoin
         ]);
+
+        await supabase.auth.getSession();
       } catch (e) {
-        console.warn(e);
+        console.warn('App preparation error:', e);
       } finally {
-        // Signale au composant AnimatedSplash que l'app est prête
         setIsAppReady(true);
       }
     }
@@ -249,7 +249,7 @@ export default function RootLayout() {
   // ce composant va gérer l'attente du préchargement de manière fluide.
   if (!isSplashAnimationComplete) {
     return (
-      <AnimatedSplash
+      <SplashScreenCustom
         isAppReady={isAppReady}
         onFinish={() => setIsSplashAnimationComplete(true)}
       />

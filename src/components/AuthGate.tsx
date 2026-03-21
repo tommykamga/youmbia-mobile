@@ -23,7 +23,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
-export type AuthGateContext = 'favorites' | 'messages' | 'sell' | 'account';
+export type AuthGateContext = 'favorites' | 'messages' | 'sell' | 'account' | 'listings';
 
 interface AuthGateProps {
   context: AuthGateContext;
@@ -45,6 +45,10 @@ const CONTEXT_CONTENT = {
   account: {
     title: 'Accédez à votre espace',
     subtitle: 'Connectez-vous pour gérer votre compte, vos annonces et vos activités.',
+  },
+  listings: {
+    title: 'Gérez vos annonces',
+    subtitle: 'Connectez-vous pour suivre vos ventes et mettre à jour vos annonces.',
   },
 };
 

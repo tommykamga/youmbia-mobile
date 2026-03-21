@@ -14,6 +14,7 @@ import type { PublicListing } from '@/services/listings';
 import { colors, spacing, typography, fontWeights } from '@/theme';
 import { useCardWidth } from '@/hooks/useCardWidth';
 import { useFavorites } from '@/context/FavoritesContext';
+import { ListingSectionSkeleton } from './ListingSectionSkeleton';
 
 const NEAR_YOU_LIMIT = 6;
 const INITIAL_NUM_TO_RENDER = 4;
@@ -76,7 +77,11 @@ export function NearYouSection({ userCity }: NearYouSectionProps) {
     }
   }, [userCity, router]);
 
-  if (loading || listings.length === 0) {
+  if (loading) {
+    return <ListingSectionSkeleton title="Près de vous" icon="location-outline" variant="nearYou" />;
+  }
+
+  if (listings.length === 0) {
     return null;
   }
 

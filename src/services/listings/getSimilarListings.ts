@@ -29,6 +29,7 @@ type ListingRow = Pick<
   | 'boosted'
   | 'urgent'
   | 'district'
+  | 'updated_at'
 > & {
   listing_images: ListingImageRow[] | null;
 };
@@ -94,6 +95,7 @@ function mapRow(row: ListingRow, signedMap: Map<string, string>): PublicListing 
     images,
     views_count: row.views_count ?? 0,
     seller_id: row.user_id ?? '',
+    updated_at: row.updated_at,
     ...schema,
   };
 }
@@ -116,7 +118,7 @@ export async function getSimilarListings(
     const { data, error } = await supabase
       .from('listings')
       .select(
-        'id, title, price, city, description, boosted, urgent, district, created_at, views_count, user_id, listing_images(url, sort_order)'
+        'id, title, price, city, description, boosted, urgent, district, created_at, updated_at, views_count, user_id, listing_images(url, sort_order)'
       )
       .eq('status', 'active')
       .neq('id', currentId)
@@ -172,6 +174,9 @@ export async function getSimilarListings(
       .filter((entry) => entry.isRelevant)
       .sort((a, b) => {
         if (b.score !== a.score) return b.score - a.score;
+        const aUrgent = a.item.urgent ? 1 : 0;
+        const bUrgent = b.item.urgent ? 1 : 0;
+        if (bUrgent !== aUrgent) return bUrgent - aUrgent;
         const aBoost = getDisplayBoosted(a.item) ? 1 : 0;
         const bBoost = getDisplayBoosted(b.item) ? 1 : 0;
         if (bBoost !== aBoost) return bBoost - aBoost;
@@ -198,6 +203,9 @@ export async function getSimilarListings(
         return sameCategory || sameCity;
       })
       .sort((a, b) => {
+        const aUrgent = a.urgent ? 1 : 0;
+        const bUrgent = b.urgent ? 1 : 0;
+        if (bUrgent !== aUrgent) return bUrgent - aUrgent;
         const aBoost = getDisplayBoosted(a) ? 1 : 0;
         const bBoost = getDisplayBoosted(b) ? 1 : 0;
         if (bBoost !== aBoost) return bBoost - aBoost;

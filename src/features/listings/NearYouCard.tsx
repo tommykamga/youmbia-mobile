@@ -65,6 +65,7 @@ function NearYouCardInner({
       : undefined;
   const showNew = isNew(listing.created_at);
   const showUrgent = getDisplayUrgent(listing);
+  const showBoosted = listing.boosted === true;
   const locationLine = getDisplayLocationLine(listing.city, listing.district);
   const city = listing.city?.trim() || null;
   const isNear = Boolean(userCity?.trim() && city && userCity.trim().toLowerCase() === city.toLowerCase());
@@ -103,8 +104,13 @@ function NearYouCardInner({
             <Text style={styles.imagePlaceholderText}>Aucune photo</Text>
           </View>
         )}
-        {(showNew || showUrgent) ? (
+        {(showNew || showUrgent || showBoosted) ? (
           <View style={styles.badgesWrap}>
+            {showBoosted ? (
+              <View style={styles.boostedBadge}>
+                <Ionicons name="flash" size={10} color={colors.surface} />
+              </View>
+            ) : null}
             {showNew ? (
               <View style={styles.badgeNew}>
                 <Text style={styles.badgeNewText}>Nouveau</Text>
@@ -206,6 +212,14 @@ const styles = StyleSheet.create({
     ...typography.xs,
     fontWeight: fontWeights.semibold,
     color: colors.surface,
+  },
+  boostedBadge: {
+    backgroundColor: '#FFB800',
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   heartPosition: {
     position: 'absolute',

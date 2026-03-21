@@ -15,6 +15,8 @@ import { getPublicListings } from '@/services/listings';
 import {
   ListingFeed,
   NearYouSection,
+  BoostedSection,
+  UrgentSection,
   SavedSearchAlertsSection,
   ForYouSection,
   RecentlyViewedSection,
@@ -104,21 +106,17 @@ function HomeHeaderContent() {
         />
       </Animated.View>
 
-      <Animated.View entering={FadeInDown.delay(150).duration(400)}>
-        <NearYouSection userCity={null} />
-      </Animated.View>
+      <BoostedSection />
 
-      <Animated.View entering={FadeInDown.delay(200).duration(400)}>
-        <SavedSearchAlertsSection />
-      </Animated.View>
+      <NearYouSection userCity={null} />
 
-      <Animated.View entering={FadeInDown.delay(250).duration(400)}>
-        <ForYouSection />
-      </Animated.View>
+      <UrgentSection />
 
-      <Animated.View entering={FadeInDown.delay(300).duration(400)}>
-        <RecentlyViewedSection />
-      </Animated.View>
+      <SavedSearchAlertsSection />
+
+      <ForYouSection />
+
+      <RecentlyViewedSection />
 
       <Animated.View entering={FadeInDown.delay(350).duration(400)} style={styles.feedIntro}>
         <Text style={styles.sectionTitle}>Nouvelles annonces</Text>

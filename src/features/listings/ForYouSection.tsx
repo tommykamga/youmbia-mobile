@@ -16,6 +16,7 @@ import { ListingCard } from './ListingCard';
 import type { PublicListing } from '@/services/listings';
 import { colors, spacing, typography, fontWeights } from '@/theme';
 import { useCardWidth } from '@/hooks/useCardWidth';
+import { ListingSectionSkeleton } from './ListingSectionSkeleton';
 
 const FOR_YOU_LIMIT = 6;
 const FOR_YOU_FETCH_LIMIT = 24;
@@ -209,15 +210,17 @@ export function ForYouSection() {
       <View style={{ width: cardWidth }}>
         <ListingCard
           listing={item}
-          isFavorite={favoriteIds.has(item.id)}
-          onFavoritePress={() => handleFavoritePress(item.id)}
         />
       </View>
     ),
     [favoriteIds, handleFavoritePress]
   );
 
-  if (loading || listings.length === 0) {
+  if (loading) {
+    return <ListingSectionSkeleton title="Pour vous" icon="sparkles-outline" hasSubtitle />;
+  }
+
+  if (listings.length === 0) {
     return null;
   }
 

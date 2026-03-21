@@ -13,6 +13,7 @@ import { ListingCard } from './ListingCard';
 import type { PublicListing } from '@/services/listings';
 import { colors, spacing, typography, fontWeights } from '@/theme';
 import { useCardWidth } from '@/hooks/useCardWidth';
+import { ListingSectionSkeleton } from './ListingSectionSkeleton';
 
 const INITIAL_NUM_TO_RENDER = 4;
 
@@ -70,7 +71,16 @@ export function RecentlyViewedSection() {
     [favoriteIds, router]
   );
 
-  if (loading || listings.length === 0) {
+  if (loading) {
+    // Only show skeleton if we actually have IDs to fetch
+    const ids = getRecentlyViewedListingIds();
+    if (ids.length > 0) {
+      return <ListingSectionSkeleton title="Consultés récemment" icon="time-outline" />;
+    }
+    return null;
+  }
+
+  if (listings.length === 0) {
     return null;
   }
 
@@ -103,8 +113,6 @@ export function RecentlyViewedSection() {
           <View style={{ width: cardWidth }}>
             <ListingCard
               listing={item}
-              isFavorite={favoriteIds.has(item.id)}
-              onFavoritePress={() => handleFavoritePress(item.id)}
             />
           </View>
         )}

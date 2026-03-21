@@ -92,7 +92,7 @@ export async function getPublicListings(
       'id, title, price, city, description, boosted, urgent, district, created_at, updated_at, views_count, user_id, listing_images(url, sort_order)'
     )
     .eq('status', 'active')
-    .order('updated_at', { ascending: false })
+    .order('urgent', { ascending: false })
     .order('created_at', { ascending: false })
     .range(from, to);
 

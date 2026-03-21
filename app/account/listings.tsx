@@ -13,7 +13,7 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { Screen, AppHeader, EmptyState, Loader, Button } from '@/components';
+import { Screen, AppHeader, EmptyState, Loader, Button, AuthGate } from '@/components';
 import { ListingCard } from '@/features/listings';
 import {
   bumpListing,
@@ -29,6 +29,7 @@ import { spacing, colors, typography, fontWeights, radius } from '@/theme';
 
 type State =
   | { status: 'loading' }
+  | { status: 'unauthenticated' }
   | { status: 'empty' }
   | { status: 'error'; message: string }
   | { status: 'success'; data: MyListing[] };
@@ -407,7 +408,7 @@ export default function AccountListingsScreen() {
     if (result.error) {
       setStatsByListingId({});
       if (result.error.message === 'Non connecté') {
-        router.replace(`/(auth)/login?redirect=${encodeURIComponent('/account/listings')}` as import('expo-router').Href);
+        setState({ status: 'unauthenticated' });
         return;
       }
       setState({ status: 'error', message: result.error.message });
@@ -501,6 +502,9 @@ export default function AccountListingsScreen() {
       <AppHeader title="Mes annonces" showBack />
       {state.status === 'loading' && (
         <Loader />
+      )}
+      {state.status === 'unauthenticated' && (
+        <AuthGate context="listings" />
       )}
       {state.status === 'error' && (
         <EmptyState

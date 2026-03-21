@@ -1,5 +1,5 @@
 import React, { memo, useCallback } from 'react';
-import { View, Text, StyleSheet, Pressable } from 'react-native';
+import { View, Text, StyleSheet, Pressable, Platform } from 'react-native';
 import { Image } from 'expo-image';
 import Animated, { 
   useSharedValue, 
@@ -46,6 +46,7 @@ function ListingCardInner({ listing }: ListingCardProps) {
     : timeAgo(listing.created_at);
   const locationLine = getDisplayLocationLine(listing.city, listing.district);
   const showUrgent = getDisplayUrgent(listing);
+  const showBoosted = listing.boosted === true;
   const showPriceDropped = listing.price_dropped === true;
 
   const handlePress = useCallback(() => {
@@ -82,8 +83,14 @@ function ListingCardInner({ listing }: ListingCardProps) {
             <Text style={styles.imagePlaceholderText}>Aucune photo</Text>
           </View>
         )}
-        {(showUrgent || showPriceDropped) ? (
+        {(showUrgent || showBoosted || showPriceDropped) ? (
           <View style={styles.badgesWrap}>
+            {showBoosted ? (
+              <View style={styles.boostedBadge}>
+                <Ionicons name="flash" size={12} color={colors.surface} style={{ marginRight: 2 }} />
+                <Text style={styles.boostedBadgeText}>À la une</Text>
+              </View>
+            ) : null}
             {showUrgent ? (
               <View style={styles.urgentBadge}>
                 <Text style={styles.urgentBadgeText}>Urgent</Text>
@@ -177,6 +184,28 @@ const styles = StyleSheet.create({
   urgentBadgeText: {
     ...typography.xs,
     fontWeight: fontWeights.semibold,
+    color: colors.surface,
+  },
+  boostedBadge: {
+    backgroundColor: '#FFB800', // Premium Gold/Amber
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 5,
+    borderRadius: radius.sm,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#FFB800',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.3,
+        shadowRadius: 4,
+      },
+      android: { elevation: 3 },
+    }),
+  },
+  boostedBadgeText: {
+    ...typography.xs,
+    fontWeight: fontWeights.bold,
     color: colors.surface,
   },
   priceDroppedBadge: {
