@@ -2,7 +2,7 @@
   "expo": {
     "name": "YOUMBIA",
     "slug": "youmbia-mobile",
-    "version": "3.1.0",
+    "version": "3.1.1",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "youmbiamobile",
@@ -18,7 +18,7 @@
     },
     "android": {
       "package": "com.youmbia.mobile",
-      "versionCode": 15,
+      "versionCode": 17,
       "adaptiveIcon": {
         "backgroundColor": "#0B6B3A",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
