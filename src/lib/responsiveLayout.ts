@@ -6,12 +6,13 @@ import { useWindowDimensions } from 'react-native';
 
 export type WindowSizeBucket = 'compact' | 'regular' | 'large';
 
-const WIDTH_COMPACT_MAX = 389;
-const WIDTH_REGULAR_MAX = 429;
+/** Seuils (voir spec produit) : < compactBound → compact ; < regularBound → regular. */
+const WIDTH_COMPACT_BOUND = 390;
+const WIDTH_REGULAR_BOUND = 430;
 
 export function getWindowSizeBucket(width: number): WindowSizeBucket {
-  if (width < 390) return 'compact';
-  if (width < 430) return 'regular';
+  if (width < WIDTH_COMPACT_BOUND) return 'compact';
+  if (width < WIDTH_REGULAR_BOUND) return 'regular';
   return 'large';
 }
 

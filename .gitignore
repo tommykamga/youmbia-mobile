@@ -7,7 +7,11 @@ node_modules/
 .expo/
 dist/
 web-build/
+web-build-output/
 expo-env.d.ts
+
+# Artefacts web / outils (ne pas versionner)
+.next/
 
 # Native
 .kotlin/

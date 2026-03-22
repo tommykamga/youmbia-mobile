@@ -59,6 +59,8 @@ eas build --profile production --platform all
 
 **Identifiants** : `app.json` contient `ios.bundleIdentifier` et `android.package` (`com.youmbia.mobile`). Pour soumettre aux stores, renseigner les champs dans `eas.json` > `submit.production` (Apple ID, Team ID, compte de service Google Play) ou utiliser `eas submit` interactif.
 
+**Build production (stores)** : les clés `EXPO_PUBLIC_SUPABASE_*` ne sont plus dans `eas.json` (évite de les dupliquer dans Git). Avant `eas build --profile production`, les configurer sur [expo.dev](https://expo.dev) → projet YOUMBIA → **Environment variables** (environnement **production**), avec les **mêmes valeurs** que le site web / ton `.env` local. Aucun changement requis côté **Youmbia web** (même projet Supabase).
+
 ## Variables d'environnement
 
 Créer un fichier `.env` à la racine (voir `.env.example`) avec :
