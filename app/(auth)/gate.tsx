@@ -14,11 +14,15 @@ import {
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
+import Animated, { Easing, FadeIn, FadeInDown } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Screen, Button, AppLogo, AppHeader } from '@/components';
 import { AuthGateEmailForm } from '@/features/auth/AuthGateEmailForm';
-import { getAuthGateContextConfig } from '@/config/authGateContext';
+import {
+  AUTH_GATE_CONTEXT_CONFIG,
+  getAuthGateContextConfig,
+  type AuthGateContextId,
+} from '@/config/authGateContext';
 import { buildSignupHref, getSafeRedirect } from '@/lib/authRedirect';
 import { replaceAfterSuccessfulAuth } from '@/lib/authPostNavigation';
 import { runGoogleOAuth, formatGoogleSignInUserMessage } from '@/lib/googleSignInMobile';
@@ -30,6 +34,15 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
   UIManager.setLayoutAnimationEnabledExperimental(true);
 }
 
+/** Titre barre de navigation — court et contextuel (le hero garde le copy détaillé). */
+const GATE_NAV_TITLES: Record<AuthGateContextId, string> = {
+  favorites: 'Retrouvez vos coups de cœur',
+  messages: 'Accédez à vos conversations',
+  sell: 'Publiez votre annonce',
+  account: 'Bienvenue sur votre espace',
+  listings: 'Gérez vos annonces',
+};
+
 export default function AuthGateScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -39,6 +52,12 @@ export default function AuthGateScreen() {
     () => getAuthGateContextConfig(params.context),
     [params.context]
   );
+
+  const navTitle = useMemo(() => {
+    const raw = typeof params.context === 'string' ? params.context.trim() : '';
+    const key = (raw && raw in AUTH_GATE_CONTEXT_CONFIG ? raw : 'account') as AuthGateContextId;
+    return GATE_NAV_TITLES[key];
+  }, [params.context]);
 
   /** Aligné sur login : redirect explicite safe > successHref du contexte ; buildPostAuthHref en aval. */
   const redirectParam = useMemo(() => {
@@ -127,10 +146,10 @@ export default function AuthGateScreen() {
 
   return (
     <Screen scroll keyboardAvoid safe={false} noPadding>
-      <AppHeader title="Connexion" showBack />
+      <AppHeader title={navTitle} showBack noBorder titleStyle={styles.headerNavTitle} />
 
       <View style={[styles.inner, { paddingBottom: insets.bottom + spacing['3xl'], paddingHorizontal: spacing.lg }]}>
-        <Animated.View entering={FadeIn.duration(420)} style={styles.hero}>
+        <Animated.View entering={FadeIn.duration(380)} style={styles.hero}>
           <AppLogo variant="medium" style={styles.logo} />
           <View style={styles.headline}>
             <Text style={styles.title}>{gateConfig.title}</Text>
@@ -140,7 +159,9 @@ export default function AuthGateScreen() {
 
         <View style={styles.reassurance} accessibilityRole="text">
           <Ionicons name="shield-checkmark-outline" size={15} color={colors.textMuted} />
-          <Text style={styles.reassuranceText}>Connexion sécurisée · Données protégées</Text>
+          <Text style={styles.reassuranceText}>
+            Connexion sécurisée • Aucun spam • Accès instantané
+          </Text>
         </View>
 
         {error ? (
@@ -161,7 +182,7 @@ export default function AuthGateScreen() {
           </View>
         ) : null}
 
-        <View style={styles.ctaSurface}>
+        <View style={[styles.ctaSurface, emailExpanded && styles.ctaSurfaceWhenEmailOpen]}>
           <Button
             onPress={handleGoogle}
             loading={googleLoading}
@@ -187,7 +208,9 @@ export default function AuthGateScreen() {
 
         {emailExpanded ? (
           <Animated.View
-            entering={FadeInDown.duration(420).delay(40).springify().damping(22).stiffness(200)}
+            entering={FadeInDown.duration(280)
+              .delay(20)
+              .easing(Easing.out(Easing.cubic))}
             style={styles.emailPanel}
             accessibilityLabel="Connexion par email"
           >
@@ -209,6 +232,7 @@ export default function AuthGateScreen() {
               passwordLoading={passwordLoading}
               magicLoading={magicLoading}
               disabled={googleLoading}
+              autoFocusEmail
             />
           </Animated.View>
         ) : null}
@@ -218,15 +242,21 @@ export default function AuthGateScreen() {
 }
 
 const styles = StyleSheet.create({
+  headerNavTitle: {
+    ...typography.sm,
+    fontWeight: fontWeights.semibold,
+    color: colors.textSecondary,
+    letterSpacing: 0.15,
+  },
   inner: {
-    paddingTop: spacing.xl,
-    gap: spacing['2xl'],
+    paddingTop: spacing.md,
+    gap: spacing.lg,
     maxWidth: 440,
     width: '100%',
     alignSelf: 'center',
   },
   hero: {
-    gap: spacing['2xl'],
+    gap: spacing.lg,
     alignItems: 'center',
   },
   logo: {
@@ -281,6 +311,9 @@ const styles = StyleSheet.create({
     borderColor: colors.borderLight,
     ...shadows.card,
   },
+  ctaSurfaceWhenEmailOpen: {
+    opacity: 0.92,
+  },
   primaryCta: {
     borderRadius: radius.full,
     minHeight: 56,
@@ -293,8 +326,8 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surfaceSubtle,
   },
   emailPanel: {
-    marginTop: spacing.xs,
-    paddingTop: spacing.lg,
+    marginTop: spacing.sm,
+    paddingTop: spacing.md,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: colors.borderLight,
   },

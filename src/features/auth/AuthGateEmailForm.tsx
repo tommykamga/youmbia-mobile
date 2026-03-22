@@ -22,6 +22,8 @@ export type AuthGateEmailFormProps = {
   passwordLoading: boolean;
   magicLoading: boolean;
   disabled: boolean;
+  /** Focus champ email à l’ouverture (écran gate uniquement). */
+  autoFocusEmail?: boolean;
 };
 
 export function AuthGateEmailForm({
@@ -36,13 +38,14 @@ export function AuthGateEmailForm({
   passwordLoading,
   magicLoading,
   disabled,
+  autoFocusEmail = false,
 }: AuthGateEmailFormProps) {
   const busy = disabled || passwordLoading || magicLoading;
 
   return (
     <View style={styles.wrap}>
-      <Text style={styles.sectionEyebrow} accessibilityRole="header">
-        Email & mot de passe
+      <Text style={styles.sectionTitle} accessibilityRole="header">
+        Connexion avec email
       </Text>
       <View style={styles.card}>
         <View style={styles.fields}>
@@ -55,6 +58,7 @@ export function AuthGateEmailForm({
             autoCapitalize="none"
             autoCorrect={false}
             editable={!busy}
+            autoFocus={autoFocusEmail}
           />
           <View>
             <Input
@@ -115,15 +119,13 @@ export function AuthGateEmailForm({
 
 const styles = StyleSheet.create({
   wrap: {
-    gap: spacing.lg,
+    gap: spacing.md,
   },
-  sectionEyebrow: {
-    fontSize: typography.xs.fontSize,
-    lineHeight: typography.xs.lineHeight,
+  sectionTitle: {
+    ...typography.sm,
     fontWeight: fontWeights.bold,
-    color: colors.textMuted,
-    letterSpacing: 1,
-    textTransform: 'uppercase',
+    color: colors.text,
+    letterSpacing: -0.2,
   },
   card: {
     backgroundColor: colors.surface,

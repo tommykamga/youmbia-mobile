@@ -5,7 +5,7 @@
  */
 
 import React from 'react';
-import { View, Text, StyleSheet, ViewStyle, Pressable, Platform } from 'react-native';
+import { View, Text, StyleSheet, ViewStyle, TextStyle, Pressable, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -19,6 +19,8 @@ type AppHeaderProps = {
   right?: React.ReactNode;
   /** Hide border under the header. */
   noBorder?: boolean;
+  /** Optional override for title typography (e.g. subtler nav label). */
+  titleStyle?: TextStyle;
   style?: ViewStyle;
 };
 
@@ -27,6 +29,7 @@ export function AppHeader({
   showBack = false,
   right,
   noBorder,
+  titleStyle,
   style,
 }: AppHeaderProps) {
   const insets = useSafeAreaInsets();
@@ -57,7 +60,7 @@ export function AppHeader({
         ) : (
           <View style={styles.backPlaceholder} />
         )}
-        <Text style={styles.title} numberOfLines={1}>
+        <Text style={[styles.title, titleStyle]} numberOfLines={1}>
           {title}
         </Text>
         {right ? <View style={styles.right}>{right}</View> : <View style={styles.backPlaceholder} />}
