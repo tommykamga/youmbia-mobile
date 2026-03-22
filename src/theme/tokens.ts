@@ -59,6 +59,14 @@ export const shadows = {
     shadowRadius: 6,
     elevation: 4,
   },
+  /** Cartes grille / listes — ombre douce type marketplace (Airbnb-like) */
+  card: {
+    shadowColor: colors.text,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.07,
+    shadowRadius: 10,
+    elevation: 4,
+  },
   /** Web: shadow-soft (tailwind.config boxShadow.soft) — cartes détail */
   soft: {
     shadowColor: colors.text,
@@ -108,13 +116,13 @@ export const buttonStyles = {
 
 // ─── Presets carte (web: ListingCard, annonce/[id] — rounded-2xl border bg-white shadow-sm) ─
 export const cardStyles = {
-  /** Carte standard: rounded-2xl border border-slate-100 bg-white shadow-sm */
+  /** Carte standard: bordure subtile + ombre premium (padding 16–20 au composant) */
   default: {
     backgroundColor: colors.surface,
     borderWidth: 1,
     borderColor: colors.borderLight,
     borderRadius: radius.xl,
-    ...shadows.sm,
+    ...shadows.card,
   },
   /** Carte élevée: border-slate-200 shadow-soft (détail annonce) */
   elevated: {

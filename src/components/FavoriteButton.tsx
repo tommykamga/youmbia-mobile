@@ -28,10 +28,12 @@ export function FavoriteButton({ listingId, size = 24 }: FavoriteButtonProps) {
   const progress = useSharedValue(favorite ? 1 : 0);
 
   useEffect(() => {
-    progress.value = withTiming(favorite ? 1 : 0, { 
-      duration: 200, 
-      easing: Easing.out(Easing.quad) 
+    progress.value = withTiming(favorite ? 1 : 0, {
+      duration: 200,
+      easing: Easing.out(Easing.quad),
     });
+    // progress is a Reanimated shared value — not a React dependency
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [favorite]);
 
   const handlePress = () => {

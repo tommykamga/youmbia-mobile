@@ -1,20 +1,20 @@
 /**
  * Favorites tab – Sprint 3.1.
- * Auth-gated: unauthenticated → redirect to login with return context.
- * Loading, error, empty, success with pull-to-refresh; optimistic unfavorite with rollback.
+ * Non connecté : Redirect vers /(auth)/gate?context=favorites (tab bar intercepte aussi).
  */
 
 import React, { useCallback, useEffect, useState, useMemo } from 'react';
 import { FlatList, View, StyleSheet, RefreshControl, Platform } from 'react-native';
-import { useRouter, useFocusEffect } from 'expo-router';
+import { useRouter, Redirect } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { Screen, Loader, EmptyState, Button, AuthGate } from '@/components';
+import { Screen, Loader, EmptyState, Button } from '@/components';
 import { getFavorites } from '@/services/favorites';
 import { getSession } from '@/services/auth';
 import { ListingCard } from '@/features/listings';
 import type { PublicListing } from '@/services/listings';
 import { spacing, colors } from '@/theme';
 import { useFavorites } from '@/context/FavoritesContext';
+import { buildAuthGateHref } from '@/lib/authGateNavigation';
 
 type FavoritesState =
   | { status: 'loading' }
@@ -82,7 +82,7 @@ export default function FavoritesScreen() {
   }
 
   if (state.status === 'unauthenticated') {
-    return <AuthGate context="favorites" />;
+    return <Redirect href={buildAuthGateHref('favorites')} />;
   }
 
   if (state.status === 'error') {
@@ -116,7 +116,7 @@ export default function FavoritesScreen() {
   return (
     <Screen>
       <FlatList
-        data={state.data}
+        data={displayData}
         keyExtractor={keyExtractor}
         renderItem={renderItem}
         ItemSeparatorComponent={itemSeparator}

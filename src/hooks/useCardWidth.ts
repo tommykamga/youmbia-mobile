@@ -1,5 +1,5 @@
 import { useWindowDimensions } from 'react-native';
-import { colors, spacing } from '@/theme';
+import { spacing } from '@/theme';
 
 export function useCardWidth(): number {
   const { width } = useWindowDimensions();

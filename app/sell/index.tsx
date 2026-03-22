@@ -14,6 +14,7 @@ import {
   Pressable,
 } from 'react-native';
 import { useRouter, type Href } from 'expo-router';
+import { buildAuthGateHref } from '@/lib/authGateNavigation';
 import * as ImagePicker from 'expo-image-picker';
 import { Screen, Button, Input } from '@/components';
 import { LISTING_CATEGORIES, type ListingCategoryId } from '@/lib/listingCategories';
@@ -116,7 +117,7 @@ export default function SellScreen() {
 
     const session = await getSession();
     if (!session?.user) {
-      router.replace(`/(auth)/login?redirect=${encodeURIComponent('/sell')}` as Href);
+      router.replace(buildAuthGateHref('sell'));
       return;
     }
 
@@ -150,7 +151,7 @@ export default function SellScreen() {
 
       if (error) {
         if (error.message === 'Non connecté') {
-          router.replace(`/(auth)/login?redirect=${encodeURIComponent('/sell')}` as Href);
+          router.replace(buildAuthGateHref('sell'));
           return;
         }
         setSubmitError(error.message);
@@ -282,7 +283,7 @@ export default function SellScreen() {
               onPress={() => router.push(`/listing/${publishState.listingId}`)}
               style={styles.successBtn}
             >
-              Voir l'annonce
+              {"Voir l'annonce"}
             </Button>
             <Button
               variant="secondary"
@@ -297,7 +298,7 @@ export default function SellScreen() {
               onPress={() => router.replace('/(tabs)/home' as Href)}
               style={styles.successBtn}
             >
-              Retour à l'accueil
+              {"Retour à l'accueil"}
             </Button>
           </View>
         </View>
@@ -331,7 +332,7 @@ export default function SellScreen() {
               size="lg"
               onPress={() => router.push(`/listing/${publishState.listingId}`)}
             >
-              Voir l'annonce
+              {"Voir l'annonce"}
             </Button>
             <Button
               variant="ghost"
@@ -452,7 +453,7 @@ export default function SellScreen() {
           loading={submitLoading}
           disabled={submitLoading}
         >
-          Publier l'annonce
+          {"Publier l'annonce"}
         </Button>
         <Button variant="ghost" onPress={() => router.back()} style={styles.cancel}>
           Annuler

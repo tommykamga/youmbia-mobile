@@ -16,6 +16,7 @@ type ListingRow = {
   price: number;
   city: string;
   created_at: string;
+  updated_at: string;
   views_count: number | null;
   user_id: string | null;
   boosted?: boolean | null;
@@ -36,6 +37,7 @@ function mapRow(row: ListingRow, signedMap: Map<string, string>): PublicListing 
     price: row.price,
     city: row.city,
     created_at: row.created_at,
+    updated_at: row.updated_at,
     images,
     views_count: row.views_count ?? 0,
     seller_id: row.user_id ?? '',
@@ -56,7 +58,7 @@ export async function getListingsByIds(ids: string[]): Promise<GetListingsByIdsR
   const { data, error } = await supabase
     .from('listings')
     .select(
-      'id, title, price, city, boosted, urgent, district, created_at, views_count, user_id, listing_images(url, sort_order)'
+      'id, title, price, city, boosted, urgent, district, created_at, updated_at, views_count, user_id, listing_images(url, sort_order)'
     )
     .in('id', ids)
     .eq('status', 'active');

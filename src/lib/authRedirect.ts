@@ -15,6 +15,7 @@ export function getSafeRedirect(redirect: string | undefined): string | null {
 
 /**
  * Après login / signup réussi : destination dans l’app (jamais URL web).
+ * Pour appliquer la navigation : préférer `replaceAfterSuccessfulAuth` dans `@/lib/authPostNavigation`.
  */
 export function buildPostAuthHref(
   redirectParam: string | undefined,
@@ -53,4 +54,22 @@ export function buildSignupHref(redirect?: string, contact?: string): string {
   if (contact) qs.push(`contact=${encodeURIComponent(contact)}`);
   if (qs.length === 0) return '/(auth)/signup';
   return `/(auth)/signup?${qs.join('&')}`;
+}
+
+export type BuildResetHrefParams = {
+  redirect?: string;
+  contact?: string;
+  email?: string;
+};
+
+/**
+ * Écran reset mot de passe — préserve redirect / contact comme login & signup.
+ */
+export function buildResetHref(params: BuildResetHrefParams = {}): string {
+  const qs: string[] = [];
+  if (params.redirect) qs.push(`redirect=${encodeURIComponent(params.redirect)}`);
+  if (params.contact) qs.push(`contact=${encodeURIComponent(params.contact)}`);
+  if (params.email) qs.push(`email=${encodeURIComponent(params.email)}`);
+  if (qs.length === 0) return '/(auth)/reset';
+  return `/(auth)/reset?${qs.join('&')}`;
 }

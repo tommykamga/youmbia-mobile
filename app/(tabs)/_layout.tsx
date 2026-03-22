@@ -9,16 +9,39 @@
  */
 
 import React from 'react';
-import { View, Text, StyleSheet, Platform } from 'react-native';
-import { Tabs, useRouter } from 'expo-router';
+import { View, StyleSheet, Platform } from 'react-native';
+import { Tabs, useRouter, type Href } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { colors, spacing, radius, typography } from '@/theme';
-import { useUnreadMessagesCount } from '@/hooks/useUnreadMessagesCount';
+import { getSession } from '@/services/auth';
+import { buildAuthGateHref } from '@/lib/authGateNavigation';
+import type { AuthGateContextId } from '@/config/authGateContext';
 
 const ICON_SIZE = 24;
 const SELL_PILL_ICON_SIZE = 26;
 const SELL_PILL_SIZE = 44;
+
+/**
+ * Onglets protégés : si non connecté → Auth Gate contextuel (pas d’écran tab intermédiaire).
+ * Si connecté → navigation habituelle vers la route cible.
+ */
+async function navigateProtectedTab(
+  router: { push: (href: Href) => void },
+  whenAuthedHref: Href,
+  gateContext: AuthGateContextId
+): Promise<void> {
+  try {
+    const session = await getSession();
+    if (session?.user) {
+      router.push(whenAuthedHref);
+    } else {
+      router.push(buildAuthGateHref(gateContext));
+    }
+  } catch {
+    router.push(buildAuthGateHref(gateContext));
+  }
+}
 
 const TAB_ICONS: Record<string, React.ComponentProps<typeof Ionicons>['name']> = {
   home: 'home',
@@ -63,8 +86,6 @@ export default function TabLayout() {
   // Correction Android & iOS Premium : on force une hauteur explicite qui inclut l'inset système.
   const TAB_BAR_HEIGHT = 64; 
   const totalTabBarHeight = TAB_BAR_HEIGHT + insets.bottom;
-  const unreadCount = useUnreadMessagesCount();
-
   return (
     <Tabs
       screenOptions={{
@@ -115,7 +136,7 @@ export default function TabLayout() {
         listeners={{
           tabPress: (e) => {
             e.preventDefault();
-            router.push('/sell');
+            void navigateProtectedTab(router, '/sell' as Href, 'sell');
           },
         }}
       />
@@ -125,11 +146,24 @@ export default function TabLayout() {
           title: 'Favoris',
           tabBarIcon: ({ color }) => <TabIcon name="favorites" color={color} />,
         }}
+        listeners={{
+          tabPress: (e) => {
+            e.preventDefault();
+            void navigateProtectedTab(router, '/(tabs)/favorites' as Href, 'favorites');
+          },
+        }}
       />
       <Tabs.Screen
         name="messages"
         options={{
-          href: null, // Masqué de la Tab Bar mais garde la route active
+          title: 'Messages',
+          tabBarIcon: ({ color }) => <TabIcon name="messages" color={color} />,
+        }}
+        listeners={{
+          tabPress: (e) => {
+            e.preventDefault();
+            void navigateProtectedTab(router, '/(tabs)/messages' as Href, 'messages');
+          },
         }}
       />
       <Tabs.Screen
@@ -137,6 +171,12 @@ export default function TabLayout() {
         options={{
           title: 'Compte',
           tabBarIcon: ({ color }) => <TabIcon name="account" color={color} />,
+        }}
+        listeners={{
+          tabPress: (e) => {
+            e.preventDefault();
+            void navigateProtectedTab(router, '/(tabs)/account' as Href, 'account');
+          },
         }}
       />
     </Tabs>

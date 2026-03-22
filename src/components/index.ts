@@ -11,5 +11,4 @@ export { default as Loader } from './Loader';
 export { CategoryRail } from './CategoryRail';
 export { NotificationsPromptCard } from './NotificationsPromptCard';
 export { SkeletonListingCard } from './SkeletonListingCard';
-export { AuthGate } from './AuthGate';
 export * from './HeroMarketplaceGrid';

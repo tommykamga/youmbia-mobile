@@ -6,7 +6,7 @@
 import React, { useMemo } from 'react';
 import { View, Text, StyleSheet, Pressable, useWindowDimensions } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { colors, spacing, typography, fontWeights, radius } from '@/theme';
+import { colors, spacing, typography, fontWeights } from '@/theme';
 
 const AUTRES_LABEL = 'Autres';
 

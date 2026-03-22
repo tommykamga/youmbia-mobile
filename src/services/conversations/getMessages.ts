@@ -27,14 +27,14 @@ export async function getMessages(conversationId: string): Promise<GetMessagesRe
 
   if (error) return { data: null, error: { message: error.message } };
 
-  const list = (data ?? []) as Array<{
+  const list = (data ?? []) as {
     id: string;
     conversation_id: string;
     sender_id: string;
     body: string;
     created_at: string;
     read_at: string | null;
-  }>;
+  }[];
 
   const messages: Message[] = list.map((row) => ({
     id: row.id,

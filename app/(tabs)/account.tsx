@@ -1,11 +1,12 @@
 import React, { useCallback, useState, memo } from 'react';
-import { ScrollView, View, Text, StyleSheet, Pressable, Alert } from 'react-native';
-import { useRouter, useFocusEffect } from 'expo-router';
+import { ScrollView, View, Text, StyleSheet, Pressable, Alert, ActivityIndicator } from 'react-native';
+import { useRouter, useFocusEffect, Redirect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { Screen, Loader, EmptyState, Button, AuthGate } from '@/components';
+import { Screen, Loader } from '@/components';
 import { getSession, signOut } from '@/services/auth';
 import { spacing, colors, typography, fontWeights, radius } from '@/theme';
 import Animated, { useSharedValue, useAnimatedStyle, withTiming, Easing, withSpring } from 'react-native-reanimated';
+import { buildAuthGateHref } from '@/lib/authGateNavigation';
 
 type RouteItem = {
   icon: keyof typeof Ionicons.glyphMap;
@@ -41,7 +42,15 @@ const SECTIONS = [
   },
 ];
 
-const AccountRow = memo(({ item, isLast, onPress }: { item: RouteItem; isLast: boolean; onPress: () => void }) => {
+const AccountRow = memo(function AccountRow({
+  item,
+  isLast,
+  onPress,
+}: {
+  item: RouteItem;
+  isLast: boolean;
+  onPress: () => void;
+}) {
   const scale = useSharedValue(1);
   const animatedStyle = useAnimatedStyle(() => ({
     transform: [{ scale: scale.value }]
@@ -142,7 +151,7 @@ export default function AccountScreen() {
   }
 
   if (status === 'unauthenticated') {
-    return <AuthGate context="account" />;
+    return <Redirect href={buildAuthGateHref('account')} />;
   }
 
   return (
@@ -206,7 +215,7 @@ export default function AccountScreen() {
             >
               <View style={[styles.iconWrap, { backgroundColor: '#FEE2E2' }]}>
                 {signingOut ? (
-                  <Loader size="small" />
+                  <ActivityIndicator size="small" color={colors.error} />
                 ) : (
                   <Ionicons name="log-out-outline" size={20} color={colors.error} />
                 )}

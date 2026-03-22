@@ -4,6 +4,7 @@ import { getFavoriteIds, toggleFavorite as toggleFavoriteService } from '@/servi
 import { getSession } from '@/services/auth';
 import { useRouter } from 'expo-router';
 import { Alert } from 'react-native';
+import { buildAuthGateHref } from '@/lib/authGateNavigation';
 
 type FavoritesContextType = {
   favorites: Set<string>;
@@ -55,7 +56,7 @@ export function FavoritesProvider({ children }: { children: React.ReactNode }) {
         'Vous devez être connecté pour ajouter des annonces à vos favoris.',
         [
           { text: 'Plus tard', style: 'cancel' },
-          { text: 'Se connecter', onPress: () => router.push('/(auth)/login') }
+          { text: 'Se connecter', onPress: () => router.push(buildAuthGateHref('favorites')) }
         ]
       );
       return;
@@ -90,7 +91,7 @@ export function FavoritesProvider({ children }: { children: React.ReactNode }) {
         });
         console.error('[FavoritesContext] Toggle error:', result.error.message);
       }
-    } catch (err) {
+    } catch {
       // Rollback on crash/offline
       setFavorites(prev => {
         const reverted = new Set(prev);
@@ -106,7 +107,7 @@ export function FavoritesProvider({ children }: { children: React.ReactNode }) {
         return next;
       });
     }
-  }, [mutatingIds]);
+  }, [mutatingIds, router]);
 
   return (
     <FavoritesContext.Provider value={{ favorites, isFavorite, toggleFavorite, loading, refresh }}>

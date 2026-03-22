@@ -5,7 +5,7 @@
 
 import React from 'react';
 import { View, StyleSheet, ViewStyle } from 'react-native';
-import { colors, radius, shadows } from '@/theme';
+import { cardStyles } from '@/theme';
 
 type CardVariant = 'default' | 'elevated' | 'subtle';
 
@@ -16,26 +16,9 @@ type CardProps = {
 };
 
 const variantStyles: Record<CardVariant, ViewStyle> = {
-  default: {
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.borderLight,
-    borderRadius: radius.xl,
-    ...shadows.sm,
-  },
-  elevated: {
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius['3xl'],
-    ...shadows.soft,
-  },
-  subtle: {
-    backgroundColor: colors.surfaceSubtle,
-    borderWidth: 1,
-    borderColor: colors.borderLight,
-    borderRadius: radius.xl,
-  },
+  default: { ...cardStyles.default },
+  elevated: { ...cardStyles.elevated },
+  subtle: { ...cardStyles.subtle },
 };
 
 export function Card({ children, variant = 'default', style }: CardProps) {

@@ -41,13 +41,12 @@ function isProtectedSegment(segments: string[]): boolean {
   const first = segments[0];
   const second = segments[1];
 
-  // Ces segments nécessitent une connexion pour afficher leur contenu RÉEL,
-  // mais nous ne voulons plus de redirection forcée vers /(auth)/login. 
-  // Ils afficheront leur propre UI d'Authentification Contextuelle (AuthGate).
-  const tabsWithAuthGate = ['favorites', 'messages', 'sell', 'account'];
-  
-  if (first === '(tabs)' && second && tabsWithAuthGate.includes(second)) {
-    return false; // Pas de redirection forcée
+  // Onglets (favorites, messages, sell, account) : pas de redirection login ici — interception
+  // dans (tabs)/_layout + Redirect /(auth)/gate si l’utilisateur atteint l’écran sans session.
+  const tabsWithContextualGate = ['favorites', 'messages', 'sell', 'account'];
+
+  if (first === '(tabs)' && second && tabsWithContextualGate.includes(second)) {
+    return false;
   }
 
   // Segment "sell" à la racine (si accédé directement) : on protège toujours.

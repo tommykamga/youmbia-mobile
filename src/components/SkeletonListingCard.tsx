@@ -7,18 +7,21 @@
 import React from 'react';
 import { View, StyleSheet } from 'react-native';
 import { colors, spacing, radius, cardStyles } from '@/theme';
+import { SkeletonPulse } from '@/components/SkeletonPulse';
 
 const IMAGE_ASPECT = 4 / 3;
 
 export function SkeletonListingCard() {
   return (
     <View style={styles.card}>
-      <View style={styles.imageWrap} />
+      <SkeletonPulse style={styles.imageWrap} />
       <View style={styles.body}>
-        <View style={[styles.titleLine, styles.titleLineFirst]} />
-        <View style={[styles.titleLine, styles.titleLineShort]} />
-        <View style={styles.priceLine} />
-        <View style={styles.metaLine} />
+        <SkeletonPulse>
+          <View style={[styles.titleLine, styles.titleLineFirst]} />
+          <View style={[styles.titleLine, styles.titleLineShort]} />
+          <View style={styles.priceLine} />
+          <View style={styles.metaLine} />
+        </SkeletonPulse>
       </View>
     </View>
   );
@@ -34,6 +37,8 @@ const styles = StyleSheet.create({
     width: '100%',
     aspectRatio: IMAGE_ASPECT,
     backgroundColor: colors.surfaceMuted,
+    borderBottomLeftRadius: 0,
+    borderBottomRightRadius: 0,
   },
   body: {
     padding: spacing.base,

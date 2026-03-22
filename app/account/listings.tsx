@@ -12,9 +12,10 @@ import {
   Alert,
   Platform,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, Redirect } from 'expo-router';
+import { buildAuthGateHref } from '@/lib/authGateNavigation';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { Screen, AppHeader, EmptyState, Loader, Button, AuthGate } from '@/components';
+import { Screen, AppHeader, EmptyState, Loader, Button } from '@/components';
 import { ListingCard } from '@/features/listings';
 import {
   bumpListing,
@@ -34,12 +35,6 @@ type State =
   | { status: 'empty' }
   | { status: 'error'; message: string }
   | { status: 'success'; data: MyListing[] };
-
-const DEFAULT_LISTING_STATS: ListingStats = {
-  views: 0,
-  favorites: 0,
-  contacts: 0,
-};
 
 function buildInitialStats(listing: MyListing): ListingStats {
   return {
@@ -299,7 +294,7 @@ const MyListingRowInner = memo(function MyListingRow({
               onPress={handleImproveListing}
               disabled={isMutating}
             >
-              Améliorer l'annonce
+              {"Améliorer l'annonce"}
             </Button>
           </View>
         ) : null}
@@ -335,7 +330,7 @@ const MyListingRowInner = memo(function MyListingRow({
               disabled={isMutating}
               loading={pendingAction === 'bump'}
             >
-              Remonter l'annonce
+              {"Remonter l'annonce"}
             </Button>
           ) : null}
           <Button
@@ -426,18 +421,20 @@ export default function AccountListingsScreen() {
     setState(
       list.length === 0 ? { status: 'empty' } : { status: 'success', data: list }
     );
-  }, [router]);
+  }, []);
 
   useEffect(() => {
     load().then(() => setRefreshing(false));
   }, [load]);
 
+  const successListings = state.status === 'success' ? state.data : null;
+
   useEffect(() => {
-    if (state.status !== 'success' || state.data.length === 0) return;
+    if (!successListings || successListings.length === 0) return;
     let cancelled = false;
     (async () => {
       const entries = await Promise.all(
-        state.data.map(async (listing) => {
+        successListings.map(async (listing) => {
           const result = await getListingStats(listing.id);
           const fallback = buildInitialStats(listing);
           return [listing.id, { ...fallback, ...result.data }] as const;
@@ -452,7 +449,7 @@ export default function AccountListingsScreen() {
     return () => {
       cancelled = true;
     };
-  }, [state.status, state.status === 'success' ? state.data : null]);
+  }, [state.status, successListings]);
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
@@ -505,7 +502,7 @@ export default function AccountListingsScreen() {
         <Loader />
       )}
       {state.status === 'unauthenticated' && (
-        <AuthGate context="listings" />
+        <Redirect href={buildAuthGateHref('listings')} />
       )}
       {state.status === 'error' && (
         <EmptyState

@@ -32,7 +32,6 @@ export function ListingSeller({ listing, memberSince, listingCount, onPress }: L
   const isReliable = !isFlagged && trustScore != null && trustScore >= TRUST_SCORE_HIGH_THRESHOLD;
   const hasAnyBadge = isVerified || isReliable || isFlagged;
   const isBanned = seller?.is_banned === true;
-  const showTrustScore = trustScore != null;
   const safeListingCount =
     typeof listingCount === 'number' && Number.isFinite(listingCount)
       ? Math.max(0, Math.floor(listingCount))

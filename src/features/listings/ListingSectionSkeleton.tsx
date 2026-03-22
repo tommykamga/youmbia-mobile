@@ -1,7 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet, FlatList } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { SkeletonListingCard } from '@/components/SkeletonListingCard';
 import { colors, spacing, typography, fontWeights, cardStyles } from '@/theme';
 import { useCardWidth } from '@/hooks/useCardWidth';
 

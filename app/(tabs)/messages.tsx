@@ -1,12 +1,13 @@
 import React, { useCallback, useState } from 'react';
 import { FlatList, View, Text, StyleSheet, Pressable, RefreshControl } from 'react-native';
-import { useRouter, useFocusEffect } from 'expo-router';
+import { useRouter, useFocusEffect, Redirect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { Screen, EmptyState, Button, AppHeader, AuthGate } from '@/components';
+import { Screen, EmptyState, Button, AppHeader } from '@/components';
 import { getSession } from '@/services/auth';
 import { getConversations } from '@/services/conversations';
 import type { Conversation } from '@/services/conversations/types';
 import { spacing, colors, typography, fontWeights, radius } from '@/theme';
+import { buildAuthGateHref } from '@/lib/authGateNavigation';
 import Animated, { useSharedValue, useAnimatedStyle, withTiming, Easing, withSpring } from 'react-native-reanimated';
 
 function formatInboxDate(iso: string | null | undefined): string {
@@ -39,11 +40,11 @@ function MessagesSkeleton() {
           <View style={[styles.avatar, { backgroundColor: colors.surfaceSubtle }]} />
           <View style={styles.body}>
             <View style={[styles.header, { marginBottom: 8 }]}>
-              <View style={{ height: 16, width: '40%', backgroundColor: colors.surfaceSubtle, borderRadius: radius.xs }} />
-              <View style={{ height: 12, width: '15%', backgroundColor: colors.surfaceSubtle, borderRadius: radius.xs }} />
+              <View style={{ height: 16, width: '40%', backgroundColor: colors.surfaceSubtle, borderRadius: radius.sm }} />
+              <View style={{ height: 12, width: '15%', backgroundColor: colors.surfaceSubtle, borderRadius: radius.sm }} />
             </View>
-            <View style={{ height: 14, width: '60%', backgroundColor: colors.surfaceSubtle, borderRadius: radius.xs, marginBottom: 8 }} />
-            <View style={{ height: 14, width: '85%', backgroundColor: colors.surfaceSubtle, borderRadius: radius.xs }} />
+            <View style={{ height: 14, width: '60%', backgroundColor: colors.surfaceSubtle, borderRadius: radius.sm, marginBottom: 8 }} />
+            <View style={{ height: 14, width: '85%', backgroundColor: colors.surfaceSubtle, borderRadius: radius.sm }} />
           </View>
         </View>
       ))}
@@ -161,13 +162,15 @@ export default function MessagesScreen() {
 
   const renderItem = ({ item }: { item: Conversation }) => <MessageItem item={item} />;
 
+  if (status === 'unauthenticated') {
+    return <Redirect href={buildAuthGateHref('messages')} />;
+  }
+
   return (
     <Screen noPadding>
-      <AppHeader title="Boîte de réception" hideBorder />
+      <AppHeader title="Boîte de réception" noBorder />
       
       {status === 'loading' && <MessagesSkeleton />}
-
-      {status === 'unauthenticated' && <AuthGate context="messages" />}
 
 
       {status === 'error_network' && (

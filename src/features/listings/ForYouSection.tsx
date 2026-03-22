@@ -5,10 +5,10 @@
 
 import React, { useCallback, useState } from 'react';
 import { View, Text, StyleSheet, FlatList } from 'react-native';
-import { useFocusEffect, useRouter } from 'expo-router';
+import { useFocusEffect } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { getPublicListings } from '@/services/listings';
-import { getFavoriteIds, getFavorites, toggleFavorite } from '@/services/favorites';
+import { getFavoriteIds, getFavorites } from '@/services/favorites';
 import { getRecentlyViewedListingIds } from '@/services/recentlyViewed';
 import { getSavedSearches, type SavedSearch } from '@/services/savedSearches';
 import { getListingsByIds } from '@/services/listings/getListingsByIds';
@@ -115,7 +115,6 @@ function buildRecommendationSubtitle(signals: RecommendationSignals): string {
 }
 
 export function ForYouSection() {
-  const router = useRouter();
   const cardWidth = useCardWidth();
   const ITEM_WIDTH = cardWidth + spacing.sm;
   const [listings, setListings] = useState<PublicListing[]>([]);
@@ -179,31 +178,6 @@ export function ForYouSection() {
     }, [load])
   );
 
-  const handleFavoritePress = useCallback(
-    async (listingId: string) => {
-      const next = !favoriteIds.has(listingId);
-      setFavoriteIds((prev) => {
-        const nextSet = new Set(prev);
-        if (next) nextSet.add(listingId);
-        else nextSet.delete(listingId);
-        return nextSet;
-      });
-      const result = await toggleFavorite(listingId);
-      if (result.error) {
-        setFavoriteIds((prev) => {
-          const reverted = new Set(prev);
-          if (next) reverted.delete(listingId);
-          else reverted.add(listingId);
-          return reverted;
-        });
-        if (result.error.message === 'Non connecté') {
-          router.replace(`/(auth)/login?redirect=${encodeURIComponent('/(tabs)/home')}`);
-        }
-      }
-    },
-    [favoriteIds, router]
-  );
-
   const keyExtractor = useCallback((item: PublicListing) => item.id, []);
   const renderItem = useCallback(
     ({ item }: { item: PublicListing }) => (
@@ -213,7 +187,7 @@ export function ForYouSection() {
         />
       </View>
     ),
-    [favoriteIds, handleFavoritePress]
+    [cardWidth]
   );
 
   if (loading) {

@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { View, Text, StyleSheet, KeyboardAvoidingView, ScrollView, Platform } from 'react-native';
+import { View, Text, StyleSheet, ScrollView } from 'react-native';
 import { Screen, AppHeader, Button, Input, Loader, EmptyState } from '@/components';
 import {
   getCurrentProfile,
@@ -85,7 +85,7 @@ export default function AccountProfileScreen() {
   if (state.status === 'loading') {
     return (
       <Screen>
-        <AppHeader title="Mon Profil" showBack hideBorder />
+        <AppHeader title="Mon Profil" showBack noBorder />
         <Loader />
       </Screen>
     );
@@ -94,7 +94,7 @@ export default function AccountProfileScreen() {
   if (state.status === 'error') {
     return (
       <Screen>
-        <AppHeader title="Mon Profil" showBack hideBorder />
+        <AppHeader title="Mon Profil" showBack noBorder />
         <EmptyState
           icon={<Ionicons name="alert-circle-outline" size={56} color={colors.textSecondary} />}
           title="Erreur de chargement"
@@ -114,7 +114,7 @@ export default function AccountProfileScreen() {
 
   return (
     <Screen keyboardAvoid scroll={false} noPadding>
-      <AppHeader title="Modifier profil" showBack hideBorder />
+      <AppHeader title="Modifier profil" showBack noBorder />
       
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         

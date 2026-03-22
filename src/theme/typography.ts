@@ -4,6 +4,8 @@
  * et de l'échelle Tailwind (text-xs → text-4xl). Adapté pour React Native.
  */
 
+import { colors } from './colors';
+
 /** Échelle de base (équivalent Tailwind text-xs → text-4xl). */
 export const fontScale = {
   xs: { fontSize: 12, lineHeight: 16 },   // text-xs
@@ -37,18 +39,22 @@ export const headings = {
   section: {
     ...fontScale['2xl'],
     fontWeight: fontWeights.black,
-    letterSpacing: -0.3,
+    letterSpacing: -0.35,
+    color: colors.text,
   },
   /** .heading-subsection — H3 (text-lg font-bold) */
   subsection: {
     ...fontScale.lg,
     fontWeight: fontWeights.bold,
-    letterSpacing: -0.2,
+    letterSpacing: -0.22,
+    color: colors.text,
   },
   /** .heading-card — titres de cartes (text-base font-bold) */
   card: {
     ...fontScale.base,
     fontWeight: fontWeights.bold,
+    letterSpacing: -0.15,
+    color: colors.text,
   },
 } as const;
 

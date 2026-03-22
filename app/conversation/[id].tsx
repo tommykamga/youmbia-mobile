@@ -20,9 +20,10 @@ import {
   getConversations,
 } from '@/services/conversations';
 import { getSession } from '@/services/auth';
+import { buildAuthGateHref } from '@/lib/authGateNavigation';
 import { markConversationNotificationAsRead, syncMessageNotificationSnapshot } from '@/services/messageNotifications';
 import type { Message } from '@/services/conversations';
-import { spacing, colors, typography, fontWeights, radius } from '@/theme';
+import { spacing, colors, typography, fontWeights } from '@/theme';
 import { Ionicons } from '@expo/vector-icons';
 
 function formatMessageTime(iso: string): string {
@@ -90,7 +91,9 @@ export default function ConversationThreadScreen() {
       }
       const session = await getSession();
       if (!session?.user) {
-        router.replace(`/(auth)/login?redirect=${encodeURIComponent(`/conversation/${id}`)}`);
+        router.replace(
+          buildAuthGateHref('messages', { redirect: `/conversation/${id}` })
+        );
         return;
       }
       setUserId(session.user.id);
@@ -194,7 +197,7 @@ export default function ConversationThreadScreen() {
   if (status === 'error') {
     return (
       <Screen>
-        <AppHeader title="Conversation" showBack hideBorder />
+        <AppHeader title="Conversation" showBack noBorder />
         <EmptyState 
           icon={<Ionicons name="alert-circle-outline" size={56} color={colors.textSecondary} />}
           title="Erreur de chargement" 
@@ -209,7 +212,7 @@ export default function ConversationThreadScreen() {
 
   return (
     <Screen scroll={false} noPadding>
-      <AppHeader title={title} showBack hideBorder />
+      <AppHeader title={title} showBack noBorder />
       
       {status === 'loading' && <MessagesSkeleton />}
 

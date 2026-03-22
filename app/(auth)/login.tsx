@@ -6,24 +6,11 @@ import { Screen, Button, Input, AppLogo } from '@/components';
 import { signIn, signInWithOtp, getSession } from '@/services/auth';
 import { makeRedirectUri } from 'expo-auth-session';
 import { colors, spacing, typography, fontWeights, radius } from '@/theme';
-import { buildPostAuthHref, buildSignupHref } from '@/lib/authRedirect';
-
-function buildMagicLinkOtpPath(redirect?: string, contact?: string): string | undefined {
-  const parts: string[] = [];
-  if (redirect) parts.push(`redirect=${encodeURIComponent(redirect)}`);
-  if (contact) parts.push(`contact=${encodeURIComponent(contact)}`);
-  if (parts.length === 0) return undefined;
-  return parts.join('&');
-}
-
-function getErrorMessage(error: { message: string }): string {
-  const msg = error.message.toLowerCase();
-  if (msg.includes('invalid login')) return 'Email ou mot de passe incorrect.';
-  if (msg.includes('network') || msg.includes('réseau') || msg.includes('fetch')) return 'Réseau indisponible. Réessayez.';
-  if (msg.includes('email')) return 'Vérifiez votre adresse email.';
-  if (msg.includes('rate limit')) return 'Trop de tentatives brèves. Veuillez patienter.';
-  return error.message || 'Connexion impossible. Réessayez.';
-}
+import { buildSignupHref, buildResetHref } from '@/lib/authRedirect';
+import { replaceAfterSuccessfulAuth } from '@/lib/authPostNavigation';
+import { buildMagicLinkOtpPath } from '@/lib/authOtpRedirectPath';
+import { mapAuthErrorMessage } from '@/lib/mapAuthErrorMessage';
+import { runGoogleOAuth, formatGoogleSignInUserMessage } from '@/lib/googleSignInMobile';
 
 export default function LoginScreen() {
   const router = useRouter();
@@ -45,7 +32,7 @@ export default function LoginScreen() {
     let mounted = true;
     getSession().then((s) => {
       if (!mounted || !s?.user) return;
-      router.replace(buildPostAuthHref(params.redirect, params.contact));
+      replaceAfterSuccessfulAuth(router, params.redirect, params.contact);
     });
     return () => {
       mounted = false;
@@ -64,9 +51,9 @@ export default function LoginScreen() {
     try {
       const result = await signIn(trimmedEmail, password);
       if (result.ok) {
-        router.replace(buildPostAuthHref(params.redirect, params.contact));
+        replaceAfterSuccessfulAuth(router, params.redirect, params.contact);
       } else {
-        setError(getErrorMessage(result.error));
+        setError(mapAuthErrorMessage(result.error));
       }
     } catch {
       setError('Connexion impossible. Réessayez.');
@@ -96,7 +83,7 @@ export default function LoginScreen() {
       if (result.ok) {
         setSuccess('Lien magique envoyé ! Vérifiez votre boîte mail pour vous connecter.');
       } else {
-        setError(getErrorMessage(result.error));
+        setError(mapAuthErrorMessage(result.error));
       }
     } catch {
       setError('Erreur lors de l\'envoi du lien magique. Réessayez plus tard.');
@@ -110,20 +97,14 @@ export default function LoginScreen() {
     setSuccess(null);
     setGoogleLoading(true);
     try {
-      const { signInWithGoogle } = await import('@/services/auth/signInWithGoogle');
-      const result = await signInWithGoogle();
+      const result = await runGoogleOAuth();
       if (result.ok) {
-        router.replace(buildPostAuthHref(params.redirect, params.contact));
+        replaceAfterSuccessfulAuth(router, params.redirect, params.contact);
       } else {
-        setError(getErrorMessage({ message: result.error.message || 'Connexion Google échouée.' }));
+        setError(formatGoogleSignInUserMessage(undefined, result));
       }
     } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      if (msg.includes('ExpoCryptoAES') || msg.includes('native module')) {
-        setError('Google Auth nécessite un build natif sécurisé (indisponible via Expo Go seul).');
-      } else {
-        setError(msg || 'Connexion Google échouée.');
-      }
+      setError(formatGoogleSignInUserMessage(e));
     } finally {
       setGoogleLoading(false);
     }
@@ -137,7 +118,9 @@ export default function LoginScreen() {
         <View style={styles.headerText}>
           <Text style={styles.title}>Bon retour 👋</Text>
           <Text style={styles.subtitle}>
-            Connectez-vous pour retrouver vos annonces et favoris en un clin d'œil.
+            {
+              "Connectez-vous pour retrouver vos annonces et favoris en un clin d'œil."
+            }
           </Text>
         </View>
 
@@ -176,7 +159,14 @@ export default function LoginScreen() {
               secureTextEntry
               editable={!isAnyLoading}
             />
-            <Link href={`/(auth)/reset?email=${encodeURIComponent(email)}`} asChild>
+            <Link
+              href={buildResetHref({
+                redirect: typeof params.redirect === 'string' ? params.redirect : undefined,
+                contact: typeof params.contact === 'string' ? params.contact : undefined,
+                email: email.trim() || undefined,
+              })}
+              asChild
+            >
               <Pressable style={styles.forgotPassword}>
                 <Text style={styles.forgotPasswordText}>Mot de passe oublié ?</Text>
               </Pressable>
@@ -224,7 +214,7 @@ export default function LoginScreen() {
             asChild
           >
             <Pressable hitSlop={15}>
-              <Text style={styles.footerLink}>S'inscrire</Text>
+              <Text style={styles.footerLink}>{"S'inscrire"}</Text>
             </Pressable>
           </Link>
         </View>

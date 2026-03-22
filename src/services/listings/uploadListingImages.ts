@@ -37,7 +37,7 @@ function getUploadErrorMessage(message: string, fallback: string): string {
  */
 export async function uploadListingImages(
   listingId: string,
-  images: Array<{ base64: string }>
+  images: { base64: string }[]
 ): Promise<UploadListingImagesResult> {
   try {
     const {

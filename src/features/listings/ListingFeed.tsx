@@ -1,16 +1,22 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { FlatList, RefreshControl, StyleSheet, View, Pressable, Text, ActivityIndicator } from 'react-native';
-import { useRouter, useFocusEffect } from 'expo-router';
+import {
+  FlatList,
+  RefreshControl,
+  StyleSheet,
+  View,
+  Pressable,
+  Text,
+  ActivityIndicator,
+  Platform,
+} from 'react-native';
+import { useFocusEffect } from 'expo-router';
 import { getPublicListings, type PublicListing } from '@/services/listings';
-import { getFavoriteIds, toggleFavorite } from '@/services/favorites';
 import { sortListings, type SortOption } from '@/utils/sortListings';
 import { ListingCard } from './ListingCard';
-import { Loader, EmptyState, SkeletonListingCard, Button } from '@/components';
+import { EmptyState, SkeletonListingCard, Button } from '@/components';
 import { spacing, colors, typography, fontWeights, radius } from '@/theme';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useFavorites } from '@/context/FavoritesContext';
-
-import { Platform } from 'react-native';
 
 const PAGE_SIZE = 15;
 const INITIAL_NUM_TO_RENDER = Platform.OS === 'ios' ? 8 : 10;
@@ -28,8 +34,7 @@ export type ListingFeedProps = {
 };
 
 export function ListingFeed({ listHeaderComponent }: ListingFeedProps) {
-  const router = useRouter();
-  const { isFavorite, refresh: refreshFavorites } = useFavorites();
+  const { refresh: refreshFavorites } = useFavorites();
   const [state, setState] = useState<FeedState>({ status: 'loading' });
   const [sortBy, setSortBy] = useState<SortOption>('recent');
   const [refreshing, setRefreshing] = useState(false);
@@ -39,6 +44,10 @@ export function ListingFeed({ listHeaderComponent }: ListingFeedProps) {
   const [hasMore, setHasMore] = useState(true);
   const [loadMoreError, setLoadMoreError] = useState<string | null>(null);
   const hasMoreRef = useRef(true);
+
+  const feedSuccessData = state.status === 'success' ? state.data : null;
+  const feedDataLength = feedSuccessData?.length ?? 0;
+  const errorMessage = state.status === 'error' ? state.message : null;
 
   const load = useCallback(async (pageOffset: number = 0, append: boolean = false) => {
     const listResult = await getPublicListings(pageOffset, PAGE_SIZE);
@@ -108,7 +117,7 @@ export function ListingFeed({ listHeaderComponent }: ListingFeedProps) {
 
   const loadMore = useCallback(() => {
     if (state.status !== 'success' || loadingMoreRef.current || !hasMoreRef.current) return;
-    const currentLength = state.data.length;
+    const currentLength = feedDataLength;
     if (currentLength === 0) return;
     loadingMoreRef.current = true;
     setLoadingMore(true);
@@ -116,12 +125,12 @@ export function ListingFeed({ listHeaderComponent }: ListingFeedProps) {
       loadingMoreRef.current = false;
       setLoadingMore(false);
     });
-  }, [state.status, state.status === 'success' ? state.data.length : 0, load]);
+  }, [state.status, feedDataLength, load]);
 
   const sortedListings = useMemo(() => {
-    const list = state.status === 'success' ? state.data : [];
+    const list = feedSuccessData ?? [];
     return sortListings(list, sortBy);
-  }, [state.status, state.status === 'success' ? state.data : null, sortBy]);
+  }, [feedSuccessData, sortBy]);
 
   const feedData = useMemo(() => {
     if (state.status === 'loading') return [1, 2, 3, 4, 5, 6];
@@ -176,7 +185,7 @@ export function ListingFeed({ listHeaderComponent }: ListingFeedProps) {
       return (
         <EmptyState
           title="Oups, une erreur est survenue"
-          message={state.message}
+          message={errorMessage ?? ''}
           icon={<Ionicons name="alert-circle-outline" size={32} color={colors.error} />}
           action={
             <Button variant="secondary" onPress={() => load(0, false)}>
@@ -198,10 +207,10 @@ export function ListingFeed({ listHeaderComponent }: ListingFeedProps) {
       );
     }
     return null;
-  }, [state.status, state.status === 'error' ? state.message : null, load]);
+  }, [state.status, errorMessage, load]);
 
   const listFooter = useMemo(() => {
-    const dataLength = state.status === 'success' ? state.data.length : 0;
+    const dataLength = feedDataLength;
     if (state.status !== 'success' || dataLength === 0) return null;
     if (loadingMore) {
       return (
@@ -236,7 +245,7 @@ export function ListingFeed({ listHeaderComponent }: ListingFeedProps) {
       );
     }
     return null;
-  }, [state.status, state.status === 'success' ? state.data.length : 0, loadingMore, hasMore, loadMoreError, load]);
+  }, [state.status, feedDataLength, loadingMore, hasMore, loadMoreError, load]);
 
   /* No key prop on FlatList — preserves scroll position when returning from listing detail. */
   return (

@@ -8,7 +8,6 @@ import { View, Text, StyleSheet, FlatList, Pressable } from 'react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { getPublicListings } from '@/services/listings';
-import { getFavoriteIds, toggleFavorite } from '@/services/favorites';
 import { buildSavedSearchHref, getSavedSearches, type SavedSearch } from '@/services/savedSearches';
 import { getSavedSearchAlertMatches } from '@/services/savedSearchAlerts';
 import { ListingCard } from './ListingCard';
@@ -32,7 +31,6 @@ export function SavedSearchAlertsSection() {
   const cardWidth = useCardWidth();
   const ITEM_WIDTH = cardWidth + spacing.sm;
   const [listings, setListings] = useState<PublicListing[]>([]);
-  const [favoriteIds, setFavoriteIds] = useState<Set<string>>(new Set());
   const [subtitle, setSubtitle] = useState('');
   const [topSearch, setTopSearch] = useState<SavedSearch | null>(null);
   const [loading, setLoading] = useState(true);
@@ -43,18 +41,12 @@ export function SavedSearchAlertsSection() {
       const savedSearches = getSavedSearches().slice(0, 8);
       if (savedSearches.length === 0) {
         setListings([]);
-        setFavoriteIds(new Set());
         setSubtitle('');
         setTopSearch(null);
         return;
       }
 
-      const [feedResult, favoriteIdsResult] = await Promise.all([
-        getPublicListings(0, ALERT_FETCH_LIMIT),
-        getFavoriteIds(),
-      ]);
-
-      setFavoriteIds(new Set(favoriteIdsResult.data ?? []));
+      const feedResult = await getPublicListings(0, ALERT_FETCH_LIMIT);
 
       const matches = getSavedSearchAlertMatches(feedResult.data ?? [], savedSearches);
       if (matches.length === 0) {
@@ -80,43 +72,14 @@ export function SavedSearchAlertsSection() {
     }, [load])
   );
 
-  const handleFavoritePress = useCallback(
-    async (listingId: string) => {
-      const next = !favoriteIds.has(listingId);
-      setFavoriteIds((prev) => {
-        const nextSet = new Set(prev);
-        if (next) nextSet.add(listingId);
-        else nextSet.delete(listingId);
-        return nextSet;
-      });
-      const result = await toggleFavorite(listingId);
-      if (result.error) {
-        setFavoriteIds((prev) => {
-          const reverted = new Set(prev);
-          if (next) reverted.delete(listingId);
-          else reverted.add(listingId);
-          return reverted;
-        });
-        if (result.error.message === 'Non connecté') {
-          router.replace(`/(auth)/login?redirect=${encodeURIComponent('/(tabs)/home')}`);
-        }
-      }
-    },
-    [favoriteIds, router]
-  );
-
   const keyExtractor = useCallback((item: PublicListing) => item.id, []);
   const renderItem = useCallback(
     ({ item }: { item: PublicListing }) => (
       <View style={{ width: cardWidth }}>
-        <ListingCard
-          listing={item}
-          isFavorite={favoriteIds.has(item.id)}
-          onFavoritePress={() => handleFavoritePress(item.id)}
-        />
+        <ListingCard listing={item} />
       </View>
     ),
-    [favoriteIds, handleFavoritePress]
+    [cardWidth]
   );
 
   const handleSeeMatches = useCallback(() => {
@@ -154,7 +117,6 @@ export function SavedSearchAlertsSection() {
       </View>
       <FlatList
         data={listings}
-        extraData={favoriteIds}
         keyExtractor={keyExtractor}
         horizontal
         showsHorizontalScrollIndicator={false}

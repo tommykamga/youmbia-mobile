@@ -5,7 +5,9 @@ import { Ionicons } from '@expo/vector-icons';
 import { Screen, Button, Input, AppLogo } from '@/components';
 import { signUp, getSession } from '@/services/auth';
 import { colors, spacing, typography, fontWeights, radius } from '@/theme';
-import { buildPostAuthHref, buildLoginHref } from '@/lib/authRedirect';
+import { buildLoginHref } from '@/lib/authRedirect';
+import { replaceAfterSuccessfulAuth } from '@/lib/authPostNavigation';
+import { runGoogleOAuth, formatGoogleSignInUserMessage } from '@/lib/googleSignInMobile';
 
 function getErrorMessage(error: { message: string }): string {
   const msg = error.message.toLowerCase();
@@ -36,7 +38,7 @@ export default function SignupScreen() {
     let mounted = true;
     getSession().then((s) => {
       if (!mounted || !s?.user) return;
-      router.replace(buildPostAuthHref(params.redirect, params.contact));
+      replaceAfterSuccessfulAuth(router, params.redirect, params.contact);
     });
     return () => {
       mounted = false;
@@ -67,7 +69,7 @@ export default function SignupScreen() {
           setSuccessMessage('Compte créé avec succès ! Vérifiez votre boîte mail pour confirmer votre inscription avant de vous connecter.');
           return;
         }
-        router.replace(buildPostAuthHref(params.redirect, params.contact));
+        replaceAfterSuccessfulAuth(router, params.redirect, params.contact);
       } else {
         setError(getErrorMessage(result.error));
       }
@@ -83,20 +85,14 @@ export default function SignupScreen() {
     setSuccessMessage(null);
     setGoogleLoading(true);
     try {
-      const { signInWithGoogle } = await import('@/services/auth/signInWithGoogle');
-      const result = await signInWithGoogle();
+      const result = await runGoogleOAuth();
       if (result.ok) {
-        router.replace(buildPostAuthHref(params.redirect, params.contact));
+        replaceAfterSuccessfulAuth(router, params.redirect, params.contact);
       } else {
-        setError(getErrorMessage({ message: result.error.message || 'Connexion Google échouée.' }));
+        setError(formatGoogleSignInUserMessage(undefined, result));
       }
     } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      if (msg.includes('ExpoCryptoAES') || msg.includes('native module')) {
-        setError('Google Auth nécessite un build natif sécurisé (indisponible via Expo Go seul).');
-      } else {
-        setError(msg || 'Connexion Google échouée.');
-      }
+      setError(formatGoogleSignInUserMessage(e));
     } finally {
       setGoogleLoading(false);
     }
@@ -159,13 +155,13 @@ export default function SignupScreen() {
           />
 
           <Button onPress={handleSubmit} loading={loading} disabled={isAnyLoading}>
-            S'inscrire
+            {"S'inscrire"}
           </Button>
         </View>
 
         <View style={styles.divider}>
           <View style={styles.line} />
-          <Text style={styles.dividerText}>ou s'inscrire avec</Text>
+          <Text style={styles.dividerText}>{"ou s'inscrire avec"}</Text>
           <View style={styles.line} />
         </View>
 

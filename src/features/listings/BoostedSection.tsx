@@ -3,8 +3,7 @@
  */
 
 import React, { useCallback, useEffect, useState } from 'react';
-import { View, Text, StyleSheet, FlatList, Pressable } from 'react-native';
-import { useRouter } from 'expo-router';
+import { View, Text, StyleSheet, FlatList } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { supabase } from '@/lib/supabase';
 import { getSignedUrlsMap, toDisplayImageUrl } from '@/lib/listingImageUrl';
@@ -13,16 +12,13 @@ import { ListingCard } from './ListingCard';
 import type { PublicListing } from '@/services/listings';
 import { colors, spacing, typography, fontWeights } from '@/theme';
 import { useCardWidth } from '@/hooks/useCardWidth';
-import { useFavorites } from '@/context/FavoritesContext';
 import { ListingSectionSkeleton } from './ListingSectionSkeleton';
 
 const BOOSTED_LIMIT = 6;
 
 export function BoostedSection() {
-  const router = useRouter();
   const cardWidth = useCardWidth();
   const ITEM_WIDTH = cardWidth + spacing.sm;
-  const { isFavorite, toggleFavorite } = useFavorites();
   const [listings, setListings] = useState<PublicListing[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -86,7 +82,7 @@ export function BoostedSection() {
         />
       </View>
     ),
-    [cardWidth, isFavorite, toggleFavorite]
+    [cardWidth]
   );
 
   if (loading) {

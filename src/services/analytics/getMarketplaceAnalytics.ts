@@ -43,7 +43,7 @@ export type SellerActivityMetric = {
 };
 
 export type SellerEngagementMetrics = {
-  publishedListingsBySeller: Array<{ sellerId: string; activeListingCount: number }>;
+  publishedListingsBySeller: { sellerId: string; activeListingCount: number }[];
   topSellers: SellerActivityMetric[];
   singleListingSellerSharePct: number;
   multiListingSellerSharePct: number;

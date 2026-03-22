@@ -9,6 +9,7 @@ import {
   Alert,
   FlatList,
   Platform,
+  Dimensions,
 } from 'react-native';
 import { useLocalSearchParams, useRouter, useFocusEffect, type Href } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -23,7 +24,6 @@ import { reportListing } from '@/services/reports';
 import { getSellerStats } from '@/services/users';
 import { ListingCard } from '@/features/listings/ListingCard';
 import { SkeletonListingCard } from '@/components/SkeletonListingCard';
-import { Dimensions } from 'react-native';
 import {
   ListingGallery,
   ListingMeta,
@@ -33,7 +33,7 @@ import {
   SecondaryActions,
 } from '@/features/listings';
 import { spacing, colors, typography, fontWeights, radius } from '@/theme';
-import { buildLoginHrefForListingContact } from '@/lib/authRedirect';
+import { buildAuthGateHref } from '@/lib/authGateNavigation';
 import {
   isSellerContactAction,
   openSellerPhoneCall,
@@ -195,7 +195,7 @@ export default function ListingDetailScreen() {
 
       setIsFavorite(!nextFavorite);
       if (result.error.message === 'Non connecté') {
-        router.replace(`/(auth)/login?redirect=${encodeURIComponent(`/listing/${id}`)}`);
+        router.replace(buildAuthGateHref('favorites', { redirect: `/listing/${id}` }));
         return;
       }
       Alert.alert(
@@ -215,7 +215,9 @@ export default function ListingDetailScreen() {
     const result = await getOrCreateConversation(id);
     if (result.error) {
       if (result.error.message === 'Non connecté') {
-        router.push(buildLoginHrefForListingContact(id, 'message'));
+        router.push(
+          buildAuthGateHref('messages', { redirect: `/listing/${id}`, contact: 'message' })
+        );
         return false;
       }
       Alert.alert(
@@ -239,7 +241,9 @@ export default function ListingDetailScreen() {
     try {
       const session = await getSession();
       if (!session?.user) {
-        router.push(buildLoginHrefForListingContact(id, 'message'));
+        router.push(
+          buildAuthGateHref('messages', { redirect: `/listing/${id}`, contact: 'message' })
+        );
         return;
       }
       await openConversationForListing();
@@ -254,7 +258,9 @@ export default function ListingDetailScreen() {
     if (!id || state.status !== 'success') return;
     const session = await getSession();
     if (!session?.user) {
-      router.push(buildLoginHrefForListingContact(id, 'whatsapp'));
+      router.push(
+        buildAuthGateHref('messages', { redirect: `/listing/${id}`, contact: 'whatsapp' })
+      );
       return;
     }
     await openWhatsAppForListing(state.listing);
@@ -264,7 +270,7 @@ export default function ListingDetailScreen() {
     if (!id || state.status !== 'success') return;
     const session = await getSession();
     if (!session?.user) {
-      router.push(buildLoginHrefForListingContact(id, 'call'));
+      router.push(buildAuthGateHref('messages', { redirect: `/listing/${id}`, contact: 'call' }));
       return;
     }
     await openSellerPhoneCall(state.listing);
@@ -274,7 +280,7 @@ export default function ListingDetailScreen() {
     if (!id || state.status !== 'success') return;
     const session = await getSession();
     if (!session?.user) {
-      router.push(buildLoginHrefForListingContact(id, 'sms'));
+      router.push(buildAuthGateHref('messages', { redirect: `/listing/${id}`, contact: 'sms' }));
       return;
     }
     await openSellerSms(state.listing);
@@ -336,7 +342,7 @@ export default function ListingDetailScreen() {
     if (!id) return;
     const session = await getSession();
     if (!session?.user) {
-      router.replace(`/(auth)/login?redirect=${encodeURIComponent(`/listing/${id}`)}`);
+      router.replace(buildAuthGateHref('account', { redirect: `/listing/${id}` }));
       return;
     }
     if (reportedListingId === id) {

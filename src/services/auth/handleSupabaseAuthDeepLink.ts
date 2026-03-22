@@ -10,7 +10,7 @@
 import * as Linking from 'expo-linking';
 import type { Href } from 'expo-router';
 import { supabase } from '@/lib/supabase';
-import { buildPostAuthHref, getSafeRedirect } from '@/lib/authRedirect';
+import { buildLoginHref, buildPostAuthHref } from '@/lib/authRedirect';
 import { isSellerContactAction } from '@/lib/sellerContact';
 
 /** Aligné sur @supabase/auth-js parseParametersFromURL (fragment + query). */
@@ -110,6 +110,11 @@ export function extractRedirectContextFromCallbackUrl(fullUrl: string): {
   return {};
 }
 
+/** Après échec OAuth ou échec de finalisation session : login avec redirect/contact conservés. */
+function buildAuthRecoveryHref(redirect?: string, contact?: string): Href {
+  return buildLoginHref(redirect, contact) as Href;
+}
+
 function hasSupabaseAuthSignals(params: Record<string, string>): boolean {
   return Boolean(
     params.access_token ||
@@ -140,16 +145,6 @@ export type HandleSupabaseAuthDeepLinkResult =
   | { consumed: false }
   | { consumed: true; navigateTo: Href | null; errorMessage?: string };
 
-function postAuthDestination(
-  redirectRaw: string | undefined,
-  contactRaw: string | undefined
-): Href {
-  const safe = getSafeRedirect(redirectRaw);
-  const contact =
-    contactRaw && isSellerContactAction(contactRaw) ? contactRaw : undefined;
-  return buildPostAuthHref(safe ?? undefined, contact);
-}
-
 /**
  * Parse l’URL, hydrate la session si besoin, retourne la destination Expo Router.
  * `navigateTo === null` : URL déjà traitée (doublon) — ne pas naviguer.
@@ -174,7 +169,7 @@ export async function handleSupabaseAuthDeepLink(
   }
 
   const ctx = extractRedirectContextFromCallbackUrl(raw);
-  const dest = postAuthDestination(ctx.redirect, ctx.contact);
+  const dest = buildPostAuthHref(ctx.redirect, ctx.contact);
 
   if (params.error || params.error_description) {
     lastConsumedAuthUrl = raw;
@@ -182,7 +177,7 @@ export async function handleSupabaseAuthDeepLink(
     if (__DEV__) {
       console.warn('[auth/deep-link]', msg, params.error_code);
     }
-    return { consumed: true, navigateTo: dest, errorMessage: msg };
+    return { consumed: true, navigateTo: buildAuthRecoveryHref(ctx.redirect, ctx.contact), errorMessage: msg };
   }
 
   try {
@@ -190,11 +185,19 @@ export async function handleSupabaseAuthDeepLink(
       const { data, error } = await supabase.auth.exchangeCodeForSession(params.code);
       if (error) {
         lastConsumedAuthUrl = raw;
-        return { consumed: true, navigateTo: dest, errorMessage: error.message };
+        return {
+          consumed: true,
+          navigateTo: buildAuthRecoveryHref(ctx.redirect, ctx.contact),
+          errorMessage: error.message,
+        };
       }
       if (!data.session) {
         lastConsumedAuthUrl = raw;
-        return { consumed: true, navigateTo: dest };
+        return {
+          consumed: true,
+          navigateTo: buildAuthRecoveryHref(ctx.redirect, ctx.contact),
+          errorMessage: 'Connexion incomplète. Réessayez.',
+        };
       }
     } else if (params.access_token && params.refresh_token) {
       const { data: existing } = await supabase.auth.getSession();
@@ -208,7 +211,11 @@ export async function handleSupabaseAuthDeepLink(
       });
       if (error) {
         lastConsumedAuthUrl = raw;
-        return { consumed: true, navigateTo: dest, errorMessage: error.message };
+        return {
+          consumed: true,
+          navigateTo: buildAuthRecoveryHref(ctx.redirect, ctx.contact),
+          errorMessage: error.message,
+        };
       }
     } else {
       return { consumed: false };
@@ -219,6 +226,6 @@ export async function handleSupabaseAuthDeepLink(
   } catch (e) {
     lastConsumedAuthUrl = raw;
     const msg = e instanceof Error ? e.message : 'Session invalide';
-    return { consumed: true, navigateTo: dest, errorMessage: msg };
+    return { consumed: true, navigateTo: buildAuthRecoveryHref(ctx.redirect, ctx.contact), errorMessage: msg };
   }
 }

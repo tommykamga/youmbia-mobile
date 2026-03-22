@@ -15,13 +15,13 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
-import { useRouter, useFocusEffect, useLocalSearchParams } from 'expo-router';
+import { useFocusEffect, useLocalSearchParams } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Screen, Loader, EmptyState, Button } from '@/components';
 import { ListingCard } from '@/features/listings';
 import { searchListings } from '@/services/listings';
 import { getSearchSuggestions } from '@/services/searchSuggestions';
-import { getFavoriteIds as getFavIds, toggleFavorite as toggleFav } from '@/services/favorites';
+import { getFavoriteIds as getFavIds } from '@/services/favorites';
 import { sortListings, type SortOption } from '@/utils/sortListings';
 import {
   getSavedSearches,
@@ -107,7 +107,6 @@ function validatePriceFilters(priceMin: string, priceMax: string): {
 }
 
 export default function SearchScreen() {
-  const router = useRouter();
   const params = useLocalSearchParams<{
     q?: string;
     priceMin?: string;
@@ -136,8 +135,6 @@ export default function SearchScreen() {
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const resultsListRef = useRef<FlatList<PublicListing> | null>(null);
   const savedSearchFeedbackTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const favoriteIdsRef = useRef<Set<string>>(new Set());
-  favoriteIdsRef.current = favoriteIds;
 
   const loadFavorites = useCallback(async () => {
     const res = await getFavIds();
@@ -244,11 +241,12 @@ export default function SearchScreen() {
   }, []);
 
   /** Scroll results list to top when a new search returns success (Sprint 3.2). */
+  const scrollResetKey = state.status === 'success' ? state.query : '';
   useEffect(() => {
     if (state.status === 'success') {
       resultsListRef.current?.scrollToOffset({ offset: 0, animated: true });
     }
-  }, [state.status, state.status === 'success' ? state.query : '']);
+  }, [state.status, scrollResetKey]);
 
   const handleSubmit = useCallback(() => {
     Keyboard.dismiss();
@@ -310,31 +308,6 @@ export default function SearchScreen() {
     };
   }, []);
 
-  const handleFavoritePress = useCallback(
-    async (listingId: string) => {
-      const nextFavorite = !favoriteIdsRef.current.has(listingId);
-      setFavoriteIds((prev) => {
-        const next = new Set(prev);
-        if (nextFavorite) next.add(listingId);
-        else next.delete(listingId);
-        return next;
-      });
-      const result = await toggleFav(listingId);
-      if (result.error) {
-        setFavoriteIds((prev) => {
-          const reverted = new Set(prev);
-          if (nextFavorite) reverted.delete(listingId);
-          else reverted.add(listingId);
-          return reverted;
-        });
-        if (result.error.message === 'Non connecté') {
-          router.replace(`/(auth)/login?redirect=${encodeURIComponent('/(tabs)/search')}`);
-        }
-      }
-    },
-    [router]
-  );
-
   const handleSavedSearchPress = useCallback(
     (item: SavedSearch) => {
       setQuery(item.query);
@@ -373,10 +346,11 @@ export default function SearchScreen() {
   );
   const itemSeparator = useCallback(() => <View style={styles.separator} />, []);
 
+  const successSearchData = state.status === 'success' ? state.data : null;
   const sortedListings = useMemo(() => {
-    const list = state.status === 'success' ? state.data : [];
+    const list = successSearchData ?? [];
     return sortListings(list, sortBy);
-  }, [state.status, state.status === 'success' ? state.data : null, sortBy]);
+  }, [successSearchData, sortBy]);
 
   const availableCities = useMemo(() => {
     const values = new Set<string>();

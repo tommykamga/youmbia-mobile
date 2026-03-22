@@ -6,9 +6,12 @@ import { Screen, Button, Input, AppLogo } from '@/components';
 import { resetPasswordForEmail } from '@/services/auth';
 import { makeRedirectUri } from 'expo-auth-session';
 import { colors, spacing, typography, fontWeights, radius } from '@/theme';
+import { buildLoginHref } from '@/lib/authRedirect';
+import { mapAuthErrorMessage } from '@/lib/mapAuthErrorMessage';
+import { isPlausibleEmail } from '@/lib/authEmailValidation';
 
 export default function ResetPasswordScreen() {
-  const params = useLocalSearchParams<{ email?: string }>();
+  const params = useLocalSearchParams<{ email?: string; redirect?: string; contact?: string }>();
   
   const [email, setEmail] = useState(params.email ?? '');
   const [loading, setLoading] = useState(false);
@@ -23,6 +26,10 @@ export default function ResetPasswordScreen() {
       setError('Veuillez saisir votre adresse email.');
       return;
     }
+    if (!isPlausibleEmail(trimmedEmail)) {
+      setError('Indiquez une adresse email valide.');
+      return;
+    }
     setLoading(true);
     try {
       const redirectTo = makeRedirectUri();
@@ -30,12 +37,7 @@ export default function ResetPasswordScreen() {
       if (result.ok) {
         setSuccess('Un email contenant les instructions de réinitialisation vous a été envoyé.');
       } else {
-        const msg = result.error.message.toLowerCase();
-        if (msg.includes('rate limit')) {
-           setError('Trop de tentatives. Veuillez patienter avant de réessayer.');
-        } else {
-           setError("Erreur lors de l'envoi de l'email. Vérifiez l'adresse saisie.");
-        }
+        setError(mapAuthErrorMessage(result.error));
       }
     } catch {
       setError('Erreur inattendue. Veuillez réessayer.');
@@ -47,7 +49,13 @@ export default function ResetPasswordScreen() {
   return (
     <Screen scroll keyboardAvoid>
       <View style={styles.headerRow}>
-        <Link href="/(auth)/login" asChild>
+        <Link
+          href={buildLoginHref(
+            typeof params.redirect === 'string' ? params.redirect : undefined,
+            typeof params.contact === 'string' ? params.contact : undefined
+          )}
+          asChild
+        >
           <Pressable hitSlop={15} style={styles.backButton}>
             <Ionicons name="arrow-back" size={24} color={colors.text} />
           </Pressable>

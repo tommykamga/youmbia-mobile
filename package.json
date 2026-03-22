@@ -13,7 +13,9 @@
     "android": "expo run:android",
     "ios": "expo run:ios",
     "web": "expo start --web",
-    "postinstall": "node scripts/postinstall-expo-modules-core.js"
+    "postinstall": "node scripts/postinstall-expo-modules-core.js",
+    "lint": "eslint .",
+    "lint:expo": "expo lint"
   },
   "dependencies": {
     "@react-native-async-storage/async-storage": "2.2.0",
@@ -47,6 +49,8 @@
   },
   "devDependencies": {
     "@types/react": "~19.1.10",
+    "eslint": "^9.0.0",
+    "eslint-config-expo": "~10.0.0",
     "typescript": "~5.9.2"
   },
   "overrides": {

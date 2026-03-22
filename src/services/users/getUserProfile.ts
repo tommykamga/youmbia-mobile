@@ -39,7 +39,7 @@ type ListingImageRow = Pick<Tables<'listing_images'>, 'url' | 'sort_order'>;
 
 type ListingRow = Pick<
   Tables<'listings'>,
-  'id' | 'title' | 'price' | 'city' | 'created_at' | 'views_count' | 'user_id'
+  'id' | 'title' | 'price' | 'city' | 'created_at' | 'updated_at' | 'views_count' | 'user_id'
 > & {
   listing_images: ListingImageRow[] | null;
 };
@@ -55,6 +55,7 @@ function mapListingRow(row: ListingRow, signedMap: Map<string, string>): PublicL
     price: row.price,
     city: row.city ?? '',
     created_at: row.created_at,
+    updated_at: row.updated_at,
     images,
     views_count: row.views_count ?? 0,
     seller_id: row.user_id ?? '',
@@ -105,7 +106,7 @@ export async function getUserProfile(userId: string): Promise<GetUserProfileResu
 
   const { data: listingRows, error: listingsError } = await supabase
     .from('listings')
-    .select('id, title, price, city, created_at, views_count, user_id, listing_images(url, sort_order)')
+    .select('id, title, price, city, created_at, updated_at, views_count, user_id, listing_images(url, sort_order)')
     .eq('user_id', id)
     .eq('status', 'active')
     .order('created_at', { ascending: false });

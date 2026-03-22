@@ -47,13 +47,13 @@ export async function getConversations(): Promise<GetConversationsResult> {
       };
     }
 
-    const list = (rows ?? []) as Array<{
+    const list = (rows ?? []) as {
       id: string;
       listing_id: string;
       buyer_id: string;
       seller_id: string;
       created_at: string;
-    }>;
+    }[];
 
     if (list.length === 0) return { data: [], error: null };
 

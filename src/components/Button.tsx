@@ -123,21 +123,33 @@ export function Button({
       onPress={onPress}
       disabled={disabled || loading}
       {...pressableProps}
-      style={({ pressed }) => [
-        styles.base,
-        {
-          backgroundColor: v.bg,
-          borderWidth: v.border ? 1.5 : 0,
-          borderColor: v.border,
-          paddingVertical: s.paddingVertical,
-          paddingHorizontal: s.paddingHorizontal,
-          opacity: disabled ? 0.6 : pressed ? 0.9 : 1,
-          borderRadius: radius['2xl'],
-          ...shadowStyle,
-          transform: [{ scale: disabled ? 1 : pressed ? 0.98 : 1 }],
-        },
-        style,
-      ]}
+      style={({ pressed }) => {
+        const pressedOpacity =
+          disabled || !pressed
+            ? 1
+            : variant === 'primary'
+              ? 0.92
+              : variant === 'secondary'
+                ? 0.96
+                : variant === 'outline'
+                  ? 0.93
+                  : 0.82;
+        return [
+          styles.base,
+          {
+            backgroundColor: v.bg,
+            borderWidth: v.border ? 1.5 : 0,
+            borderColor: v.border,
+            paddingVertical: s.paddingVertical,
+            paddingHorizontal: s.paddingHorizontal,
+            opacity: disabled ? 0.6 : pressed ? pressedOpacity : 1,
+            borderRadius: radius['2xl'],
+            ...shadowStyle,
+            transform: [{ scale: disabled ? 1 : pressed ? 0.98 : 1 }],
+          },
+          style,
+        ];
+      }}
     >
       {content}
     </Pressable>

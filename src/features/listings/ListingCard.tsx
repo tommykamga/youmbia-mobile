@@ -11,8 +11,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { useRouter } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { colors, spacing, typography, fontWeights, radius } from '@/theme';
-import { cardStyles } from '@/theme';
+import { cardStyles, colors, spacing, typography, fontWeights, radius } from '@/theme';
 import { formatPrice } from '@/lib/format';
 import { FavoriteButton } from '@/components/FavoriteButton';
 import { timeAgo } from '@/utils/timeAgo';
