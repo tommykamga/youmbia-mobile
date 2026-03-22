@@ -14,7 +14,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { cardStyles, colors, spacing, typography, fontWeights, radius } from '@/theme';
 import { formatPrice } from '@/lib/format';
 import { FavoriteButton } from '@/components/FavoriteButton';
-import { timeAgo } from '@/utils/timeAgo';
+import { timeAgo, isListingNew } from '@/utils/timeAgo';
 import { getDisplayUrgent, getDisplayLocationLine } from '@/lib/listingSchemaFeatures';
 import type { PublicListing } from '@/services/listings';
 
@@ -47,6 +47,7 @@ function ListingCardInner({ listing }: ListingCardProps) {
   const showUrgent = getDisplayUrgent(listing);
   const showBoosted = listing.boosted === true;
   const showPriceDropped = listing.price_dropped === true;
+  const showNew = isListingNew(listing.created_at);
 
   const handlePress = useCallback(() => {
     router.push(`/listing/${listing.id}`);
@@ -82,7 +83,7 @@ function ListingCardInner({ listing }: ListingCardProps) {
             <Text style={styles.imagePlaceholderText}>Aucune photo</Text>
           </View>
         )}
-        {(showUrgent || showBoosted || showPriceDropped) ? (
+        {(showUrgent || showBoosted || showPriceDropped || showNew) ? (
           <View style={styles.badgesWrap}>
             {showBoosted ? (
               <View style={styles.boostedBadge}>
@@ -98,6 +99,11 @@ function ListingCardInner({ listing }: ListingCardProps) {
             {showPriceDropped ? (
               <View style={styles.priceDroppedBadge}>
                 <Text style={styles.priceDroppedBadgeText}>Prix baissé</Text>
+              </View>
+            ) : null}
+            {showNew ? (
+              <View style={styles.badgeNew}>
+                <Text style={styles.badgeNewText}>Nouveau</Text>
               </View>
             ) : null}
           </View>
@@ -128,7 +134,8 @@ export const ListingCard = memo(ListingCardInner, (prev, next) => {
   return (
     prev.listing.id === next.listing.id &&
     prev.listing.updated_at === next.listing.updated_at &&
-    prev.listing.views_count === next.listing.views_count
+    prev.listing.views_count === next.listing.views_count &&
+    prev.listing.created_at === next.listing.created_at
   );
 });
 
@@ -218,16 +225,41 @@ const styles = StyleSheet.create({
     fontWeight: fontWeights.semibold,
     color: colors.surface,
   },
+  badgeNew: {
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 5,
+    borderRadius: radius.sm,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    ...Platform.select({
+      ios: {
+        shadowColor: colors.text,
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.06,
+        shadowRadius: 2,
+      },
+      android: { elevation: 1 },
+    }),
+  },
+  badgeNewText: {
+    ...typography.xs,
+    fontWeight: fontWeights.bold,
+    color: colors.textSecondary,
+    letterSpacing: 0.2,
+  },
   body: {
-    padding: spacing.base,
-    minHeight: 136,
+    paddingHorizontal: spacing.base,
+    paddingTop: spacing.base + 2,
+    paddingBottom: spacing.base + 4,
+    minHeight: 140,
     justifyContent: 'space-between',
   },
   title: {
     ...typography.base,
     fontWeight: fontWeights.semibold,
     color: colors.text,
-    marginBottom: spacing.xs,
+    marginBottom: spacing.sm,
     lineHeight: 22,
   },
   price: {
@@ -235,7 +267,7 @@ const styles = StyleSheet.create({
     fontWeight: fontWeights.black,
     color: colors.primary,
     letterSpacing: -0.3,
-    marginBottom: spacing.sm,
+    marginBottom: spacing.md,
   },
   footerRow: {
     flexDirection: 'row',

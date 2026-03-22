@@ -10,30 +10,52 @@ type ListingSectionSkeletonProps = {
   iconColor?: string;
   variant?: 'default' | 'nearYou';
   hasSubtitle?: boolean;
+  /** Titres de section « premium » (phrase naturelle) vs chips uppercase. */
+  titleVariant?: 'default' | 'featured';
 };
 
-export function ListingSectionSkeleton({ title, icon, iconColor, variant = 'default', hasSubtitle }: ListingSectionSkeletonProps) {
+export function ListingSectionSkeleton({
+  title,
+  icon,
+  iconColor,
+  variant = 'default',
+  hasSubtitle,
+  titleVariant = 'default',
+}: ListingSectionSkeletonProps) {
   const cardWidth = useCardWidth();
-  const data = [1, 2, 3]; // Show 3 skeleton cards
+  const data = [1, 2, 3];
 
-  // Precise calculations
-  const titleRowHeight = 32;
-  const subtitleHeight = hasSubtitle ? 24 : 0;
+  const titleRowHeight = titleVariant === 'featured' ? 36 : 32;
+  const subtitleHeight = hasSubtitle ? 22 : 0;
+  const titleBlockGap = hasSubtitle ? spacing.xs : 0;
   const imageHeight = cardWidth * 0.75;
   const bodyHeight = variant === 'nearYou' ? 120 : 136;
   const sectionPaddingBottom = spacing.sm;
-  const totalHeight = titleRowHeight + subtitleHeight + imageHeight + bodyHeight + sectionPaddingBottom;
+  const totalHeight =
+    titleRowHeight +
+    subtitleHeight +
+    titleBlockGap +
+    imageHeight +
+    bodyHeight +
+    sectionPaddingBottom;
+
+  const titleStyle = titleVariant === 'featured' ? styles.titleFeatured : styles.titleDefault;
 
   return (
     <View style={[styles.section, { height: totalHeight }]}>
-      <View style={styles.titleRow}>
-        <Ionicons
-          name={icon}
-          size={18}
-          color={iconColor || colors.textMuted}
-          style={styles.titleIcon}
-        />
-        <Text style={styles.title}>{title}</Text>
+      <View style={styles.headerBlock}>
+        <View style={[styles.titleRow, titleVariant === 'featured' && styles.titleRowFeatured]}>
+          <Ionicons
+            name={icon}
+            size={titleVariant === 'featured' ? 20 : 18}
+            color={iconColor || colors.textMuted}
+            style={styles.titleIcon}
+          />
+          <Text style={[titleStyle]} numberOfLines={2}>
+            {title}
+          </Text>
+        </View>
+        {hasSubtitle ? <View style={styles.subtitleSkeleton} /> : null}
       </View>
       <FlatList
         data={data}
@@ -60,11 +82,16 @@ const styles = StyleSheet.create({
   section: {
     marginBottom: spacing.xl,
   },
+  headerBlock: {
+    marginBottom: spacing.sm,
+  },
   titleRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: spacing.sm,
-    height: 24, // Fixed height for title
+    minHeight: 24,
+  },
+  titleRowFeatured: {
+    alignItems: 'flex-start',
   },
   skeletonCard: {
     ...cardStyles.default,
@@ -81,14 +108,31 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
   },
   titleIcon: {
-    marginRight: spacing.xs,
+    marginRight: spacing.sm,
+    marginTop: 2,
   },
-  title: {
+  titleDefault: {
     ...typography.sm,
     fontWeight: fontWeights.bold,
     color: colors.text,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
+    flex: 1,
+  },
+  titleFeatured: {
+    ...typography.lg,
+    fontWeight: fontWeights.bold,
+    color: colors.text,
+    letterSpacing: -0.3,
+    flex: 1,
+  },
+  subtitleSkeleton: {
+    height: 12,
+    width: '72%',
+    borderRadius: 6,
+    backgroundColor: colors.surfaceMuted,
+    marginTop: spacing.xs,
+    marginLeft: 28,
   },
   scroll: {
     marginHorizontal: -spacing.base,

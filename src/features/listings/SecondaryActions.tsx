@@ -1,9 +1,10 @@
 import React from 'react';
-import { View, StyleSheet, Alert, Linking } from 'react-native';
+import { View, StyleSheet, Alert, Linking, useWindowDimensions } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Button } from '@/components';
 import { spacing } from '@/theme';
 import { shareListing } from '@/lib/shareListing';
+import { getWindowSizeBucket } from '@/lib/responsiveLayout';
 import type { ListingDetail } from '@/services/listings';
 
 type SecondaryActionsProps = {
@@ -16,6 +17,9 @@ type SecondaryActionsProps = {
   onSmsPress?: () => void | Promise<void>;
 };
 
+const BTN_TEXT_COMPACT = { fontSize: 11 } as const;
+const BTN_TEXT_REGULAR = { fontSize: 12 } as const;
+
 export function SecondaryActions({
   listing,
   isFavorite,
@@ -25,6 +29,10 @@ export function SecondaryActions({
   onSmsPress,
 }: SecondaryActionsProps) {
   const [sharing, setSharing] = React.useState(false);
+  const { width } = useWindowDimensions();
+  const bucket = getWindowSizeBucket(width);
+  const useGrid = bucket === 'compact';
+  const textStyle = useGrid ? BTN_TEXT_COMPACT : BTN_TEXT_REGULAR;
 
   const handleShare = async () => {
     if (sharing || !listing.id) return;
@@ -90,55 +98,90 @@ export function SecondaryActions({
     }
   };
 
+  const favBtn = (
+    <Button
+      variant="secondary"
+      size="sm"
+      onPress={onFavoritePress}
+      style={useGrid ? styles.gridBtn : styles.rowBtn}
+      textStyle={textStyle}
+      leftIcon={
+        <Ionicons
+          name={isFavorite ? 'heart' : 'heart-outline'}
+          size={18}
+          color={isFavorite ? '#DC2626' : undefined}
+        />
+      }
+    >
+      Favoris
+    </Button>
+  );
+
+  const shareBtn = (
+    <Button
+      variant="secondary"
+      size="sm"
+      onPress={handleShare}
+      style={useGrid ? styles.gridBtn : styles.rowBtn}
+      textStyle={textStyle}
+      loading={sharing}
+      leftIcon={<Ionicons name="share-outline" size={18} />}
+    >
+      Partager
+    </Button>
+  );
+
+  const callBtn = sellerPhone ? (
+    <Button
+      variant="secondary"
+      size="sm"
+      onPress={handleCall}
+      style={useGrid ? styles.gridBtn : styles.rowBtn}
+      textStyle={textStyle}
+      leftIcon={<Ionicons name="call-outline" size={18} />}
+    >
+      Appeler
+    </Button>
+  ) : null;
+
+  const smsBtn = sellerPhone ? (
+    <Button
+      variant="secondary"
+      size="sm"
+      onPress={handleSms}
+      style={useGrid ? styles.gridBtn : styles.rowBtn}
+      textStyle={textStyle}
+      leftIcon={<Ionicons name="chatbox-ellipses-outline" size={18} />}
+    >
+      SMS
+    </Button>
+  ) : null;
+
+  if (useGrid) {
+    return (
+      <View style={styles.gridWrap}>
+        <View style={styles.gridRow}>
+          <View style={styles.gridCell}>{favBtn}</View>
+          <View style={styles.gridCell}>{shareBtn}</View>
+        </View>
+        {sellerPhone ? (
+          <View style={styles.gridRow}>
+            <View style={styles.gridCell}>{callBtn}</View>
+            <View style={styles.gridCell}>{smsBtn}</View>
+          </View>
+        ) : null}
+      </View>
+    );
+  }
+
   return (
-    <View style={styles.container}>
-      <Button
-        variant="secondary"
-        size="sm"
-        onPress={onFavoritePress}
-        style={styles.button}
-        leftIcon={
-          <Ionicons
-            name={isFavorite ? 'heart' : 'heart-outline'}
-            size={18}
-            color={isFavorite ? '#DC2626' : undefined}
-          />
-        }
-      >
-        Favoris
-      </Button>
-
-      <Button
-        variant="secondary"
-        size="sm"
-        onPress={handleShare}
-        style={styles.button}
-        loading={sharing}
-        leftIcon={<Ionicons name="share-outline" size={18} />}
-      >
-        Partager
-      </Button>
-
+    <View style={styles.rowWrap}>
+      {favBtn}
+      {shareBtn}
       {sellerPhone ? (
         <>
-          <Button
-            variant="secondary"
-            size="sm"
-            onPress={handleCall}
-            style={styles.button}
-            leftIcon={<Ionicons name="call-outline" size={18} />}
-          >
-            Appeler
-          </Button>
-          <Button
-            variant="secondary"
-            size="sm"
-            onPress={handleSms}
-            style={styles.button}
-            leftIcon={<Ionicons name="chatbox-ellipses-outline" size={18} />}
-          >
-            SMS
-          </Button>
+          {callBtn}
+          {smsBtn}
         </>
       ) : null}
     </View>
@@ -146,14 +189,33 @@ export function SecondaryActions({
 }
 
 const styles = StyleSheet.create({
-  container: {
+  rowWrap: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'stretch',
     gap: spacing.sm,
     marginBottom: spacing.xl,
   },
-  button: {
+  rowBtn: {
     flex: 1,
+    minWidth: 0,
     minHeight: 44,
+  },
+  gridWrap: {
+    marginBottom: spacing.xl,
+    gap: spacing.sm,
+  },
+  gridRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    alignItems: 'stretch',
+  },
+  gridCell: {
+    flex: 1,
+    minWidth: 0,
+  },
+  gridBtn: {
+    minHeight: 44,
+    width: '100%',
+    paddingHorizontal: spacing.xs,
   },
 });

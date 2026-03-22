@@ -75,7 +75,16 @@ export function NearYouSection({ userCity }: NearYouSectionProps) {
   }, [userCity, router]);
 
   if (loading) {
-    return <ListingSectionSkeleton title="Près de vous" icon="location-outline" variant="nearYou" />;
+    return (
+      <ListingSectionSkeleton
+        title="Près de vous"
+        icon="location-outline"
+        iconColor={colors.primary}
+        variant="nearYou"
+        hasSubtitle
+        titleVariant="featured"
+      />
+    );
   }
 
   if (listings.length === 0) {
@@ -84,14 +93,17 @@ export function NearYouSection({ userCity }: NearYouSectionProps) {
 
   return (
     <View style={styles.section}>
-      <View style={styles.titleRow}>
-        <Ionicons
-          name="location-outline"
-          size={18}
-          color={colors.textMuted}
-          style={styles.titleIcon}
-        />
-        <Text style={styles.title}>Près de vous</Text>
+      <View style={styles.titleBlock}>
+        <View style={styles.titleRow}>
+          <Ionicons
+            name="location-outline"
+            size={20}
+            color={colors.primary}
+            style={styles.titleIcon}
+          />
+          <Text style={styles.title}>Près de vous</Text>
+        </View>
+        <Text style={styles.subtitle}>Les meilleures offres autour de vous</Text>
       </View>
       <FlatList
         data={listings}
@@ -115,10 +127,12 @@ export function NearYouSection({ userCity }: NearYouSectionProps) {
         renderItem={renderItem}
       />
       <Pressable
-        style={({ pressed }) => [styles.voirPlus, pressed && styles.voirPlusPressed]}
+        style={({ pressed }) => [styles.voirTout, pressed && styles.voirToutPressed]}
         onPress={handleVoirPlus}
+        accessibilityRole="button"
+        accessibilityLabel="Voir toutes les annonces à proximité"
       >
-        <Text style={styles.voirPlusLabel}>Voir plus</Text>
+        <Text style={styles.voirToutLabel}>Voir tout</Text>
         <Ionicons name="chevron-forward" size={16} color={colors.primary} />
       </Pressable>
     </View>
@@ -129,20 +143,28 @@ const styles = StyleSheet.create({
   section: {
     marginBottom: spacing.xl,
   },
+  titleBlock: {
+    marginBottom: spacing.md,
+  },
   titleRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: spacing.sm,
   },
   titleIcon: {
-    marginRight: spacing.xs,
+    marginRight: spacing.sm,
   },
   title: {
-    ...typography.sm,
+    ...typography.lg,
     fontWeight: fontWeights.bold,
     color: colors.text,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
+    letterSpacing: -0.3,
+    flex: 1,
+  },
+  subtitle: {
+    ...typography.sm,
+    color: colors.textMuted,
+    marginTop: spacing.xs,
+    marginLeft: 28,
   },
   scroll: {
     marginHorizontal: -spacing.base,
@@ -151,18 +173,22 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.base,
     paddingBottom: spacing.sm,
   },
-  voirPlus: {
+  voirTout: {
     flexDirection: 'row',
     alignItems: 'center',
     alignSelf: 'flex-start',
+    gap: 4,
     paddingVertical: spacing.sm,
-    paddingRight: spacing.xs,
+    paddingHorizontal: spacing.sm,
     marginTop: spacing.xs,
+    marginLeft: -spacing.sm,
+    borderRadius: 999,
   },
-  voirPlusPressed: {
-    opacity: 0.8,
+  voirToutPressed: {
+    opacity: 0.85,
+    backgroundColor: colors.primaryLight + '80',
   },
-  voirPlusLabel: {
+  voirToutLabel: {
     ...typography.sm,
     fontWeight: fontWeights.semibold,
     color: colors.primary,

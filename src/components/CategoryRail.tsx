@@ -6,14 +6,13 @@
 import React, { useMemo } from 'react';
 import { View, Text, StyleSheet, Pressable, useWindowDimensions } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { colors, spacing, typography, fontWeights } from '@/theme';
+import { colors, spacing, typography, fontWeights, radius, shadows } from '@/theme';
 
 const AUTRES_LABEL = 'Autres';
 
 const ITEM_MIN_WIDTH = 80;
 const GAP = spacing.sm;
 const SAFETY_BUFFER = 8;
-const HORIZONTAL_PADDING_TOTAL = spacing.base * 4;
 
 const ICON_WRAP_SIZE = 48;
 const ICON_SIZE = 24;
@@ -39,12 +38,15 @@ export type CategoryRailProps = {
   categories: readonly string[];
   onCategoryPress: (label: string) => void;
   onVoirToutPress: () => void;
+  /** Marge latérale du rail (alignée sur le padding Home / feed). */
+  edgePadding?: number;
 };
 
 export function CategoryRail({
   categories,
   onCategoryPress,
   onVoirToutPress,
+  edgePadding = spacing.base,
 }: CategoryRailProps) {
   const { width } = useWindowDimensions();
 
@@ -54,8 +56,9 @@ export function CategoryRail({
       return { visibleCategories: [], showAutres: false, itemWidth: 0 };
     }
 
+    const horizontalPaddingTotal = edgePadding * 4;
     const availableWidth =
-      width - HORIZONTAL_PADDING_TOTAL - SAFETY_BUFFER;
+      width - horizontalPaddingTotal - SAFETY_BUFFER;
 
     let nVisible = Math.max(
       1,
@@ -95,7 +98,7 @@ export function CategoryRail({
       showAutres,
       itemWidth: Math.max(ITEM_MIN_WIDTH, finalItemWidth),
     };
-  }, [categories, width]);
+  }, [categories, width, edgePadding]);
 
   const renderTile = (
     label: string,
@@ -120,7 +123,7 @@ export function CategoryRail({
         <Ionicons
           name={iconName as keyof typeof Ionicons.glyphMap}
           size={ICON_SIZE}
-          color={colors.textSecondary}
+          color={colors.primary}
         />
       </View>
       <Text
@@ -134,7 +137,7 @@ export function CategoryRail({
   );
 
   return (
-    <View style={styles.rail} pointerEvents="box-none">
+    <View style={[styles.rail, { paddingHorizontal: edgePadding }]} pointerEvents="box-none">
       {visibleCategories.map((label) =>
         renderTile(
           label,
@@ -156,7 +159,6 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     justifyContent: 'flex-start',
     gap: GAP,
-    paddingHorizontal: spacing.base,
     paddingVertical: spacing.xs,
     marginBottom: spacing.sm,
     overflow: 'hidden',
@@ -164,23 +166,27 @@ const styles = StyleSheet.create({
   tile: {
     alignItems: 'center',
     justifyContent: 'flex-start',
-    paddingVertical: 2,
+    paddingVertical: spacing.xs,
+    borderRadius: radius.lg,
   },
   tilePressed: {
-    opacity: 0.88,
-    backgroundColor: colors.primary + '18',
+    opacity: 0.92,
+    backgroundColor: colors.primaryLight + '99',
     transform: [{ scale: 0.97 }],
   },
   iconWrap: {
     width: ICON_WRAP_SIZE,
     height: ICON_WRAP_SIZE,
     borderRadius: ICON_WRAP_SIZE / 2,
-    backgroundColor: colors.border,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.borderLight,
     alignItems: 'center',
     justifyContent: 'center',
+    ...shadows.sm,
   },
   label: {
-    marginTop: 4,
+    marginTop: 6,
     ...typography.sm,
     fontWeight: fontWeights.semibold,
     color: colors.text,

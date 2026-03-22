@@ -21,6 +21,7 @@ import { colors, spacing, typography, fontWeights, radius, cardStyles } from '@/
 import { formatPrice } from '@/lib/format';
 import { FavoriteButton } from '@/components/FavoriteButton';
 import { getDisplayLocationLine, getDisplayUrgent } from '@/lib/listingSchemaFeatures';
+import { timeAgo, isListingNew } from '@/utils/timeAgo';
 import type { PublicListing } from '@/services/listings';
 
 const IMAGE_ASPECT = 4 / 3;
@@ -28,18 +29,7 @@ const BODY_PADDING = spacing.sm;
 const TITLE_LINE_HEIGHT = 20;
 
 const HEART_SIZE = 20;
-const NEW_DAYS = 7;
 const OVERLAY_INSET = spacing.sm;
-
-function isNew(createdAt: string): boolean {
-  try {
-    const d = new Date(createdAt);
-    const days = (Date.now() - d.getTime()) / (1000 * 60 * 60 * 24);
-    return days >= 0 && days <= NEW_DAYS;
-  } catch {
-    return false;
-  }
-}
 
 type NearYouCardProps = {
   listing: PublicListing;
@@ -63,7 +53,8 @@ function NearYouCardInner({
     listing.images?.length && String(listing.images[0] ?? '').trim()
       ? listing.images[0]
       : undefined;
-  const showNew = isNew(listing.created_at);
+  const showNew = isListingNew(listing.created_at);
+  const relativeTime = timeAgo(listing.created_at);
   const showUrgent = getDisplayUrgent(listing);
   const showBoosted = listing.boosted === true;
   const locationLine = getDisplayLocationLine(listing.city, listing.district);
@@ -141,6 +132,11 @@ function NearYouCardInner({
             {isNear ? ' · À proximité' : ''}
           </Text>
         </View>
+        {relativeTime ? (
+          <Text style={styles.timeMeta} numberOfLines={1}>
+            {relativeTime}
+          </Text>
+        ) : null}
       </View>
     </AnimatedPressable>
   );
@@ -150,6 +146,7 @@ export const NearYouCard = memo(NearYouCardInner, (prev, next) => {
   return (
     prev.listing.id === next.listing.id &&
     prev.listing.updated_at === next.listing.updated_at &&
+    prev.listing.created_at === next.listing.created_at &&
     prev.userCity === next.userCity
   );
 });
@@ -192,15 +189,18 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
   },
   badgeNew: {
-    paddingHorizontal: spacing.xs,
-    paddingVertical: 4,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 5,
     borderRadius: radius.sm,
-    backgroundColor: colors.badgeNeutralBg,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
   },
   badgeNewText: {
-    ...typography.label.badge,
-    color: colors.badgeNeutralText,
-    textTransform: 'uppercase',
+    ...typography.xs,
+    fontWeight: fontWeights.bold,
+    color: colors.textSecondary,
+    letterSpacing: 0.2,
   },
   urgentBadge: {
     backgroundColor: colors.error,
@@ -228,7 +228,8 @@ const styles = StyleSheet.create({
   },
   body: {
     padding: BODY_PADDING,
-    minHeight: 96,
+    paddingBottom: spacing.sm,
+    minHeight: 102,
     justifyContent: 'space-between',
   },
   title: {
@@ -254,5 +255,10 @@ const styles = StyleSheet.create({
     flex: 1,
     ...typography.xs,
     color: colors.textMuted,
+  },
+  timeMeta: {
+    ...typography.xs,
+    color: colors.textTertiary,
+    marginTop: 4,
   },
 });

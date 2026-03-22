@@ -20,3 +20,18 @@ export function timeAgo(date: string | Date | null | undefined): string {
   }
   return `il y a ${days} j`;
 }
+
+const NEW_LISTING_DAYS = 7;
+
+/** Annonce publiée récemment — pour badge « Nouveau » (UI uniquement). */
+export function isListingNew(createdAt: string | Date | null | undefined): boolean {
+  if (createdAt == null) return false;
+  try {
+    const d = new Date(createdAt);
+    if (Number.isNaN(d.getTime())) return false;
+    const days = (Date.now() - d.getTime()) / (1000 * 60 * 60 * 24);
+    return days >= 0 && days <= NEW_LISTING_DAYS;
+  } catch {
+    return false;
+  }
+}

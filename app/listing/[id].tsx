@@ -9,7 +9,6 @@ import {
   Alert,
   FlatList,
   Platform,
-  Dimensions,
 } from 'react-native';
 import { useLocalSearchParams, useRouter, useFocusEffect, type Href } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -40,6 +39,7 @@ import {
   openSellerSms,
   openWhatsAppForListing,
 } from '@/lib/sellerContact';
+import { useResponsiveLayout } from '@/lib/responsiveLayout';
 
 type State =
   | { status: 'loading' }
@@ -88,9 +88,9 @@ function getActionErrorMessage(message: string, fallback: string): string {
 }
 
 export default function ListingDetailScreen() {
-  const { width: SCREEN_WIDTH } = Dimensions.get('window');
-  const CARD_WIDTH = SCREEN_WIDTH * 0.8;
-  const CARD_GAP = spacing.base;
+  const { width: screenWidth, isCompact } = useResponsiveLayout();
+  const CARD_WIDTH = screenWidth * 0.8;
+  const CARD_GAP = isCompact ? spacing.sm : spacing.base;
 
   const { id, contact: contactParam } = useLocalSearchParams<{ id: string; contact?: string }>();
   const router = useRouter();
@@ -433,7 +433,7 @@ export default function ListingDetailScreen() {
         showsVerticalScrollIndicator={false}
       >
         <ListingGallery images={listing.images} />
-        <View style={styles.body}>
+        <View style={[styles.body, isCompact && styles.bodyCompact]}>
           <ListingMeta
             title={listing.title}
             price={listing.price}
@@ -565,6 +565,9 @@ const styles = StyleSheet.create({
   },
   body: {
     padding: spacing.base,
+  },
+  bodyCompact: {
+    padding: spacing.sm,
   },
   similarSection: {
     marginTop: spacing.lg,

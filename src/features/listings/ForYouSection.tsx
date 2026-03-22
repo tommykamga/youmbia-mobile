@@ -191,7 +191,15 @@ export function ForYouSection() {
   );
 
   if (loading) {
-    return <ListingSectionSkeleton title="Pour vous" icon="sparkles-outline" hasSubtitle />;
+    return (
+      <ListingSectionSkeleton
+        title="Recommandé pour vous"
+        icon="sparkles-outline"
+        iconColor={colors.primary}
+        hasSubtitle
+        titleVariant="featured"
+      />
+    );
   }
 
   if (listings.length === 0) {
@@ -200,11 +208,13 @@ export function ForYouSection() {
 
   return (
     <View style={styles.section}>
-      <View style={styles.titleRow}>
-        <Ionicons name="sparkles-outline" size={18} color={colors.textMuted} style={styles.titleIcon} />
-        <Text style={styles.title}>Pour vous</Text>
+      <View style={styles.titleBlock}>
+        <View style={styles.titleRow}>
+          <Ionicons name="sparkles-outline" size={20} color={colors.primary} style={styles.titleIcon} />
+          <Text style={styles.title}>Recommandé pour vous</Text>
+        </View>
+        <Text style={styles.subtitle}>{subtitle}</Text>
       </View>
-      <Text style={styles.subtitle}>{subtitle}</Text>
       <FlatList
         data={listings}
         extraData={favoriteIds}
@@ -235,24 +245,28 @@ const styles = StyleSheet.create({
   section: {
     marginBottom: spacing.xl,
   },
+  titleBlock: {
+    marginBottom: spacing.md,
+  },
   titleRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: spacing.sm,
   },
   titleIcon: {
-    marginRight: spacing.xs,
+    marginRight: spacing.sm,
   },
   title: {
-    ...typography.sm,
-    fontWeight: fontWeights.semibold,
+    ...typography.lg,
+    fontWeight: fontWeights.bold,
     color: colors.text,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
+    letterSpacing: -0.3,
+    flex: 1,
   },
   subtitle: {
-    ...typography.xs,
+    ...typography.sm,
     color: colors.textMuted,
+    marginTop: spacing.xs,
+    marginLeft: 28,
     marginBottom: spacing.sm,
   },
   scroll: {

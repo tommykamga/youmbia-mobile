@@ -8,12 +8,13 @@
  * prominent FAB/action that opens the same flow without occupying a tab slot (see product decision).
  */
 
-import React from 'react';
-import { View, StyleSheet, Platform } from 'react-native';
+import React, { useMemo } from 'react';
+import { View, StyleSheet, Platform, useWindowDimensions } from 'react-native';
 import { Tabs, useRouter, type Href } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { colors, spacing, radius, typography } from '@/theme';
+import { getWindowSizeBucket } from '@/lib/responsiveLayout';
 import { getSession } from '@/services/auth';
 import { buildAuthGateHref } from '@/lib/authGateNavigation';
 import type { AuthGateContextId } from '@/config/authGateContext';
@@ -82,10 +83,17 @@ function SellTabIcon({ focused }: { focused: boolean }) {
 export default function TabLayout() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  
-  // Correction Android & iOS Premium : on force une hauteur explicite qui inclut l'inset système.
-  const TAB_BAR_HEIGHT = 64; 
-  const totalTabBarHeight = TAB_BAR_HEIGHT + insets.bottom;
+  const { width } = useWindowDimensions();
+  const bucket = getWindowSizeBucket(width);
+
+  const tabBarMetrics = useMemo(() => {
+    const labelFontSize = bucket === 'compact' ? 10 : bucket === 'regular' ? 11 : 12;
+    const itemPadV = bucket === 'compact' ? 2 : 4;
+    const barHeight = bucket === 'compact' ? 58 : 64;
+    return { labelFontSize, itemPadV, barHeight };
+  }, [bucket]);
+
+  const totalTabBarHeight = tabBarMetrics.barHeight + insets.bottom;
   return (
     <Tabs
       screenOptions={{
@@ -96,11 +104,11 @@ export default function TabLayout() {
           { 
             height: totalTabBarHeight,
             paddingBottom: Platform.OS === 'ios' ? insets.bottom + 4 : Math.max(insets.bottom, spacing.xs) + 4,
-            paddingTop: spacing.sm,
+            paddingTop: bucket === 'compact' ? spacing.xs : spacing.sm,
           },
         ],
-        tabBarLabelStyle: styles.tabBarLabel,
-        tabBarItemStyle: styles.tabBarItem,
+        tabBarLabelStyle: [styles.tabBarLabel, { fontSize: tabBarMetrics.labelFontSize }],
+        tabBarItemStyle: [styles.tabBarItem, { paddingVertical: tabBarMetrics.itemPadV, minWidth: 0 }],
         headerStyle: { backgroundColor: colors.surface },
         headerTitleStyle: {
           fontWeight: '700',
@@ -122,7 +130,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="search"
         options={{
-          title: 'Rechercher',
+          title: bucket === 'compact' ? 'Chercher' : 'Rechercher',
           tabBarIcon: ({ color }) => <TabIcon name="search" color={color} />,
         }}
       />
@@ -131,7 +139,11 @@ export default function TabLayout() {
         options={{
           title: 'Vendre',
           tabBarIcon: ({ focused }) => <SellTabIcon focused={focused} />,
-          tabBarLabelStyle: [styles.tabBarLabel, styles.sellLabel],
+          tabBarLabelStyle: [
+            styles.tabBarLabel,
+            styles.sellLabel,
+            { fontSize: tabBarMetrics.labelFontSize },
+          ],
         }}
         listeners={{
           tabPress: (e) => {
@@ -216,6 +228,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginTop: -4,
+    borderWidth: 2,
+    borderColor: 'rgba(255,255,255,0.35)',
     ...Platform.select({
       ios: {
         shadowColor: colors.primary,

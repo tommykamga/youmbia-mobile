@@ -31,9 +31,14 @@ type FeedState =
 export type ListingFeedProps = {
   /** Rendered at the top of the list (e.g. home header). Enables single scroll + reliable pull-to-refresh. */
   listHeaderComponent?: React.ReactElement | null;
+  /** Padding horizontal du contenu (Home compact = plus étroit). */
+  contentPaddingHorizontal?: number;
 };
 
-export function ListingFeed({ listHeaderComponent }: ListingFeedProps) {
+export function ListingFeed({
+  listHeaderComponent,
+  contentPaddingHorizontal = spacing.base,
+}: ListingFeedProps) {
   const { refresh: refreshFavorites } = useFavorites();
   const [state, setState] = useState<FeedState>({ status: 'loading' });
   const [sortBy, setSortBy] = useState<SortOption>('recent');
@@ -247,6 +252,11 @@ export function ListingFeed({ listHeaderComponent }: ListingFeedProps) {
     return null;
   }, [state.status, feedDataLength, loadingMore, hasMore, loadMoreError, load]);
 
+  const listContentStyle = useMemo(
+    () => [styles.listContent, { paddingHorizontal: contentPaddingHorizontal }],
+    [contentPaddingHorizontal]
+  );
+
   /* No key prop on FlatList — preserves scroll position when returning from listing detail. */
   return (
     <FlatList
@@ -257,7 +267,7 @@ export function ListingFeed({ listHeaderComponent }: ListingFeedProps) {
       ListHeaderComponent={listHeader}
       ListFooterComponent={listFooter}
       ListEmptyComponent={listEmpty}
-      contentContainerStyle={styles.listContent}
+      contentContainerStyle={listContentStyle}
       showsVerticalScrollIndicator={false}
       initialNumToRender={INITIAL_NUM_TO_RENDER}
       maxToRenderPerBatch={6}
@@ -281,7 +291,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   listContent: {
-    padding: spacing.base,
+    paddingVertical: spacing.base,
     paddingBottom: spacing['3xl'],
     flexGrow: 1,
   },
