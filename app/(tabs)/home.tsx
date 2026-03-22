@@ -22,7 +22,6 @@ import {
   RecentlyViewedSection,
 } from '@/features/listings';
 import { colors, spacing, typography, fontWeights, radius, shadows } from '@/theme';
-import { useUnreadMessagesCount } from '@/hooks/useUnreadMessagesCount';
 
 /** 5–7 primary categories – tap navigates to search with this query. */
 const HOME_CATEGORIES = [
@@ -59,9 +58,7 @@ export default function HomeScreen() {
 
 function HomeHeaderContent() {
   const router = useRouter();
-  const unreadCount = useUnreadMessagesCount();
   const handleSearchPress = () => router.push('/(tabs)/search');
-  const handleMessagesPress = () => router.push('/(tabs)/messages');
   const handleCategoryPress = (label: string) =>
     router.push(`/(tabs)/search?q=${encodeURIComponent(label)}`);
   const handleVoirToutPress = () => router.push('/categories');
@@ -70,19 +67,6 @@ function HomeHeaderContent() {
     <View style={styles.header}>
       <View style={styles.topRow}>
         <AppLogo variant="medium" style={styles.logo} />
-        <Pressable
-          style={({ pressed }) => [styles.messageBtn, pressed && styles.messageBtnPressed]}
-          onPress={handleMessagesPress}
-        >
-          <Ionicons name="chatbubbles-outline" size={26} color={colors.text} />
-          {unreadCount > 0 && (
-            <View style={styles.badge}>
-              <Text style={styles.badgeText}>
-                {unreadCount > 9 ? '9+' : unreadCount}
-              </Text>
-            </View>
-          )}
-        </Pressable>
       </View>
 
       <Pressable
@@ -134,40 +118,10 @@ const styles = StyleSheet.create({
   topRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
     marginBottom: spacing.lg,
-    paddingRight: spacing.xs,
   },
   logo: {
     alignSelf: 'flex-start',
-  },
-  messageBtn: {
-    width: 44,
-    height: 44,
-    alignItems: 'center',
-    justifyContent: 'center',
-    position: 'relative',
-  },
-  messageBtnPressed: {
-    opacity: 0.7,
-  },
-  badge: {
-    position: 'absolute',
-    top: 4,
-    right: 4,
-    backgroundColor: colors.error,
-    minWidth: 18,
-    height: 18,
-    borderRadius: 9,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 2,
-    borderColor: colors.surface,
-  },
-  badgeText: {
-    color: colors.surface,
-    fontSize: 10,
-    fontWeight: fontWeights.bold,
   },
   searchBar: {
     flexDirection: 'row',
