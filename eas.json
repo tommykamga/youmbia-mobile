@@ -15,8 +15,8 @@
       },
       "env": {
         "APP_ENV": "development",
-        "EXPO_PUBLIC_SUPABASE_URL": "……",
-        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "……"
+        "EXPO_PUBLIC_SUPABASE_URL": "TON_URL_SUPABASE",
+        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "TA_CLE_ANON_SUPABASE"
       }
     },
     "preview": {
@@ -29,8 +29,8 @@
       },
       "env": {
         "APP_ENV": "preview",
-        "EXPO_PUBLIC_SUPABASE_URL": "……",
-        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "……"
+        "EXPO_PUBLIC_SUPABASE_URL": "TON_URL_SUPABASE",
+        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "TA_CLE_ANON_SUPABASE"
       }
     },
     "production": {
@@ -40,7 +40,9 @@
         "buildType": "app-bundle"
       },
       "env": {
-        "APP_ENV": "production"
+        "APP_ENV": "production",
+        "EXPO_PUBLIC_SUPABASE_URL": "https://ainzxommczlyjhymuwgu.supabase.co",
+        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFpbnp4b21tY3pseWpoeW11d2d1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzIxODYwMjksImV4cCI6MjA4Nzc2MjAyOX0.cfnrvUOih6fz0aJ5vB3jAvkoOlPR4F59vxfQO3V_jAY"
       }
     }
   }
