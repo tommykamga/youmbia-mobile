@@ -12,6 +12,14 @@ import { useFocusEffect, Redirect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, typography, fontWeights, radius } from '@/theme';
 import { buildAuthGateHref } from '@/lib/authGateNavigation';
+import { lightCacheKeys, lightCacheRead, lightCacheWrite } from '@/lib/lightCache';
+
+type ProfileCachePayload = {
+  userId: string;
+  fullName: string;
+  phone: string;
+  incomplete: boolean;
+};
 
 function logProfileDev(phase: string, payload?: Record<string, unknown>) {
   if (typeof __DEV__ !== 'undefined' && __DEV__) {
@@ -37,13 +45,13 @@ export default function AccountProfileScreen() {
 
   const load = useCallback(async () => {
     logProfileDev('fetch_start');
-    setState({ status: 'loading' });
     setSaveError(null);
     setSaveSuccess(null);
 
     try {
       const session = await getSession();
-      setEmail(session?.user?.email ?? '');
+      const sessionEmail = session?.user?.email ?? '';
+      setEmail(sessionEmail);
       const userId = session?.user?.id;
       if (!userId) {
         logProfileDev('no_user', { hasSession: !!session });
@@ -52,6 +60,19 @@ export default function AccountProfileScreen() {
         return;
       }
       logProfileDev('session_ok', { userId });
+
+      const cacheKey = lightCacheKeys.profile(userId);
+      const cached = await lightCacheRead<ProfileCachePayload>(cacheKey);
+      if (cached?.payload?.userId === userId) {
+        setFullName(cached.payload.fullName);
+        setPhone(cached.payload.phone);
+        setState({
+          status: 'success',
+          incomplete: cached.payload.incomplete,
+        });
+      } else {
+        setState({ status: 'loading' });
+      }
 
       const result = await getCurrentProfile();
       logProfileDev('supabase_profile', {
@@ -80,6 +101,12 @@ export default function AccountProfileScreen() {
       setPhone(phoneVal);
       const incomplete = !name.trim() && !phoneVal.trim();
       setState({ status: 'success', incomplete });
+      await lightCacheWrite<ProfileCachePayload>(cacheKey, {
+        userId,
+        fullName: name,
+        phone: phoneVal,
+        incomplete,
+      });
       logProfileDev('fetch_end', { outcome: 'success', incomplete });
     } catch (e) {
       logProfileDev('fetch_exception', { error: e instanceof Error ? e.message : String(e) });
@@ -120,7 +147,18 @@ export default function AccountProfileScreen() {
     const ph = sanitizeProfileDisplayValue(result.data?.phone);
     setFullName(fn);
     setPhone(ph);
-    setState({ status: 'success', incomplete: !fn.trim() && !ph.trim() });
+    const incompleteAfter = !fn.trim() && !ph.trim();
+    setState({ status: 'success', incomplete: incompleteAfter });
+    const session = await getSession();
+    const uid = session?.user?.id;
+    if (uid) {
+      await lightCacheWrite<ProfileCachePayload>(lightCacheKeys.profile(uid), {
+        userId: uid,
+        fullName: fn,
+        phone: ph,
+        incomplete: incompleteAfter,
+      });
+    }
   }, [fullName, phone]);
 
   if (state.status === 'loading') {

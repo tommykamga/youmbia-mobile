@@ -1,10 +1,13 @@
-import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
+import React, { createContext, useContext, useState, useCallback, useEffect, useMemo, useRef } from 'react';
+import { Alert, InteractionManager } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import { getFavoriteIds, toggleFavorite as toggleFavoriteService } from '@/services/favorites';
 import { getSession } from '@/services/auth';
 import { useRouter } from 'expo-router';
-import { Alert } from 'react-native';
 import { buildAuthGateHref } from '@/lib/authGateNavigation';
+import { lightCacheKeys, lightCacheRead, lightCacheRemove, lightCacheWrite } from '@/lib/lightCache';
+
+type FavoritesCachePayload = { userId: string; ids: string[] };
 
 type FavoritesContextType = {
   favorites: Set<string>;
@@ -19,7 +22,8 @@ const FavoritesContext = createContext<FavoritesContextType | undefined>(undefin
 export function FavoritesProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const [favorites, setFavorites] = useState<Set<string>>(new Set());
-  const [mutatingIds, setMutatingIds] = useState<Set<string>>(new Set());
+  /** Ref pour anti-spam toggle (évite des re-rendus provider inutiles vs useState). */
+  const mutatingIdsRef = useRef<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
 
   const refresh = useCallback(async () => {
@@ -28,11 +32,14 @@ export function FavoritesProvider({ children }: { children: React.ReactNode }) {
       if (!session?.user) {
         setFavorites(new Set());
         setLoading(false);
+        await lightCacheRemove(lightCacheKeys.favorites);
         return;
       }
+      const uid = session.user.id;
       const { data, error } = await getFavoriteIds();
       if (!error && data) {
         setFavorites(new Set(data));
+        await lightCacheWrite<FavoritesCachePayload>(lightCacheKeys.favorites, { userId: uid, ids: data });
       }
     } catch (err) {
       console.error('[FavoritesContext] Refresh error:', err);
@@ -42,7 +49,27 @@ export function FavoritesProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   useEffect(() => {
-    refresh();
+    const task = InteractionManager.runAfterInteractions(() => {
+      void (async () => {
+        const session = await getSession();
+        if (!session?.user) {
+          setFavorites(new Set());
+          setLoading(false);
+          await lightCacheRemove(lightCacheKeys.favorites);
+          return;
+        }
+        const uid = session.user.id;
+        const cached = await lightCacheRead<FavoritesCachePayload>(lightCacheKeys.favorites);
+        if (cached?.payload?.userId === uid && Array.isArray(cached.payload.ids)) {
+          setFavorites(new Set(cached.payload.ids));
+          setLoading(false);
+        }
+        await refresh();
+      })();
+    });
+    return () => {
+      task.cancel();
+    };
   }, [refresh]);
 
   const isFavorite = useCallback((id: string) => favorites.has(id), [favorites]);
@@ -63,10 +90,10 @@ export function FavoritesProvider({ children }: { children: React.ReactNode }) {
     }
 
     // 1. Anti-spam check: ignore if already mutating this ID
-    if (mutatingIds.has(id)) return;
+    if (mutatingIdsRef.current.has(id)) return;
 
     // 1. Mark as mutating & Haptic Feedback
-    setMutatingIds(prev => new Set(prev).add(id));
+    mutatingIdsRef.current = new Set(mutatingIdsRef.current).add(id);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
 
     // 2. Optimistic Update (Functional for consistency)
@@ -90,6 +117,14 @@ export function FavoritesProvider({ children }: { children: React.ReactNode }) {
           return reverted;
         });
         console.error('[FavoritesContext] Toggle error:', result.error.message);
+      } else {
+        setFavorites((prev) => {
+          void lightCacheWrite<FavoritesCachePayload>(lightCacheKeys.favorites, {
+            userId: session.user.id,
+            ids: Array.from(prev),
+          });
+          return prev;
+        });
       }
     } catch {
       // Rollback on crash/offline
@@ -101,16 +136,19 @@ export function FavoritesProvider({ children }: { children: React.ReactNode }) {
       });
     } finally {
       // 4. Unlock mutation
-      setMutatingIds(prev => {
-        const next = new Set(prev);
-        next.delete(id);
-        return next;
-      });
+      const next = new Set(mutatingIdsRef.current);
+      next.delete(id);
+      mutatingIdsRef.current = next;
     }
-  }, [mutatingIds, router]);
+  }, [router]);
+
+  const value = useMemo(
+    () => ({ favorites, isFavorite, toggleFavorite, loading, refresh }),
+    [favorites, isFavorite, toggleFavorite, loading, refresh]
+  );
 
   return (
-    <FavoritesContext.Provider value={{ favorites, isFavorite, toggleFavorite, loading, refresh }}>
+    <FavoritesContext.Provider value={value}>
       {children}
     </FavoritesContext.Provider>
   );

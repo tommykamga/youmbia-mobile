@@ -36,14 +36,14 @@ export function NearYouSection({ userCity }: NearYouSectionProps) {
     if (city) {
       const result = await getListingsByCity(city, NEAR_YOU_LIMIT);
       if (result.error) {
-        const fallback = await getPublicListings();
-        setListings((fallback.data ?? []).slice(0, NEAR_YOU_LIMIT));
+        const fallback = await getPublicListings(0, NEAR_YOU_LIMIT);
+        setListings(fallback.data ?? []);
       } else {
         setListings(result.data ?? []);
       }
     } else {
-      const result = await getPublicListings();
-      setListings((result.data ?? []).slice(0, NEAR_YOU_LIMIT));
+      const result = await getPublicListings(0, NEAR_YOU_LIMIT);
+      setListings(result.data ?? []);
     }
     setLoading(false);
   }, [userCity]);

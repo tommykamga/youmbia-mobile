@@ -8,6 +8,7 @@ import {
   Text,
   ActivityIndicator,
   Platform,
+  InteractionManager,
 } from 'react-native';
 import { useFocusEffect } from 'expo-router';
 import { getPublicListings, type PublicListing } from '@/services/listings';
@@ -17,8 +18,11 @@ import { EmptyState, SkeletonListingCard, Button } from '@/components';
 import { spacing, colors, typography, fontWeights, radius } from '@/theme';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useFavorites } from '@/context/FavoritesContext';
+import { lightCacheKeys, lightCacheRead, lightCacheWrite } from '@/lib/lightCache';
 
 const PAGE_SIZE = 15;
+
+type HomeFeedCachePayload = { listings: PublicListing[] };
 const INITIAL_NUM_TO_RENDER = Platform.OS === 'ios' ? 8 : 10;
 const WINDOW_SIZE = Platform.OS === 'ios' ? 5 : 10;
 
@@ -57,8 +61,14 @@ export function ListingFeed({
   const load = useCallback(async (pageOffset: number = 0, append: boolean = false) => {
     const listResult = await getPublicListings(pageOffset, PAGE_SIZE);
     if (listResult.error) {
-      if (!append) setState({ status: 'error', message: listResult.error.message });
-      else setLoadMoreError(listResult.error.message);
+      if (!append) {
+        setState((prev) => {
+          if (prev.status === 'success' && prev.data.length > 0) {
+            return prev;
+          }
+          return { status: 'error', message: listResult.error.message };
+        });
+      } else setLoadMoreError(listResult.error.message);
       return;
     }
     const list = listResult.data ?? [];
@@ -80,6 +90,9 @@ export function ListingFeed({
       );
       hasMoreRef.current = true;
       setHasMore(true);
+      if (list.length > 0) {
+        void lightCacheWrite<HomeFeedCachePayload>(lightCacheKeys.homeFeedPublic, { listings: list });
+      }
     }
   }, []);
 
@@ -88,15 +101,25 @@ export function ListingFeed({
     if (hasLoadedListingsRef.current) return;
     hasLoadedListingsRef.current = true;
     let cancelled = false;
-    load(0, false).then(() => {
+    void (async () => {
+      const snap = await lightCacheRead<HomeFeedCachePayload>(lightCacheKeys.homeFeedPublic);
+      if (!cancelled && snap?.payload?.listings?.length) {
+        setState({ status: 'success', data: snap.payload.listings });
+      }
+      await load(0, false);
       if (!cancelled) setRefreshing(false);
-    });
-    return () => { cancelled = true; };
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, [load]);
 
   useFocusEffect(
     useCallback(() => {
-      refreshFavorites();
+      const task = InteractionManager.runAfterInteractions(() => {
+        void refreshFavorites();
+      });
+      return () => task.cancel();
     }, [refreshFavorites])
   );
 

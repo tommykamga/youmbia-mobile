@@ -18,11 +18,11 @@ import {
   initializeNotifications,
   isPushNotificationsAvailable,
 } from '@/services/notifications';
-import { syncNewMessageNotifications } from '@/services/messageNotifications';
-import { syncSavedSearchNotifications } from '@/services/savedSearchNotifications';
 import { FavoritesProvider } from '@/context/FavoritesContext';
 
 const MESSAGE_NOTIFICATIONS_POLL_MS = 45000;
+/** Délai avant le 1er sync messages / recherches sauvegardées pour ne pas concurrencer session + 1er rendu. */
+const STARTUP_NOTIFICATION_SYNC_DELAY_MS = 2500;
 
 export { ErrorBoundary } from 'expo-router';
 
@@ -103,23 +103,43 @@ export default function RootLayout() {
   }, []);
 
   useEffect(() => {
-    let interval: ReturnType<typeof setInterval> | null = null;
+    let pollInterval: ReturnType<typeof setInterval> | null = null;
+    let startupDelayTimer: ReturnType<typeof setTimeout> | null = null;
+    let cancelled = false;
 
-    const runSync = () => {
-      void syncNewMessageNotifications(routeKeyRef.current);
-      void syncSavedSearchNotifications(routeKeyRef.current);
+    const runSync = async () => {
+      if (cancelled) return;
+      try {
+        const [{ syncNewMessageNotifications }, { syncSavedSearchNotifications }] = await Promise.all([
+          import('@/services/messageNotifications'),
+          import('@/services/savedSearchNotifications'),
+        ]);
+        if (cancelled) return;
+        void syncNewMessageNotifications(routeKeyRef.current);
+        void syncSavedSearchNotifications(routeKeyRef.current);
+      } catch {
+        // Prochain intervalle ou prochain focus actif retentera le chargement des modules.
+      }
     };
 
     const startPolling = () => {
-      if (interval) return;
-      runSync();
-      interval = setInterval(runSync, MESSAGE_NOTIFICATIONS_POLL_MS);
+      if (pollInterval || startupDelayTimer) return;
+      startupDelayTimer = setTimeout(() => {
+        startupDelayTimer = null;
+        void runSync();
+        pollInterval = setInterval(() => void runSync(), MESSAGE_NOTIFICATIONS_POLL_MS);
+      }, STARTUP_NOTIFICATION_SYNC_DELAY_MS);
     };
 
     const stopPolling = () => {
-      if (!interval) return;
-      clearInterval(interval);
-      interval = null;
+      if (startupDelayTimer) {
+        clearTimeout(startupDelayTimer);
+        startupDelayTimer = null;
+      }
+      if (pollInterval) {
+        clearInterval(pollInterval);
+        pollInterval = null;
+      }
     };
 
     if (AppState.currentState === 'active') {
@@ -135,6 +155,7 @@ export default function RootLayout() {
     });
 
     return () => {
+      cancelled = true;
       stopPolling();
       subscription.remove();
     };

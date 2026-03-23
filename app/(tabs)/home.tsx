@@ -6,12 +6,10 @@
 
 import React from 'react';
 import { View, Text, StyleSheet, Pressable } from 'react-native';
-import { useRouter, useFocusEffect } from 'expo-router';
-import { Image } from 'expo-image';
+import { useRouter } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { Screen, AppLogo, CategoryRail, NotificationsPromptCard } from '@/components';
-import { getPublicListings } from '@/services/listings';
 import {
   ListingFeed,
   NearYouSection,
@@ -38,20 +36,6 @@ const HOME_CATEGORIES = [
 export default function HomeScreen() {
   const { bucket } = useResponsiveLayout();
   const contentPaddingHorizontal = bucket === 'compact' ? spacing.sm : spacing.base;
-
-  // Prefetch first few listing images for instant feeling
-  useFocusEffect(
-    React.useCallback(() => {
-      getPublicListings(0, 10).then(res => {
-        if (res.data) {
-          const urls = res.data
-            .map(l => (l.images?.[0] ? String(l.images[0]) : null))
-            .filter((u): u is string => u != null);
-          Image.prefetch(urls);
-        }
-      });
-    }, [])
-  );
 
   return (
     <Screen noPadding>

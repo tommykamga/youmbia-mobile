@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useRef, useState } from 'react';
 import { FlatList, View, Text, StyleSheet, Pressable, RefreshControl } from 'react-native';
 import { useRouter, useFocusEffect, Redirect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -8,7 +8,10 @@ import { getConversations } from '@/services/conversations';
 import type { Conversation } from '@/services/conversations/types';
 import { spacing, colors, typography, fontWeights, radius } from '@/theme';
 import { buildAuthGateHref } from '@/lib/authGateNavigation';
+import { lightCacheKeys, lightCacheRead, lightCacheWrite } from '@/lib/lightCache';
 import Animated, { useSharedValue, useAnimatedStyle, withTiming, Easing, withSpring } from 'react-native-reanimated';
+
+type InboxCachePayload = { userId: string; conversations: Conversation[] };
 
 function formatInboxDate(iso: string | null | undefined): string {
   if (!iso) return '';
@@ -32,6 +35,61 @@ function formatInboxDate(iso: string | null | undefined): string {
   }
 }
 
+function MessageItem({ item }: { item: Conversation }) {
+  const router = useRouter();
+  const scale = useSharedValue(1);
+  const animatedStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: scale.value }],
+  }));
+
+  const onPressIn = () => {
+    scale.value = withTiming(0.98, { duration: 100, easing: Easing.out(Easing.quad) });
+  };
+  const onPressOut = () => {
+    scale.value = withSpring(1);
+  };
+
+  return (
+    <Animated.View style={animatedStyle}>
+      <Pressable
+        style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
+        onPressIn={onPressIn}
+        onPressOut={onPressOut}
+        onPress={() => router.push(`/conversation/${item.id}`)}
+      >
+        <View style={styles.avatar}>
+          <Text style={styles.avatarText}>
+            {item.other_party_name?.charAt(0).toUpperCase() || '?'}
+          </Text>
+        </View>
+        <View style={styles.body}>
+          <View style={styles.header}>
+            <Text style={styles.participant} numberOfLines={1}>
+              {item.other_party_name || 'Utilisateur'}
+            </Text>
+            <Text style={styles.date}>{formatInboxDate(item.last_message_at || item.created_at)}</Text>
+          </View>
+          <Text style={styles.listing} numberOfLines={1}>
+            {item.listing_title || 'Annonce supprimée'}
+          </Text>
+          <View style={styles.footer}>
+            <Text style={[styles.preview, (item.unread_count ?? 0) > 0 && styles.previewUnread]} numberOfLines={1}>
+              {item.last_message_preview || 'Démarrer la conversation'}
+            </Text>
+            {(item.unread_count ?? 0) > 0 && (
+              <View style={styles.badge}>
+                <Text style={styles.badgeText}>
+                  {item.unread_count! > 9 ? '9+' : item.unread_count}
+                </Text>
+              </View>
+            )}
+          </View>
+        </View>
+      </Pressable>
+    </Animated.View>
+  );
+}
+
 function MessagesSkeleton() {
   return (
     <View style={styles.list}>
@@ -52,11 +110,19 @@ function MessagesSkeleton() {
   );
 }
 
+function sortConversationsInbox(data: Conversation[]): void {
+  data.sort((a, b) => {
+    const dA = new Date(a.last_message_at || a.created_at).getTime();
+    const dB = new Date(b.last_message_at || b.created_at).getTime();
+    return dB - dA;
+  });
+}
+
 export default function MessagesScreen() {
-  const router = useRouter();
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [status, setStatus] = useState<'loading' | 'error_network' | 'error_generic' | 'success' | 'empty' | 'unauthenticated'>('loading');
   const [refreshing, setRefreshing] = useState(false);
+  const shownFromCacheRef = useRef(false);
 
   const fetchInbox = useCallback(async () => {
     try {
@@ -65,6 +131,18 @@ export default function MessagesScreen() {
         setStatus('unauthenticated');
         return;
       }
+      const uid = session.user.id;
+      shownFromCacheRef.current = false;
+      const cacheKey = lightCacheKeys.conversations(uid);
+      const cached = await lightCacheRead<InboxCachePayload>(cacheKey);
+      if (cached?.payload?.userId === uid && Array.isArray(cached.payload.conversations)) {
+        const data = [...cached.payload.conversations];
+        sortConversationsInbox(data);
+        setConversations(data);
+        setStatus(data.length > 0 ? 'success' : 'empty');
+        shownFromCacheRef.current = true;
+      }
+
       const result = await getConversations();
       if (typeof __DEV__ !== 'undefined' && __DEV__) {
         // eslint-disable-next-line no-console -- diagnostic inbox uniquement en dev
@@ -83,6 +161,9 @@ export default function MessagesScreen() {
           setStatus('unauthenticated');
           return;
         }
+        if (shownFromCacheRef.current) {
+          return;
+        }
         if (msg.includes('network') || msg.includes('réseau') || msg.includes('fetch')) {
           setStatus('error_network');
         } else {
@@ -91,18 +172,17 @@ export default function MessagesScreen() {
         return;
       }
       const data = Array.isArray(result.data) ? result.data : [];
-      // Sort by last message, otherwise created_at
-      data.sort((a, b) => {
-        const dA = new Date(a.last_message_at || a.created_at).getTime();
-        const dB = new Date(b.last_message_at || b.created_at).getTime();
-        return dB - dA;
-      });
+      sortConversationsInbox(data);
       setConversations(data);
       setStatus(data.length > 0 ? 'success' : 'empty');
+      await lightCacheWrite<InboxCachePayload>(cacheKey, { userId: uid, conversations: data });
     } catch (e: unknown) {
       if (typeof __DEV__ !== 'undefined' && __DEV__) {
         // eslint-disable-next-line no-console
         console.warn('[messages/inbox] fetchInbox exception', e);
+      }
+      if (shownFromCacheRef.current) {
+        return;
       }
       const msg = String(e instanceof Error ? e.message : e).toLowerCase();
       if (msg.includes('network') || msg.includes('réseau') || msg.includes('fetch')) {
@@ -125,61 +205,7 @@ export default function MessagesScreen() {
     setRefreshing(false);
   }, [fetchInbox]);
 
-  const MessageItem = ({ item }: { item: Conversation }) => {
-    const scale = useSharedValue(1);
-    const animatedStyle = useAnimatedStyle(() => ({
-      transform: [{ scale: scale.value }]
-    }));
-
-    const onPressIn = () => {
-      scale.value = withTiming(0.98, { duration: 100, easing: Easing.out(Easing.quad) });
-    };
-    const onPressOut = () => {
-      scale.value = withSpring(1);
-    };
-
-    return (
-      <Animated.View style={animatedStyle}>
-        <Pressable
-          style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
-          onPressIn={onPressIn}
-          onPressOut={onPressOut}
-          onPress={() => router.push(`/conversation/${item.id}`)}
-        >
-          <View style={styles.avatar}>
-            <Text style={styles.avatarText}>
-              {item.other_party_name?.charAt(0).toUpperCase() || '?'}
-            </Text>
-          </View>
-          <View style={styles.body}>
-            <View style={styles.header}>
-              <Text style={styles.participant} numberOfLines={1}>
-                {item.other_party_name || 'Utilisateur'}
-              </Text>
-              <Text style={styles.date}>{formatInboxDate(item.last_message_at || item.created_at)}</Text>
-            </View>
-            <Text style={styles.listing} numberOfLines={1}>
-              {item.listing_title || 'Annonce supprimée'}
-            </Text>
-            <View style={styles.footer}>
-              <Text style={[styles.preview, (item.unread_count ?? 0) > 0 && styles.previewUnread]} numberOfLines={1}>
-                {item.last_message_preview || 'Démarrer la conversation'}
-              </Text>
-              {(item.unread_count ?? 0) > 0 && (
-                <View style={styles.badge}>
-                  <Text style={styles.badgeText}>
-                    {item.unread_count! > 9 ? '9+' : item.unread_count}
-                  </Text>
-                </View>
-              )}
-            </View>
-          </View>
-        </Pressable>
-      </Animated.View>
-    );
-  };
-
-  const renderItem = ({ item }: { item: Conversation }) => <MessageItem item={item} />;
+  const renderItem = useCallback(({ item }: { item: Conversation }) => <MessageItem item={item} />, []);
 
   if (status === 'unauthenticated') {
     return <Redirect href={buildAuthGateHref('messages')} />;
