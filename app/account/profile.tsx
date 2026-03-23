@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView } from 'react-native';
 import { Screen, AppHeader, Button, Input, Loader, EmptyState } from '@/components';
 import {
@@ -8,14 +8,23 @@ import {
   normalizePhoneForProfile,
 } from '@/services/profile';
 import { getSession } from '@/services/auth';
-import { useFocusEffect } from 'expo-router';
+import { useFocusEffect, Redirect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, typography, fontWeights, radius } from '@/theme';
+import { buildAuthGateHref } from '@/lib/authGateNavigation';
+
+function logProfileDev(phase: string, payload?: Record<string, unknown>) {
+  if (typeof __DEV__ !== 'undefined' && __DEV__) {
+    // eslint-disable-next-line no-console -- diagnostic profil uniquement en dev
+    console.log(`[profile] ${phase}`, payload ?? {});
+  }
+}
 
 type ProfileState =
   | { status: 'loading' }
+  | { status: 'unauthenticated' }
   | { status: 'error'; message: string }
-  | { status: 'success' };
+  | { status: 'success'; incomplete: boolean };
 
 export default function AccountProfileScreen() {
   const [state, setState] = useState<ProfileState>({ status: 'loading' });
@@ -27,36 +36,65 @@ export default function AccountProfileScreen() {
   const [saveSuccess, setSaveSuccess] = useState<string | null>(null);
 
   const load = useCallback(async () => {
+    logProfileDev('fetch_start');
     setState({ status: 'loading' });
     setSaveError(null);
     setSaveSuccess(null);
-    
-    // Also fetch email from session for the visual avatar
-    const session = await getSession();
-    setEmail(session?.user?.email ?? '');
 
-    const result = await getCurrentProfile();
-    if (result.error) {
-      setState({ status: 'error', message: "Nous n'arrivons pas à charger vos informations." });
-      return;
+    try {
+      const session = await getSession();
+      setEmail(session?.user?.email ?? '');
+      const userId = session?.user?.id;
+      if (!userId) {
+        logProfileDev('no_user', { hasSession: !!session });
+        setState({ status: 'unauthenticated' });
+        logProfileDev('fetch_end', { outcome: 'unauthenticated' });
+        return;
+      }
+      logProfileDev('session_ok', { userId });
+
+      const result = await getCurrentProfile();
+      logProfileDev('supabase_profile', {
+        hasData: !!result.data,
+        error: result.error?.message ?? null,
+      });
+
+      if (result.error) {
+        const raw = String(result.error.message ?? '').toLowerCase();
+        if (raw.includes('not authenticated') || raw.includes('non connecté')) {
+          setState({ status: 'unauthenticated' });
+          logProfileDev('fetch_end', { outcome: 'unauthenticated' });
+          return;
+        }
+        setState({
+          status: 'error',
+          message: result.error.message || "Nous n'arrivons pas à charger vos informations.",
+        });
+        logProfileDev('fetch_end', { outcome: 'error' });
+        return;
+      }
+
+      const name = sanitizeProfileDisplayValue(result.data?.full_name);
+      const phoneVal = sanitizeProfileDisplayValue(result.data?.phone);
+      setFullName(name);
+      setPhone(phoneVal);
+      const incomplete = !name.trim() && !phoneVal.trim();
+      setState({ status: 'success', incomplete });
+      logProfileDev('fetch_end', { outcome: 'success', incomplete });
+    } catch (e) {
+      logProfileDev('fetch_exception', { error: e instanceof Error ? e.message : String(e) });
+      setState({
+        status: 'error',
+        message: "Nous n'arrivons pas à charger vos informations. Réessayez.",
+      });
+      logProfileDev('fetch_end', { outcome: 'catch' });
     }
-    const name = sanitizeProfileDisplayValue(result.data?.full_name);
-    const phoneVal = sanitizeProfileDisplayValue(result.data?.phone);
-    setFullName(name);
-    setPhone(phoneVal);
-    setState({ status: 'success' });
   }, []);
-
-  useEffect(() => {
-    load();
-  }, [load]);
 
   useFocusEffect(
     useCallback(() => {
-      if (state.status === 'success') {
-        load();
-      }
-    }, [load, state.status])
+      void load();
+    }, [load])
   );
 
   const handleSave = useCallback(async () => {
@@ -78,8 +116,11 @@ export default function AccountProfileScreen() {
       return;
     }
     setSaveSuccess("Votre profil a été mis à jour avec succès.");
-    setFullName(sanitizeProfileDisplayValue(result.data?.full_name));
-    setPhone(sanitizeProfileDisplayValue(result.data?.phone));
+    const fn = sanitizeProfileDisplayValue(result.data?.full_name);
+    const ph = sanitizeProfileDisplayValue(result.data?.phone);
+    setFullName(fn);
+    setPhone(ph);
+    setState({ status: 'success', incomplete: !fn.trim() && !ph.trim() });
   }, [fullName, phone]);
 
   if (state.status === 'loading') {
@@ -89,6 +130,10 @@ export default function AccountProfileScreen() {
         <Loader />
       </Screen>
     );
+  }
+
+  if (state.status === 'unauthenticated') {
+    return <Redirect href={buildAuthGateHref('account', { redirect: '/account/profile' })} />;
   }
 
   if (state.status === 'error') {
@@ -111,6 +156,7 @@ export default function AccountProfileScreen() {
   }
 
   const initial = email?.charAt(0).toUpperCase() || '?';
+  const showIncomplete = state.status === 'success' && state.incomplete;
 
   return (
     <Screen keyboardAvoid scroll={false} noPadding>
@@ -132,6 +178,15 @@ export default function AccountProfileScreen() {
         </View>
 
         <View style={styles.formContainer}>
+          {showIncomplete ? (
+            <View style={styles.alertInfo}>
+              <Ionicons name="information-circle-outline" size={20} color={colors.primary} />
+              <Text style={styles.alertInfoText}>
+                Profil incomplet — renseignez au moins votre nom ou votre téléphone.
+              </Text>
+            </View>
+          ) : null}
+
           {saveError ? (
             <View style={styles.alertError}>
               <Ionicons name="alert-circle" size={20} color={colors.error} />
@@ -291,6 +346,21 @@ const styles = StyleSheet.create({
     borderRadius: radius.md,
     gap: spacing.sm,
     marginBottom: spacing.base,
+  },
+  alertInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#EEF2FF',
+    padding: spacing.base,
+    borderRadius: radius.md,
+    gap: spacing.sm,
+    marginBottom: spacing.base,
+  },
+  alertInfoText: {
+    flex: 1,
+    color: colors.textSecondary,
+    fontSize: typography.sm.fontSize,
+    fontWeight: fontWeights.medium,
   },
   alertSuccessText: {
     flex: 1,

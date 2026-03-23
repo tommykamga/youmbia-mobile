@@ -66,8 +66,23 @@ export default function MessagesScreen() {
         return;
       }
       const result = await getConversations();
+      if (typeof __DEV__ !== 'undefined' && __DEV__) {
+        // eslint-disable-next-line no-console -- diagnostic inbox uniquement en dev
+        console.log('[messages/inbox]', {
+          userId: session.user.id,
+          request: 'getConversations',
+          error: result.error?.message ?? null,
+          rowCount: result.data?.length ?? 0,
+        });
+      }
       if (result.error) {
-        const msg = String(result.error.message).toLowerCase();
+        const raw = String(result.error.message);
+        const msg = raw.toLowerCase();
+        // getConversations() ne renvoie une erreur que si auth échoue (session présente mais getUser() sans user).
+        if (msg.includes('non connecté') || msg.includes('not authenticated')) {
+          setStatus('unauthenticated');
+          return;
+        }
         if (msg.includes('network') || msg.includes('réseau') || msg.includes('fetch')) {
           setStatus('error_network');
         } else {
@@ -75,7 +90,7 @@ export default function MessagesScreen() {
         }
         return;
       }
-      const data = result.data || [];
+      const data = Array.isArray(result.data) ? result.data : [];
       // Sort by last message, otherwise created_at
       data.sort((a, b) => {
         const dA = new Date(a.last_message_at || a.created_at).getTime();
@@ -84,8 +99,12 @@ export default function MessagesScreen() {
       });
       setConversations(data);
       setStatus(data.length > 0 ? 'success' : 'empty');
-    } catch (e: any) {
-      const msg = String(e?.message || e).toLowerCase();
+    } catch (e: unknown) {
+      if (typeof __DEV__ !== 'undefined' && __DEV__) {
+        // eslint-disable-next-line no-console
+        console.warn('[messages/inbox] fetchInbox exception', e);
+      }
+      const msg = String(e instanceof Error ? e.message : e).toLowerCase();
       if (msg.includes('network') || msg.includes('réseau') || msg.includes('fetch')) {
         setStatus('error_network');
       } else {

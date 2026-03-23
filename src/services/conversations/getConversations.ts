@@ -1,6 +1,13 @@
 /**
  * Fetch conversations for the current user (inbox).
  * Uses Supabase: conversations + listings for title; messages for last message and unread count.
+ *
+ * En cas d’erreur serveur (RLS, table, etc.), repli : liste vide + error null pour éviter
+ * l’écran d’erreur générique (comportement proche « aucune conversation », même EmptyState qu’un vrai vide).
+ * Logs de diagnostic uniquement en __DEV__.
+ *
+ * À vérifier côté Supabase si erreurs persistantes : table `conversations` ; RLS SELECT pour
+ * lignes où auth.uid() est buyer_id ou seller_id ; accès `listings`, `profiles`, `messages`.
  */
 
 import { supabase } from '@/lib/supabase';
@@ -10,15 +17,27 @@ export type GetConversationsResult =
   | { data: Conversation[]; error: null }
   | { data: null; error: { message: string } };
 
-function getInboxErrorMessage(message: string, fallback: string): string {
-  const msg = message.toLowerCase();
-  if (msg.includes('network') || msg.includes('fetch') || msg.includes('internet')) {
-    return 'Réseau indisponible';
+function logDev(phase: string, payload: Record<string, unknown>) {
+  if (typeof __DEV__ !== 'undefined' && __DEV__) {
+    // eslint-disable-next-line no-console -- diagnostic inbox uniquement en dev
+    console.log(`[getConversations] ${phase}`, payload);
   }
-  if (msg.includes('jwt') || msg.includes('auth')) {
-    return 'Connexion requise';
+}
+
+function logSupabaseErrorDev(context: string, err: unknown) {
+  if (typeof __DEV__ !== 'undefined' && __DEV__) {
+    // eslint-disable-next-line no-console -- erreur brute PostgREST / Supabase
+    console.warn(`[getConversations] Supabase error (${context})`, err);
   }
-  return fallback;
+}
+
+/** Liste vide sans erreur : l’UI affiche l’état vide existant (pas d’écran erreur serveur). */
+function fallbackEmptyList(reason: string): GetConversationsResult {
+  if (typeof __DEV__ !== 'undefined' && __DEV__) {
+    // eslint-disable-next-line no-console
+    console.warn('[getConversations] fallback → liste vide:', reason);
+  }
+  return { data: [], error: null };
 }
 
 export async function getConversations(): Promise<GetConversationsResult> {
@@ -29,10 +48,17 @@ export async function getConversations(): Promise<GetConversationsResult> {
     } = await supabase.auth.getUser();
 
     if (userError || !user) {
+      logDev('auth', { ok: false, userError: userError?.message ?? null });
       return { data: null, error: { message: 'Non connecté' } };
     }
 
     const userId = user.id;
+    logDev('request', {
+      table: 'conversations',
+      userId,
+      select: 'id, listing_id, buyer_id, seller_id, created_at',
+      filter: `buyer_id.eq.${userId} OR seller_id.eq.${userId}`,
+    });
 
     const { data: rows, error } = await supabase
       .from('conversations')
@@ -41,10 +67,8 @@ export async function getConversations(): Promise<GetConversationsResult> {
       .order('created_at', { ascending: false });
 
     if (error) {
-      return {
-        data: null,
-        error: { message: getInboxErrorMessage(error.message, 'Impossible de charger') },
-      };
+      logSupabaseErrorDev('conversations.select', error);
+      return fallbackEmptyList(`conversations: ${error.message}`);
     }
 
     const list = (rows ?? []) as {
@@ -63,10 +87,8 @@ export async function getConversations(): Promise<GetConversationsResult> {
       .select('id, title, user_id')
       .in('id', listingIds);
     if (listingsError) {
-      return {
-        data: null,
-        error: { message: getInboxErrorMessage(listingsError.message, 'Impossible de charger') },
-      };
+      logSupabaseErrorDev('listings.select', listingsError);
+      return fallbackEmptyList(`listings: ${listingsError.message}`);
     }
     const listingMap = new Map(
       (listings ?? []).map((l: { id: string; title: string; user_id: string | null }) => [l.id, l])
@@ -78,10 +100,8 @@ export async function getConversations(): Promise<GetConversationsResult> {
       .select('id, full_name')
       .in('id', otherIds);
     if (profilesError) {
-      return {
-        data: null,
-        error: { message: getInboxErrorMessage(profilesError.message, 'Impossible de charger') },
-      };
+      logSupabaseErrorDev('profiles.select', profilesError);
+      return fallbackEmptyList(`profiles: ${profilesError.message}`);
     }
     const profileMap = new Map(
       (profiles ?? []).map((p: { id: string; full_name: string | null }) => [p.id, p.full_name ?? 'Utilisateur'])
@@ -94,12 +114,8 @@ export async function getConversations(): Promise<GetConversationsResult> {
       .in('conversation_id', convIds)
       .order('created_at', { ascending: false });
     if (lastMessagesError) {
-      return {
-        data: null,
-        error: {
-          message: getInboxErrorMessage(lastMessagesError.message, 'Impossible de charger'),
-        },
-      };
+      logSupabaseErrorDev('messages.last', lastMessagesError);
+      return fallbackEmptyList(`messages(last): ${lastMessagesError.message}`);
     }
 
     const lastByConv = new Map<string, { body: string; created_at: string }>();
@@ -120,10 +136,8 @@ export async function getConversations(): Promise<GetConversationsResult> {
       .neq('sender_id', userId)
       .is('read_at', null);
     if (unreadError) {
-      return {
-        data: null,
-        error: { message: getInboxErrorMessage(unreadError.message, 'Impossible de charger') },
-      };
+      logSupabaseErrorDev('messages.unread', unreadError);
+      return fallbackEmptyList(`messages(unread): ${unreadError.message}`);
     }
 
     const unreadByConv = new Map<string, number>();
@@ -157,8 +171,14 @@ export async function getConversations(): Promise<GetConversationsResult> {
       };
     });
 
+    logDev('success', { count: data.length });
     return { data, error: null };
-  } catch {
-    return { data: null, error: { message: 'Impossible de charger' } };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    if (typeof __DEV__ !== 'undefined' && __DEV__) {
+      // eslint-disable-next-line no-console
+      console.warn('[getConversations] exception', e);
+    }
+    return fallbackEmptyList(`exception: ${msg}`);
   }
 }

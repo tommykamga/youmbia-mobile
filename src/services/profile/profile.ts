@@ -85,8 +85,17 @@ export async function getCurrentProfile(): Promise<GetCurrentProfileResult> {
     return { data: null, error: { message: error.message } };
   }
 
+  // Ligne absente en base (nouveau compte, trigger manquant) : pas d’erreur — formulaire éditable.
   if (!data) {
-    return { data: null, error: { message: 'Profile not found' } };
+    return {
+      data: {
+        id: user.id,
+        full_name: null,
+        avatar_url: null,
+        phone: null,
+      },
+      error: null,
+    };
   }
 
   return { data: data as ProfileRow, error: null };

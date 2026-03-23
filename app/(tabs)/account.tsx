@@ -15,22 +15,23 @@ type RouteItem = {
   isDestructive?: boolean;
 };
 
+// Historique & Notifications masqués temporairement (écrans non prêts) — décommenter les lignes dans items pour réactiver.
 const SECTIONS = [
   {
     title: 'Mes annonces & activités',
     items: [
-      { icon: 'list', label: 'Mes annonces', route: '/(tabs)/annonces' },
+      { icon: 'list', label: 'Mes annonces', route: '/account/listings' },
       { icon: 'chatbubbles-outline', label: 'Messages', route: '/(tabs)/messages' },
-      { icon: 'heart-outline', label: 'Favoris', route: '/(tabs)/favoris' },
-      { icon: 'time-outline', label: 'Historique', route: '/history' },
+      { icon: 'heart-outline', label: 'Favoris', route: '/(tabs)/favorites' },
+      // { icon: 'time-outline', label: 'Historique', route: '/history' },
     ] as RouteItem[],
   },
   {
     title: 'Paramètres',
     items: [
       { icon: 'person-outline', label: 'Profil public', route: '/account/profile' },
-      { icon: 'notifications-outline', label: 'Notifications', route: '/settings/notifications' },
-      { icon: 'shield-checkmark-outline', label: 'Sécurité & Confidentialité', route: '/settings/security' },
+      // { icon: 'notifications-outline', label: 'Notifications', route: '/settings/notifications' },
+      { icon: 'shield-checkmark-outline', label: 'Sécurité & Confidentialité', route: '/privacy' },
     ] as RouteItem[],
   },
   {

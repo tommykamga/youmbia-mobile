@@ -286,6 +286,9 @@ export default function RootLayout() {
         <Stack.Screen name="account" options={{ headerShown: false }} />
         <Stack.Screen name="sell/index" options={{ headerShown: false }} />
         <Stack.Screen name="categories" options={{ headerShown: false }} />
+        <Stack.Screen name="help" options={{ headerShown: false }} />
+        <Stack.Screen name="terms" options={{ headerShown: false }} />
+        <Stack.Screen name="privacy" options={{ headerShown: false }} />
       </Stack>
     </FavoritesProvider>
   );
