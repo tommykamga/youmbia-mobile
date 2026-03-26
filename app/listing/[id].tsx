@@ -13,7 +13,14 @@ import {
 import { useLocalSearchParams, useRouter, useFocusEffect, type Href } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Screen, Button, Loader, EmptyState, AppHeader } from '@/components';
-import { getListingById, getSimilarListings, type ListingDetail, type PublicListing } from '@/services/listings';
+import {
+  getListingById,
+  getSimilarListings,
+  getListingDynamicAttributesForDisplay,
+  type ListingDetail,
+  type ListingDynamicAttributeDisplay,
+  type PublicListing,
+} from '@/services/listings';
 import { getFavoriteIds, toggleFavorite } from '@/services/favorites';
 import { addRecentlyViewedListingId } from '@/services/recentlyViewed';
 import { LISTING_CATEGORIES } from '@/lib/listingCategories';
@@ -28,6 +35,7 @@ import {
   ListingMeta,
   ListingSeller,
   ListingDescription,
+  ListingCharacteristics,
   ListingActions,
   SecondaryActions,
 } from '@/features/listings';
@@ -44,7 +52,7 @@ import { useResponsiveLayout } from '@/lib/responsiveLayout';
 type State =
   | { status: 'loading' }
   | { status: 'error'; message: string }
-  | { status: 'success'; listing: ListingDetail };
+  | { status: 'success'; listing: ListingDetail; dynamicAttributes: ListingDynamicAttributeDisplay[] };
 
 const FOOTER_HEIGHT_ESTIMATE = 80;
 
@@ -127,9 +135,10 @@ export default function ListingDetailScreen() {
     setSimilarListings([]);
     let cancelled = false;
     (async () => {
-      const [listingResult, favResult] = await Promise.all([
+      const [listingResult, favResult, dynamicAttributes] = await Promise.all([
         getListingById(id),
         getFavoriteIds(),
+        getListingDynamicAttributesForDisplay(id),
       ]);
       if (cancelled) return;
       if (listingResult.error) {
@@ -137,7 +146,7 @@ export default function ListingDetailScreen() {
         return;
       }
       const listing = listingResult.data!;
-      setState({ status: 'success', listing });
+      setState({ status: 'success', listing, dynamicAttributes });
       addRecentlyViewedListingId(id);
       if (favResult.data && id) {
         setIsFavorite(favResult.data.includes(id));
@@ -406,6 +415,7 @@ export default function ListingDetailScreen() {
   }
 
   const listing = state.listing;
+  const dynamicAttributes = state.dynamicAttributes;
 
   const renderSimilarItem = ({ item }: { item: PublicListing }) => (
     <View style={{ width: CARD_WIDTH }}>
@@ -451,6 +461,12 @@ export default function ListingDetailScreen() {
             memberSince={sellerStats.memberSince}
             listingCount={sellerStats.listingCount}
             onPress={listing.seller_id ? () => router.push(`/user/${listing.seller_id}` as const) : undefined}
+          />
+          <ListingCharacteristics
+            condition={listing.condition}
+            brand={listing.brand}
+            model={listing.model}
+            dynamicItems={dynamicAttributes}
           />
           <ListingDescription description={listing.description} />
 

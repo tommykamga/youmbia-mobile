@@ -361,7 +361,7 @@ const MyListingRowInner = memo(function MyListingRow({
           <Button
             variant="ghost"
             size="sm"
-            onPress={() => router.push(`/listing/${listing.id}`)}
+            onPress={() => router.push(`/listing/${listing.id}/edit`)}
             disabled={isMutating}
           >
             Modifier

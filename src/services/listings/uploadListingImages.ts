@@ -10,15 +10,15 @@ const BUCKET = 'listing-images';
 
 export type UploadListingImagesResult =
   | {
-      status: 'ok';
-      data: { uploadedCount: number; failedCount: 0; totalCount: number };
-      error: null;
-    }
+    status: 'ok';
+    data: { uploadedCount: number; failedCount: 0; totalCount: number };
+    error: null;
+  }
   | {
-      status: 'partial' | 'failed';
-      data: { uploadedCount: number; failedCount: number; totalCount: number };
-      error: { message: string };
-    };
+    status: 'partial' | 'failed';
+    data: { uploadedCount: number; failedCount: number; totalCount: number };
+    error: { message: string };
+  };
 
 function getUploadErrorMessage(message: string, fallback: string): string {
   const msg = message.toLowerCase();
@@ -33,7 +33,7 @@ function getUploadErrorMessage(message: string, fallback: string): string {
 
 /**
  * Each item: base64 string (from image picker with base64: true).
- * Uploads to listingId/0.jpg, listingId/1.jpg, ... then inserts listing_images.
+ * Uploads to userId/listingId/0.jpg, userId/listingId/1.jpg, ... then inserts listing_images.
  */
 export async function uploadListingImages(
   listingId: string,
@@ -73,7 +73,7 @@ export async function uploadListingImages(
         continue;
       }
 
-      const path = `${listingId}/${i}.jpg`;
+      const path = `${user.id}/${listingId}/${i}.jpg`;
       const { error: uploadError } = await supabase.storage
         .from(BUCKET)
         .upload(path, decode(base64), {

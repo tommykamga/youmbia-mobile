@@ -36,6 +36,8 @@ export type Database = {
           name: string;
           parent_id: number | null;
           slug: string;
+          /** Profil formulaire attributs dynamiques (ex. vehicle) — aligné prod. */
+          form_profile: string | null;
         };
         Insert: {
           icon?: string | null;
@@ -44,6 +46,7 @@ export type Database = {
           name: string;
           parent_id?: number | null;
           slug: string;
+          form_profile?: string | null;
         };
         Update: {
           icon?: string | null;
@@ -52,6 +55,7 @@ export type Database = {
           name?: string;
           parent_id?: number | null;
           slug?: string;
+          form_profile?: string | null;
         };
         Relationships: [
           {
@@ -320,6 +324,109 @@ export type Database = {
             referencedColumns: ['id'];
           },
         ];
+      };
+      /** Category attributes (shared with web); read-only usage on mobile detail for now. */
+      category_attribute_definitions: {
+        Row: {
+          id: string;
+          key: string;
+          label_fr: string;
+          type: string;
+          required: boolean;
+          filterable: boolean;
+          sort_order: number;
+          form_profile: string | null;
+          category_id: number | null;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          key: string;
+          label_fr: string;
+          type: string;
+          required?: boolean;
+          filterable?: boolean;
+          sort_order?: number;
+          form_profile?: string | null;
+          category_id?: number | null;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          key?: string;
+          label_fr?: string;
+          type?: string;
+          required?: boolean;
+          filterable?: boolean;
+          sort_order?: number;
+          form_profile?: string | null;
+          category_id?: number | null;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      category_attribute_options: {
+        Row: {
+          id: string;
+          attribute_definition_id: string;
+          value: string;
+          label_fr: string;
+          sort_order: number;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          attribute_definition_id: string;
+          value: string;
+          label_fr: string;
+          sort_order?: number;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          attribute_definition_id?: string;
+          value?: string;
+          label_fr?: string;
+          sort_order?: number;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      listing_attribute_values: {
+        Row: {
+          id: string;
+          listing_id: string;
+          attribute_definition_id: string;
+          option_id: string | null;
+          value_text: string | null;
+          value_number: number | null;
+          value_boolean: boolean | null;
+          value_date: string | null;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          listing_id: string;
+          attribute_definition_id: string;
+          option_id?: string | null;
+          value_text?: string | null;
+          value_number?: number | null;
+          value_boolean?: boolean | null;
+          value_date?: string | null;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          listing_id?: string;
+          attribute_definition_id?: string;
+          option_id?: string | null;
+          value_text?: string | null;
+          value_number?: number | null;
+          value_boolean?: boolean | null;
+          value_date?: string | null;
+          updated_at?: string;
+        };
+        Relationships: [];
       };
       messages: {
         Row: {

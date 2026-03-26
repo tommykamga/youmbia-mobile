@@ -24,6 +24,10 @@ export type ListingDetail = {
   /** Badge "Urgent". */
   urgent?: boolean;
   category_id?: number | null;
+  /** Colonnes legacy (fallback si pas d’équivalent dynamique affiché). */
+  condition?: string | null;
+  brand?: string | null;
+  model?: string | null;
   seller: {
     full_name: string | null;
     created_at: string | null;
@@ -56,6 +60,10 @@ type ListingRow = {
   boosted?: boolean | null;
   district?: string | null;
   urgent?: boolean | null;
+  condition?: string | null;
+  brand?: string | null;
+  model?: string | null;
+  category_id?: number | null;
   listing_images: ListingImageRow[] | null;
 };
 
@@ -81,7 +89,7 @@ export async function getListingById(id: string): Promise<GetListingByIdResult> 
   const { data: listingRow, error: listingError } = await supabase
     .from('listings')
     .select(
-      'id, title, price, city, description, boosted, urgent, district, created_at, views_count, user_id, status, category_id, listing_images(url, sort_order)'
+      'id, title, price, city, description, boosted, urgent, district, condition, brand, model, created_at, views_count, user_id, status, category_id, listing_images(url, sort_order)'
     )
     .eq('id', id)
     .maybeSingle();
@@ -160,6 +168,10 @@ export async function getListingById(id: string): Promise<GetListingByIdResult> 
     images: mapImages(row.listing_images, signedMap),
     district,
     urgent,
+    condition: row.condition ?? null,
+    brand: row.brand ?? null,
+    model: row.model ?? null,
+    category_id: row.category_id ?? null,
     seller,
   };
 

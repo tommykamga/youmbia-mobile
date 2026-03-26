@@ -2,7 +2,7 @@
  * Sell / publish listing – stack screen (dedicated route).
  * Form: title, price, city, description, images. On success shows next actions.
  */
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -18,8 +18,19 @@ import { buildAuthGateHref } from '@/lib/authGateNavigation';
 import * as ImagePicker from 'expo-image-picker';
 import { Screen, Button, Input } from '@/components';
 import { LISTING_CATEGORIES, type ListingCategoryId } from '@/lib/listingCategories';
+import { shouldUseDynamicAttributesPilot } from '@/lib/vehicleDynamicPilot';
+import type {
+  CategoryAttributeOption,
+  EffectiveCategoryAttributeDefinitionResolved,
+} from '@/lib/categoryAttributesTypes';
+import {
+  getEffectiveCategoryAttributeDefinitionsResolved,
+  getCategoryAttributeOptionsByDefinitionIds,
+} from '@/services/categoryAttributes';
+import { buildListingDynamicAttributeRows } from '@/lib/listingDynamicAttributesPayload';
+import { DynamicCategoryAttributesFields } from '@/features/sell/DynamicCategoryAttributesFields';
 import { colors, spacing, typography, fontWeights, radius } from '@/theme';
-import { createListing, uploadListingImages } from '@/services/listings';
+import { createListing, uploadListingImages, saveListingDynamicAttributeValues } from '@/services/listings';
 import { getSession } from '@/services/auth';
 
 /** Galerie améliorée : jusqu'à 12 photos par annonce. */
@@ -50,6 +61,15 @@ export default function SellScreen() {
   const [description, setDescription] = useState('');
   const [images, setImages] = useState<PickedImage[]>([]);
 
+  const [dynamicDefs, setDynamicDefs] = useState<EffectiveCategoryAttributeDefinitionResolved[]>([]);
+  const [dynamicOptionsByDef, setDynamicOptionsByDef] = useState<
+    Map<string, CategoryAttributeOption[]>
+  >(() => new Map());
+  const [dynamicValues, setDynamicValues] = useState<Record<string, string>>({});
+  const [dynamicLoading, setDynamicLoading] = useState(false);
+  /** Pilote Véhicules + Électronique : `form_profile` ou repli ids racines (voir `shouldUseDynamicAttributesPilot`). */
+  const [dynamicAttributesPilotActive, setDynamicAttributesPilotActive] = useState(false);
+
   const [submitLoading, setSubmitLoading] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [retryUploadLoading, setRetryUploadLoading] = useState(false);
@@ -63,7 +83,52 @@ export default function SellScreen() {
     setCity('');
     setDescription('');
     setImages([]);
+    setDynamicDefs([]);
+    setDynamicOptionsByDef(new Map());
+    setDynamicValues({});
+    setDynamicLoading(false);
+    setDynamicAttributesPilotActive(false);
   };
+
+  useEffect(() => {
+    if (categoryId == null) {
+      setDynamicAttributesPilotActive(false);
+      setDynamicDefs([]);
+      setDynamicOptionsByDef(new Map());
+      setDynamicValues({});
+      setDynamicLoading(false);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      const pilot = await shouldUseDynamicAttributesPilot(categoryId);
+      if (cancelled) return;
+      setDynamicAttributesPilotActive(pilot);
+      if (!pilot) {
+        setDynamicDefs([]);
+        setDynamicOptionsByDef(new Map());
+        setDynamicValues({});
+        setDynamicLoading(false);
+        return;
+      }
+      setDynamicLoading(true);
+      const defs = await getEffectiveCategoryAttributeDefinitionsResolved(categoryId);
+      if (cancelled) return;
+      const selectIds = defs.filter((d) => d.type === 'select').map((d) => d.definition_id);
+      const optsMap = await getCategoryAttributeOptionsByDefinitionIds(selectIds);
+      if (cancelled) return;
+      setDynamicDefs(defs);
+      setDynamicOptionsByDef(optsMap);
+      setDynamicLoading(false);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [categoryId]);
+
+  const handleDynamicChange = useCallback((key: string, value: string) => {
+    setDynamicValues((prev) => ({ ...prev, [key]: value }));
+  }, []);
 
   const buildPartialPublishState = (
     listingId: string,
@@ -138,6 +203,10 @@ export default function SellScreen() {
       setSubmitError('Ajoutez au moins une photo');
       return;
     }
+    if (dynamicAttributesPilotActive && dynamicLoading) {
+      setSubmitError('Chargement des caractéristiques… Réessayez dans un instant.');
+      return;
+    }
 
     setSubmitLoading(true);
     try {
@@ -162,6 +231,18 @@ export default function SellScreen() {
       if (!listingId) {
         setSubmitError("Impossible de publier l'annonce");
         return;
+      }
+
+      const dynamicRows = buildListingDynamicAttributeRows(
+        dynamicDefs,
+        dynamicValues,
+        dynamicOptionsByDef
+      );
+      if (dynamicRows.length > 0) {
+        const dynRes = await saveListingDynamicAttributeValues(listingId, dynamicRows);
+        if (!dynRes.success) {
+          console.warn('[SellScreen] saveListingDynamicAttributeValues', dynRes.error);
+        }
       }
 
       const withBase64 = images.filter((img): img is PickedImage & { base64: string } => !!img.base64);
@@ -398,6 +479,17 @@ export default function SellScreen() {
           })}
         </View>
       </View>
+
+      {dynamicAttributesPilotActive ? (
+        <DynamicCategoryAttributesFields
+          definitions={dynamicDefs}
+          optionsByDefinitionId={dynamicOptionsByDef}
+          loading={dynamicLoading}
+          values={dynamicValues}
+          onChange={handleDynamicChange}
+        />
+      ) : null}
+
       <Input
         label="Ville (optionnel)"
         placeholder="Ex. Paris"
@@ -451,7 +543,9 @@ export default function SellScreen() {
           size="lg"
           onPress={handleSubmit}
           loading={submitLoading}
-          disabled={submitLoading}
+          disabled={
+            submitLoading || (dynamicAttributesPilotActive && dynamicLoading)
+          }
         >
           {"Publier l'annonce"}
         </Button>

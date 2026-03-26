@@ -12,5 +12,6 @@ export { ListingMeta } from './ListingMeta';
 export { ListingSeller } from './ListingSeller';
 export { SellerBadge } from './SellerBadge';
 export { ListingDescription } from './ListingDescription';
+export { ListingCharacteristics } from './ListingCharacteristics';
 export { ListingActions } from './ListingActions';
 export * from './SecondaryActions';
