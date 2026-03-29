@@ -19,14 +19,14 @@ export type GetConversationsResult =
 
 function logDev(phase: string, payload: Record<string, unknown>) {
   if (typeof __DEV__ !== 'undefined' && __DEV__) {
-    // eslint-disable-next-line no-console -- diagnostic inbox uniquement en dev
+     
     console.log(`[getConversations] ${phase}`, payload);
   }
 }
 
 function logSupabaseErrorDev(context: string, err: unknown) {
   if (typeof __DEV__ !== 'undefined' && __DEV__) {
-    // eslint-disable-next-line no-console -- erreur brute PostgREST / Supabase
+     
     console.warn(`[getConversations] Supabase error (${context})`, err);
   }
 }
@@ -34,7 +34,7 @@ function logSupabaseErrorDev(context: string, err: unknown) {
 /** Liste vide sans erreur : l’UI affiche l’état vide existant (pas d’écran erreur serveur). */
 function fallbackEmptyList(reason: string): GetConversationsResult {
   if (typeof __DEV__ !== 'undefined' && __DEV__) {
-    // eslint-disable-next-line no-console
+     
     console.warn('[getConversations] fallback → liste vide:', reason);
   }
   return { data: [], error: null };
@@ -176,7 +176,7 @@ export async function getConversations(): Promise<GetConversationsResult> {
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     if (typeof __DEV__ !== 'undefined' && __DEV__) {
-      // eslint-disable-next-line no-console
+       
       console.warn('[getConversations] exception', e);
     }
     return fallbackEmptyList(`exception: ${msg}`);

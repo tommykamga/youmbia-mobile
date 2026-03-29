@@ -10,7 +10,7 @@ import { getSignedUrlsMap, toDisplayImageUrl } from '@/lib/listingImageUrl';
 import { normalizeListingSchemaFeatures } from '@/lib/listingSchemaFeatures';
 import { ListingCard, LISTING_CARD_RAIL_STRIDE } from './ListingCard';
 import type { PublicListing } from '@/services/listings';
-import { colors, spacing, ui } from '@/theme';
+import { spacing, ui } from '@/theme';
 import { ListingSectionSkeleton } from './ListingSectionSkeleton';
 
 const BOOSTED_LIMIT = 6;

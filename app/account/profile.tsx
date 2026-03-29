@@ -23,7 +23,7 @@ type ProfileCachePayload = {
 
 function logProfileDev(phase: string, payload?: Record<string, unknown>) {
   if (typeof __DEV__ !== 'undefined' && __DEV__) {
-    // eslint-disable-next-line no-console -- diagnostic profil uniquement en dev
+     
     console.log(`[profile] ${phase}`, payload ?? {});
   }
 }
