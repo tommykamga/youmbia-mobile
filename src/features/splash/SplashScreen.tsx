@@ -1,18 +1,20 @@
-import React, { useEffect } from 'react';
-import { StyleSheet, View, Dimensions, Platform } from 'react-native';
+import React, { useEffect, useLayoutEffect } from 'react';
+import { StyleSheet, View } from 'react-native';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
   withTiming,
   Easing,
-  withDelay,
   runOnJS,
 } from 'react-native-reanimated';
-import { LinearGradient } from 'expo-linear-gradient';
 import * as SplashScreenLib from 'expo-splash-screen';
+import { BrandSymbol } from '@/components/BrandSymbol';
 
-const { width } = Dimensions.get('window');
-const LOGO_SIZE = width * 0.35;
+/** Symbole seul, aligné sur l’icône app (calque adaptive, fond transparent attendu sur le PNG). */
+const SYMBOL_SIZE = 168;
+
+/** Temps d’affichage minimum du branding avant fondu vers l’app (après isAppReady). */
+const MIN_VISIBLE_MS = 550;
 
 type SplashScreenProps = {
   isAppReady: boolean;
@@ -20,43 +22,36 @@ type SplashScreenProps = {
 };
 
 export default function SplashScreen({ isAppReady, onFinish }: SplashScreenProps) {
-  const opacity = useSharedValue(0);
-  const scale = useSharedValue(0.95);
-  const glowOpacity = useSharedValue(0);
+  // Aligné sur le splash natif Expo (#0B6B3A + même PNG) : pas de fondu d’entrée pour éviter flash / double écran.
+  const opacity = useSharedValue(1);
+  const scale = useSharedValue(1);
+
+  useLayoutEffect(() => {
+    let cancelled = false;
+    let innerFrame = 0;
+    const outerFrame = requestAnimationFrame(() => {
+      innerFrame = requestAnimationFrame(() => {
+        if (!cancelled) {
+          SplashScreenLib.hideAsync().catch(() => {});
+        }
+      });
+    });
+    return () => {
+      cancelled = true;
+      cancelAnimationFrame(outerFrame);
+      if (innerFrame) cancelAnimationFrame(innerFrame);
+    };
+  }, []);
 
   useEffect(() => {
     let isMounted = true;
 
-    // Masquer le splash natif immédiatement pour laisser place à l'animation custom
-    SplashScreenLib.hideAsync().catch(() => {});
-
-    // Animation d'entrée : Logo et Glow (plus rapide pour plus de réactivité)
-    opacity.value = withTiming(1, {
-      duration: 300,
-      easing: Easing.out(Easing.quad),
-    });
-
-    scale.value = withTiming(1, {
-      duration: 500,
-      easing: Easing.out(Easing.back(1.2)),
-    });
-
-    glowOpacity.value = withDelay(
-      150,
-      withTiming(0.4, {
-        duration: 600,
-        easing: Easing.inOut(Easing.ease),
-      })
-    );
-
-    // Attente minimale de 800ms pour garantir l'effet premium tout en étant réactif
     const timer = setTimeout(() => {
       if (isAppReady && isMounted) {
-        // Animation de sortie
         opacity.value = withTiming(
           0,
           {
-            duration: 250,
+            duration: 200,
             easing: Easing.inOut(Easing.ease),
           },
           (finished) => {
@@ -66,41 +61,24 @@ export default function SplashScreen({ isAppReady, onFinish }: SplashScreenProps
           }
         );
       }
-    }, 800);
+    }, MIN_VISIBLE_MS);
 
     return () => {
       isMounted = false;
       clearTimeout(timer);
     };
-  }, [isAppReady, onFinish, opacity, scale, glowOpacity]);
+  }, [isAppReady, onFinish, opacity]);
 
-  const logoStyle = useAnimatedStyle(() => ({
+  const wrapStyle = useAnimatedStyle(() => ({
     opacity: opacity.value,
     transform: [{ scale: scale.value }],
   }));
 
-  const glowStyle = useAnimatedStyle(() => ({
-    opacity: glowOpacity.value,
-    transform: [{ scale: scale.value * 1.2 }],
-  }));
-
   return (
     <View style={styles.container}>
-      <LinearGradient
-        colors={['#0B6B3A', '#1DBF73']}
-        style={StyleSheet.absoluteFill}
-        start={{ x: 0.5, y: 0 }}
-        end={{ x: 0.5, y: 1 }}
-      />
-      
-      {/* Halo lumineux subtil derrière le logo */}
-      <Animated.View style={[styles.glow, glowStyle]} />
-
-      <Animated.Image
-        source={require('../../../assets/images/android-icon-foreground.png')}
-        style={[styles.logo, logoStyle]}
-        resizeMode="contain"
-      />
+      <Animated.View style={wrapStyle}>
+        <BrandSymbol size={SYMBOL_SIZE} />
+      </Animated.View>
     </View>
   );
 }
@@ -112,28 +90,5 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     zIndex: 99999,
-  },
-  glow: {
-    position: 'absolute',
-    width: LOGO_SIZE * 2,
-    height: LOGO_SIZE * 2,
-    borderRadius: LOGO_SIZE,
-    backgroundColor: '#ffffff',
-    opacity: 0.15,
-    ...Platform.select({
-      ios: {
-        shadowColor: '#ffffff',
-        shadowOffset: { width: 0, height: 0 },
-        shadowOpacity: 0.5,
-        shadowRadius: 40,
-      },
-      android: {
-        elevation: 0,
-      },
-    }),
-  },
-  logo: {
-    width: LOGO_SIZE,
-    height: LOGO_SIZE,
   },
 });

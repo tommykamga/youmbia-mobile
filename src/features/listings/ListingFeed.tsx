@@ -9,13 +9,16 @@ import {
   ActivityIndicator,
   Platform,
   InteractionManager,
+  type NativeSyntheticEvent,
+  type NativeScrollEvent,
 } from 'react-native';
+import Animated from 'react-native-reanimated';
 import { useFocusEffect } from 'expo-router';
 import { getPublicListings, type PublicListing } from '@/services/listings';
 import { sortListings, type SortOption } from '@/utils/sortListings';
 import { ListingCard } from './ListingCard';
 import { EmptyState, SkeletonListingCard, Button } from '@/components';
-import { spacing, colors, typography, fontWeights, radius } from '@/theme';
+import { spacing, colors, typography, fontWeights, radius, ui } from '@/theme';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useFavorites } from '@/context/FavoritesContext';
 import { lightCacheKeys, lightCacheRead, lightCacheWrite } from '@/lib/lightCache';
@@ -37,11 +40,20 @@ export type ListingFeedProps = {
   listHeaderComponent?: React.ReactElement | null;
   /** Padding horizontal du contenu (Home compact = plus étroit). */
   contentPaddingHorizontal?: number;
+  /** Présentation carte fil d’accueil (home uniquement aujourd’hui). */
+  listingCardFeedPresentation?: 'standard' | 'home';
+  /**
+   * Home uniquement : `Animated.FlatList` + handler Reanimated (header / sticky search).
+   * Inchangé pour les autres consommateurs éventuels.
+   */
+  reanimatedScrollHandler?: (e: NativeSyntheticEvent<NativeScrollEvent>) => void;
 };
 
 export function ListingFeed({
   listHeaderComponent,
   contentPaddingHorizontal = spacing.base,
+  listingCardFeedPresentation = 'standard',
+  reanimatedScrollHandler,
 }: ListingFeedProps) {
   const { refresh: refreshFavorites } = useFavorites();
   const [state, setState] = useState<FeedState>({ status: 'loading' });
@@ -134,9 +146,14 @@ export function ListingFeed({
       if (typeof item === 'number') {
         return <SkeletonListingCard />;
       }
-      return <ListingCard listing={item as PublicListing} />;
+      return (
+        <ListingCard
+          listing={item as PublicListing}
+          feedPresentation={listingCardFeedPresentation}
+        />
+      );
     },
-    []
+    [listingCardFeedPresentation]
   );
   const itemSeparator = useCallback(
     () => <View style={styles.separator} />,
@@ -280,33 +297,58 @@ export function ListingFeed({
     [contentPaddingHorizontal]
   );
 
-  /* No key prop on FlatList — preserves scroll position when returning from listing detail. */
-  return (
-    <FlatList
-      data={feedData}
-      keyExtractor={keyExtractor}
-      renderItem={renderItem}
-      ItemSeparatorComponent={itemSeparator}
-      ListHeaderComponent={listHeader}
-      ListFooterComponent={listFooter}
-      ListEmptyComponent={listEmpty}
-      contentContainerStyle={listContentStyle}
-      showsVerticalScrollIndicator={false}
-      initialNumToRender={INITIAL_NUM_TO_RENDER}
-      maxToRenderPerBatch={6}
-      windowSize={WINDOW_SIZE}
-      removeClippedSubviews={Platform.OS === 'ios'}
-      onEndReached={loadMore}
-      onEndReachedThreshold={0.4}
-      refreshControl={
+  const listProps = useMemo(
+    () => ({
+      data: feedData,
+      keyExtractor,
+      renderItem,
+      ItemSeparatorComponent: itemSeparator,
+      ListHeaderComponent: listHeader,
+      ListFooterComponent: listFooter,
+      ListEmptyComponent: listEmpty,
+      contentContainerStyle: listContentStyle,
+      showsVerticalScrollIndicator: false,
+      initialNumToRender: INITIAL_NUM_TO_RENDER,
+      maxToRenderPerBatch: 6,
+      windowSize: WINDOW_SIZE,
+      removeClippedSubviews: Platform.OS === 'ios',
+      onEndReached: loadMore,
+      onEndReachedThreshold: 0.4,
+      refreshControl: (
         <RefreshControl
           refreshing={refreshing}
           onRefresh={onRefresh}
           tintColor={colors.primary}
         />
-      }
-    />
+      ),
+    }),
+    [
+      feedData,
+      keyExtractor,
+      renderItem,
+      itemSeparator,
+      listHeader,
+      listFooter,
+      listEmpty,
+      listContentStyle,
+      loadMore,
+      refreshing,
+      onRefresh,
+    ]
   );
+
+  /* No key prop on FlatList — preserves scroll position when returning from listing detail. */
+  if (reanimatedScrollHandler) {
+    return (
+      <Animated.FlatList
+        {...listProps}
+        onScroll={reanimatedScrollHandler}
+        scrollEventThrottle={16}
+      />
+    );
+  }
+
+  return <FlatList {...listProps} />;
 }
 
 const styles = StyleSheet.create({
@@ -314,21 +356,21 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   listContent: {
-    paddingVertical: spacing.base,
+    paddingTop: 0,
     paddingBottom: spacing['3xl'],
     flexGrow: 1,
   },
   separator: {
-    height: spacing.base,
+    height: ui.spacing.md,
   },
   sortContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.sm,
-    paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.base,
+    gap: ui.spacing.sm,
+    paddingVertical: ui.spacing.sm,
+    paddingHorizontal: ui.spacing.lg,
     borderBottomWidth: 1,
-    borderBottomColor: colors.borderLight,
+    borderBottomColor: ui.colors.borderLight,
   },
   sortOption: {
     paddingVertical: spacing.xs,

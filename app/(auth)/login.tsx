@@ -2,10 +2,10 @@ import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, Pressable } from 'react-native';
 import { Link, useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { Screen, Button, Input, AppLogo } from '@/components';
+import { Screen, AppButton, Input, AppLogo } from '@/components';
 import { signIn, signInWithOtp, getSession } from '@/services/auth';
 import { makeRedirectUri } from 'expo-auth-session';
-import { colors, spacing, typography, fontWeights, radius } from '@/theme';
+import { colors, spacing, ui } from '@/theme';
 import { buildSignupHref, buildResetHref } from '@/lib/authRedirect';
 import { replaceAfterSuccessfulAuth } from '@/lib/authPostNavigation';
 import { buildMagicLinkOtpPath } from '@/lib/authOtpRedirectPath';
@@ -113,7 +113,7 @@ export default function LoginScreen() {
   return (
     <Screen scroll keyboardAvoid>
       <View style={styles.content}>
-        <AppLogo variant="large" style={styles.logo} />
+        <AppLogo variant="auth" style={styles.logo} />
 
         <View style={styles.headerText}>
           <Text style={styles.title}>Bon retour 👋</Text>
@@ -173,9 +173,15 @@ export default function LoginScreen() {
             </Link>
           </View>
 
-          <Button onPress={handleSubmit} loading={loading} disabled={isAnyLoading}>
+          <AppButton
+            onPress={handleSubmit}
+            loading={loading}
+            disabled={isAnyLoading}
+            layout="pill52"
+            style={styles.btnPrimaryMargin}
+          >
             Se connecter
-          </Button>
+          </AppButton>
         </View>
 
         <View style={styles.divider}>
@@ -185,23 +191,25 @@ export default function LoginScreen() {
         </View>
 
         <View style={styles.socialActions}>
-          <Button
+          <AppButton
             variant="outline"
             onPress={handleMagicLink}
             loading={magicLoading}
             disabled={isAnyLoading}
+            layout="pillMutedOutline52"
           >
             Lien Magique par Email
-          </Button>
+          </AppButton>
 
-          <Button
+          <AppButton
             variant="outline"
             onPress={handleGoogleSignIn}
             loading={googleLoading}
             disabled={isAnyLoading}
+            layout="pillMutedOutline52"
           >
             Google Auth
-          </Button>
+          </AppButton>
         </View>
 
         <View style={styles.footer}>
@@ -226,106 +234,120 @@ export default function LoginScreen() {
 
 const styles = StyleSheet.create({
   content: {
-    paddingTop: spacing.xl,
+    paddingTop: ui.spacing.lg,
     paddingBottom: spacing['3xl'],
-    gap: spacing.lg,
+    gap: ui.spacing.md,
+    maxWidth: 440,
+    width: '100%',
+    alignSelf: 'center',
   },
   logo: {
     alignSelf: 'center',
-    marginBottom: spacing.xs,
+    marginBottom: 0,
   },
   headerText: {
     alignItems: 'center',
-    marginBottom: spacing.sm,
+    marginBottom: ui.spacing.xs,
+    gap: ui.spacing.xs,
   },
   title: {
-    fontSize: typography['3xl'].fontSize,
-    lineHeight: typography['3xl'].lineHeight,
-    fontWeight: fontWeights.black,
-    color: colors.text,
-    letterSpacing: -0.5,
+    ...ui.typography.hero,
+    textAlign: 'center',
+    letterSpacing: -0.45,
   },
   subtitle: {
-    fontSize: typography.base.fontSize,
-    lineHeight: typography.base.lineHeight,
-    color: colors.textSecondary,
+    ...ui.typography.body,
+    color: ui.colors.textSecondary,
     textAlign: 'center',
-    marginTop: spacing.xs,
-    paddingHorizontal: spacing.lg,
+    paddingHorizontal: ui.spacing.sm,
+    lineHeight: 24,
+    fontWeight: '500',
   },
   form: {
-    gap: spacing.base,
+    gap: ui.spacing.lg,
+  },
+  btnPrimaryMargin: {
+    marginTop: ui.spacing.xs,
   },
   forgotPassword: {
     alignSelf: 'flex-end',
-    paddingVertical: spacing.xs,
+    paddingVertical: ui.spacing.xs,
   },
   forgotPasswordText: {
-    fontSize: typography.sm.fontSize,
-    color: colors.primary,
-    fontWeight: fontWeights.semibold,
+    ...ui.typography.bodySmall,
+    color: ui.colors.primary,
+    fontWeight: '600',
   },
   socialActions: {
-    gap: spacing.base,
+    gap: ui.spacing.sm,
   },
   divider: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginVertical: spacing.xs,
+    marginVertical: ui.spacing.xs,
   },
   line: {
     flex: 1,
-    height: 1,
-    backgroundColor: colors.borderLight,
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: ui.colors.borderLight,
   },
   dividerText: {
-    marginHorizontal: spacing.base,
-    fontSize: typography.sm.fontSize,
+    marginHorizontal: ui.spacing.md,
+    ...ui.typography.caption,
     color: colors.textTertiary,
-    fontWeight: fontWeights.medium,
+    fontWeight: '600',
+    letterSpacing: 0.2,
   },
   footer: {
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
-    marginTop: spacing.xl,
-    gap: spacing.xs,
+    marginTop: ui.spacing.lg,
+    gap: ui.spacing.xs,
   },
   footerText: {
-    fontSize: typography.base.fontSize,
-    color: colors.textSecondary,
+    ...ui.typography.bodySmall,
+    color: ui.colors.textSecondary,
   },
   footerLink: {
-    fontSize: typography.base.fontSize,
-    color: colors.primary,
-    fontWeight: fontWeights.bold,
+    ...ui.typography.bodySmall,
+    color: ui.colors.primary,
+    fontWeight: '700',
   },
   alertError: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FEE2E2',
-    padding: spacing.base,
-    borderRadius: radius.md,
-    gap: spacing.sm,
+    backgroundColor: colors.errorLight,
+    paddingVertical: ui.spacing.md,
+    paddingHorizontal: ui.spacing.lg,
+    borderRadius: ui.radius.lg,
+    gap: ui.spacing.sm,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.error + '33',
   },
   alertErrorText: {
     flex: 1,
     color: colors.error,
-    fontSize: typography.sm.fontSize,
-    fontWeight: fontWeights.medium,
+    fontSize: 14,
+    lineHeight: 20,
+    fontWeight: '600',
   },
   alertSuccess: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#DCFCE7',
-    padding: spacing.base,
-    borderRadius: radius.md,
-    gap: spacing.sm,
+    backgroundColor: colors.successLight,
+    paddingVertical: ui.spacing.md,
+    paddingHorizontal: ui.spacing.lg,
+    borderRadius: ui.radius.lg,
+    gap: ui.spacing.sm,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: ui.colors.primary + '22',
   },
   alertSuccessText: {
     flex: 1,
-    color: '#15803D', // darker green for readability
-    fontSize: typography.sm.fontSize,
-    fontWeight: fontWeights.medium,
+    color: colors.badgeVerifiedText,
+    fontSize: 14,
+    lineHeight: 20,
+    fontWeight: '600',
   },
 });

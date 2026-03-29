@@ -1,4 +1,10 @@
-export { ListingCard } from './ListingCard';
+export {
+  ListingCard,
+  LISTING_CARD_RAIL_STRIDE,
+  LISTING_CARD_RAIL_WIDTH,
+  LISTING_CARD_RAIL_MARGIN_END,
+} from './ListingCard';
+export type { ListingCardVariant, ListingCardProps } from './ListingCard';
 export { ListingFeed } from './ListingFeed';
 export { NearYouSection } from './NearYouSection';
 export { SavedSearchAlertsSection } from './SavedSearchAlertsSection';

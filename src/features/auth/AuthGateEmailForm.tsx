@@ -6,8 +6,8 @@
 import React from 'react';
 import { View, Text, StyleSheet, Pressable } from 'react-native';
 import { Link } from 'expo-router';
-import { Button, Input } from '@/components';
-import { colors, spacing, typography, fontWeights, radius, shadows } from '@/theme';
+import { AppButton, AppCard, Input } from '@/components';
+import { colors, ui } from '@/theme';
 
 export type AuthGateEmailFormProps = {
   email: string;
@@ -47,7 +47,7 @@ export function AuthGateEmailForm({
       <Text style={styles.sectionTitle} accessibilityRole="header">
         Connexion avec email
       </Text>
-      <View style={styles.card}>
+      <AppCard padded>
         <View style={styles.fields}>
           <Input
             label="Adresse email"
@@ -76,15 +76,15 @@ export function AuthGateEmailForm({
             </Link>
           </View>
 
-          <Button
+          <AppButton
             onPress={onSubmitPassword}
             loading={passwordLoading}
             disabled={busy}
-            size="lg"
-            style={styles.btnPrimary}
+            layout="pill52"
+            style={styles.btnPrimaryMargin}
           >
             Se connecter
-          </Button>
+          </AppButton>
         </View>
 
         <View style={styles.separator}>
@@ -93,17 +93,16 @@ export function AuthGateEmailForm({
           <View style={styles.line} />
         </View>
 
-        <Button
+        <AppButton
           variant="outline"
           onPress={onMagicLink}
           loading={magicLoading}
           disabled={busy}
-          size="lg"
-          style={styles.btnOutline}
+          layout="pillMutedOutline52"
         >
           Recevoir un lien par email
-        </Button>
-      </View>
+        </AppButton>
+      </AppCard>
 
       <View style={styles.signupRow}>
         <Text style={styles.signupHint}>Pas encore de compte ? </Text>
@@ -119,65 +118,47 @@ export function AuthGateEmailForm({
 
 const styles = StyleSheet.create({
   wrap: {
-    gap: spacing.md,
+    gap: ui.spacing.sm,
   },
   sectionTitle: {
-    ...typography.sm,
-    fontWeight: fontWeights.bold,
-    color: colors.text,
-    letterSpacing: -0.2,
-  },
-  card: {
-    backgroundColor: colors.surface,
-    borderRadius: radius['3xl'],
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.borderLight,
-    padding: spacing.lg,
-    gap: spacing.lg,
-    ...shadows.sm,
+    ...ui.typography.bodySmall,
+    fontWeight: '700',
+    color: ui.colors.textPrimary,
+    letterSpacing: -0.15,
   },
   fields: {
-    gap: spacing.base,
+    gap: ui.spacing.lg,
   },
-  btnPrimary: {
-    borderRadius: radius.full,
-    minHeight: 54,
-    marginTop: spacing.xs,
-  },
-  btnOutline: {
-    borderRadius: radius.full,
-    minHeight: 52,
-    borderWidth: 1.5,
-    borderColor: colors.border,
-    backgroundColor: colors.surfaceSubtle,
+  btnPrimaryMargin: {
+    marginTop: ui.spacing.xs,
   },
   forgot: {
     alignSelf: 'flex-end',
-    paddingVertical: spacing.sm,
+    paddingVertical: ui.spacing.sm,
     flexDirection: 'row',
     alignItems: 'center',
   },
   forgotText: {
-    fontSize: typography.sm.fontSize,
-    color: colors.primary,
-    fontWeight: fontWeights.semibold,
+    ...ui.typography.bodySmall,
+    color: ui.colors.primary,
+    fontWeight: '600',
   },
   separator: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginVertical: spacing.xs,
+    marginVertical: ui.spacing.xs,
   },
   line: {
     flex: 1,
     height: StyleSheet.hairlineWidth,
-    backgroundColor: colors.borderLight,
+    backgroundColor: ui.colors.borderLight,
   },
   separatorLabel: {
-    marginHorizontal: spacing.base,
-    fontSize: typography.xs.fontSize,
+    marginHorizontal: ui.spacing.lg,
+    ...ui.typography.caption,
     color: colors.textTertiary,
-    fontWeight: fontWeights.bold,
-    letterSpacing: 0.8,
+    fontWeight: '700',
+    letterSpacing: 0.6,
     textTransform: 'lowercase',
   },
   signupRow: {
@@ -185,16 +166,16 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     flexWrap: 'wrap',
-    paddingTop: spacing.sm,
+    paddingTop: ui.spacing.sm,
   },
   signupHint: {
-    fontSize: typography.sm.fontSize,
-    color: colors.textMuted,
-    fontWeight: fontWeights.medium,
+    ...ui.typography.bodySmall,
+    color: ui.colors.textMuted,
+    fontWeight: '500',
   },
   signupLink: {
-    fontSize: typography.sm.fontSize,
-    color: colors.primary,
-    fontWeight: fontWeights.bold,
+    ...ui.typography.bodySmall,
+    color: ui.colors.primary,
+    fontWeight: '700',
   },
 });

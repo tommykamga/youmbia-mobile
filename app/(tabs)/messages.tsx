@@ -213,7 +213,7 @@ export default function MessagesScreen() {
 
   return (
     <Screen noPadding>
-      <AppHeader title="Boîte de réception" noBorder />
+      <AppHeader title="Boîte de réception" noBorder brandStrip />
       
       {status === 'loading' && <MessagesSkeleton />}
 

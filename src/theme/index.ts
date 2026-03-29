@@ -13,3 +13,6 @@ export {
   tokens,
 } from './tokens';
 export type { Theme } from './tokens';
+
+export { ui, uiColors, uiSpacing, uiRadius, uiTypography, uiShadow } from './ui';
+export type { UI, UIColors, UISpacing, UIRadius, UITypography, UIShadow } from './ui';

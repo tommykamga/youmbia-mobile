@@ -1,6 +1,6 @@
 /**
  * Premium bottom tab bar – YOUMBIA brand, safe-area aware, cross-platform icons.
- * Order: Home | Search | Vendre (center) | Favoris | Messages | Compte.
+ * Order: Home | Search | Vendre (center) | Favoris | Compte. Messages : route masquée (accès home / compte).
  *
  * Icons: @expo/vector-icons (Ionicons) – one icon set for iOS and Android, no platform branching.
  *
@@ -48,7 +48,6 @@ const TAB_ICONS: Record<string, React.ComponentProps<typeof Ionicons>['name']> =
   home: 'home',
   search: 'search',
   favorites: 'heart',
-  messages: 'chatbubbles',
   account: 'person',
 };
 
@@ -169,13 +168,8 @@ export default function TabLayout() {
         name="messages"
         options={{
           title: 'Messages',
-          tabBarIcon: ({ color }) => <TabIcon name="messages" color={color} />,
-        }}
-        listeners={{
-          tabPress: (e) => {
-            e.preventDefault();
-            void navigateProtectedTab(router, '/(tabs)/messages' as Href, 'messages');
-          },
+          href: null,
+          headerShown: false,
         }}
       />
       <Tabs.Screen

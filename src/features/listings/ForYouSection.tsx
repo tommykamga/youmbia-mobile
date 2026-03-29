@@ -12,10 +12,9 @@ import { getFavoriteIds, getFavorites } from '@/services/favorites';
 import { getRecentlyViewedListingIds } from '@/services/recentlyViewed';
 import { getSavedSearches, type SavedSearch } from '@/services/savedSearches';
 import { getListingsByIds } from '@/services/listings/getListingsByIds';
-import { ListingCard } from './ListingCard';
+import { ListingCard, LISTING_CARD_RAIL_STRIDE } from './ListingCard';
 import type { PublicListing } from '@/services/listings';
 import { colors, spacing, typography, fontWeights } from '@/theme';
-import { useCardWidth } from '@/hooks/useCardWidth';
 import { ListingSectionSkeleton } from './ListingSectionSkeleton';
 
 const FOR_YOU_LIMIT = 6;
@@ -115,8 +114,7 @@ function buildRecommendationSubtitle(signals: RecommendationSignals): string {
 }
 
 export function ForYouSection() {
-  const cardWidth = useCardWidth();
-  const ITEM_WIDTH = cardWidth + spacing.sm;
+  const ITEM_WIDTH = LISTING_CARD_RAIL_STRIDE;
   const [listings, setListings] = useState<PublicListing[]>([]);
   const [favoriteIds, setFavoriteIds] = useState<Set<string>>(new Set());
   const [subtitle, setSubtitle] = useState('Une sélection récente à découvrir');
@@ -181,13 +179,9 @@ export function ForYouSection() {
   const keyExtractor = useCallback((item: PublicListing) => item.id, []);
   const renderItem = useCallback(
     ({ item }: { item: PublicListing }) => (
-      <View style={{ width: cardWidth }}>
-        <ListingCard
-          listing={item}
-        />
-      </View>
+      <ListingCard listing={item} variant="rail" />
     ),
-    [cardWidth]
+    []
   );
 
   if (loading) {
@@ -223,7 +217,6 @@ export function ForYouSection() {
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
         style={styles.scroll}
-        ItemSeparatorComponent={() => <View style={{ width: spacing.sm }} />}
         getItemLayout={(_, index) => ({
           length: ITEM_WIDTH,
           offset: index * ITEM_WIDTH,

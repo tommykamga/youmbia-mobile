@@ -2,10 +2,10 @@ import React, { useState } from 'react';
 import { View, Text, StyleSheet, Pressable } from 'react-native';
 import { Link, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { Screen, Button, Input, AppLogo } from '@/components';
+import { Screen, AppButton, Input, AppLogo } from '@/components';
 import { resetPasswordForEmail } from '@/services/auth';
 import { makeRedirectUri } from 'expo-auth-session';
-import { colors, spacing, typography, fontWeights, radius } from '@/theme';
+import { colors, spacing, ui } from '@/theme';
 import { buildLoginHref } from '@/lib/authRedirect';
 import { mapAuthErrorMessage } from '@/lib/mapAuthErrorMessage';
 import { isPlausibleEmail } from '@/lib/authEmailValidation';
@@ -57,13 +57,13 @@ export default function ResetPasswordScreen() {
           asChild
         >
           <Pressable hitSlop={15} style={styles.backButton}>
-            <Ionicons name="arrow-back" size={24} color={colors.text} />
+            <Ionicons name="arrow-back" size={24} color={ui.colors.textPrimary} />
           </Pressable>
         </Link>
       </View>
 
       <View style={styles.content}>
-        <AppLogo variant="large" style={styles.logo} />
+        <AppLogo variant="auth" style={styles.logo} />
         
         <View style={styles.headerText}>
           <Text style={styles.title}>Mot de passe oublié</Text>
@@ -98,9 +98,15 @@ export default function ResetPasswordScreen() {
             editable={!loading}
           />
 
-          <Button onPress={handleSubmit} loading={loading} disabled={loading}>
+          <AppButton
+            onPress={handleSubmit}
+            loading={loading}
+            disabled={loading}
+            layout="pill52"
+            style={styles.btnPrimaryMargin}
+          >
             Envoyer les instructions
-          </Button>
+          </AppButton>
         </View>
       </View>
     </Screen>
@@ -109,74 +115,89 @@ export default function ResetPasswordScreen() {
 
 const styles = StyleSheet.create({
   headerRow: {
-    paddingTop: spacing.lg,
-    paddingBottom: spacing.sm,
+    paddingTop: ui.spacing.md,
+    paddingBottom: ui.spacing.sm,
   },
   backButton: {
     width: 40,
     height: 40,
-    borderRadius: 20,
+    borderRadius: ui.radius.pill,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: colors.surfaceSubtle,
+    backgroundColor: ui.colors.surfaceSubtle,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: ui.colors.borderLight,
   },
   content: {
     paddingBottom: spacing['3xl'],
-    gap: spacing.lg,
+    gap: ui.spacing.md,
+    maxWidth: 440,
+    width: '100%',
+    alignSelf: 'center',
   },
   logo: {
     alignSelf: 'center',
-    marginBottom: spacing.xs,
+    marginBottom: 0,
   },
   headerText: {
     alignItems: 'center',
-    marginBottom: spacing.sm,
+    marginBottom: ui.spacing.xs,
+    gap: ui.spacing.xs,
   },
   title: {
-    fontSize: typography['3xl'].fontSize,
-    lineHeight: typography['3xl'].lineHeight,
-    fontWeight: fontWeights.black,
-    color: colors.text,
-    letterSpacing: -0.5,
+    ...ui.typography.h1,
+    textAlign: 'center',
+    letterSpacing: -0.4,
   },
   subtitle: {
-    fontSize: typography.base.fontSize,
-    lineHeight: typography.base.lineHeight,
-    color: colors.textSecondary,
+    ...ui.typography.body,
+    color: ui.colors.textSecondary,
     textAlign: 'center',
-    marginTop: spacing.xs,
-    paddingHorizontal: spacing.lg,
+    paddingHorizontal: ui.spacing.sm,
+    lineHeight: 24,
+    fontWeight: '500',
   },
   form: {
-    gap: spacing.base,
-    marginTop: spacing.sm,
+    gap: ui.spacing.lg,
+    marginTop: ui.spacing.xs,
+  },
+  btnPrimaryMargin: {
+    marginTop: ui.spacing.xs,
   },
   alertError: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FEE2E2', 
-    padding: spacing.base,
-    borderRadius: radius.md,
-    gap: spacing.sm,
+    backgroundColor: colors.errorLight,
+    paddingVertical: ui.spacing.md,
+    paddingHorizontal: ui.spacing.lg,
+    borderRadius: ui.radius.lg,
+    gap: ui.spacing.sm,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.error + '33',
   },
   alertErrorText: {
     flex: 1,
     color: colors.error,
-    fontSize: typography.sm.fontSize,
-    fontWeight: fontWeights.medium,
+    fontSize: 14,
+    lineHeight: 20,
+    fontWeight: '600',
   },
   alertSuccess: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#DCFCE7', 
-    padding: spacing.base,
-    borderRadius: radius.md,
-    gap: spacing.sm,
+    backgroundColor: colors.successLight,
+    paddingVertical: ui.spacing.md,
+    paddingHorizontal: ui.spacing.lg,
+    borderRadius: ui.radius.lg,
+    gap: ui.spacing.sm,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: ui.colors.primary + '22',
   },
   alertSuccessText: {
     flex: 1,
-    color: '#15803D',
-    fontSize: typography.sm.fontSize,
-    fontWeight: fontWeights.medium,
+    color: colors.badgeVerifiedText,
+    fontSize: 14,
+    lineHeight: 20,
+    fontWeight: '600',
   },
 });

@@ -8,17 +8,15 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { supabase } from '@/lib/supabase';
 import { getSignedUrlsMap, toDisplayImageUrl } from '@/lib/listingImageUrl';
 import { normalizeListingSchemaFeatures } from '@/lib/listingSchemaFeatures';
-import { ListingCard } from './ListingCard';
+import { ListingCard, LISTING_CARD_RAIL_STRIDE } from './ListingCard';
 import type { PublicListing } from '@/services/listings';
 import { colors, spacing, typography, fontWeights } from '@/theme';
-import { useCardWidth } from '@/hooks/useCardWidth';
 import { ListingSectionSkeleton } from './ListingSectionSkeleton';
 
 const URGENT_LIMIT = 6;
 
 export function UrgentSection() {
-  const cardWidth = useCardWidth();
-  const ITEM_WIDTH = cardWidth + spacing.sm;
+  const ITEM_WIDTH = LISTING_CARD_RAIL_STRIDE;
   const [listings, setListings] = useState<PublicListing[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -75,14 +73,8 @@ export function UrgentSection() {
   const keyExtractor = useCallback((item: PublicListing) => item.id, []);
   
   const renderItem = useCallback(
-    ({ item }: { item: PublicListing }) => (
-      <View style={{ width: cardWidth }}>
-        <ListingCard
-          listing={item}
-        />
-      </View>
-    ),
-    [cardWidth]
+    ({ item }: { item: PublicListing }) => <ListingCard listing={item} variant="rail" />,
+    []
   );
 
   if (loading) {
@@ -111,7 +103,6 @@ export function UrgentSection() {
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
         style={styles.scroll}
-        ItemSeparatorComponent={() => <View style={{ width: spacing.sm }} />}
         snapToInterval={ITEM_WIDTH}
         snapToAlignment="start"
         decelerationRate="fast"

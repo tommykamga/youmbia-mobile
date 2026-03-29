@@ -2,7 +2,7 @@ import React, { useCallback, useState, memo } from 'react';
 import { ScrollView, View, Text, StyleSheet, Pressable, Alert, ActivityIndicator } from 'react-native';
 import { useRouter, useFocusEffect, Redirect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { Screen, Loader } from '@/components';
+import { Screen, Loader, BrandSymbol } from '@/components';
 import { getSession, signOut } from '@/services/auth';
 import { spacing, colors, typography, fontWeights, radius } from '@/theme';
 import Animated, { useSharedValue, useAnimatedStyle, withTiming, Easing, withSpring } from 'react-native-reanimated';
@@ -158,7 +158,10 @@ export default function AccountScreen() {
   return (
     <Screen noPadding>
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        
+        <View style={styles.brandBar}>
+          <BrandSymbol size={40} />
+        </View>
+
         {/* User Profile Header Card */}
         <View style={styles.headerCard}>
           <View style={styles.avatar}>
@@ -235,6 +238,13 @@ export default function AccountScreen() {
 }
 
 const styles = StyleSheet.create({
+  brandBar: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingTop: spacing.xs,
+    paddingBottom: spacing.sm,
+    backgroundColor: '#F9FAFB',
+  },
   center: { flex: 1, paddingTop: spacing['3xl'] },
   emptyAction: { minWidth: 240, marginTop: spacing.md },
   scrollContent: {

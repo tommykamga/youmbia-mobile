@@ -8,17 +8,15 @@ import { useFocusEffect } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { getListingsByIds } from '@/services/listings';
 import { getRecentlyViewedListingIds } from '@/services/recentlyViewed';
-import { ListingCard } from './ListingCard';
+import { ListingCard, LISTING_CARD_RAIL_STRIDE } from './ListingCard';
 import type { PublicListing } from '@/services/listings';
 import { colors, spacing, typography, fontWeights } from '@/theme';
-import { useCardWidth } from '@/hooks/useCardWidth';
 import { ListingSectionSkeleton } from './ListingSectionSkeleton';
 
 const INITIAL_NUM_TO_RENDER = 4;
 
 export function RecentlyViewedSection() {
-  const cardWidth = useCardWidth();
-  const ITEM_WIDTH = cardWidth + spacing.sm;
+  const ITEM_WIDTH = LISTING_CARD_RAIL_STRIDE;
   const [listings, setListings] = useState<PublicListing[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -78,14 +76,7 @@ export function RecentlyViewedSection() {
         snapToInterval={ITEM_WIDTH}
         snapToAlignment="start"
         decelerationRate="fast"
-        ItemSeparatorComponent={() => <View style={{ width: spacing.sm }} />}
-        renderItem={({ item }) => (
-          <View style={{ width: cardWidth }}>
-            <ListingCard
-              listing={item}
-            />
-          </View>
-        )}
+        renderItem={({ item }) => <ListingCard listing={item} variant="rail" />}
       />
     </View>
   );

@@ -9,16 +9,26 @@
     "userInterfaceStyle": "automatic",
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.youmbia.mobile"
+      "bundleIdentifier": "com.youmbia.mobile",
+      "splash": {
+        "image": "./assets/images/splash.png",
+        "resizeMode": "contain",
+        "backgroundColor": "#0B6B3A"
+      }
     },
     "splash": {
-      "image": "./assets/images/android-icon-foreground.png",
+      "image": "./assets/images/splash.png",
       "resizeMode": "contain",
       "backgroundColor": "#0B6B3A"
     },
     "android": {
       "package": "com.youmbia.mobile",
       "versionCode": 19,
+      "splash": {
+        "image": "./assets/images/splash.png",
+        "resizeMode": "contain",
+        "backgroundColor": "#0B6B3A"
+      },
       "adaptiveIcon": {
         "backgroundColor": "#0B6B3A",
         "foregroundImage": "./assets/images/android-icon-foreground.png",

@@ -10,10 +10,9 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { getPublicListings } from '@/services/listings';
 import { buildSavedSearchHref, getSavedSearches, type SavedSearch } from '@/services/savedSearches';
 import { getSavedSearchAlertMatches } from '@/services/savedSearchAlerts';
-import { ListingCard } from './ListingCard';
+import { ListingCard, LISTING_CARD_RAIL_STRIDE } from './ListingCard';
 import type { PublicListing } from '@/services/listings';
 import { colors, spacing, typography, fontWeights, radius } from '@/theme';
-import { useCardWidth } from '@/hooks/useCardWidth';
 
 const ALERT_LIMIT = 3;
 const ALERT_FETCH_LIMIT = 24;
@@ -28,8 +27,7 @@ function buildSubtitle(matchCount: number, searchCount: number): string {
 
 export function SavedSearchAlertsSection() {
   const router = useRouter();
-  const cardWidth = useCardWidth();
-  const ITEM_WIDTH = cardWidth + spacing.sm;
+  const ITEM_WIDTH = LISTING_CARD_RAIL_STRIDE;
   const [listings, setListings] = useState<PublicListing[]>([]);
   const [subtitle, setSubtitle] = useState('');
   const [topSearch, setTopSearch] = useState<SavedSearch | null>(null);
@@ -74,12 +72,8 @@ export function SavedSearchAlertsSection() {
 
   const keyExtractor = useCallback((item: PublicListing) => item.id, []);
   const renderItem = useCallback(
-    ({ item }: { item: PublicListing }) => (
-      <View style={{ width: cardWidth }}>
-        <ListingCard listing={item} />
-      </View>
-    ),
-    [cardWidth]
+    ({ item }: { item: PublicListing }) => <ListingCard listing={item} variant="rail" />,
+    []
   );
 
   const handleSeeMatches = useCallback(() => {
@@ -122,7 +116,6 @@ export function SavedSearchAlertsSection() {
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
         style={styles.scroll}
-        ItemSeparatorComponent={() => <View style={{ width: spacing.sm }} />}
         getItemLayout={(_, index) => ({
           length: ITEM_WIDTH,
           offset: index * ITEM_WIDTH,

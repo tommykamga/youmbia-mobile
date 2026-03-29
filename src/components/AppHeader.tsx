@@ -10,9 +10,12 @@ import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { colors, spacing, typography, fontWeights } from '@/theme';
+import { BrandSymbol } from './BrandSymbol';
 
 type AppHeaderProps = {
   title: string;
+  /** Bandeau logo YOUMBIA au-dessus du titre (onglets type Messages). */
+  brandStrip?: boolean;
   /** Show back button (uses router.back()). */
   showBack?: boolean;
   /** Right-side element (e.g. icon button or text). */
@@ -26,6 +29,7 @@ type AppHeaderProps = {
 
 export function AppHeader({
   title,
+  brandStrip = false,
   showBack = false,
   right,
   noBorder,
@@ -44,6 +48,11 @@ export function AppHeader({
         style,
       ]}
     >
+      {brandStrip ? (
+        <View style={styles.brandStrip}>
+          <BrandSymbol size={36} />
+        </View>
+      ) : null}
       <View style={styles.row}>
         {showBack ? (
           <Pressable
@@ -77,6 +86,11 @@ const styles = StyleSheet.create({
   border: {
     borderBottomWidth: 1,
     borderBottomColor: colors.borderLight,
+  },
+  brandStrip: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingBottom: spacing.xs,
   },
   row: {
     flexDirection: 'row',

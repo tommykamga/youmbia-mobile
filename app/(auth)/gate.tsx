@@ -16,7 +16,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import Animated, { Easing, FadeIn, FadeInDown } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Screen, Button, AppLogo, AppHeader } from '@/components';
+import { Screen, AppLogo, AppHeader, AppCard, AppButton } from '@/components';
 import { AuthGateEmailForm } from '@/features/auth/AuthGateEmailForm';
 import {
   AUTH_GATE_CONTEXT_CONFIG,
@@ -28,7 +28,7 @@ import { replaceAfterSuccessfulAuth } from '@/lib/authPostNavigation';
 import { runGoogleOAuth, formatGoogleSignInUserMessage } from '@/lib/googleSignInMobile';
 import { getSession } from '@/services/auth';
 import { useAuthGateEmailAuth } from '@/features/auth/useAuthGateEmailAuth';
-import { colors, spacing, typography, fontWeights, radius, shadows } from '@/theme';
+import { colors, spacing, ui } from '@/theme';
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
@@ -148,9 +148,16 @@ export default function AuthGateScreen() {
     <Screen scroll keyboardAvoid safe={false} noPadding>
       <AppHeader title={navTitle} showBack noBorder titleStyle={styles.headerNavTitle} />
 
-      <View style={[styles.inner, { paddingBottom: insets.bottom + spacing['3xl'], paddingHorizontal: spacing.lg }]}>
+      <View
+        style={[
+          styles.inner,
+          { paddingBottom: insets.bottom + spacing['3xl'], paddingHorizontal: spacing.lg },
+        ]}
+      >
         <Animated.View entering={FadeIn.duration(380)} style={styles.hero}>
-          <AppLogo variant="medium" style={styles.logo} />
+          <View style={styles.logoHalo}>
+            <AppLogo variant="auth" style={styles.logo} />
+          </View>
           <View style={styles.headline}>
             <Text style={styles.title}>{gateConfig.title}</Text>
             <Text style={styles.subtitle}>{gateConfig.subtitle}</Text>
@@ -158,7 +165,7 @@ export default function AuthGateScreen() {
         </Animated.View>
 
         <View style={styles.reassurance} accessibilityRole="text">
-          <Ionicons name="shield-checkmark-outline" size={15} color={colors.textMuted} />
+          <Ionicons name="shield-checkmark-outline" size={16} color={ui.colors.textMuted} />
           <Text style={styles.reassuranceText}>
             Connexion sécurisée • Aucun spam • Accès instantané
           </Text>
@@ -182,29 +189,30 @@ export default function AuthGateScreen() {
           </View>
         ) : null}
 
-        <View style={[styles.ctaSurface, emailExpanded && styles.ctaSurfaceWhenEmailOpen]}>
-          <Button
+        <AppCard
+          padded
+          style={emailExpanded ? styles.ctaSurfaceWhenEmailOpen : undefined}
+        >
+          <AppButton
             onPress={handleGoogle}
             loading={googleLoading}
             disabled={anyLoading}
-            size="lg"
-            style={styles.primaryCta}
-            leftIcon={<Ionicons name="logo-google" size={22} color={colors.surface} />}
+            layout="pill52"
+            leftIcon={<Ionicons name="logo-google" size={22} color={ui.colors.surface} />}
           >
             {gateConfig.primaryCtaLabel}
-          </Button>
+          </AppButton>
 
-          <Button
+          <AppButton
             variant="outline"
             onPress={openEmailSection}
             disabled={anyLoading}
-            size="lg"
-            style={styles.secondaryCta}
-            leftIcon={<Ionicons name="mail-outline" size={20} color={colors.primary} />}
+            layout="pillMutedOutline52"
+            leftIcon={<Ionicons name="mail-outline" size={20} color={ui.colors.primary} />}
           >
             {gateConfig.secondaryCtaLabel}
-          </Button>
-        </View>
+          </AppButton>
+        </AppCard>
 
         {emailExpanded ? (
           <Animated.View
@@ -243,93 +251,82 @@ export default function AuthGateScreen() {
 
 const styles = StyleSheet.create({
   headerNavTitle: {
-    ...typography.sm,
-    fontWeight: fontWeights.semibold,
-    color: colors.textSecondary,
-    letterSpacing: 0.15,
+    ...ui.typography.bodySmall,
+    fontWeight: '600',
+    color: ui.colors.textSecondary,
+    letterSpacing: 0.12,
   },
   inner: {
-    paddingTop: spacing.md,
-    gap: spacing.lg,
+    paddingTop: ui.spacing.xs,
+    gap: ui.spacing.md,
     maxWidth: 440,
     width: '100%',
     alignSelf: 'center',
   },
   hero: {
-    gap: spacing.lg,
+    gap: ui.spacing.md,
     alignItems: 'center',
+  },
+  /** Même teinte que la home (#DCFCE7), plus légère qu’en hero (opacité ~0.10). */
+  logoHalo: {
+    backgroundColor: 'rgba(220, 252, 231, 0.10)',
+    paddingVertical: 6,
+    paddingHorizontal: ui.spacing.sm,
+    borderRadius: ui.radius.xl,
+    borderWidth: 1,
+    borderColor: ui.colors.borderLight,
   },
   logo: {
     alignSelf: 'center',
+    marginBottom: 0,
+    marginTop: 0,
   },
   headline: {
-    gap: spacing.md,
-    paddingHorizontal: spacing.sm,
+    gap: ui.spacing.xs,
+    marginTop: 0,
+    paddingHorizontal: ui.spacing.sm,
     maxWidth: 400,
   },
   title: {
-    ...typography['2xl'],
-    fontWeight: fontWeights.black,
-    color: colors.text,
-    letterSpacing: -0.5,
+    ...ui.typography.h1,
     textAlign: 'center',
+    letterSpacing: -0.4,
   },
   subtitle: {
-    ...typography.base,
-    color: colors.textSecondary,
+    ...ui.typography.body,
+    color: ui.colors.textSecondary,
     textAlign: 'center',
-    lineHeight: 25,
-    paddingHorizontal: spacing.xs,
-    fontWeight: fontWeights.medium,
+    lineHeight: 24,
+    paddingHorizontal: ui.spacing.xs,
+    fontWeight: '500',
   },
   reassurance: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     alignSelf: 'center',
-    gap: spacing.sm,
-    paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.base,
-    backgroundColor: colors.surfaceSubtle,
-    borderRadius: radius.full,
+    gap: ui.spacing.sm,
+    paddingVertical: ui.spacing.sm,
+    paddingHorizontal: ui.spacing.md,
+    backgroundColor: ui.colors.surfaceSubtle,
+    borderRadius: ui.radius.pill,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.borderLight,
+    borderColor: ui.colors.borderLight,
   },
   reassuranceText: {
-    fontSize: typography.xs.fontSize,
-    lineHeight: typography.xs.lineHeight,
-    color: colors.textMuted,
-    fontWeight: fontWeights.semibold,
-    letterSpacing: 0.15,
-  },
-  ctaSurface: {
-    gap: spacing.md,
-    padding: spacing.base,
-    backgroundColor: colors.surface,
-    borderRadius: radius['3xl'],
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.borderLight,
-    ...shadows.card,
+    ...ui.typography.caption,
+    fontWeight: '600',
+    letterSpacing: 0.12,
+    flexShrink: 1,
   },
   ctaSurfaceWhenEmailOpen: {
-    opacity: 0.92,
-  },
-  primaryCta: {
-    borderRadius: radius.full,
-    minHeight: 56,
-  },
-  secondaryCta: {
-    borderRadius: radius.full,
-    minHeight: 54,
-    borderWidth: 1.5,
-    borderColor: colors.border,
-    backgroundColor: colors.surfaceSubtle,
+    opacity: 0.94,
   },
   emailPanel: {
-    marginTop: spacing.sm,
-    paddingTop: spacing.md,
+    marginTop: ui.spacing.xs,
+    paddingTop: ui.spacing.sm,
     borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: colors.borderLight,
+    borderTopColor: ui.colors.borderLight,
   },
   alertIconWrap: {
     marginTop: 1,
@@ -338,36 +335,36 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'flex-start',
     backgroundColor: colors.errorLight,
-    paddingVertical: spacing.md,
-    paddingHorizontal: spacing.base,
-    borderRadius: radius.lg,
-    gap: spacing.md,
+    paddingVertical: ui.spacing.md,
+    paddingHorizontal: ui.spacing.lg,
+    borderRadius: ui.radius.lg,
+    gap: ui.spacing.md,
     borderLeftWidth: 4,
     borderLeftColor: colors.error,
   },
   alertErrorText: {
     flex: 1,
     color: colors.error,
-    fontSize: typography.sm.fontSize,
+    fontSize: 14,
     lineHeight: 21,
-    fontWeight: fontWeights.semibold,
+    fontWeight: '600',
   },
   alertSuccess: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     backgroundColor: colors.successLight,
-    paddingVertical: spacing.md,
-    paddingHorizontal: spacing.base,
-    borderRadius: radius.lg,
-    gap: spacing.md,
+    paddingVertical: ui.spacing.md,
+    paddingHorizontal: ui.spacing.lg,
+    borderRadius: ui.radius.lg,
+    gap: ui.spacing.md,
     borderLeftWidth: 4,
     borderLeftColor: colors.primaryDark,
   },
   alertSuccessText: {
     flex: 1,
     color: colors.badgeVerifiedText,
-    fontSize: typography.sm.fontSize,
+    fontSize: 14,
     lineHeight: 21,
-    fontWeight: fontWeights.semibold,
+    fontWeight: '600',
   },
 });

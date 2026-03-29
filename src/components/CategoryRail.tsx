@@ -6,16 +6,16 @@
 import React, { useMemo } from 'react';
 import { View, Text, StyleSheet, Pressable, useWindowDimensions } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { colors, spacing, typography, fontWeights, radius, shadows } from '@/theme';
+import { ui } from '@/theme';
 
 const AUTRES_LABEL = 'Autres';
 
 const ITEM_MIN_WIDTH = 80;
-const GAP = spacing.sm;
+const GAP = ui.spacing.sm;
 const SAFETY_BUFFER = 8;
 
-const ICON_WRAP_SIZE = 48;
-const ICON_SIZE = 24;
+const ICON_WRAP_SIZE = 52;
+const ICON_SIZE = 22;
 
 /** Mapping local label → icône Ionicons (outline). Fallback: ellipsis-horizontal. */
 const CATEGORY_ICON: Record<string, string> = {
@@ -46,7 +46,7 @@ export function CategoryRail({
   categories,
   onCategoryPress,
   onVoirToutPress,
-  edgePadding = spacing.base,
+  edgePadding = ui.spacing.lg,
 }: CategoryRailProps) {
   const { width } = useWindowDimensions();
 
@@ -123,7 +123,7 @@ export function CategoryRail({
         <Ionicons
           name={iconName as keyof typeof Ionicons.glyphMap}
           size={ICON_SIZE}
-          color={colors.primary}
+          color={ui.colors.primary}
         />
       </View>
       <Text
@@ -159,37 +159,36 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     justifyContent: 'flex-start',
     gap: GAP,
-    paddingVertical: spacing.xs,
-    marginBottom: spacing.sm,
+    paddingVertical: ui.spacing.xs,
+    marginBottom: ui.spacing.sm,
     overflow: 'hidden',
   },
   tile: {
     alignItems: 'center',
     justifyContent: 'flex-start',
-    paddingVertical: spacing.xs,
-    borderRadius: radius.lg,
+    paddingVertical: ui.spacing.xs,
+    borderRadius: ui.radius.lg,
   },
   tilePressed: {
     opacity: 0.92,
-    backgroundColor: colors.primaryLight + '99',
+    backgroundColor: ui.colors.primarySoft,
     transform: [{ scale: 0.97 }],
   },
   iconWrap: {
     width: ICON_WRAP_SIZE,
     height: ICON_WRAP_SIZE,
     borderRadius: ICON_WRAP_SIZE / 2,
-    backgroundColor: colors.surface,
+    backgroundColor: ui.colors.surface,
     borderWidth: 1,
-    borderColor: colors.borderLight,
+    borderColor: ui.colors.borderLight,
     alignItems: 'center',
     justifyContent: 'center',
-    ...shadows.sm,
   },
   label: {
-    marginTop: 6,
-    ...typography.sm,
-    fontWeight: fontWeights.semibold,
-    color: colors.text,
+    marginTop: ui.spacing.xs,
+    ...ui.typography.bodySmall,
+    fontWeight: '600',
+    color: ui.colors.textPrimary,
     textAlign: 'center',
   },
 });
