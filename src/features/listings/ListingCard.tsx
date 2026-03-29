@@ -30,10 +30,13 @@ export const LISTING_CARD_RAIL_MARGIN_END = 12;
 export const LISTING_CARD_RAIL_STRIDE = LISTING_CARD_RAIL_WIDTH + LISTING_CARD_RAIL_MARGIN_END;
 
 const IMAGE_HEIGHT = 160;
-/** Fils d’accueil uniquement (`feedPresentation="home"`) — un peu plus immersif. */
-const IMAGE_HEIGHT_HOME = 172;
+/** Fils d’accueil uniquement — image plus immersive, alignée au radius carte home. */
+const IMAGE_HEIGHT_HOME = 186;
 const IMAGE_RADIUS = 16;
+/** Radius carte / image home (entre xl et 3xl, rendu marketplace premium). */
+const CARD_RADIUS_HOME = 20;
 const HEART_SIZE = 28;
+const HEART_SIZE_HOME = 26;
 const OVERLAY_INSET = spacing.sm;
 
 export type ListingCardVariant = 'feed' | 'rail';
@@ -128,13 +131,13 @@ function ListingCardInner({
 
   const renderImageBody = () => (
     <>
-      <View style={styles.topRow}>
+      <View style={[styles.topRow, isHomeFeed && styles.topRowHome]}>
         {renderBadges()}
-        <View style={styles.heartSlot}>
-          <FavoriteButton listingId={listing.id} size={HEART_SIZE} />
+        <View style={[styles.heartSlot, isHomeFeed && styles.heartSlotHome]}>
+          <FavoriteButton listingId={listing.id} size={isHomeFeed ? HEART_SIZE_HOME : HEART_SIZE} />
         </View>
       </View>
-      {priceLabel ? (
+      {priceLabel && !isHomeFeed ? (
         <View style={styles.priceOverlay}>
           <Text style={styles.priceText}>{priceLabel}</Text>
         </View>
@@ -180,11 +183,28 @@ function ListingCardInner({
       )}
 
       <View style={[styles.info, isHomeFeed && styles.infoHome]}>
-        <Text style={[styles.title, isHomeFeed && styles.titleHome]} numberOfLines={2}>
+        {isHomeFeed && priceLabel ? (
+          <Text
+            style={styles.priceHomeLead}
+            numberOfLines={1}
+            ellipsizeMode="tail"
+          >
+            {priceLabel}
+          </Text>
+        ) : null}
+        <Text
+          style={[styles.title, isHomeFeed && styles.titleHome]}
+          numberOfLines={2}
+          ellipsizeMode="tail"
+        >
           {listing.title}
         </Text>
         {metaLine ? (
-          <Text style={[styles.meta, isHomeFeed && styles.metaHome]} numberOfLines={1}>
+          <Text
+            style={[styles.meta, isHomeFeed && styles.metaHome]}
+            numberOfLines={1}
+            ellipsizeMode="tail"
+          >
             {metaLine}
           </Text>
         ) : null}
@@ -220,7 +240,7 @@ const styles = StyleSheet.create({
     backgroundColor: ui.colors.surface,
     borderWidth: 1,
     borderColor: ui.colors.borderLight,
-    borderRadius: ui.radius.xl,
+    borderRadius: CARD_RADIUS_HOME,
     overflow: 'hidden',
     padding: 0,
     width: '100%',
@@ -242,10 +262,24 @@ const styles = StyleSheet.create({
   imageHome: {
     borderBottomLeftRadius: 0,
     borderBottomRightRadius: 0,
+    borderTopLeftRadius: CARD_RADIUS_HOME,
+    borderTopRightRadius: CARD_RADIUS_HOME,
   },
   imageRadiusHome: {
     borderBottomLeftRadius: 0,
     borderBottomRightRadius: 0,
+    borderTopLeftRadius: CARD_RADIUS_HOME,
+    borderTopRightRadius: CARD_RADIUS_HOME,
+  },
+  topRowHome: {
+    paddingTop: 10,
+    paddingHorizontal: 10,
+  },
+  heartSlotHome: {
+    borderRadius: 22,
+    backgroundColor: 'rgba(255,255,255,0.92)',
+    padding: 2,
+    overflow: 'hidden',
   },
   imagePlaceholder: {
     position: 'relative',
@@ -385,18 +419,31 @@ const styles = StyleSheet.create({
   },
   infoHome: {
     paddingHorizontal: ui.spacing.md,
-    paddingTop: ui.spacing.md,
-    paddingBottom: ui.spacing.md,
+    paddingTop: spacing.base,
+    paddingBottom: ui.spacing.lg,
+    gap: 0,
+  },
+  priceHomeLead: {
+    fontSize: 19,
+    lineHeight: 24,
+    fontWeight: fontWeights.black,
+    color: colors.primaryDark,
+    letterSpacing: -0.4,
+    marginBottom: ui.spacing.md,
   },
   titleHome: {
-    ...ui.typography.bodySmall,
+    fontSize: 15,
+    lineHeight: 21,
     fontWeight: fontWeights.semibold,
     color: ui.colors.textPrimary,
-    marginBottom: ui.spacing.xs,
-    lineHeight: 20,
+    marginBottom: spacing.sm,
+    letterSpacing: -0.12,
   },
   metaHome: {
-    ...ui.typography.caption,
-    color: ui.colors.textMuted,
+    fontSize: 11,
+    lineHeight: 15,
+    fontWeight: fontWeights.normal,
+    color: colors.textTertiary,
+    marginTop: 2,
   },
 });

@@ -14,7 +14,7 @@ import { getSavedSearches, type SavedSearch } from '@/services/savedSearches';
 import { getListingsByIds } from '@/services/listings/getListingsByIds';
 import { ListingCard, LISTING_CARD_RAIL_STRIDE } from './ListingCard';
 import type { PublicListing } from '@/services/listings';
-import { colors, spacing, typography, fontWeights } from '@/theme';
+import { colors, spacing, typography, ui } from '@/theme';
 import { ListingSectionSkeleton } from './ListingSectionSkeleton';
 
 const FOR_YOU_LIMIT = 6;
@@ -249,10 +249,9 @@ const styles = StyleSheet.create({
     marginRight: spacing.sm,
   },
   title: {
-    ...typography.lg,
-    fontWeight: fontWeights.bold,
-    color: colors.text,
-    letterSpacing: -0.3,
+    ...ui.typography.h2,
+    letterSpacing: -0.35,
+    color: ui.colors.textPrimary,
     flex: 1,
   },
   subtitle: {

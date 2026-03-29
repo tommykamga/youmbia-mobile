@@ -234,7 +234,7 @@ export default function LoginScreen() {
 
 const styles = StyleSheet.create({
   content: {
-    paddingTop: ui.spacing.lg,
+    paddingTop: ui.spacing.md,
     paddingBottom: spacing['3xl'],
     gap: ui.spacing.md,
     maxWidth: 440,
@@ -247,19 +247,19 @@ const styles = StyleSheet.create({
   },
   headerText: {
     alignItems: 'center',
-    marginBottom: ui.spacing.xs,
+    marginBottom: 0,
     gap: ui.spacing.xs,
   },
   title: {
-    ...ui.typography.hero,
+    ...ui.typography.h1,
     textAlign: 'center',
-    letterSpacing: -0.45,
+    letterSpacing: -0.4,
   },
   subtitle: {
     ...ui.typography.body,
     color: ui.colors.textSecondary,
     textAlign: 'center',
-    paddingHorizontal: ui.spacing.sm,
+    paddingHorizontal: ui.spacing.xs,
     lineHeight: 24,
     fontWeight: '500',
   },

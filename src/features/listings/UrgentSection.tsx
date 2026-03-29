@@ -10,7 +10,7 @@ import { getSignedUrlsMap, toDisplayImageUrl } from '@/lib/listingImageUrl';
 import { normalizeListingSchemaFeatures } from '@/lib/listingSchemaFeatures';
 import { ListingCard, LISTING_CARD_RAIL_STRIDE } from './ListingCard';
 import type { PublicListing } from '@/services/listings';
-import { colors, spacing, typography, fontWeights } from '@/theme';
+import { colors, spacing, ui } from '@/theme';
 import { ListingSectionSkeleton } from './ListingSectionSkeleton';
 
 const URGENT_LIMIT = 6;
@@ -126,11 +126,10 @@ const styles = StyleSheet.create({
     marginRight: spacing.xs,
   },
   title: {
-    ...typography.sm,
-    fontWeight: fontWeights.bold,
-    color: colors.text,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
+    ...ui.typography.h2,
+    letterSpacing: -0.35,
+    color: ui.colors.textPrimary,
+    flex: 1,
   },
   scroll: {
     marginHorizontal: -spacing.base,

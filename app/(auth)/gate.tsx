@@ -257,7 +257,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0.12,
   },
   inner: {
-    paddingTop: ui.spacing.xs,
+    paddingTop: ui.spacing.md,
     gap: ui.spacing.md,
     maxWidth: 440,
     width: '100%',

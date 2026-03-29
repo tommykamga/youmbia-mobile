@@ -10,7 +10,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { getListingsByCity, getPublicListings } from '@/services/listings';
 import { NearYouCard } from './NearYouCard';
 import type { PublicListing } from '@/services/listings';
-import { colors, spacing, typography, fontWeights } from '@/theme';
+import { colors, spacing, typography, fontWeights, ui } from '@/theme';
 import { useCardWidth } from '@/hooks/useCardWidth';
 import { ListingSectionSkeleton } from './ListingSectionSkeleton';
 
@@ -154,10 +154,9 @@ const styles = StyleSheet.create({
     marginRight: spacing.sm,
   },
   title: {
-    ...typography.lg,
-    fontWeight: fontWeights.bold,
-    color: colors.text,
-    letterSpacing: -0.3,
+    ...ui.typography.h2,
+    letterSpacing: -0.35,
+    color: ui.colors.textPrimary,
     flex: 1,
   },
   subtitle: {

@@ -12,7 +12,7 @@ import { buildSavedSearchHref, getSavedSearches, type SavedSearch } from '@/serv
 import { getSavedSearchAlertMatches } from '@/services/savedSearchAlerts';
 import { ListingCard, LISTING_CARD_RAIL_STRIDE } from './ListingCard';
 import type { PublicListing } from '@/services/listings';
-import { colors, spacing, typography, fontWeights, radius } from '@/theme';
+import { colors, spacing, typography, fontWeights, radius, ui } from '@/theme';
 
 const ALERT_LIMIT = 3;
 const ALERT_FETCH_LIMIT = 24;
@@ -156,11 +156,11 @@ const styles = StyleSheet.create({
     marginRight: spacing.xs,
   },
   title: {
-    ...typography.sm,
-    fontWeight: fontWeights.semibold,
-    color: colors.text,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
+    ...ui.typography.h2,
+    letterSpacing: -0.35,
+    color: ui.colors.textPrimary,
+    flex: 1,
+    minWidth: 0,
   },
   subtitle: {
     ...typography.xs,

@@ -144,7 +144,9 @@ export function ListingFeed({
   const renderItem = useCallback(
     ({ item }: { item: any }) => {
       if (typeof item === 'number') {
-        return <SkeletonListingCard />;
+        return (
+          <SkeletonListingCard feedPresentation={listingCardFeedPresentation} />
+        );
       }
       return (
         <ListingCard

@@ -10,7 +10,7 @@ import { getListingsByIds } from '@/services/listings';
 import { getRecentlyViewedListingIds } from '@/services/recentlyViewed';
 import { ListingCard, LISTING_CARD_RAIL_STRIDE } from './ListingCard';
 import type { PublicListing } from '@/services/listings';
-import { colors, spacing, typography, fontWeights } from '@/theme';
+import { colors, spacing, ui } from '@/theme';
 import { ListingSectionSkeleton } from './ListingSectionSkeleton';
 
 const INITIAL_NUM_TO_RENDER = 4;
@@ -95,11 +95,10 @@ const styles = StyleSheet.create({
     marginRight: spacing.xs,
   },
   title: {
-    ...typography.sm,
-    fontWeight: fontWeights.semibold,
-    color: colors.text,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
+    ...ui.typography.h2,
+    letterSpacing: -0.35,
+    color: ui.colors.textPrimary,
+    flex: 1,
   },
   scroll: {
     marginHorizontal: -spacing.base,

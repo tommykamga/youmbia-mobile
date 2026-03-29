@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet, FlatList } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { colors, spacing, typography, fontWeights, cardStyles } from '@/theme';
+import { colors, spacing, cardStyles, ui } from '@/theme';
 import { useCardWidth } from '@/hooks/useCardWidth';
 
 type ListingSectionSkeletonProps = {
@@ -25,7 +25,7 @@ export function ListingSectionSkeleton({
   const cardWidth = useCardWidth();
   const data = [1, 2, 3];
 
-  const titleRowHeight = titleVariant === 'featured' ? 36 : 32;
+  const titleRowHeight = titleVariant === 'featured' ? 40 : 34;
   const subtitleHeight = hasSubtitle ? 22 : 0;
   const titleBlockGap = hasSubtitle ? spacing.xs : 0;
   const imageHeight = cardWidth * 0.75;
@@ -39,8 +39,6 @@ export function ListingSectionSkeleton({
     bodyHeight +
     sectionPaddingBottom;
 
-  const titleStyle = titleVariant === 'featured' ? styles.titleFeatured : styles.titleDefault;
-
   return (
     <View style={[styles.section, { height: totalHeight }]}>
       <View style={styles.headerBlock}>
@@ -51,7 +49,7 @@ export function ListingSectionSkeleton({
             color={iconColor || colors.textMuted}
             style={styles.titleIcon}
           />
-          <Text style={[titleStyle]} numberOfLines={2}>
+          <Text style={styles.titleText} numberOfLines={2}>
             {title}
           </Text>
         </View>
@@ -111,19 +109,10 @@ const styles = StyleSheet.create({
     marginRight: spacing.sm,
     marginTop: 2,
   },
-  titleDefault: {
-    ...typography.sm,
-    fontWeight: fontWeights.bold,
-    color: colors.text,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-    flex: 1,
-  },
-  titleFeatured: {
-    ...typography.lg,
-    fontWeight: fontWeights.bold,
-    color: colors.text,
-    letterSpacing: -0.3,
+  titleText: {
+    ...ui.typography.h2,
+    letterSpacing: -0.35,
+    color: ui.colors.textPrimary,
     flex: 1,
   },
   subtitleSkeleton: {
