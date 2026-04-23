@@ -5,11 +5,23 @@
 # Dependencies
 node_modules
 
-# Expo / local build
+# Expo / local state
 .expo
 .expo-shared
 dist
 build
+
+# Android / build artifacts
+*.aab
+*.apk
+android/app/build
+android/build
+
+# Env local
+.env
+.env.local
+.env.development
+.env.test
 
 # Logs
 *.log
@@ -17,27 +29,29 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
-# OS / editor
+# OS / editors
 .DS_Store
 .vscode
 .idea
+.AppleDouble
+.LSOverride
 
 # Web artifacts
 .next
 out
 
-# Tests / coverage
+# Tests
 coverage
 __tests__
 
-# Design / docs / marketing
+# Docs / marketing / exports
 docs
 design
 canva
 marketing
 screenshots
 
-# Heavy media not needed for app build
+# Heavy media / archives
 *.mp4
 *.mov
 *.zip
@@ -45,3 +59,7 @@ screenshots
 *.ai
 *.fig
 *.sketch
+
+# Misc
+*.tmp
+*.temp
