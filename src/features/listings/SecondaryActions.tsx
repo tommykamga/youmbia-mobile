@@ -1,10 +1,11 @@
 import React from 'react';
-import { View, StyleSheet, Alert, Linking, useWindowDimensions } from 'react-native';
+import { View, StyleSheet, Alert, useWindowDimensions } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Button } from '@/components';
 import { spacing } from '@/theme';
 import { shareListing } from '@/lib/shareListing';
 import { getWindowSizeBucket } from '@/lib/responsiveLayout';
+import { openSellerPhoneCallRaw, openSellerSmsRaw } from '@/lib/sellerContact';
 import type { ListingDetail } from '@/services/listings';
 
 type SecondaryActionsProps = {
@@ -59,21 +60,7 @@ export function SecondaryActions({
       await onCallPress();
       return;
     }
-    if (!sellerPhone) {
-      Alert.alert('Appel', 'Numéro de téléphone non disponible.');
-      return;
-    }
-    const telUrl = `tel:${sellerPhone}`;
-    try {
-      const canOpen = await Linking.canOpenURL(telUrl);
-      if (canOpen) {
-        await Linking.openURL(telUrl);
-      } else {
-        Alert.alert('Appel', "Impossible d'ouvrir l'application téléphone.");
-      }
-    } catch {
-      Alert.alert('Appel', 'Une erreur est survenue.');
-    }
+    await openSellerPhoneCallRaw(sellerPhone);
   };
 
   const handleSms = async () => {
@@ -81,21 +68,7 @@ export function SecondaryActions({
       await onSmsPress();
       return;
     }
-    if (!sellerPhone) {
-      Alert.alert('SMS', 'Numéro de téléphone non disponible.');
-      return;
-    }
-    const smsUrl = `sms:${sellerPhone}`;
-    try {
-      const canOpen = await Linking.canOpenURL(smsUrl);
-      if (canOpen) {
-        await Linking.openURL(smsUrl);
-      } else {
-        Alert.alert('SMS', "Impossible d'ouvrir l'application Messages.");
-      }
-    } catch {
-      Alert.alert('SMS', 'Une erreur est survenue.');
-    }
+    await openSellerSmsRaw(sellerPhone);
   };
 
   const favBtn = (

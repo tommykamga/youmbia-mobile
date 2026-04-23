@@ -12,27 +12,34 @@ export type SellerContactAction = 'whatsapp' | 'call' | 'sms' | 'message';
 
 const WHATSAPP_PREFIX = 'https://wa.me';
 
-/** Normalise pour wa.me / tel / sms (FR : 0x → 33…). */
-export function normalizePhoneForWhatsApp(raw: string | null | undefined): string | null {
+type NormalizedContactPhone = {
+  /** dialable for tel:/sms: digits and optional leading + (only if present in source) */
+  dialable: string;
+  /** digits only for wa.me and whatsapp:// (no leading +) */
+  waDigits: string;
+};
+
+/**
+ * Normalisation du numéro pour actions externes.
+ * - supprime espaces/tirets/parenthèses
+ * - conserve un éventuel '+' en tête uniquement s'il existait déjà
+ */
+function normalizePhoneForContact(raw: string | null | undefined): NormalizedContactPhone | null {
   if (!raw || typeof raw !== 'string') return null;
-  const digits = raw.replace(/\D/g, '');
-  if (digits.length < 9) return null;
-  if (digits.length === 10 && digits.startsWith('0')) return '33' + digits.slice(1);
-  if (digits.length === 9) return '33' + digits;
-  if (digits.length >= 10) return digits;
-  return null;
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+
+  const hasLeadingPlus = trimmed.startsWith('+');
+  const digitsOnly = trimmed.replace(/\D/g, '');
+  if (digitsOnly.length < 3) return null;
+
+  const dialable = hasLeadingPlus ? `+${digitsOnly}` : digitsOnly;
+  return { dialable, waDigits: digitsOnly };
 }
 
-function telUriFromNormalized(digits: string): string {
-  return `tel:+${digits.replace(/^\+/, '')}`;
-}
-
-function smsUriFromNormalized(digits: string, body?: string): string {
-  const base = `sms:+${digits.replace(/^\+/, '')}`;
-  if (body && body.trim()) {
-    return `${base}?body=${encodeURIComponent(body.trim())}`;
-  }
-  return base;
+/** Normalise pour wa.me / whatsapp:// (digits only). */
+export function normalizePhoneForWhatsApp(raw: string | null | undefined): string | null {
+  return normalizePhoneForContact(raw)?.waDigits ?? null;
 }
 
 function buildWhatsAppMessage(listing: ListingDetail): string {
@@ -52,68 +59,79 @@ function buildWhatsAppMessage(listing: ListingDetail): string {
 
 export async function openWhatsAppForListing(listing: ListingDetail): Promise<boolean> {
   const raw = listing.seller?.phone ?? null;
-  const whatsappNumber = normalizePhoneForWhatsApp(raw);
-  if (!whatsappNumber) {
+  const phone = normalizePhoneForContact(raw);
+  if (!phone) {
     Alert.alert('WhatsApp indisponible', 'Numéro du vendeur non disponible.');
     return false;
   }
   const text = buildWhatsAppMessage(listing);
-  const url = `${WHATSAPP_PREFIX}/${whatsappNumber}?text=${encodeURIComponent(text)}`;
+  const encoded = encodeURIComponent(text);
+  const appUrl = `whatsapp://send?phone=${phone.waDigits}&text=${encoded}`;
+  const webUrl = `${WHATSAPP_PREFIX}/${phone.waDigits}?text=${encoded}`;
+
   try {
-    const supported = await Linking.canOpenURL(url).catch(() => false);
-    if (!supported) {
-      Alert.alert('WhatsApp indisponible', "Impossible d'ouvrir WhatsApp.");
-      return false;
-    }
-    await Linking.openURL(url);
+    await Linking.openURL(appUrl);
     return true;
-  } catch {
+  } catch (e) {
+    if (__DEV__) console.debug('[sellerContact] WhatsApp app open failed, fallback to wa.me', e);
+  }
+
+  try {
+    await Linking.openURL(webUrl);
+    return true;
+  } catch (e) {
+    if (__DEV__) console.debug('[sellerContact] WhatsApp web open failed', e);
     Alert.alert('WhatsApp indisponible', "Impossible d'ouvrir WhatsApp.");
     return false;
   }
 }
 
-export async function openSellerPhoneCall(listing: ListingDetail): Promise<boolean> {
-  const digits = normalizePhoneForWhatsApp(listing.seller?.phone ?? null);
-  if (!digits) {
+export async function openSellerPhoneCallRaw(rawPhone: string | null | undefined): Promise<boolean> {
+  const phone = normalizePhoneForContact(rawPhone);
+  if (!phone) {
     Alert.alert('Appel', 'Numéro de téléphone non disponible.');
     return false;
   }
-  const telUrl = telUriFromNormalized(digits);
+  const telUrl = `tel:${phone.dialable}`;
   try {
-    const canOpen = await Linking.canOpenURL(telUrl);
-    if (canOpen) {
-      await Linking.openURL(telUrl);
-      return true;
-    }
+    await Linking.openURL(telUrl);
+    return true;
+  } catch (e) {
+    if (__DEV__) console.debug('[sellerContact] tel open failed', e);
     Alert.alert('Appel', "Impossible d'ouvrir l'application téléphone.");
     return false;
-  } catch {
-    Alert.alert('Appel', 'Une erreur est survenue.');
+  }
+}
+
+export async function openSellerPhoneCall(listing: ListingDetail): Promise<boolean> {
+  return openSellerPhoneCallRaw(listing.seller?.phone ?? null);
+}
+
+export async function openSellerSmsRaw(
+  rawPhone: string | null | undefined,
+  body?: string
+): Promise<boolean> {
+  const phone = normalizePhoneForContact(rawPhone);
+  if (!phone) {
+    Alert.alert('SMS', 'Numéro de téléphone non disponible.');
+    return false;
+  }
+  const smsUrl = body
+    ? `sms:${phone.dialable}?body=${encodeURIComponent(body.trim())}`
+    : `sms:${phone.dialable}`;
+  try {
+    await Linking.openURL(smsUrl);
+    return true;
+  } catch (e) {
+    if (__DEV__) console.debug('[sellerContact] sms open failed', e);
+    Alert.alert('SMS', "Impossible d'ouvrir l'application Messages.");
     return false;
   }
 }
 
 export async function openSellerSms(listing: ListingDetail): Promise<boolean> {
-  const digits = normalizePhoneForWhatsApp(listing.seller?.phone ?? null);
-  if (!digits) {
-    Alert.alert('SMS', 'Numéro de téléphone non disponible.');
-    return false;
-  }
   const body = buildWhatsAppMessage(listing);
-  const smsUrl = smsUriFromNormalized(digits, body);
-  try {
-    const canOpen = await Linking.canOpenURL(smsUrl);
-    if (canOpen) {
-      await Linking.openURL(smsUrl);
-      return true;
-    }
-    Alert.alert('SMS', "Impossible d'ouvrir l'application Messages.");
-    return false;
-  } catch {
-    Alert.alert('SMS', 'Une erreur est survenue.');
-    return false;
-  }
+  return openSellerSmsRaw(listing.seller?.phone ?? null, body);
 }
 
 export function isSellerContactAction(value: string | undefined): value is SellerContactAction {
