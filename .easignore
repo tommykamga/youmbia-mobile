@@ -1,0 +1,47 @@
+# Git
+.git
+.gitignore
+
+# Dependencies
+node_modules
+
+# Expo / local build
+.expo
+.expo-shared
+dist
+build
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# OS / editor
+.DS_Store
+.vscode
+.idea
+
+# Web artifacts
+.next
+out
+
+# Tests / coverage
+coverage
+__tests__
+
+# Design / docs / marketing
+docs
+design
+canva
+marketing
+screenshots
+
+# Heavy media not needed for app build
+*.mp4
+*.mov
+*.zip
+*.psd
+*.ai
+*.fig
+*.sketch
