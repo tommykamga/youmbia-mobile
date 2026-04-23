@@ -133,15 +133,21 @@ export default function AccountProfileScreen() {
       return;
     }
     setSaving(true);
+    logProfileDev('save_start', {
+      full_name: (fullName ?? '').trim() || null,
+      phone: phoneNorm.value,
+    });
     const result = await updateProfile({
       full_name: fullName.trim() || null,
       phone: phoneNorm.value,
     });
     setSaving(false);
     if (result.error) {
+      logProfileDev('save_error', { message: result.error.message });
       setSaveError("Impossible de mettre à jour le profil. Réessayez.");
       return;
     }
+    logProfileDev('save_success', { hasData: !!result.data });
     setSaveSuccess("Votre profil a été mis à jour avec succès.");
     const fn = sanitizeProfileDisplayValue(result.data?.full_name);
     const ph = sanitizeProfileDisplayValue(result.data?.phone);

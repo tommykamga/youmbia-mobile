@@ -139,15 +139,46 @@ export async function updateProfile(payload: UpdateProfilePayload): Promise<Upda
     return getCurrentProfile();
   }
 
+  const selectCols = 'id, full_name, avatar_url, phone, created_at';
+
   const { data, error } = await supabase
     .from('profiles')
     .update(updates as never)
     .eq('id', user.id)
-    .select('id, full_name, avatar_url, phone, created_at')
+    .select(selectCols)
     .single();
 
   if (error) {
-    return { data: null, error: { message: error.message } };
+    // Profil absent en base (0 row updated) → `.single()` échoue. On tente un upsert minimal.
+    const errAny = error as unknown as { code?: string; message?: string };
+    const code = (errAny.code ?? '').toUpperCase();
+    const msg = String(errAny.message ?? '');
+    const looksLikeZeroRowSingle =
+      // PostgREST `.single()` when 0 (or >1) rows returned
+      code === 'PGRST116' ||
+      msg.toLowerCase().includes('json object requested') ||
+      msg.toLowerCase().includes('no rows') ||
+      msg.toLowerCase().includes('0 rows');
+
+    if (!looksLikeZeroRowSingle) {
+      return { data: null, error: { message: error.message } };
+    }
+
+    const upsertPayload: Record<string, unknown> = { id: user.id };
+    if (Object.prototype.hasOwnProperty.call(updates, 'full_name')) upsertPayload.full_name = updates.full_name;
+    if (Object.prototype.hasOwnProperty.call(updates, 'phone')) upsertPayload.phone = updates.phone;
+
+    const { data: upserted, error: upsertError } = await supabase
+      .from('profiles')
+      .upsert(upsertPayload as never, { onConflict: 'id' })
+      .select(selectCols)
+      .single();
+
+    if (upsertError) {
+      return { data: null, error: { message: upsertError.message } };
+    }
+
+    return { data: upserted as ProfileRow, error: null };
   }
 
   return { data: data as ProfileRow, error: null };
