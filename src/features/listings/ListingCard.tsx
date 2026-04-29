@@ -228,11 +228,17 @@ function ListingCardInner({
 }
 
 export const ListingCard = memo(ListingCardInner, (prev, next) => {
+  const prevStatus = (prev.listing as unknown as { status?: string | null }).status ?? null;
+  const nextStatus = (next.listing as unknown as { status?: string | null }).status ?? null;
+  const prevFirstImage = prev.listing.images?.[0] ?? null;
+  const nextFirstImage = next.listing.images?.[0] ?? null;
   return (
     prev.feedPresentation === next.feedPresentation &&
     prev.variant === next.variant &&
     prev.listing.id === next.listing.id &&
     prev.listing.updated_at === next.listing.updated_at &&
+    prevStatus === nextStatus &&
+    prevFirstImage === nextFirstImage &&
     prev.listing.views_count === next.listing.views_count &&
     prev.listing.created_at === next.listing.created_at
   );

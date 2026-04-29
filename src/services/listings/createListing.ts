@@ -43,7 +43,11 @@ export async function createListing(payload: CreateListingPayload): Promise<Crea
 
     const title = payload.title?.trim();
     const categoryId = Number(payload.categoryId);
-    const city = payload.city?.trim() || null;
+    /**
+     * Ville optionnelle côté UX. Pour éviter un échec d’insertion si la colonne est NOT NULL,
+     * on persiste une chaîne vide plutôt que `null` quand non renseignée.
+     */
+    const city = payload.city?.trim() || '';
     const description = payload.description?.trim() || null;
 
     if (!title || title.length < 2) {

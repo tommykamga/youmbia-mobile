@@ -37,7 +37,11 @@ export async function updateListing(
       return { success: false, error: 'Prix invalide (doit être supérieur à 0)' };
     }
 
-    const city = payload.city?.trim() || null;
+    /**
+     * Ville optionnelle côté UX. Pour éviter un échec si la colonne est NOT NULL,
+     * on persiste une chaîne vide plutôt que `null` quand non renseignée.
+     */
+    const city = payload.city?.trim() || '';
     const description = payload.description?.trim() || null;
 
     const { error } = await supabase

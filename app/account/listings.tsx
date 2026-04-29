@@ -19,6 +19,7 @@ import { Screen, AppHeader, EmptyState, Loader, Button } from '@/components';
 import { ListingCard } from '@/features/listings';
 import {
   bumpListing,
+  deleteListing,
   getMyListings,
   getListingStats,
   updateListingStatus,
@@ -144,11 +145,13 @@ const MyListingRowInner = memo(function MyListingRow({
   stats,
   onPatchListing,
   onPromoteListing,
+  onRemoveListing,
 }: {
   listing: MyListing;
   stats: ListingStats;
   onPatchListing: (listingId: string, patch: Partial<MyListing>) => void;
   onPromoteListing: (listingId: string) => void;
+  onRemoveListing: (listingId: string) => void;
 }) {
   const router = useRouter();
   const [pendingAction, setPendingAction] = useState<null | 'status' | 'urgent' | 'bump'>(null);
@@ -257,6 +260,36 @@ const MyListingRowInner = memo(function MyListingRow({
       setSharing(false);
     }
   }, [listing.city, listing.id, listing.price, listing.title, sharing]);
+
+  const handleDeleteListing = useCallback(() => {
+    if (isMutating) return;
+    Alert.alert(
+      'Supprimer cette annonce ?',
+      "Cette action est définitive. Les images ne seront pas supprimées du stockage.",
+      [
+        { text: 'Annuler', style: 'cancel' },
+        {
+          text: 'Supprimer',
+          style: 'destructive',
+          onPress: async () => {
+            setPendingAction('status');
+            const result = await deleteListing(listing.id);
+            if (!result.success) {
+              Alert.alert(
+                'Suppression impossible',
+                result.error ||
+                  "Impossible de supprimer l'annonce. Vous pouvez la mettre en pause si besoin."
+              );
+              setPendingAction(null);
+              return;
+            }
+            onRemoveListing(listing.id);
+            setPendingAction(null);
+          },
+        },
+      ]
+    );
+  }, [isMutating, listing.id, onRemoveListing]);
 
   const isActive = listing.status === 'active';
   const isUrgent = listing.urgent === true;
@@ -370,6 +403,15 @@ const MyListingRowInner = memo(function MyListingRow({
             disabled={isMutating}
           >
             Modifier
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            onPress={handleDeleteListing}
+            disabled={isMutating}
+            loading={pendingAction === 'status'}
+          >
+            Supprimer
           </Button>
           {isActive ? (
             <Button
@@ -486,6 +528,19 @@ export default function AccountListingsScreen() {
     });
   }, []);
 
+  const removeListing = useCallback((listingId: string) => {
+    setState((prev) => {
+      if (prev.status !== 'success') return prev;
+      const nextData = prev.data.filter((item) => item.id !== listingId);
+      return nextData.length === 0 ? { status: 'empty' } : { status: 'success', data: nextData };
+    });
+    setStatsByListingId((prev) => {
+      const next = { ...prev };
+      delete next[listingId];
+      return next;
+    });
+  }, []);
+
   const keyExtractor = useCallback((item: MyListing) => item.id, []);
   const renderItem = useCallback(
     ({ item }: { item: MyListing }) => (
@@ -494,9 +549,10 @@ export default function AccountListingsScreen() {
         stats={statsByListingId[item.id] ?? buildInitialStats(item)}
         onPatchListing={patchListing}
         onPromoteListing={promoteListing}
+        onRemoveListing={removeListing}
       />
     ),
-    [patchListing, promoteListing, statsByListingId]
+    [patchListing, promoteListing, removeListing, statsByListingId]
   );
   const itemSeparator = useCallback(() => <View style={styles.separator} />, []);
 
