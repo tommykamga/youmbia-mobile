@@ -89,6 +89,18 @@ export default function SellScreen() {
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [retryUploadLoading, setRetryUploadLoading] = useState(false);
 
+  const goBackOrHome = useCallback(() => {
+    const canGoBack =
+      typeof (router as unknown as { canGoBack?: () => boolean }).canGoBack === 'function'
+        ? (router as unknown as { canGoBack: () => boolean }).canGoBack()
+        : false;
+    if (canGoBack) {
+      router.back();
+      return;
+    }
+    router.replace('/(tabs)/home' as Href);
+  }, [router]);
+
   const resetForm = () => {
     setPublishState({ status: 'idle' });
     setSubmitError(null);
@@ -593,7 +605,7 @@ export default function SellScreen() {
         >
           {"Publier l'annonce"}
         </Button>
-        <Button variant="ghost" onPress={() => router.back()} style={styles.cancel}>
+        <Button variant="ghost" onPress={goBackOrHome} style={styles.cancel}>
           Annuler
         </Button>
       </View>

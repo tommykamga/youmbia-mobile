@@ -204,7 +204,18 @@ function HomeHeaderContent({
   const handleCategoryPress = (label: string) =>
     router.push(`/(tabs)/search?q=${encodeURIComponent(label)}`);
   const handleVoirToutPress = () => router.push('/categories');
-  const handleSellCtaPress = () => router.push('/(tabs)/sell');
+  const handleSellCtaPress = useCallback(async () => {
+    try {
+      const session = await getSession();
+      if (session?.user) {
+        router.push('/sell' as Href);
+      } else {
+        router.push(buildAuthGateHref('sell'));
+      }
+    } catch {
+      router.push(buildAuthGateHref('sell'));
+    }
+  }, [router]);
 
   const handleMessagesPress = useCallback(async () => {
     try {

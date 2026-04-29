@@ -6,7 +6,7 @@
 
 import React from 'react';
 import { View, Text, StyleSheet, ViewStyle, TextStyle, Pressable, Platform } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, type Href } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { colors, spacing, typography, fontWeights } from '@/theme';
@@ -38,6 +38,7 @@ export function AppHeader({
 }: AppHeaderProps) {
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const fallbackHref: Href = '/(tabs)/home';
 
   return (
     <View
@@ -56,7 +57,17 @@ export function AppHeader({
       <View style={styles.row}>
         {showBack ? (
           <Pressable
-            onPress={() => router.back()}
+            onPress={() => {
+              const canGoBack =
+                typeof (router as unknown as { canGoBack?: () => boolean }).canGoBack === 'function'
+                  ? (router as unknown as { canGoBack: () => boolean }).canGoBack()
+                  : false;
+              if (canGoBack) {
+                router.back();
+                return;
+              }
+              router.replace(fallbackHref);
+            }}
             style={({ pressed }) => [styles.backBtn, pressed && styles.backBtnPressed]}
             hitSlop={12}
           >

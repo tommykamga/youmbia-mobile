@@ -1,4 +1,4 @@
-import React, { memo, useCallback } from 'react';
+import React, { memo, useCallback, useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -60,15 +60,31 @@ function ListingCardInner({
 }: ListingCardProps) {
   const router = useRouter();
   const scale = useSharedValue(1);
+  const [imageFailed, setImageFailed] = useState(false);
 
   const animatedStyle = useAnimatedStyle(() => ({
     transform: [{ scale: scale.value }],
   }));
 
-  const firstImage =
-    listing.images?.length && String(listing.images[0] ?? '').trim()
-      ? listing.images[0]
-      : undefined;
+  const firstImage = useMemo(() => {
+    const any = listing as unknown as Record<string, unknown>;
+    const candidates = [
+      any.imageUrl,
+      any.mainImageUrl,
+      any.image_url,
+      Array.isArray(any.images) ? (any.images[0] as unknown) : undefined,
+    ];
+    for (const c of candidates) {
+      const s = typeof c === 'string' ? c.trim() : '';
+      if (s) return s;
+    }
+    return undefined;
+  }, [listing]);
+
+  useEffect(() => {
+    // Si l’URL change (refresh / nouvelles signed URLs), on retente le chargement.
+    setImageFailed(false);
+  }, [firstImage]);
 
   const metaTimeOrViews =
     listing.views_count > 0
@@ -171,11 +187,12 @@ function ListingCardInner({
         animatedStyle,
       ]}
     >
-      {firstImage ? (
+      {firstImage && !imageFailed ? (
         <ImageBackground
           source={{ uri: firstImage }}
           style={[styles.image, isHomeFeed && styles.imageHome, isHomeFeed && styles.imageHomeTall]}
           imageStyle={[styles.imageRadius, isHomeFeed && styles.imageRadiusHome]}
+          onError={() => setImageFailed(true)}
         >
           {renderImageBody()}
         </ImageBackground>
