@@ -15,6 +15,7 @@ export type UserProfile = {
   bio?: string | null;
   created_at: string | null;
   is_verified: boolean | null;
+  phone_verified?: boolean | null;
   trust_score: number | null;
   reports_count: number | null;
   is_banned: boolean | null;
@@ -29,6 +30,7 @@ type UserProfileRow = Pick<
   | 'bio'
   | 'created_at'
   | 'is_verified'
+  | 'phone_verified'
   | 'trust_score'
   | 'reports_count'
   | 'is_banned'
@@ -78,7 +80,9 @@ export async function getUserProfile(userId: string): Promise<GetUserProfileResu
 
   const { data: profileRow, error: profileError } = await supabase
     .from('profiles')
-    .select('id, full_name, city, bio, created_at, is_verified, trust_score, reports_count, is_banned, is_flagged')
+    .select(
+      'id, full_name, city, bio, created_at, is_verified, phone_verified, trust_score, reports_count, is_banned, is_flagged'
+    )
     .eq('id', id)
     .maybeSingle();
 
@@ -98,6 +102,7 @@ export async function getUserProfile(userId: string): Promise<GetUserProfileResu
     bio: safeProfileRow.bio ?? null,
     created_at: safeProfileRow.created_at ?? null,
     is_verified: safeProfileRow.is_verified ?? null,
+    phone_verified: safeProfileRow.phone_verified ?? null,
     trust_score: safeProfileRow.trust_score ?? null,
     reports_count: safeProfileRow.reports_count ?? null,
     is_banned: safeProfileRow.is_banned ?? null,

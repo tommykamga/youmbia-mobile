@@ -29,6 +29,7 @@ type State =
         bio: string | null;
         created_at: string | null;
         is_verified: boolean | null;
+        phone_verified?: boolean | null;
         trust_score: number | null;
         reports_count: number | null;
         is_banned: boolean | null;
@@ -86,6 +87,7 @@ export default function UserProfileScreen() {
           bio: profile.bio ?? null,
           created_at: profile.created_at,
           is_verified: profile.is_verified,
+          phone_verified: profile.phone_verified ?? null,
           trust_score: profile.trust_score,
           reports_count: profile.reports_count,
           is_banned: profile.is_banned,
@@ -224,6 +226,9 @@ export default function UserProfileScreen() {
           <Text style={styles.name}>{name}</Text>
           {state.profile.is_verified === true && (
             <SellerBadge variant="verified" label="Vérifié" />
+          )}
+          {state.profile.phone_verified === true && (
+            <SellerBadge variant="phoneVerified" label="Téléphone vérifié" />
           )}
           {isFlagged && (
             <SellerBadge variant="flagged" label="Profil signalé" />

@@ -37,9 +37,12 @@ import {
   getCurrentProfile,
   sanitizeProfileDisplayValue,
 } from '@/services/profile';
+import { supabase } from '@/lib/supabase';
 
 /** Aligné web : maximum 4 photos par annonce. */
 const MAX_LISTING_IMAGES = 4;
+/** Garde-fou trust (Sprint TRUST SAFE) : limite de publications / 24h. */
+const MAX_LISTINGS_PER_24H = 5;
 
 type PickedImage = { uri: string; base64: string | null };
 
@@ -293,6 +296,36 @@ export default function SellScreen() {
 
     setSubmitLoading(true);
     try {
+      // Limite publications / 24h (safe: si erreur Supabase/réseau, on bloque la publication).
+      const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+      const { count, error: countError } = await supabase
+        .from('listings')
+        .select('id', { count: 'exact', head: true })
+        .eq('user_id', session.user.id)
+        .gte('created_at', since);
+
+      if (countError) {
+        const message = 'Impossible de vérifier votre limite de publication pour le moment. Réessayez.';
+        console.warn('[SellScreen] dailyLimitCheck', countError);
+        setSubmitError(message);
+        Alert.alert('Vérification impossible', message);
+        return;
+      }
+
+      if (typeof count !== 'number') {
+        const message = 'Impossible de vérifier votre limite de publication pour le moment. Réessayez.';
+        setSubmitError(message);
+        Alert.alert('Vérification impossible', message);
+        return;
+      }
+
+      if (count >= MAX_LISTINGS_PER_24H) {
+        const message = "Vous avez atteint la limite de publication pour aujourd’hui. Réessayez plus tard.";
+        setSubmitError(message);
+        Alert.alert('Limite atteinte', message);
+        return;
+      }
+
       const { data, error } = await createListing({
         title: title.trim(),
         price: Math.round(price),

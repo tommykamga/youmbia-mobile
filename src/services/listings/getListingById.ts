@@ -33,6 +33,7 @@ export type ListingDetail = {
     created_at: string | null;
     /** Optional: used for WhatsApp deep link and phone CTA. If profiles.phone does not exist, remove from select. */
     phone?: string | null;
+    phone_verified?: boolean | null;
     /** Trust signals (from profiles, same as web). */
     is_verified?: boolean | null;
     is_flagged?: boolean | null;
@@ -126,7 +127,9 @@ export async function getListingById(id: string): Promise<GetListingByIdResult> 
   if (sellerId) {
     const { data: profile } = await supabase
       .from('profiles')
-      .select('full_name, created_at, phone, is_verified, is_flagged, trust_score, reports_count, is_banned')
+      .select(
+        'full_name, created_at, phone, phone_verified, is_verified, is_flagged, trust_score, reports_count, is_banned'
+      )
       .eq('id', sellerId)
       .maybeSingle();
     // If your profiles table has no phone / is_banned column, they can be removed from the select.
@@ -135,6 +138,7 @@ export async function getListingById(id: string): Promise<GetListingByIdResult> 
         full_name: string | null;
         created_at: string | null;
         phone?: string | null;
+        phone_verified?: boolean | null;
         is_verified?: boolean | null;
         is_flagged?: boolean | null;
         trust_score?: number | null;
@@ -145,6 +149,7 @@ export async function getListingById(id: string): Promise<GetListingByIdResult> 
         full_name: p.full_name ?? null,
         created_at: p.created_at ?? null,
         phone: p.phone ?? null,
+        phone_verified: p.phone_verified ?? null,
         is_verified: p.is_verified ?? null,
         is_flagged: p.is_flagged ?? null,
         trust_score: p.trust_score ?? null,

@@ -27,10 +27,11 @@ export function ListingSeller({ listing, memberSince, listingCount, onPress }: L
   const name = seller?.full_name?.trim() || 'Vendeur';
   const joinDate = formatJoinDate(memberSince ?? seller?.created_at ?? null);
   const isVerified = seller?.is_verified === true;
+  const isPhoneVerified = seller?.phone_verified === true;
   const isFlagged = seller?.is_flagged === true || (Number(seller?.reports_count ?? 0) > 0);
   const trustScore = seller?.trust_score;
   const isReliable = !isFlagged && trustScore != null && trustScore >= TRUST_SCORE_HIGH_THRESHOLD;
-  const hasAnyBadge = isVerified || isReliable || isFlagged;
+  const hasAnyBadge = isVerified || isPhoneVerified || isReliable || isFlagged;
   const isBanned = seller?.is_banned === true;
   const safeListingCount =
     typeof listingCount === 'number' && Number.isFinite(listingCount)
@@ -85,6 +86,9 @@ export function ListingSeller({ listing, memberSince, listingCount, onPress }: L
         <View style={styles.badges}>
           {isVerified && (
             <SellerBadge variant="verified" label="✔ Vendeur vérifié" />
+          )}
+          {isPhoneVerified && (
+            <SellerBadge variant="phoneVerified" label="Téléphone vérifié" />
           )}
           {isFlagged && (
             <SellerBadge variant="flagged" label="⚠ Vendeur signalé" />

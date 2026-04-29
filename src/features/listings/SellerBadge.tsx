@@ -7,13 +7,17 @@ import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { colors, spacing, typography, radius } from '@/theme';
 
-export type SellerBadgeVariant = 'verified' | 'reliable' | 'flagged';
+export type SellerBadgeVariant = 'verified' | 'phoneVerified' | 'reliable' | 'flagged';
 
 const VARIANT_STYLES: Record<
   SellerBadgeVariant,
   { bg: string; text: string }
 > = {
   verified: {
+    bg: colors.badgeVerifiedBg,
+    text: colors.badgeVerifiedText,
+  },
+  phoneVerified: {
     bg: colors.badgeVerifiedBg,
     text: colors.badgeVerifiedText,
   },
