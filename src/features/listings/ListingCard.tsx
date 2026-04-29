@@ -78,11 +78,20 @@ function ListingCardInner({
   const locationLabel = (locationLine || listing.city || '').trim();
   const metaLine = [locationLabel, metaTimeOrViews].filter(Boolean).join(' • ');
 
+  const rawStatus = (listing as unknown as { status?: string | null }).status;
+  const normalizedStatus = typeof rawStatus === 'string' ? rawStatus.toLowerCase() : null;
+  const statusBadgeLabel =
+    normalizedStatus === 'hidden'
+      ? 'En pause'
+      : normalizedStatus === 'suspended'
+        ? 'Suspendue'
+        : null;
+
   const showUrgent = getDisplayUrgent(listing);
   const showBoosted = listing.boosted === true;
   const showPriceDropped = listing.price_dropped === true;
   const showNew = isListingNew(listing.created_at);
-  const hasBadges = showUrgent || showBoosted || showPriceDropped || showNew;
+  const hasBadges = showUrgent || showBoosted || showPriceDropped || showNew || statusBadgeLabel != null;
 
   const priceLabel = formatPrice(listing.price);
 
@@ -101,6 +110,11 @@ function ListingCardInner({
   const renderBadges = () =>
     hasBadges ? (
       <View style={styles.badgesRow}>
+        {statusBadgeLabel ? (
+          <View style={styles.statusBadge}>
+            <Text style={styles.statusBadgeText}>{statusBadgeLabel}</Text>
+          </View>
+        ) : null}
         {showBoosted ? (
           <View style={styles.boostedBadge}>
             <Ionicons name="flash" size={12} color={colors.surface} style={styles.badgeIcon} />
@@ -312,6 +326,20 @@ const styles = StyleSheet.create({
     flex: 1,
     marginRight: spacing.xs,
     maxWidth: '72%',
+  },
+  statusBadge: {
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 5,
+    borderRadius: radius.sm,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  statusBadgeText: {
+    ...typography.xs,
+    fontWeight: fontWeights.semibold,
+    color: colors.textSecondary,
+    letterSpacing: 0.2,
   },
   badgeIcon: {
     marginRight: 2,

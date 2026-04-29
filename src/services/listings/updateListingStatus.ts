@@ -5,18 +5,24 @@
 
 import { supabase } from '@/lib/supabase';
 
+export type ListingStatus = 'active' | 'hidden' | 'suspended';
+
 export type UpdateListingStatusResult =
   | { data: null; error: null }
   | { data: null; error: { message: string } };
 
 /**
  * Sets status for a listing owned by the current user.
- * Safe for "deactivate" by setting status to 'inactive' (or 'archived' if backend supports it).
+ * To hide/pause a listing, use status 'hidden' (aligned with web).
  */
 export async function updateListingStatus(
   listingId: string,
-  status: string
+  status: ListingStatus
 ): Promise<UpdateListingStatusResult> {
+  if (status !== 'active' && status !== 'hidden' && status !== 'suspended') {
+    return { data: null, error: { message: 'Statut annonce invalide' } };
+  }
+
   const {
     data: { user },
     error: userError,

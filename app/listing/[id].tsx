@@ -77,7 +77,7 @@ function getListingErrorDisplay(message: string): { title: string; body: string 
   if (message === "Cette annonce n'est plus disponible.") {
     return {
       title: 'Annonce indisponible',
-      body: "Cette annonce a été retirée et n'est plus visible.",
+      body: "Cette annonce n'est plus disponible. Elle a peut-être été mise en pause ou supprimée.",
     };
   }
   if (message === 'Identifiant manquant') {

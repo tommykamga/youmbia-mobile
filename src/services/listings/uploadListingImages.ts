@@ -7,6 +7,7 @@ import { decode } from 'base64-arraybuffer';
 import { supabase } from '@/lib/supabase';
 
 const BUCKET = 'listing-images';
+const MAX_IMAGES_PER_LISTING = 4;
 
 export type UploadListingImagesResult =
   | {
@@ -50,6 +51,14 @@ export async function uploadListingImages(
         status: 'failed',
         data: { uploadedCount: 0, failedCount: images.length, totalCount: images.length },
         error: { message: 'Non connecté' },
+      };
+    }
+
+    if (images.length > MAX_IMAGES_PER_LISTING) {
+      return {
+        status: 'failed',
+        data: { uploadedCount: 0, failedCount: images.length, totalCount: images.length },
+        error: { message: 'Une annonce ne peut pas contenir plus de 4 photos.' },
       };
     }
 

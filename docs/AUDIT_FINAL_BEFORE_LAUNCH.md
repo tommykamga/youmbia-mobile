@@ -51,7 +51,7 @@
 
 - **Toggle:** toggleFavorite(listingId) used on home feed (ListingFeed) and listing detail; optimistic UI + revert on error; “Non connecté” → redirect to login.
 - **Favorites tab:** getSession → redirect if no user; getFavorites() → getListingsByIds(ids) with status=active; order preserved. Loading / redirect / empty / error / success with RefreshControl.
-- **State:** Feed refetches favoriteIds on focus; listing detail refetches isFavorite on mount. Favorites tab refetches on focus and on refresh. getListingsByIds filters inactive listings (expected).
+- **State:** Feed refetches favoriteIds on focus; listing detail refetches isFavorite on mount. Favorites tab refetches on focus and on refresh. getListingsByIds filtre uniquement les annonces `active` (expected).
 
 **Issues found:** None.
 

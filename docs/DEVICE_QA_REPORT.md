@@ -37,7 +37,7 @@ Use this on physical devices (Android + iOS) and/or preview builds. Check each l
 - [ ] **Appeler** – Ouvre le téléphone (si numéro vendeur).
 - [ ] **Partager** – Ouvre le share sheet natif ; contenu : titre, prix, lien youmbia.com/annonce/…
 - [ ] **Signaler** – Non connecté → login ; connecté → modal motif → envoi → message de succès.
-- [ ] **Annonce introuvable / plus disponible** – ID invalide ou annonce inactive → message clair + Retour.
+- [ ] **Annonce introuvable / plus disponible** – ID invalide ou annonce masquée/suspendue → message clair + Retour.
 
 ### Favorites
 - [ ] **Non connecté** – Redirection vers login avec redirect vers Favoris.

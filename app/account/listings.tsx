@@ -98,11 +98,16 @@ function getListingQualityBadge(
 }
 
 function StatusBadge({ status }: { status: string }) {
-  const isActive = status === 'active';
+  const normalized = String(status ?? '').toLowerCase();
+  const isActive = normalized === 'active';
+  const isHidden = normalized === 'hidden';
+  const isSuspended = normalized === 'suspended';
+
+  const label = isActive ? 'En ligne' : isSuspended ? 'Suspendue' : isHidden ? 'En pause' : 'Hors ligne';
   return (
     <View style={[styles.statusBadge, isActive ? styles.statusActive : styles.statusInactive]}>
       <Text style={[styles.statusText, isActive ? styles.statusTextActive : styles.statusTextInactive]}>
-        {isActive ? 'En ligne' : 'Hors ligne'}
+        {label}
       </Text>
     </View>
   );
@@ -153,17 +158,17 @@ const MyListingRowInner = memo(function MyListingRow({
   const handleDeactivate = useCallback(() => {
     if (isMutating) return;
     Alert.alert(
-      'Désactiver l\'annonce',
+      "Mettre l'annonce en pause",
       'L\'annonce ne sera plus visible dans le fil. Vous pourrez la réactiver plus tard.',
       [
         { text: 'Annuler', style: 'cancel' },
         {
-          text: 'Désactiver',
+          text: 'Mettre en pause',
           style: 'destructive',
           onPress: async () => {
             setPendingAction('status');
-            onPatchListing(listing.id, { status: 'inactive' });
-            const result = await updateListingStatus(listing.id, 'inactive');
+            onPatchListing(listing.id, { status: 'hidden' });
+            const result = await updateListingStatus(listing.id, 'hidden');
             if (result.error) {
               onPatchListing(listing.id, { status: listing.status });
               Alert.alert('Erreur', "Impossible de mettre à jour l'annonce");
@@ -374,7 +379,7 @@ const MyListingRowInner = memo(function MyListingRow({
               disabled={isMutating}
               loading={pendingAction === 'status'}
             >
-              Désactiver
+              Mettre en pause
             </Button>
           ) : (
             <Button

@@ -32,11 +32,26 @@ import { DynamicCategoryAttributesFields } from '@/features/sell/DynamicCategory
 import { colors, spacing, typography, fontWeights, radius } from '@/theme';
 import { createListing, uploadListingImages, saveListingDynamicAttributeValues } from '@/services/listings';
 import { getSession } from '@/services/auth';
+import { getCurrentProfile, sanitizeProfileDisplayValue } from '@/services/profile';
 
-/** Galerie améliorée : jusqu'à 12 photos par annonce. */
-const MAX_LISTING_IMAGES = 12;
+/** Aligné web : maximum 4 photos par annonce. */
+const MAX_LISTING_IMAGES = 4;
 
 type PickedImage = { uri: string; base64: string | null };
+
+function getFirstNonEmptyProfileField(
+  profile: Record<string, unknown> | null | undefined,
+  keys: string[]
+): string {
+  if (!profile) return '';
+  for (const key of keys) {
+    const value = profile[key];
+    if (typeof value !== 'string') continue;
+    const sanitized = sanitizeProfileDisplayValue(value);
+    if (sanitized.trim()) return sanitized;
+  }
+  return '';
+}
 
 type PublishState =
   | { status: 'idle' }
@@ -183,6 +198,31 @@ export default function SellScreen() {
     const session = await getSession();
     if (!session?.user) {
       router.replace(buildAuthGateHref('sell'));
+      return;
+    }
+
+    // Aligné web : profil vendeur obligatoire (nom/pseudo) + téléphone obligatoire
+    const profileRes = await getCurrentProfile();
+    const profileAny = (profileRes.data ?? null) as unknown as Record<string, unknown> | null;
+    const sellerNameValid = getFirstNonEmptyProfileField(profileAny, [
+      'display_name',
+      'username',
+      'pseudo',
+      'full_name',
+    ]);
+    const sellerPhoneValid = getFirstNonEmptyProfileField(profileAny, [
+      'whatsapp_phone',
+      'phone_number',
+      'phone',
+    ]);
+    if (!sellerNameValid.trim() || !sellerPhoneValid.trim()) {
+      const message =
+        "Avant de publier une annonce, complète ton profil vendeur avec ton nom ou pseudo et ton numéro de téléphone.";
+      setSubmitError(message);
+      Alert.alert('Profil vendeur incomplet', message, [
+        { text: 'Plus tard', style: 'cancel' },
+        { text: 'Compléter mon profil', onPress: () => router.push('/account/profile') },
+      ]);
       return;
     }
 
