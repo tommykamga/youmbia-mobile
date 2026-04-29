@@ -32,7 +32,11 @@ import { DynamicCategoryAttributesFields } from '@/features/sell/DynamicCategory
 import { colors, spacing, typography, fontWeights, radius } from '@/theme';
 import { createListing, uploadListingImages, saveListingDynamicAttributeValues } from '@/services/listings';
 import { getSession } from '@/services/auth';
-import { getCurrentProfile, sanitizeProfileDisplayValue } from '@/services/profile';
+import {
+  checkPhoneUniquenessForPublish,
+  getCurrentProfile,
+  sanitizeProfileDisplayValue,
+} from '@/services/profile';
 
 /** Aligné web : maximum 4 photos par annonce. */
 const MAX_LISTING_IMAGES = 4;
@@ -235,6 +239,29 @@ export default function SellScreen() {
         { text: 'Plus tard', style: 'cancel' },
         { text: 'Compléter mon profil', onPress: () => router.push('/account/profile') },
       ]);
+      return;
+    }
+
+    if (profileAny?.is_banned === true) {
+      const message = "Votre compte ne peut pas publier d'annonce pour le moment.";
+      setSubmitError(message);
+      Alert.alert('Publication impossible', message);
+      return;
+    }
+
+    try {
+      const phoneCheck = await checkPhoneUniquenessForPublish(session.user.id, sellerPhoneValid);
+      if (!phoneCheck.ok) {
+        const message = 'Ce numéro de téléphone est déjà utilisé par un autre compte.';
+        setSubmitError(message);
+        Alert.alert('Publication impossible', message);
+        return;
+      }
+    } catch (e) {
+      const message = 'Impossible de vérifier votre profil pour le moment. Réessayez.';
+      console.warn('[SellScreen] checkPhoneUniquenessForPublish', e);
+      setSubmitError(message);
+      Alert.alert('Vérification impossible', message);
       return;
     }
 

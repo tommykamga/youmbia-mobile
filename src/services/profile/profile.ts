@@ -24,6 +24,7 @@ export interface ProfileRow {
   full_name: string | null;
   avatar_url: string | null;
   phone?: string | null;
+  is_banned?: boolean | null;
   created_at?: string;
   updated_at?: string;
   [key: string]: unknown;
@@ -77,7 +78,7 @@ export async function getCurrentProfile(): Promise<GetCurrentProfileResult> {
 
   const { data, error } = await supabase
     .from('profiles')
-    .select('id, full_name, avatar_url, phone, created_at')
+    .select('id, full_name, avatar_url, phone, is_banned, created_at')
     .eq('id', user.id)
     .maybeSingle();
 
@@ -93,12 +94,57 @@ export async function getCurrentProfile(): Promise<GetCurrentProfileResult> {
         full_name: null,
         avatar_url: null,
         phone: null,
+        is_banned: null,
       },
       error: null,
     };
   }
 
   return { data: data as ProfileRow, error: null };
+}
+
+/**
+ * Normalisation "unicité" : trim, supprime espaces / tirets / parenthèses.
+ * (Ne change pas auth / DB : uniquement pour comparer côté client.)
+ */
+export function normalizePhoneForUniquenessCheck(raw: string | null | undefined): string {
+  if (raw == null || typeof raw !== 'string') return '';
+  return raw.trim().replace(/[\s\-()]/g, '');
+}
+
+export type CheckPhoneUniquenessForPublishResult =
+  | { ok: true }
+  | { ok: false; reason: 'duplicate' };
+
+/**
+ * Vérifie côté client qu'aucun autre profil n'utilise le même téléphone normalisé.
+ * En cas d'erreur Supabase/réseau, on remonte l'erreur au caller pour appliquer une approche safe.
+ */
+export async function checkPhoneUniquenessForPublish(
+  currentUserId: string,
+  rawPhone: string
+): Promise<CheckPhoneUniquenessForPublishResult> {
+  const normalized = normalizePhoneForUniquenessCheck(rawPhone);
+  if (!normalized) return { ok: true };
+
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('id, phone')
+    .not('phone', 'is', null);
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  const rows = (data ?? []) as Array<{ id: string | null; phone: string | null }>;
+  const conflict = rows.some((row) => {
+    const id = String(row.id ?? '').trim();
+    if (!id || id === currentUserId) return false;
+    const p = normalizePhoneForUniquenessCheck(row.phone);
+    return p !== '' && p === normalized;
+  });
+
+  return conflict ? { ok: false, reason: 'duplicate' } : { ok: true };
 }
 
 export type UpdateProfilePayload = {
