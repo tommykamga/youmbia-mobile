@@ -105,6 +105,8 @@ export default function ListingDetailScreen() {
   const insets = useSafeAreaInsets();
   const [state, setState] = useState<State>({ status: 'loading' });
   const [isFavorite, setIsFavorite] = useState(false);
+  const lastFavoriteIdsFetchAtRef = useRef<number>(0);
+  const FAVORITES_FETCH_TTL_MS = 45_000;
   const [reportModalVisible, setReportModalVisible] = useState(false);
   const [reportLoading, setReportLoading] = useState(false);
   const [reportReason, setReportReason] = useState<string | null>(null);
@@ -151,6 +153,7 @@ export default function ListingDetailScreen() {
       if (favResult.data && id) {
         setIsFavorite(favResult.data.includes(id));
       }
+      lastFavoriteIdsFetchAtRef.current = Date.now();
       if (listing.seller_id) {
         const statsResult = await getSellerStats(listing.seller_id);
         if (!cancelled && !statsResult.error) {
@@ -187,6 +190,9 @@ export default function ListingDetailScreen() {
   useFocusEffect(
     useCallback(() => {
       if (state.status !== 'success' || !id) return;
+      const now = Date.now();
+      if (now - lastFavoriteIdsFetchAtRef.current < FAVORITES_FETCH_TTL_MS) return;
+      lastFavoriteIdsFetchAtRef.current = now;
       getFavoriteIds().then((res) => {
         if (res.data) setIsFavorite(res.data.includes(id));
       });

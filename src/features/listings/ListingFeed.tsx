@@ -13,6 +13,7 @@ import {
   type NativeScrollEvent,
 } from 'react-native';
 import Animated from 'react-native-reanimated';
+import { useScrollToTop } from '@react-navigation/native';
 import { useFocusEffect } from 'expo-router';
 import { getPublicListings, type PublicListing } from '@/services/listings';
 import { sortListings, type SortOption } from '@/utils/sortListings';
@@ -55,6 +56,9 @@ export function ListingFeed({
   listingCardFeedPresentation = 'standard',
   reanimatedScrollHandler,
 }: ListingFeedProps) {
+  const listRef = useRef<any>(null);
+  useScrollToTop(listRef);
+
   const { refresh: refreshFavorites } = useFavorites();
   const [state, setState] = useState<FeedState>({ status: 'loading' });
   const [sortBy, setSortBy] = useState<SortOption>('recent');
@@ -84,8 +88,13 @@ export function ListingFeed({
       return;
     }
     const list = listResult.data ?? [];
+    const reachedEnd = list.length < PAGE_SIZE;
     if (append) {
       setLoadMoreError(null);
+      if (reachedEnd) {
+        hasMoreRef.current = false;
+        setHasMore(false);
+      }
       setState((prev) => {
         if (prev.status !== 'success') return prev;
         const seen = new Set(prev.data.map((i) => i.id));
@@ -100,8 +109,8 @@ export function ListingFeed({
           ? { status: 'empty' }
           : { status: 'success', data: list }
       );
-      hasMoreRef.current = true;
-      setHasMore(true);
+      hasMoreRef.current = !reachedEnd;
+      setHasMore(!reachedEnd);
       if (list.length > 0) {
         void lightCacheWrite<HomeFeedCachePayload>(lightCacheKeys.homeFeedPublic, { listings: list });
       }
@@ -343,6 +352,7 @@ export function ListingFeed({
   if (reanimatedScrollHandler) {
     return (
       <Animated.FlatList
+        ref={listRef}
         {...listProps}
         onScroll={reanimatedScrollHandler}
         scrollEventThrottle={16}
@@ -350,7 +360,7 @@ export function ListingFeed({
     );
   }
 
-  return <FlatList {...listProps} />;
+  return <FlatList ref={listRef} {...listProps} />;
 }
 
 const styles = StyleSheet.create({

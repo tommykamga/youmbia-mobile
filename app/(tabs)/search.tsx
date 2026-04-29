@@ -129,6 +129,8 @@ export default function SearchScreen() {
   });
   const [priceFilterError, setPriceFilterError] = useState<string | null>(null);
   const [favoriteIds, setFavoriteIds] = useState<Set<string>>(new Set());
+  const lastFavoritesFetchAtRef = useRef<number>(0);
+  const FAVORITES_FETCH_TTL_MS = 45_000;
   const [savedSearches, setSavedSearches] = useState<SavedSearch[]>([]);
   const [savedSearchFeedback, setSavedSearchFeedback] = useState<string | null>(null);
   const [suggestions, setSuggestions] = useState<string[]>([]);
@@ -137,6 +139,9 @@ export default function SearchScreen() {
   const savedSearchFeedbackTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const loadFavorites = useCallback(async () => {
+    const now = Date.now();
+    if (now - lastFavoritesFetchAtRef.current < FAVORITES_FETCH_TTL_MS) return;
+    lastFavoritesFetchAtRef.current = now;
     const res = await getFavIds();
     if (res.data) setFavoriteIds(new Set(res.data));
   }, []);

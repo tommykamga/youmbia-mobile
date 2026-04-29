@@ -6,7 +6,7 @@ import SplashScreenCustom from '@/features/splash/SplashScreen';
 import 'react-native-reanimated';
 import { Alert, AppState, Linking } from 'react-native';
 import { colors } from '@/theme';
-import { onAuthStateChange } from '@/services/auth';
+import { getSession, onAuthStateChange } from '@/services/auth';
 import { handleSupabaseAuthDeepLink } from '@/services/auth/handleSupabaseAuthDeepLink';
 import { getListingHrefFromUrl } from '@/lib/listingDeepLink';
 import {
@@ -110,6 +110,8 @@ export default function RootLayout() {
     const runSync = async () => {
       if (cancelled) return;
       try {
+        const session = await getSession();
+        if (!session?.user) return;
         const [{ syncNewMessageNotifications }, { syncSavedSearchNotifications }] = await Promise.all([
           import('@/services/messageNotifications'),
           import('@/services/savedSearchNotifications'),
