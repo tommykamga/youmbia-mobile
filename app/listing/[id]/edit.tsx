@@ -273,7 +273,7 @@ export default function ListingEditScreen() {
         maxLength={200}
       />
       <Input
-        label="Prix (€)"
+        label="Prix (FCFA)"
         placeholder="0"
         value={priceStr}
         onChangeText={setPriceStr}

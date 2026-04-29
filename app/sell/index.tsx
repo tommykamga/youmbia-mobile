@@ -239,6 +239,10 @@ export default function SellScreen() {
       setSubmitError('Catégorie requise');
       return;
     }
+    if (!description.trim()) {
+      setSubmitError('Veuillez ajouter une description à votre annonce.');
+      return;
+    }
     if (images.length === 0 || !images.some((img) => !!img.base64 || !!img.uri)) {
       setSubmitError('Ajoutez au moins une photo');
       return;
@@ -482,7 +486,7 @@ export default function SellScreen() {
         maxLength={200}
       />
       <Input
-        label="Prix (€)"
+        label="Prix (FCFA)"
         placeholder="0"
         value={priceStr}
         onChangeText={setPriceStr}
@@ -537,7 +541,7 @@ export default function SellScreen() {
         onChangeText={setCity}
       />
       <Input
-        label="Description (optionnelle)"
+        label="Description"
         placeholder="Décrivez votre article..."
         value={description}
         onChangeText={setDescription}

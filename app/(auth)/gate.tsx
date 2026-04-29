@@ -191,7 +191,7 @@ export default function AuthGateScreen() {
 
         <AppCard
           padded
-          style={emailExpanded ? styles.ctaSurfaceWhenEmailOpen : undefined}
+          style={[styles.ctaSurfaceFlat, emailExpanded ? styles.ctaSurfaceWhenEmailOpen : undefined]}
         >
           <AppButton
             onPress={handleGoogle}
@@ -321,6 +321,16 @@ const styles = StyleSheet.create({
   },
   ctaSurfaceWhenEmailOpen: {
     opacity: 0.94,
+  },
+  ctaSurfaceFlat: {
+    backgroundColor: 'transparent',
+    borderWidth: 0,
+    borderColor: 'transparent',
+    shadowColor: 'transparent',
+    shadowOpacity: 0,
+    shadowRadius: 0,
+    shadowOffset: { width: 0, height: 0 },
+    elevation: 0,
   },
   emailPanel: {
     marginTop: ui.spacing.xs,
