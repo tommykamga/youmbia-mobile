@@ -38,7 +38,8 @@ function getUploadErrorMessage(message: string, fallback: string): string {
  */
 export async function uploadListingImages(
   listingId: string,
-  images: { base64: string }[]
+  images: { base64: string }[],
+  options?: { sortOrders?: number[] }
 ): Promise<UploadListingImagesResult> {
   try {
     const {
@@ -62,6 +63,25 @@ export async function uploadListingImages(
       };
     }
 
+    const sortOrders =
+      Array.isArray(options?.sortOrders) && options?.sortOrders.length === images.length
+        ? options!.sortOrders
+        : images.map((_, i) => i);
+
+    const sortOrderSet = new Set(sortOrders);
+    const invalidSortOrders =
+      sortOrders.length !== images.length ||
+      sortOrderSet.size !== sortOrders.length ||
+      sortOrders.some((n) => !Number.isInteger(n) || n < 0 || n >= MAX_IMAGES_PER_LISTING);
+
+    if (invalidSortOrders) {
+      return {
+        status: 'failed',
+        data: { uploadedCount: 0, failedCount: images.length, totalCount: images.length },
+        error: { message: "Ordre des photos invalide. Réessayez." },
+      };
+    }
+
     if (!images.length) {
       return {
         status: 'ok',
@@ -75,6 +95,7 @@ export async function uploadListingImages(
     let lastErrorMessage: string | null = null;
 
     for (let i = 0; i < images.length; i++) {
+      const sortOrder = sortOrders[i]!;
       const base64 = images[i].base64?.replace(/^data:image\/\w+;base64,/, '') ?? '';
       if (!base64) {
         failedCount += 1;
@@ -82,7 +103,7 @@ export async function uploadListingImages(
         continue;
       }
 
-      const path = `${user.id}/${listingId}/${i}.jpg`;
+      const path = `${user.id}/${listingId}/${sortOrder}.jpg`;
       const { error: uploadError } = await supabase.storage
         .from(BUCKET)
         .upload(path, decode(base64), {
@@ -103,7 +124,7 @@ export async function uploadListingImages(
         .from('listing_images')
         .select('id')
         .eq('listing_id', listingId)
-        .eq('sort_order', i)
+        .eq('sort_order', sortOrder)
         .limit(1);
 
       if (existingError) {
@@ -135,7 +156,7 @@ export async function uploadListingImages(
         const { error: insertError } = await supabase.from('listing_images').insert({
           listing_id: listingId,
           url: path,
-          sort_order: i,
+          sort_order: sortOrder,
         } as never);
 
         if (insertError) {

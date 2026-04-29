@@ -13,6 +13,7 @@ export { searchListings } from './searchListings';
 export { createListing } from './createListing';
 export { saveListingDynamicAttributeValues } from './saveListingDynamicAttributeValues';
 export { uploadListingImages } from './uploadListingImages';
+export { deleteListingImage } from './deleteListingImage';
 export { getMyListings } from './getMyListings';
 export { getListingStats } from './getListingStats';
 export { bumpListing } from './bumpListing';
@@ -32,6 +33,7 @@ export type { SaveListingDynamicAttributeValuesResult } from './saveListingDynam
 export type { DeleteListingDynamicAttributeValuesResult } from './deleteListingDynamicAttributeValuesForDefinitions';
 export type { DeleteListingResult } from './deleteListing';
 export type { UploadListingImagesResult } from './uploadListingImages';
+export type { DeleteListingImageResult } from './deleteListingImage';
 export type { MyListing, GetMyListingsResult } from './getMyListings';
 export type { ListingStats, GetListingStatsResult } from './getListingStats';
 export type { BumpListingResult } from './bumpListing';

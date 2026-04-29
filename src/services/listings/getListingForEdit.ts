@@ -15,12 +15,13 @@ export type ListingForEdit = {
   category_id: number | null;
   status: string;
   images: string[];
+  imageItems: { id: string; path: string; sort_order: number | null; displayUrl: string }[];
   district?: string | null;
   urgent?: boolean;
   boosted?: boolean;
 };
 
-type ListingImageRow = { url: string; sort_order: number | null };
+type ListingImageRow = { id: string; url: string; sort_order: number | null };
 
 type ListingRow = {
   id: string;
@@ -37,12 +38,20 @@ type ListingRow = {
   listing_images: ListingImageRow[] | null;
 };
 
-function mapImages(rows: ListingImageRow[] | null, signedMap: Map<string, string>): string[] {
+function mapImageItems(
+  rows: ListingImageRow[] | null,
+  signedMap: Map<string, string>
+): { id: string; path: string; sort_order: number | null; displayUrl: string }[] {
   if (!rows?.length) return [];
   return [...rows]
     .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
-    .map((img) => toDisplayImageUrl(img.url ?? '', signedMap))
-    .filter((url) => url !== '');
+    .map((img) => ({
+      id: String(img.id ?? '').trim(),
+      path: String(img.url ?? '').trim(),
+      sort_order: img.sort_order ?? null,
+      displayUrl: toDisplayImageUrl(img.url ?? '', signedMap),
+    }))
+    .filter((item) => item.id !== '' && item.path !== '' && item.displayUrl !== '');
 }
 
 export type GetListingForEditResult =
@@ -64,7 +73,7 @@ export async function getListingForEdit(id: string): Promise<GetListingForEditRe
   const { data: listingRow, error: listingError } = await supabase
     .from('listings')
     .select(
-      'id, title, price, city, description, category_id, status, boosted, urgent, district, user_id, listing_images(url, sort_order)'
+      'id, title, price, city, description, category_id, status, boosted, urgent, district, user_id, listing_images(id, url, sort_order)'
     )
     .eq('id', id)
     .eq('user_id', user.id)
@@ -90,6 +99,7 @@ export async function getListingForEdit(id: string): Promise<GetListingForEditRe
     .filter(Boolean);
   const signedMap = await getSignedUrlsMap(paths);
   const { boosted, district, urgent } = normalizeListingSchemaFeatures(row);
+  const imageItems = mapImageItems(row.listing_images, signedMap);
 
   const data: ListingForEdit = {
     id: row.id,
@@ -99,7 +109,8 @@ export async function getListingForEdit(id: string): Promise<GetListingForEditRe
     description: row.description ?? '',
     category_id: row.category_id ?? null,
     status: (row.status ?? 'active').toLowerCase(),
-    images: mapImages(row.listing_images, signedMap),
+    images: imageItems.map((item) => item.displayUrl),
+    imageItems,
     district,
     urgent,
     boosted,

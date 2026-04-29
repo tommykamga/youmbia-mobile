@@ -11,8 +11,11 @@ import {
   Image,
   Alert,
   Platform,
+  Pressable,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import Ionicons from '@expo/vector-icons/Ionicons';
+import * as ImagePicker from 'expo-image-picker';
 import { Screen, Button, Input, Loader, EmptyState, AppHeader } from '@/components';
 import { buildAuthGateHref } from '@/lib/authGateNavigation';
 import { LISTING_CATEGORIES } from '@/lib/listingCategories';
@@ -35,17 +38,24 @@ import {
   getListingDynamicAttributeValuesForForm,
   saveListingDynamicAttributeValues,
   deleteListingDynamicAttributeValuesForDefinitions,
+  uploadListingImages,
+  deleteListingImage,
   type ListingForEdit,
 } from '@/services/listings';
 import { getSession } from '@/services/auth';
 import { DynamicCategoryAttributesFields } from '@/features/sell/DynamicCategoryAttributesFields';
 import { colors, spacing, typography, fontWeights, radius } from '@/theme';
 
+const MAX_LISTING_IMAGES = 4;
+
 type LoadState =
   | { status: 'loading' }
   | { status: 'error'; message: string }
   | { status: 'unauthenticated' }
   | { status: 'ready'; listing: ListingForEdit };
+
+type ImageItem = ListingForEdit['imageItems'][number];
+type PickedImage = { uri: string; base64: string | null };
 
 export default function ListingEditScreen() {
   const router = useRouter();
@@ -67,6 +77,9 @@ export default function ListingEditScreen() {
 
   const [submitLoading, setSubmitLoading] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+
+  const [images, setImages] = useState<ImageItem[]>([]);
+  const [photoActionLoading, setPhotoActionLoading] = useState(false);
 
   useEffect(() => {
     if (!id || typeof id !== 'string') {
@@ -94,6 +107,7 @@ export default function ListingEditScreen() {
       setPriceStr(String(L.price));
       setCity(L.city ?? '');
       setDescription(L.description ?? '');
+      setImages(L.imageItems ?? []);
 
       const pilot =
         L.category_id != null ? await shouldUseDynamicAttributesPilot(L.category_id) : false;
@@ -135,6 +149,124 @@ export default function ListingEditScreen() {
   const handleDynamicChange = useCallback((key: string, value: string) => {
     setDynamicValues((prev) => ({ ...prev, [key]: value }));
   }, []);
+
+  const getAvailableSortOrders = useCallback((current: ImageItem[]) => {
+    const used = new Set(
+      current
+        .map((img) => img.sort_order)
+        .filter((n): n is number => typeof n === 'number' && Number.isInteger(n))
+    );
+    const available: number[] = [];
+    for (let i = 0; i < MAX_LISTING_IMAGES; i++) {
+      if (!used.has(i)) available.push(i);
+    }
+    return available;
+  }, []);
+
+  const handleDeletePhoto = useCallback(
+    (img: ImageItem) => {
+      if (photoActionLoading) return;
+      if (images.length <= 1) {
+        Alert.alert('Photos', 'Une annonce doit conserver au moins une photo.');
+        return;
+      }
+      Alert.alert('Supprimer la photo ?', 'Cette action est définitive.', [
+        { text: 'Annuler', style: 'cancel' },
+        {
+          text: 'Supprimer',
+          style: 'destructive',
+          onPress: async () => {
+            setPhotoActionLoading(true);
+            const result = await deleteListingImage(img.id);
+            if (!result.success) {
+              Alert.alert('Erreur', result.error || 'Impossible de supprimer la photo.');
+              setPhotoActionLoading(false);
+              return;
+            }
+            setImages((prev) => prev.filter((p) => p.id !== img.id));
+            setPhotoActionLoading(false);
+          },
+        },
+      ]);
+    },
+    [images.length, photoActionLoading]
+  );
+
+  const pickAndUploadPhotos = useCallback(async () => {
+    if (loadState.status !== 'ready') return;
+    if (photoActionLoading) return;
+
+    const availableSlots = getAvailableSortOrders(images);
+    if (availableSlots.length <= 0) {
+      Alert.alert('Photos', 'Une annonce ne peut pas contenir plus de 4 photos.');
+      return;
+    }
+
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert(
+        'Permission requise',
+        "Autorisez l'accès aux photos pour ajouter des images à votre annonce."
+      );
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      allowsMultipleSelection: true,
+      quality: 1,
+      base64: true,
+    });
+
+    if (result.canceled || !result.assets?.length) return;
+
+    const picked: PickedImage[] = result.assets.map((a) => ({
+      uri: a.uri,
+      base64: a.base64 ?? null,
+    }));
+
+    const pickedWithBase64 = picked.filter(
+      (p): p is PickedImage & { base64: string } => typeof p.base64 === 'string' && p.base64.length > 0
+    );
+
+    if (pickedWithBase64.length === 0) {
+      Alert.alert('Photos', "Certaines photos n'ont pas pu être préparées.");
+      return;
+    }
+
+    if (pickedWithBase64.length > availableSlots.length) {
+      Alert.alert('Photos', 'Une annonce ne peut pas contenir plus de 4 photos.');
+      return;
+    }
+
+    setPhotoActionLoading(true);
+    try {
+      const sortOrders = availableSlots.slice(0, pickedWithBase64.length);
+      const uploadResult = await uploadListingImages(
+        loadState.listing.id,
+        pickedWithBase64.map((p) => ({ base64: p.base64 })),
+        { sortOrders }
+      );
+
+      if (uploadResult.status === 'failed') {
+        Alert.alert('Erreur', uploadResult.error?.message || "Impossible d'ajouter les photos.");
+        return;
+      }
+      if (uploadResult.status === 'partial') {
+        Alert.alert('Photos', uploadResult.error?.message || "Certaines photos n'ont pas pu être ajoutées.");
+      }
+
+      // Recharger uniquement les photos depuis le backend sans toucher aux champs texte en cours d’édition.
+      const refreshed = await getListingForEdit(loadState.listing.id);
+      if (refreshed.error) {
+        Alert.alert('Photos', "Photos ajoutées, mais impossible d'actualiser l'affichage.");
+        return;
+      }
+      setImages(refreshed.data.imageItems ?? []);
+    } finally {
+      setPhotoActionLoading(false);
+    }
+  }, [getAvailableSortOrders, images, loadState, photoActionLoading]);
 
   const categoryLabel =
     loadState.status === 'ready'
@@ -247,22 +379,49 @@ export default function ListingEditScreen() {
     );
   }
 
-  const listing = loadState.listing;
-
   return (
     <Screen scroll keyboardAvoid>
       <AppHeader title="Modifier l’annonce" showBack />
       <Text style={styles.subtitle}>Catégorie : {categoryLabel}</Text>
 
-      {listing.images.length > 0 ? (
+      {images.length > 0 ? (
         <View style={styles.imagesSection}>
           <Text style={styles.label}>Photos</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.thumbsRow}>
-            {listing.images.map((uri, i) => (
-              <Image key={i} source={{ uri }} style={styles.thumb} />
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.thumbsRow}
+          >
+            {images.map((img) => (
+              <View key={img.id} style={styles.thumbWrap}>
+                <Image source={{ uri: img.displayUrl }} style={styles.thumb} />
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Supprimer la photo"
+                  onPress={() => handleDeletePhoto(img)}
+                  style={({ pressed }) => [
+                    styles.removeThumb,
+                    pressed && { opacity: 0.85 },
+                    photoActionLoading && { opacity: 0.6 },
+                  ]}
+                >
+                  <Ionicons name="close" size={14} color={colors.surface} />
+                </Pressable>
+              </View>
             ))}
+            {images.length < MAX_LISTING_IMAGES ? (
+              <Button
+                variant="outline"
+                size="md"
+                onPress={pickAndUploadPhotos}
+                disabled={photoActionLoading}
+                loading={photoActionLoading}
+                style={styles.addPhotoBtn}
+              >
+                + Photo
+              </Button>
+            ) : null}
           </ScrollView>
-          <Text style={styles.photoHint}>La modification des photos arrive prochainement.</Text>
         </View>
       ) : null}
 
@@ -341,16 +500,28 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: spacing.sm,
   },
+  thumbWrap: {
+    position: 'relative',
+  },
   thumb: {
     width: 80,
     height: 80,
     borderRadius: radius.lg,
     backgroundColor: colors.surface,
   },
-  photoHint: {
-    ...typography.xs,
-    color: colors.textMuted,
-    marginTop: spacing.xs,
+  removeThumb: {
+    position: 'absolute',
+    top: -6,
+    right: -6,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.text + 'AA',
+  },
+  addPhotoBtn: {
+    alignSelf: 'center',
   },
   descriptionInput: {
     minHeight: 100,
