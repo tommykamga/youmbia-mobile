@@ -31,12 +31,5 @@ export function useResponsiveLayout() {
 
 /** Placeholder barre de recherche Home — une ligne sur petits écrans. */
 export function getHomeSearchPlaceholder(bucket: WindowSizeBucket): string {
-  switch (bucket) {
-    case 'compact':
-      return 'Rechercher une annonce…';
-    case 'regular':
-      return 'Téléphone, voiture, maison…';
-    default:
-      return 'Rechercher téléphone, voiture, maison…';
-  }
+  return 'Que recherchez-vous ?';
 }

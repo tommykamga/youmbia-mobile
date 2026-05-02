@@ -95,6 +95,18 @@ function getActionErrorMessage(message: string, fallback: string): string {
   return fallback;
 }
 
+function maskPhoneForPreview(phone: string | null | undefined): string | null {
+  const raw = String(phone ?? '').trim();
+  if (!raw) return null;
+  const digits = raw.replace(/[^\d+]/g, '');
+  const pureDigits = digits.replace(/[^\d]/g, '');
+  if (pureDigits.length < 6) return '••••••';
+  const first = pureDigits.slice(0, 2);
+  const last = pureDigits.slice(-2);
+  const prefix = digits.startsWith('+') ? '+' : '';
+  return `${prefix}${first}••••${last}`;
+}
+
 export default function ListingDetailScreen() {
   const { width: screenWidth, isCompact } = useResponsiveLayout();
   const CARD_WIDTH = screenWidth * 0.8;
@@ -112,6 +124,7 @@ export default function ListingDetailScreen() {
   const [reportReason, setReportReason] = useState<string | null>(null);
   const [favoriteLoading, setFavoriteLoading] = useState(false);
   const [messageLoading, setMessageLoading] = useState(false);
+  const [sessionStatus, setSessionStatus] = useState<'loading' | 'authed' | 'guest'>('loading');
   const [sellerStats, setSellerStats] = useState<{ memberSince: string | null; listingCount: number | null }>({
     memberSince: null,
     listingCount: null,
@@ -197,6 +210,25 @@ export default function ListingDetailScreen() {
         if (res.data) setIsFavorite(res.data.includes(id));
       });
     }, [id, state.status])
+  );
+
+  useFocusEffect(
+    useCallback(() => {
+      let active = true;
+      setSessionStatus('loading');
+      getSession()
+        .then((s) => {
+          if (!active) return;
+          setSessionStatus(s?.user ? 'authed' : 'guest');
+        })
+        .catch(() => {
+          if (!active) return;
+          setSessionStatus('guest');
+        });
+      return () => {
+        active = false;
+      };
+    }, [])
   );
 
   const handleFavoritePress = useCallback(async () => {
@@ -422,6 +454,8 @@ export default function ListingDetailScreen() {
 
   const listing = state.listing;
   const dynamicAttributes = state.dynamicAttributes;
+  const isGuest = sessionStatus === 'guest';
+  const maskedPhone = maskPhoneForPreview(listing.seller?.phone ?? null);
 
   const renderSimilarItem = ({ item }: { item: PublicListing }) => (
     <View style={{ width: CARD_WIDTH }}>
@@ -574,6 +608,9 @@ export default function ListingDetailScreen() {
         onFavorisPress={handleFavoritePress}
         onMessagePress={handleMessagePress}
         onWhatsAppPress={handleSecureWhatsApp}
+        messageLoading={messageLoading}
+        showAuthHint={isGuest}
+        maskedPhone={maskedPhone}
       />
     </Screen>
   );

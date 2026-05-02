@@ -136,7 +136,7 @@ export async function checkPhoneUniquenessForPublish(
     throw new Error(error.message);
   }
 
-  const rows = (data ?? []) as Array<{ id: string | null; phone: string | null }>;
+  const rows = (data ?? []) as { id: string | null; phone: string | null }[];
   const conflict = rows.some((row) => {
     const id = String(row.id ?? '').trim();
     if (!id || id === currentUserId) return false;

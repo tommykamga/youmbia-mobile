@@ -112,7 +112,7 @@ export default function UserProfileScreen() {
     if (!id) return;
     getSession().then((session) => {
       if (!session?.user) {
-        Alert.alert('Connexion requise', 'Connectez-vous pour signaler ce vendeur.');
+        Alert.alert('Connexion requise', 'Connecte-toi pour signaler ce vendeur.');
         return;
       }
       if (session.user.id === id) {

@@ -48,6 +48,14 @@ export type ListingFeedProps = {
    * Inchangé pour les autres consommateurs éventuels.
    */
   reanimatedScrollHandler?: (e: NativeSyntheticEvent<NativeScrollEvent>) => void;
+  /** Composant optionnel à intercaler dans le flux. */
+  extraComponent?: React.ReactElement | null;
+  /** Index (après combien d'items) intercaler le composant (défaut 6). */
+  extraComponentIndex?: number;
+  /** Limite maximale d'annonces à afficher. */
+  limit?: number;
+  /** Action à afficher en fin de flux (si limité). */
+  footerAction?: { label: string; onPress: () => void };
 };
 
 export function ListingFeed({
@@ -55,6 +63,10 @@ export function ListingFeed({
   contentPaddingHorizontal = spacing.base,
   listingCardFeedPresentation = 'standard',
   reanimatedScrollHandler,
+  extraComponent,
+  extraComponentIndex = 6,
+  limit,
+  footerAction,
 }: ListingFeedProps) {
   const listRef = useRef<any>(null);
   useScrollToTop(listRef);
@@ -157,6 +169,9 @@ export function ListingFeed({
           <SkeletonListingCard feedPresentation={listingCardFeedPresentation} />
         );
       }
+      if (item.type === 'extra') {
+        return extraComponent || null;
+      }
       return (
         <ListingCard
           listing={item as PublicListing}
@@ -164,7 +179,7 @@ export function ListingFeed({
         />
       );
     },
-    [listingCardFeedPresentation]
+    [listingCardFeedPresentation, extraComponent]
   );
   const itemSeparator = useCallback(
     () => <View style={styles.separator} />,
@@ -173,15 +188,20 @@ export function ListingFeed({
 
   const loadMore = useCallback(() => {
     if (state.status !== 'success' || loadingMoreRef.current || !hasMoreRef.current) return;
+    
     const currentLength = feedDataLength;
     if (currentLength === 0) return;
+    
+    // Si on a atteint la limite, on ne charge plus
+    if (limit && currentLength >= limit) return;
+
     loadingMoreRef.current = true;
     setLoadingMore(true);
     load(currentLength, true).finally(() => {
       loadingMoreRef.current = false;
       setLoadingMore(false);
     });
-  }, [state.status, feedDataLength, load]);
+  }, [state.status, feedDataLength, load, limit]);
 
   const sortedListings = useMemo(() => {
     const list = feedSuccessData ?? [];
@@ -190,8 +210,19 @@ export function ListingFeed({
 
   const feedData = useMemo(() => {
     if (state.status === 'loading') return [1, 2, 3, 4, 5, 6];
-    return sortedListings;
-  }, [state.status, sortedListings]);
+    
+    let list = [...sortedListings];
+    
+    // Application de la limite si présente
+    if (limit && list.length > limit) {
+      list = list.slice(0, limit);
+    }
+
+    if (extraComponent && list.length >= extraComponentIndex) {
+      list.splice(extraComponentIndex, 0, { id: 'extra-component-marker', type: 'extra' } as any);
+    }
+    return list;
+  }, [state.status, sortedListings, extraComponent, extraComponentIndex, limit]);
 
   const sortHeader = useMemo(
     () => (
@@ -268,6 +299,29 @@ export function ListingFeed({
   const listFooter = useMemo(() => {
     const dataLength = feedDataLength;
     if (state.status !== 'success' || dataLength === 0) return null;
+
+    // Cas spécifique : Limite atteinte (Home contrôlée)
+    if (limit && dataLength >= limit) {
+      return (
+        <View style={styles.limitFooter}>
+          <View style={styles.limitDivider} />
+          {footerAction && (
+            <Button
+              variant="outline"
+              onPress={footerAction.onPress}
+              style={styles.limitButton}
+            >
+              {footerAction.label}
+            </Button>
+          )}
+          <View style={styles.footerEndWrap}>
+            <Ionicons name="checkmark-circle-outline" size={18} color={colors.textTertiary} />
+            <Text style={styles.footerEnd}>Vous avez vu toutes les annonces du moment</Text>
+          </View>
+        </View>
+      );
+    }
+
     if (loadingMore) {
       return (
         <View style={styles.footer}>
@@ -301,7 +355,7 @@ export function ListingFeed({
       );
     }
     return null;
-  }, [state.status, feedDataLength, loadingMore, hasMore, loadMoreError, load]);
+  }, [state.status, feedDataLength, loadingMore, hasMore, loadMoreError, load, limit, footerAction]);
 
   const listContentStyle = useMemo(
     () => [styles.listContent, { paddingHorizontal: contentPaddingHorizontal }],
@@ -445,5 +499,20 @@ const styles = StyleSheet.create({
   },
   emptyWrap: {
     marginTop: spacing['2xl'],
+  },
+  limitFooter: {
+    paddingVertical: spacing['3xl'],
+    paddingHorizontal: spacing.base,
+    alignItems: 'center',
+  },
+  limitDivider: {
+    width: '40%',
+    height: 1,
+    backgroundColor: colors.borderLight,
+    marginBottom: spacing['2xl'],
+  },
+  limitButton: {
+    minWidth: 220,
+    marginBottom: spacing.xl,
   },
 });

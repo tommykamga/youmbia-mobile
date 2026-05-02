@@ -66,7 +66,7 @@ export const AUTH_GATE_CONTEXT_CONFIG: Record<AuthGateContextId, AuthGateContext
   }),
   listings: withSharedCtas({
     title: 'Gérez vos annonces',
-    subtitle: 'Connectez-vous pour suivre vos ventes et mettre à jour vos annonces.',
+    subtitle: 'Connecte-toi pour suivre tes ventes et mettre à jour tes annonces.',
     successHref: '/account/listings',
   }),
 };

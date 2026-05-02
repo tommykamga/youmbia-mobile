@@ -7,9 +7,6 @@ import { Pressable, Text, StyleSheet, ViewStyle, StyleProp } from 'react-native'
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { shadows, ui } from '@/theme';
 
-/** Vert YOUMBIA atténué (~60 %), pas le primaire plein (`#16A34A`). */
-const SEARCH_ICON_GREEN = 'rgba(22, 163, 74, 0.6)';
-
 export type AppSearchBarProps = {
   placeholder: string;
   onPress: () => void;
@@ -40,7 +37,7 @@ export function AppSearchBar({
       <Ionicons
         name="search"
         size={compact ? 20 : 22}
-        color={SEARCH_ICON_GREEN}
+        color={ui.colors.textMuted}
         style={styles.icon}
       />
       <Text
@@ -58,9 +55,9 @@ const styles = StyleSheet.create({
   bar: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: ui.colors.surface,
+    backgroundColor: ui.colors.surfaceSubtle,
     borderWidth: 1,
-    borderColor: ui.colors.border,
+    borderColor: ui.colors.borderLight,
     borderRadius: ui.radius.pill,
     paddingVertical: ui.spacing.md + 2,
     paddingHorizontal: ui.spacing.lg,
@@ -78,7 +75,7 @@ const styles = StyleSheet.create({
   },
   barPressed: {
     opacity: 0.96,
-    backgroundColor: ui.colors.surfaceSubtle,
+    backgroundColor: ui.colors.primarySoft,
     transform: [{ scale: 0.988 }],
   },
   icon: {

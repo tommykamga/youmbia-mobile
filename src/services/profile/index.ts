@@ -3,6 +3,7 @@
  */
 
 export { getCurrentProfile, updateProfile, sanitizeProfileDisplayValue, normalizePhoneForProfile } from './profile';
+export { checkPhoneUniquenessForPublish } from './profile';
 export type {
   ProfileRow,
   GetCurrentProfileResult,

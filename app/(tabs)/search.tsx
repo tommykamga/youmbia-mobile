@@ -14,12 +14,13 @@ import {
   Pressable,
   KeyboardAvoidingView,
   Platform,
+  Modal,
 } from 'react-native';
 import { useFocusEffect, useLocalSearchParams } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Screen, Loader, EmptyState, Button } from '@/components';
 import { ListingCard } from '@/features/listings';
-import { searchListings } from '@/services/listings';
+import { searchListings, getPublicListings } from '@/services/listings';
 import { getSearchSuggestions } from '@/services/searchSuggestions';
 import { getFavoriteIds as getFavIds } from '@/services/favorites';
 import { sortListings, type SortOption } from '@/utils/sortListings';
@@ -101,7 +102,7 @@ function validatePriceFilters(priceMin: string, priceMax: string): {
     return { min: null, max: null, error: maxResult.error };
   }
   if (minResult.value != null && maxResult.value != null && minResult.value > maxResult.value) {
-    return { min: null, max: null, error: 'La fourchette de prix est incoherente' };
+    return { min: null, max: null, error: 'La fourchette de prix est incohérente' };
   }
   return { min: minResult.value, max: maxResult.value, error: null };
 }
@@ -134,6 +135,8 @@ export default function SearchScreen() {
   const [savedSearches, setSavedSearches] = useState<SavedSearch[]>([]);
   const [savedSearchFeedback, setSavedSearchFeedback] = useState<string | null>(null);
   const [suggestions, setSuggestions] = useState<string[]>([]);
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [savedOpen, setSavedOpen] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const resultsListRef = useRef<FlatList<PublicListing> | null>(null);
   const savedSearchFeedbackTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -189,7 +192,6 @@ export default function SearchScreen() {
   /** When navigating with query params, pre-fill and run search once. */
   useEffect(() => {
     const initialQ = typeof params.q === 'string' ? params.q.trim() : '';
-    if (!initialQ) return;
     setQuery(initialQ);
     runSearch(initialQ);
   // eslint-disable-next-line react-hooks/exhaustive-deps -- only run when navigation params change
@@ -225,14 +227,14 @@ export default function SearchScreen() {
 
   const runSearch = useCallback(async (q: string) => {
     const trimmed = q.trim();
-    if (!trimmed) {
-      setState({ status: 'idle' });
-      setSubmittedQuery('');
-      return;
-    }
     setSubmittedQuery(trimmed);
     setState({ status: 'loading' });
-    const result = await searchListings(trimmed);
+    
+    // Si vide, on charge le flux public "exploration", sinon on cherche
+    const result = trimmed 
+      ? await searchListings(trimmed)
+      : await getPublicListings(0, 50);
+
     if (result.error) {
       setState({ status: 'error', message: result.error.message });
       return;
@@ -298,9 +300,9 @@ export default function SearchScreen() {
     if (!result.ok) {
       setSavedSearchFeedback(result.error.message);
     } else if (result.status === 'exists') {
-      setSavedSearchFeedback('Cette recherche existe deja');
+      setSavedSearchFeedback('Cette recherche existe déjà');
     } else {
-      setSavedSearchFeedback('Recherche enregistree');
+      setSavedSearchFeedback('Recherche enregistrée');
     }
     savedSearchFeedbackTimeoutRef.current = setTimeout(() => setSavedSearchFeedback(null), 2000);
   }, [submittedQuery, appliedPriceFilters, appliedSearchFilters, loadSavedSearches]);
@@ -384,7 +386,7 @@ export default function SearchScreen() {
   const activeFilterSummary = useMemo(() => {
     const chips: string[] = [];
     if (appliedSearchFilters.category) {
-      chips.push(`Categorie ${appliedSearchFilters.category}`);
+      chips.push(`Catégorie ${appliedSearchFilters.category}`);
     }
     if (appliedSearchFilters.city) {
       chips.push(`Ville ${appliedSearchFilters.city}`);
@@ -397,6 +399,8 @@ export default function SearchScreen() {
     }
     return chips;
   }, [appliedPriceFilters, appliedSearchFilters]);
+
+  const activeFiltersCount = activeFilterSummary.length;
 
   const filteredListings = useMemo(() => {
     return sortedListings.filter((l) => {
@@ -438,36 +442,74 @@ export default function SearchScreen() {
     setPriceFilterError(null);
   }, []);
 
+  const openFilters = useCallback(() => {
+    Keyboard.dismiss();
+    setFiltersOpen(true);
+  }, []);
+
+  const closeFilters = useCallback(() => setFiltersOpen(false), []);
+
+  const openSaved = useCallback(() => {
+    Keyboard.dismiss();
+    setSavedOpen(true);
+  }, []);
+
+  const closeSaved = useCallback(() => setSavedOpen(false), []);
+
   const sortBar = useMemo(
     () => (
-      <View style={styles.sortContainer}>
+      <View style={styles.sortRow}>
+        <View style={styles.sortContainerInline}>
+          <Pressable
+            style={[styles.sortOption, sortBy === 'recent' && styles.sortOptionActive]}
+            onPress={() => setSortBy('recent')}
+          >
+            <Text style={[styles.sortOptionText, sortBy === 'recent' && styles.sortOptionTextActive]}>
+              Récent
+            </Text>
+          </Pressable>
+          <Pressable
+            style={[styles.sortOption, sortBy === 'price_asc' && styles.sortOptionActive]}
+            onPress={() => setSortBy('price_asc')}
+          >
+            <Text style={[styles.sortOptionText, sortBy === 'price_asc' && styles.sortOptionTextActive]}>
+              Prix ↑
+            </Text>
+          </Pressable>
+          <Pressable
+            style={[styles.sortOption, sortBy === 'price_desc' && styles.sortOptionActive]}
+            onPress={() => setSortBy('price_desc')}
+          >
+            <Text style={[styles.sortOptionText, sortBy === 'price_desc' && styles.sortOptionTextActive]}>
+              Prix ↓
+            </Text>
+          </Pressable>
+        </View>
         <Pressable
-          style={[styles.sortOption, sortBy === 'recent' && styles.sortOptionActive]}
-          onPress={() => setSortBy('recent')}
+          style={({ pressed }) => [
+            styles.filtersBtn,
+            (hasAppliedPriceFilter || hasAppliedSearchFilter) && styles.filtersBtnActive,
+            pressed && styles.filtersBtnPressed,
+          ]}
+          onPress={openFilters}
         >
-          <Text style={[styles.sortOptionText, sortBy === 'recent' && styles.sortOptionTextActive]}>
-            Plus récentes
-          </Text>
-        </Pressable>
-        <Pressable
-          style={[styles.sortOption, sortBy === 'price_asc' && styles.sortOptionActive]}
-          onPress={() => setSortBy('price_asc')}
-        >
-          <Text style={[styles.sortOptionText, sortBy === 'price_asc' && styles.sortOptionTextActive]}>
-            Prix ↑
-          </Text>
-        </Pressable>
-        <Pressable
-          style={[styles.sortOption, sortBy === 'price_desc' && styles.sortOptionActive]}
-          onPress={() => setSortBy('price_desc')}
-        >
-          <Text style={[styles.sortOptionText, sortBy === 'price_desc' && styles.sortOptionTextActive]}>
-            Prix ↓
+          <Ionicons
+            name="options-outline"
+            size={18}
+            color={(hasAppliedPriceFilter || hasAppliedSearchFilter) ? colors.primary : colors.textMuted}
+          />
+          <Text
+            style={[
+              styles.filtersBtnText,
+              (hasAppliedPriceFilter || hasAppliedSearchFilter) && styles.filtersBtnTextActive,
+            ]}
+          >
+            Filtres{activeFiltersCount > 0 ? ` (${activeFiltersCount})` : ''}
           </Text>
         </Pressable>
       </View>
     ),
-    [sortBy]
+    [sortBy, openFilters, hasAppliedPriceFilter, hasAppliedSearchFilter, activeFiltersCount]
   );
 
   const savedSearchesSection = useMemo(() => {
@@ -475,7 +517,7 @@ export default function SearchScreen() {
     return (
       <View style={styles.savedSection}>
         <View style={styles.savedSectionHeader}>
-          <Text style={styles.savedSectionTitle}>Recherches enregistrees</Text>
+            <Text style={styles.savedSectionTitle}>Recherches enregistrées</Text>
         </View>
         {savedSearches.slice(0, 5).map((item) => (
           <Pressable
@@ -507,27 +549,104 @@ export default function SearchScreen() {
     );
   }, [savedSearches, handleSavedSearchPress, handleRemoveSavedSearch]);
 
-  const resultsHeader = useMemo(
-    () => (
-      <>
+  const resultsHeader = useMemo(() => {
+    const isExploreMode = !submittedQuery;
+    return (
+      <View style={styles.resultsHeaderWrap}>
+        {isExploreMode ? (
+          <View style={styles.exploreHeader}>
+            <Text style={styles.exploreTitle}>Explorez les annonces disponibles</Text>
+            <Text style={styles.exploreSubtitle}>Découvrez les dernières opportunités publiées</Text>
+          </View>
+        ) : (
+          <View style={styles.exploreHeader}>
+            <Text style={styles.exploreTitle}>Résultats de recherche</Text>
+            <Text style={styles.exploreSubtitle}>
+              {filteredListings.length} {filteredListings.length > 1 ? 'annonces trouvées' : 'annonce trouvée'}
+            </Text>
+          </View>
+        )}
+
         {sortBar}
-        <View style={styles.filterCard}>
-          <View style={styles.filterHeader}>
-            <View>
-              <Text style={styles.filterTitle}>Filtres de recherche</Text>
-              <Text style={styles.filterHint}>Affinez par categorie, ville et prix sans perdre vos resultats.</Text>
-            </View>
-            {hasAppliedPriceFilter || hasAppliedSearchFilter ? (
-              <View style={styles.filterBadge}>
-                <Text style={styles.filterBadgeText}>Actif</Text>
+
+        {(hasAppliedPriceFilter || hasAppliedSearchFilter) && (
+          <View style={styles.activeChipsRow}>
+            {activeFilterSummary.slice(0, 3).map((chip) => (
+              <View key={chip} style={styles.filterChip}>
+                <Text style={styles.filterChipText}>{chip}</Text>
+              </View>
+            ))}
+            {activeFilterSummary.length > 3 ? (
+              <View style={styles.moreChip}>
+                <Text style={styles.moreChipText}>+{activeFilterSummary.length - 3}</Text>
               </View>
             ) : null}
           </View>
-          <View style={styles.filterSection}>
-            <Text style={styles.filterLabel}>Categorie</Text>
+        )}
+      </View>
+    );
+  }, [
+    sortBar,
+    hasAppliedPriceFilter,
+    hasAppliedSearchFilter,
+    activeFilterSummary,
+    submittedQuery,
+    filteredListings.length,
+  ]);
+
+  const filtersSheetContent = useMemo(
+    () => (
+      <View style={styles.sheetCard}>
+        <View style={styles.sheetHeader}>
+          <Text style={styles.sheetTitle}>Filtres</Text>
+          <Pressable onPress={closeFilters} hitSlop={10} style={({ pressed }) => [styles.sheetCloseBtn, pressed && styles.sheetCloseBtnPressed]}>
+            <Ionicons name="close" size={22} color={colors.textMuted} />
+          </Pressable>
+        </View>
+
+        <View style={styles.filterSection}>
+          <Text style={styles.filterLabel}>Catégorie</Text>
+          <View style={styles.filterOptionWrap}>
+            {CATEGORY_OPTIONS.map((option) => {
+              const isSelected = category.trim() === option;
+              return (
+                <Pressable
+                  key={option}
+                  style={({ pressed }) => [
+                    styles.filterOptionChip,
+                    isSelected && styles.filterOptionChipSelected,
+                    pressed && styles.filterOptionChipPressed,
+                  ]}
+                  onPress={() => setCategory((prev) => (prev.trim() === option ? '' : option))}
+                >
+                  <Text
+                    style={[
+                      styles.filterOptionChipText,
+                      isSelected && styles.filterOptionChipTextSelected,
+                    ]}
+                  >
+                    {option}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        </View>
+
+        <View style={styles.filterSection}>
+          <Text style={styles.filterLabel}>Ville</Text>
+          <TextInput
+            style={styles.filterInput}
+            value={city}
+            onChangeText={setCity}
+            placeholder="Ex. Douala"
+            placeholderTextColor={colors.textMuted}
+            autoCapitalize="words"
+          />
+          {availableCities.length > 0 ? (
             <View style={styles.filterOptionWrap}>
-              {CATEGORY_OPTIONS.map((option) => {
-                const isSelected = category.trim() === option;
+              {availableCities.slice(0, 6).map((option) => {
+                const isSelected = normalizeMatchText(city) === normalizeMatchText(option);
                 return (
                   <Pressable
                     key={option}
@@ -536,7 +655,7 @@ export default function SearchScreen() {
                       isSelected && styles.filterOptionChipSelected,
                       pressed && styles.filterOptionChipPressed,
                     ]}
-                    onPress={() => setCategory((prev) => (prev.trim() === option ? '' : option))}
+                    onPress={() => setCity((prev) => (normalizeMatchText(prev) === normalizeMatchText(option) ? '' : option))}
                   >
                     <Text
                       style={[
@@ -550,116 +669,88 @@ export default function SearchScreen() {
                 );
               })}
             </View>
-          </View>
-          <View style={styles.filterSection}>
-            <Text style={styles.filterLabel}>Ville</Text>
+          ) : null}
+        </View>
+
+        <View style={styles.filterDivider} />
+
+        <View style={styles.filterSection}>
+          <Text style={styles.filterLabel}>Prix</Text>
+        </View>
+        <View style={styles.filterRow}>
+          <View style={styles.filterField}>
+            <Text style={styles.filterSubLabel}>Prix min</Text>
             <TextInput
               style={styles.filterInput}
-              value={city}
-              onChangeText={setCity}
-              placeholder="Ex. Douala"
+              value={priceMin}
+              onChangeText={(value) => {
+                setPriceMin(value);
+                if (priceFilterError) setPriceFilterError(null);
+              }}
+              placeholder="Ex. 50000"
               placeholderTextColor={colors.textMuted}
-              autoCapitalize="words"
+              keyboardType="number-pad"
             />
-            {availableCities.length > 0 ? (
-              <View style={styles.filterOptionWrap}>
-                {availableCities.slice(0, 6).map((option) => {
-                  const isSelected = normalizeMatchText(city) === normalizeMatchText(option);
-                  return (
-                    <Pressable
-                      key={option}
-                      style={({ pressed }) => [
-                        styles.filterOptionChip,
-                        isSelected && styles.filterOptionChipSelected,
-                        pressed && styles.filterOptionChipPressed,
-                      ]}
-                      onPress={() => setCity((prev) => (normalizeMatchText(prev) === normalizeMatchText(option) ? '' : option))}
-                    >
-                      <Text
-                        style={[
-                          styles.filterOptionChipText,
-                          isSelected && styles.filterOptionChipTextSelected,
-                        ]}
-                      >
-                        {option}
-                      </Text>
-                    </Pressable>
-                  );
-                })}
-              </View>
-            ) : null}
           </View>
-          <View style={styles.filterDivider} />
-          <View style={styles.filterSection}>
-            <Text style={styles.filterLabel}>Prix</Text>
-          </View>
-          <View style={styles.filterRow}>
-            <View style={styles.filterField}>
-              <Text style={styles.filterSubLabel}>Prix min</Text>
-              <TextInput
-                style={styles.filterInput}
-                value={priceMin}
-                onChangeText={(value) => {
-                  setPriceMin(value);
-                  if (priceFilterError) setPriceFilterError(null);
-                }}
-                placeholder="Ex. 50000"
-                placeholderTextColor={colors.textMuted}
-                keyboardType="number-pad"
-              />
-            </View>
-            <View style={styles.filterField}>
-              <Text style={styles.filterSubLabel}>Prix max</Text>
-              <TextInput
-                style={styles.filterInput}
-                value={priceMax}
-                onChangeText={(value) => {
-                  setPriceMax(value);
-                  if (priceFilterError) setPriceFilterError(null);
-                }}
-                placeholder="Ex. 200000"
-                placeholderTextColor={colors.textMuted}
-                keyboardType="number-pad"
-              />
-            </View>
-          </View>
-          {priceFilterError ? <Text style={styles.filterError}>{priceFilterError}</Text> : null}
-          {hasAppliedPriceFilter || hasAppliedSearchFilter ? (
-            <View style={styles.filterSummary}>
-              {activeFilterSummary.map((chip) => (
-                <View key={chip} style={styles.filterChip}>
-                  <Text style={styles.filterChipText}>{chip}</Text>
-                </View>
-              ))}
-            </View>
-          ) : (
-            <Text style={styles.filterHelperText}>Aucun filtre actif.</Text>
-          )}
-          <View style={styles.filterActions}>
-            <Pressable
-              style={({ pressed }) => [
-                styles.filterActionPrimary,
-                !(hasDraftPriceChanges || hasDraftSearchChanges) && styles.filterActionDisabled,
-                pressed && (hasDraftPriceChanges || hasDraftSearchChanges) && styles.filterActionPrimaryPressed,
-              ]}
-              onPress={handleApplyAllFilters}
-              disabled={!(hasDraftPriceChanges || hasDraftSearchChanges)}
-            >
-              <Text style={styles.filterActionPrimaryText}>Appliquer</Text>
-            </Pressable>
-            <Pressable
-              style={({ pressed }) => [
-                styles.filterActionSecondary,
-                !(hasAppliedPriceFilter || hasAppliedSearchFilter) && styles.filterActionDisabled,
-                pressed && (hasAppliedPriceFilter || hasAppliedSearchFilter) && styles.filterActionSecondaryPressed,
-              ]}
-              onPress={handleResetAllFilters}
-              disabled={!(hasAppliedPriceFilter || hasAppliedSearchFilter)}
-            >
-              <Text style={styles.filterActionSecondaryText}>Reinitialiser</Text>
-            </Pressable>
+          <View style={styles.filterField}>
+            <Text style={styles.filterSubLabel}>Prix max</Text>
+            <TextInput
+              style={styles.filterInput}
+              value={priceMax}
+              onChangeText={(value) => {
+                setPriceMax(value);
+                if (priceFilterError) setPriceFilterError(null);
+              }}
+              placeholder="Ex. 200000"
+              placeholderTextColor={colors.textMuted}
+              keyboardType="number-pad"
+            />
           </View>
         </View>
+        {priceFilterError ? <Text style={styles.filterError}>{priceFilterError}</Text> : null}
+
+        {hasAppliedPriceFilter || hasAppliedSearchFilter ? (
+          <View style={styles.filterSummary}>
+            {activeFilterSummary.map((chip) => (
+              <View key={chip} style={styles.filterChip}>
+                <Text style={styles.filterChipText}>{chip}</Text>
+              </View>
+            ))}
+          </View>
+        ) : (
+          <Text style={styles.filterHelperText}>Aucun filtre actif.</Text>
+        )}
+
+        <View style={styles.filterActions}>
+          <Pressable
+            style={({ pressed }) => [
+              styles.filterActionPrimary,
+              !(hasDraftPriceChanges || hasDraftSearchChanges) && styles.filterActionDisabled,
+              pressed && (hasDraftPriceChanges || hasDraftSearchChanges) && styles.filterActionPrimaryPressed,
+            ]}
+            onPress={() => {
+              handleApplyAllFilters();
+              closeFilters();
+            }}
+            disabled={!(hasDraftPriceChanges || hasDraftSearchChanges)}
+          >
+            <Text style={styles.filterActionPrimaryText}>Appliquer</Text>
+          </Pressable>
+          <Pressable
+            style={({ pressed }) => [
+              styles.filterActionSecondary,
+              !(hasAppliedPriceFilter || hasAppliedSearchFilter) && styles.filterActionDisabled,
+              pressed && (hasAppliedPriceFilter || hasAppliedSearchFilter) && styles.filterActionSecondaryPressed,
+            ]}
+            onPress={handleResetAllFilters}
+            disabled={!(hasAppliedPriceFilter || hasAppliedSearchFilter)}
+          >
+            <Text style={styles.filterActionSecondaryText}>Réinitialiser</Text>
+          </Pressable>
+        </View>
+
+        <View style={styles.sheetDivider} />
+
         <Pressable
           style={({ pressed }) => [styles.saveSearchBtn, pressed && styles.saveSearchBtnPressed]}
           onPress={handleSaveSearch}
@@ -669,27 +760,40 @@ export default function SearchScreen() {
             {savedSearchFeedback ?? 'Sauvegarder cette recherche'}
           </Text>
         </Pressable>
-        {savedSearchesSection}
-      </>
+
+        {savedSearches.length > 0 ? (
+          <Pressable
+            style={({ pressed }) => [styles.savedOpenBtn, pressed && styles.savedOpenBtnPressed]}
+            onPress={() => {
+              closeFilters();
+              openSaved();
+            }}
+          >
+            <Ionicons name="time-outline" size={18} color={colors.textMuted} />
+            <Text style={styles.savedOpenBtnText}>Recherches enregistrées</Text>
+          </Pressable>
+        ) : null}
+      </View>
     ),
     [
-      sortBar,
       category,
       city,
       availableCities,
       priceMin,
       priceMax,
+      priceFilterError,
       hasAppliedPriceFilter,
       hasAppliedSearchFilter,
       hasDraftPriceChanges,
       hasDraftSearchChanges,
-      priceFilterError,
       activeFilterSummary,
       handleApplyAllFilters,
       handleResetAllFilters,
       handleSaveSearch,
       savedSearchFeedback,
-      savedSearchesSection,
+      savedSearches.length,
+      closeFilters,
+      openSaved,
     ]
   );
 
@@ -705,7 +809,7 @@ export default function SearchScreen() {
             <Ionicons name="search" size={20} color={colors.textMuted} style={styles.searchIcon} />
             <TextInput
               style={styles.input}
-              placeholder="Rechercher une annonce…"
+              placeholder="Que recherchez-vous ?"
               placeholderTextColor={colors.textMuted}
               value={query}
               onChangeText={setQuery}
@@ -728,17 +832,49 @@ export default function SearchScreen() {
               </Pressable>
             ) : null}
           </View>
-          <Pressable
-            style={({ pressed }) => [styles.submitBtn, pressed && styles.submitBtnPressed]}
-            onPress={handleSubmit}
-          >
-            <Text style={styles.submitLabel}>Rechercher</Text>
-          </Pressable>
+          <View style={styles.headerActionsRow}>
+            <Pressable
+              style={({ pressed }) => [styles.submitBtn, pressed && styles.submitBtnPressed]}
+              onPress={handleSubmit}
+            >
+              <Text style={styles.submitLabel}>Rechercher</Text>
+            </Pressable>
+            <Pressable
+              style={({ pressed }) => [
+                styles.headerSecondaryBtn,
+                (hasAppliedPriceFilter || hasAppliedSearchFilter) && styles.headerSecondaryBtnActive,
+                pressed && styles.headerSecondaryBtnPressed,
+              ]}
+              onPress={openFilters}
+            >
+              <Ionicons
+                name="options-outline"
+                size={18}
+                color={(hasAppliedPriceFilter || hasAppliedSearchFilter) ? colors.primary : colors.textMuted}
+              />
+              <Text
+                style={[
+                  styles.headerSecondaryBtnText,
+                  (hasAppliedPriceFilter || hasAppliedSearchFilter) && styles.headerSecondaryBtnTextActive,
+                ]}
+              >
+                Filtres
+              </Text>
+            </Pressable>
+            {savedSearches.length > 0 ? (
+              <Pressable
+                style={({ pressed }) => [styles.headerSecondaryBtn, pressed && styles.headerSecondaryBtnPressed]}
+                onPress={openSaved}
+              >
+                <Ionicons name="time-outline" size={18} color={colors.textMuted} />
+                <Text style={styles.headerSecondaryBtnText}>Enregistrées</Text>
+              </Pressable>
+            ) : null}
+          </View>
         </View>
 
         {state.status === 'idle' && suggestions.length > 0 && (
           <>
-            {savedSearchesSection}
             <View style={styles.suggestionsWrap}>
               {suggestions.map((text) => (
                 <Pressable
@@ -765,14 +901,7 @@ export default function SearchScreen() {
         )}
 
         {state.status === 'idle' && suggestions.length === 0 && (
-          <>
-            {savedSearchesSection}
-            <View style={styles.placeholderWrap}>
-              <Text style={styles.placeholder}>
-                Saisissez un mot-clé (titre, ville, description) puis validez la recherche.
-              </Text>
-            </View>
-          </>
+          <Loader />
         )}
 
         {state.status === 'loading' && (
@@ -789,15 +918,14 @@ export default function SearchScreen() {
 
         {state.status === 'empty' && (
           <>
-            {savedSearchesSection}
             <EmptyState
               icon={<Ionicons name="search-outline" size={24} color={colors.primary} />}
               title="Aucun résultat"
-              message={`Essayez un autre mot-cle ou modifiez vos filtres pour "${state.query}".`}
+                message={`Essayez un autre mot-clé ou modifiez vos filtres pour "${state.query}".`}
               action={
                 <View style={styles.emptyAction}>
                   <Button variant="secondary" onPress={handleResetSearch}>
-                    Reinitialiser la recherche
+                      Réinitialiser la recherche
                   </Button>
                 </View>
               }
@@ -825,12 +953,12 @@ export default function SearchScreen() {
             ListEmptyComponent={
               <EmptyState
                 icon={<Ionicons name="options-outline" size={24} color={colors.primary} />}
-                title="Aucun resultat avec ces filtres"
-                message="Essayez de reinitialiser ou d'assouplir vos filtres de categorie, ville ou prix."
+                title="Aucun résultat avec ces filtres"
+                message="Essayez de réinitialiser ou d’assouplir vos filtres de catégorie, ville ou prix."
                 action={
                   <View style={styles.emptyAction}>
                     <Button variant="secondary" onPress={handleResetSearch}>
-                      Reinitialiser la recherche
+                      Réinitialiser la recherche
                     </Button>
                   </View>
                 }
@@ -839,6 +967,44 @@ export default function SearchScreen() {
             }
           />
         )}
+
+        {/* Bottom sheet: filtres */}
+        <Modal
+          visible={filtersOpen}
+          transparent
+          animationType="slide"
+          onRequestClose={closeFilters}
+        >
+          <Pressable style={styles.sheetOverlay} onPress={closeFilters}>
+            <Pressable style={styles.sheet} onPress={(e) => e.stopPropagation()}>
+              {filtersSheetContent}
+            </Pressable>
+          </Pressable>
+        </Modal>
+
+        {/* Bottom sheet: recherches enregistrées */}
+        <Modal
+          visible={savedOpen}
+          transparent
+          animationType="slide"
+          onRequestClose={closeSaved}
+        >
+          <Pressable style={styles.sheetOverlay} onPress={closeSaved}>
+            <Pressable style={styles.sheet} onPress={(e) => e.stopPropagation()}>
+              <View style={styles.sheetCard}>
+                <View style={styles.sheetHeader}>
+                  <Text style={styles.sheetTitle}>Recherches enregistrées</Text>
+                  <Pressable onPress={closeSaved} hitSlop={10} style={({ pressed }) => [styles.sheetCloseBtn, pressed && styles.sheetCloseBtnPressed]}>
+                    <Ionicons name="close" size={22} color={colors.textMuted} />
+                  </Pressable>
+                </View>
+                {savedSearchesSection ?? (
+                  <Text style={styles.savedEmptyText}>Aucune recherche enregistrée.</Text>
+                )}
+              </View>
+            </Pressable>
+          </Pressable>
+        </Modal>
       </KeyboardAvoidingView>
     </Screen>
   );
@@ -854,6 +1020,12 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.sm,
     borderBottomWidth: 1,
     borderBottomColor: colors.borderLight,
+  },
+  headerActionsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    flexWrap: 'wrap',
   },
   searchRow: {
     flexDirection: 'row',
@@ -896,6 +1068,34 @@ const styles = StyleSheet.create({
     ...typography.sm,
     fontWeight: fontWeights.semibold,
     color: colors.surface,
+  },
+  headerSecondaryBtn: {
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.base,
+    borderRadius: radius.lg,
+    backgroundColor: colors.surfaceSubtle,
+    borderWidth: 1,
+    borderColor: colors.borderLight,
+  },
+  headerSecondaryBtnActive: {
+    borderColor: colors.primary + '44',
+    backgroundColor: colors.primary + '12',
+  },
+  headerSecondaryBtnPressed: {
+    opacity: 0.9,
+  },
+  headerSecondaryBtnText: {
+    ...typography.sm,
+    color: colors.text,
+    fontWeight: fontWeights.medium,
+  },
+  headerSecondaryBtnTextActive: {
+    color: colors.primary,
+    fontWeight: fontWeights.semibold,
   },
   suggestionsWrap: {
     paddingHorizontal: spacing.base,
@@ -1001,14 +1201,20 @@ const styles = StyleSheet.create({
   separator: {
     height: spacing.base,
   },
-  sortContainer: {
+  sortRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
     gap: spacing.sm,
     paddingVertical: spacing.sm,
     paddingHorizontal: spacing.base,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.borderLight,
+  },
+  sortContainerInline: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    flexWrap: 'wrap',
+    flex: 1,
   },
   sortOption: {
     paddingVertical: spacing.xs,
@@ -1026,6 +1232,116 @@ const styles = StyleSheet.create({
   sortOptionTextActive: {
     color: colors.primary,
     fontWeight: fontWeights.semibold,
+  },
+  filtersBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    paddingVertical: spacing.xs,
+    paddingHorizontal: spacing.sm,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.borderLight,
+    backgroundColor: colors.surface,
+  },
+  filtersBtnActive: {
+    borderColor: colors.primary + '44',
+    backgroundColor: colors.primary + '10',
+  },
+  filtersBtnPressed: {
+    opacity: 0.9,
+  },
+  filtersBtnText: {
+    ...typography.xs,
+    color: colors.textMuted,
+    fontWeight: fontWeights.semibold,
+  },
+  filtersBtnTextActive: {
+    color: colors.primary,
+  },
+  activeChipsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.xs,
+    paddingHorizontal: spacing.base,
+    paddingBottom: spacing.sm,
+  },
+  moreChip: {
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    borderRadius: radius.full,
+    backgroundColor: colors.surfaceSubtle,
+    borderWidth: 1,
+    borderColor: colors.borderLight,
+  },
+  moreChipText: {
+    ...typography.xs,
+    color: colors.textMuted,
+    fontWeight: fontWeights.semibold,
+  },
+  sheetOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.35)',
+    justifyContent: 'flex-end',
+  },
+  sheet: {
+    backgroundColor: colors.surface,
+    borderTopLeftRadius: radius['2xl'],
+    borderTopRightRadius: radius['2xl'],
+    paddingBottom: spacing.lg,
+    maxHeight: '84%',
+  },
+  sheetCard: {
+    paddingHorizontal: spacing.base,
+    paddingTop: spacing.base,
+    gap: spacing.sm,
+  },
+  sheetHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  sheetTitle: {
+    ...typography.base,
+    fontWeight: fontWeights.bold,
+    color: colors.text,
+  },
+  sheetCloseBtn: {
+    padding: spacing.xs,
+  },
+  sheetCloseBtnPressed: {
+    opacity: 0.75,
+  },
+  sheetDivider: {
+    height: 1,
+    backgroundColor: colors.borderLight,
+    marginTop: spacing.sm,
+    marginBottom: spacing.sm,
+  },
+  savedOpenBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.base,
+    borderRadius: radius.lg,
+    backgroundColor: colors.surfaceSubtle,
+    borderWidth: 1,
+    borderColor: colors.borderLight,
+    alignSelf: 'flex-start',
+  },
+  savedOpenBtnPressed: {
+    opacity: 0.9,
+  },
+  savedOpenBtnText: {
+    ...typography.sm,
+    color: colors.text,
+    fontWeight: fontWeights.semibold,
+  },
+  savedEmptyText: {
+    ...typography.sm,
+    color: colors.textMuted,
+    paddingVertical: spacing.base,
   },
   filterRow: {
     flexDirection: 'row',
@@ -1220,5 +1536,23 @@ const styles = StyleSheet.create({
   },
   emptyAction: {
     minWidth: 240,
+  },
+  resultsHeaderWrap: {
+    paddingBottom: spacing.xs,
+  },
+  exploreHeader: {
+    paddingHorizontal: spacing.base,
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.md,
+  },
+  exploreTitle: {
+    ...typography.base,
+    fontWeight: fontWeights.bold,
+    color: colors.text,
+  },
+  exploreSubtitle: {
+    ...typography.xs,
+    color: colors.textMuted,
+    marginTop: 2,
   },
 });

@@ -4,7 +4,7 @@
  */
 
 import React, { useCallback, useMemo, useState } from 'react';
-import { View, Text, StyleSheet, Pressable } from 'react-native';
+import { View, Text, StyleSheet, Pressable, ActivityIndicator } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import * as Haptics from 'expo-haptics';
 import Animated, { 
@@ -29,6 +29,12 @@ type ListingActionsProps = {
   onFavorisPress?: () => void;
   /** Opens internal messaging thread (conversation). When provided, shows "Message" CTA. */
   onMessagePress?: () => void;
+  /** When true, shows auth hint copy (UI only). */
+  showAuthHint?: boolean;
+  /** Masked phone to display in auth hint (UI only). */
+  maskedPhone?: string | null;
+  /** Loading state for message CTA (UI only). */
+  messageLoading?: boolean;
   /**
    * Si défini (ex. gate auth sur la fiche), remplace l’ouverture WhatsApp par défaut.
    */
@@ -41,8 +47,12 @@ export function ListingActions({
   safeBottom = 0,
   onMessagePress,
   onWhatsAppPress,
+  showAuthHint = false,
+  maskedPhone = null,
+  messageLoading = false,
 }: ListingActionsProps) {
   const [openingWhatsApp, setOpeningWhatsApp] = useState(false);
+  const [whatsAppConfirmed, setWhatsAppConfirmed] = useState(false);
 
   const sellerPhone = sellerPhoneProp ?? listing.seller?.phone ?? null;
   const whatsappNumber = useMemo(() => normalizePhoneForWhatsApp(sellerPhone), [sellerPhone]);
@@ -67,17 +77,19 @@ export function ListingActions({
     setOpeningWhatsApp(true);
     try {
       await openWhatsAppForListing(listing);
+      setWhatsAppConfirmed(true);
+      setTimeout(() => setWhatsAppConfirmed(false), 1400);
     } finally {
       setOpeningWhatsApp(false);
     }
   }, [listing, onWhatsAppPress, openingWhatsApp, whatsappNumber]);
 
   const handleMessage = useCallback(() => {
-    if (onMessagePress) {
+    if (onMessagePress && !messageLoading) {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       onMessagePress();
     }
-  }, [onMessagePress]);
+  }, [onMessagePress, messageLoading]);
 
   const messageAnimatedStyle = useAnimatedStyle(() => ({
     transform: [{ scale: messageScale.value }],
@@ -109,6 +121,19 @@ export function ListingActions({
 
   return (
     <View style={[styles.footer, { paddingBottom: spacing.base + safeBottom }]}>
+      {showAuthHint ? (
+        <View style={styles.authHint}>
+          <View style={styles.authHintRow}>
+            <Ionicons name="lock-closed-outline" size={16} color={colors.textMuted} />
+            <Text style={styles.authHintText}>Connecte-toi pour contacter le vendeur</Text>
+          </View>
+          {maskedPhone ? (
+            <Text style={styles.authHintPhone} numberOfLines={1}>
+              Numéro: {maskedPhone}
+            </Text>
+          ) : null}
+        </View>
+      ) : null}
       <View style={styles.container}>
         {canMessage && (
           <Animated.View style={[styles.flex, messageAnimatedStyle]}>
@@ -121,9 +146,14 @@ export function ListingActions({
                 styles.btnPrimary,
                 pressed && styles.btnPressed
               ]}
+              disabled={messageLoading}
             >
-              <Ionicons name="chatbubble" size={20} color={colors.surface} style={styles.btnIcon} />
-              <Text style={styles.btnTextPrimary}>Message</Text>
+              {messageLoading ? (
+                <ActivityIndicator color={colors.surface} style={styles.btnIcon} />
+              ) : (
+                <Ionicons name="chatbubble" size={20} color={colors.surface} style={styles.btnIcon} />
+              )}
+              <Text style={styles.btnTextPrimary}>{messageLoading ? 'Ouverture…' : 'Message'}</Text>
             </Pressable>
           </Animated.View>
         )}
@@ -141,8 +171,14 @@ export function ListingActions({
               ]}
               disabled={openingWhatsApp}
             >
-              <Ionicons name="logo-whatsapp" size={20} color={colors.primary} style={styles.btnIcon} />
-              <Text style={styles.btnTextSecondary}>WhatsApp</Text>
+              {openingWhatsApp ? (
+                <ActivityIndicator color={colors.primary} style={styles.btnIcon} />
+              ) : (
+                <Ionicons name="logo-whatsapp" size={20} color={colors.primary} style={styles.btnIcon} />
+              )}
+              <Text style={styles.btnTextSecondary}>
+                {openingWhatsApp ? 'Ouverture…' : whatsAppConfirmed ? 'Ouvert' : 'WhatsApp'}
+              </Text>
             </Pressable>
           </Animated.View>
         )}
@@ -163,6 +199,32 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: colors.borderLight,
     ...shadows.soft,
+  },
+  authHint: {
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.sm,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.borderLight,
+    backgroundColor: colors.surfaceSubtle,
+    marginBottom: spacing.sm,
+    gap: 4,
+  },
+  authHintRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+  },
+  authHintText: {
+    ...typography.sm,
+    color: colors.textSecondary,
+    fontWeight: fontWeights.semibold,
+    flexShrink: 1,
+  },
+  authHintPhone: {
+    ...typography.xs,
+    color: colors.textMuted,
+    fontWeight: fontWeights.medium,
   },
   container: {
     flexDirection: 'row',

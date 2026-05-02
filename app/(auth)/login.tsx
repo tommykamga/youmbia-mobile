@@ -27,6 +27,9 @@ export default function LoginScreen() {
   const [success, setSuccess] = useState<string | null>(null);
 
   const isAnyLoading = loading || googleLoading || magicLoading;
+  const isContactContext =
+    (typeof params.contact === 'string' && params.contact.trim().length > 0) ||
+    (typeof params.redirect === 'string' && params.redirect.trim().startsWith('/listing/'));
 
   useEffect(() => {
     let mounted = true;
@@ -119,10 +122,22 @@ export default function LoginScreen() {
           <Text style={styles.title}>Bon retour 👋</Text>
           <Text style={styles.subtitle}>
             {
-              "Connectez-vous pour retrouver vos annonces et favoris en un clin d'œil."
+              "Connecte-toi pour retrouver tes annonces et tes favoris en un clin d’œil."
             }
           </Text>
         </View>
+
+        {isContactContext ? (
+          <View style={styles.contextCard}>
+            <View style={styles.contextRow}>
+              <Ionicons name="chatbubble-ellipses-outline" size={18} color={ui.colors.primary} />
+              <Text style={styles.contextTitle}>Connecte-toi pour contacter le vendeur</Text>
+            </View>
+            <Text style={styles.contextBody}>
+              Après connexion, tu reviendras automatiquement sur l’annonce.
+            </Text>
+          </View>
+        ) : null}
 
         {error ? (
           <View style={styles.alertError}>
@@ -139,6 +154,22 @@ export default function LoginScreen() {
         ) : null}
 
         <View style={styles.form}>
+          <AppButton
+            onPress={handleGoogleSignIn}
+            loading={googleLoading}
+            disabled={isAnyLoading}
+            layout="pill52"
+            leftIcon={<Ionicons name="logo-google" size={22} color={ui.colors.surface} />}
+          >
+            Continuer avec Google
+          </AppButton>
+
+          <View style={styles.divider}>
+            <View style={styles.line} />
+            <Text style={styles.dividerText}>ou par email</Text>
+            <View style={styles.line} />
+          </View>
+
           <Input
             label="Adresse email"
             placeholder="vous@exemple.com"
@@ -184,12 +215,6 @@ export default function LoginScreen() {
           </AppButton>
         </View>
 
-        <View style={styles.divider}>
-          <View style={styles.line} />
-          <Text style={styles.dividerText}>ou utiliser</Text>
-          <View style={styles.line} />
-        </View>
-
         <View style={styles.socialActions}>
           <AppButton
             variant="outline"
@@ -198,17 +223,7 @@ export default function LoginScreen() {
             disabled={isAnyLoading}
             layout="pillMutedOutline52"
           >
-            Lien Magique par Email
-          </AppButton>
-
-          <AppButton
-            variant="outline"
-            onPress={handleGoogleSignIn}
-            loading={googleLoading}
-            disabled={isAnyLoading}
-            layout="pillMutedOutline52"
-          >
-            Google Auth
+            Lien magique par email
           </AppButton>
         </View>
 
@@ -262,6 +277,31 @@ const styles = StyleSheet.create({
     paddingHorizontal: ui.spacing.xs,
     lineHeight: 24,
     fontWeight: '500',
+  },
+  contextCard: {
+    backgroundColor: ui.colors.primarySoft,
+    borderRadius: ui.radius.lg,
+    paddingVertical: ui.spacing.md,
+    paddingHorizontal: ui.spacing.lg,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: ui.colors.primary + '33',
+    gap: ui.spacing.xs,
+  },
+  contextRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: ui.spacing.sm,
+  },
+  contextTitle: {
+    flex: 1,
+    ...ui.typography.bodySmall,
+    color: ui.colors.textPrimary,
+    fontWeight: '700',
+  },
+  contextBody: {
+    ...ui.typography.caption,
+    color: ui.colors.textSecondary,
+    fontWeight: '600',
   },
   form: {
     gap: ui.spacing.lg,

@@ -114,51 +114,51 @@ export async function getMarketplaceReadiness(): Promise<GetMarketplaceReadiness
   const activeCityCount = getActiveDiversityCount(signals.topCities);
 
   if (signals.activeListings >= READINESS_THRESHOLDS.minimumListingsForTraction) {
-    strengths.push("Le volume d'annonces actives commence a devenir exploitable.");
+    strengths.push("Le volume d'annonces actives commence à devenir exploitable.");
   } else {
     weaknesses.push("Le volume d'annonces actives reste trop faible pour monétiser proprement.");
   }
 
   if (signals.activeSellers >= READINESS_THRESHOLDS.minimumSellersForTraction) {
-    strengths.push('Le nombre de vendeurs actifs montre un debut de profondeur cote offre.');
+    strengths.push('Le nombre de vendeurs actifs montre un début de profondeur côté offre.');
   } else {
-    weaknesses.push('Le nombre de vendeurs actifs est encore limite.');
+    weaknesses.push('Le nombre de vendeurs actifs est encore limité.');
   }
 
   if (signals.avgListingsPerSeller >= READINESS_THRESHOLDS.minimumAvgListingsPerSellerForTraction) {
-    strengths.push("La densite d'annonces par vendeur commence a depasser le niveau mono-annonce.");
+    strengths.push("La densité d'annonces par vendeur commence à dépasser le niveau mono-annonce.");
   } else {
-    weaknesses.push("La densite d'annonces par vendeur reste faible.");
+    weaknesses.push("La densité d'annonces par vendeur reste faible.");
   }
 
   if (signals.noViewRate <= READINESS_THRESHOLDS.maxNoViewRateForBoostTest) {
-    strengths.push("Une part significative du stock obtient deja des vues organiques.");
+    strengths.push('Une part significative du stock obtient déjà des vues organiques.');
   } else {
-    weaknesses.push("Trop d'annonces restent sans vue, signe d'un marche encore froid.");
+    weaknesses.push("Trop d'annonces restent sans vue, signe d'un marché encore froid.");
   }
 
   if (signals.noFavoriteRate <= READINESS_THRESHOLDS.maxNoFavoriteRateForBoostTest) {
-    strengths.push('Les annonces commencent a generer des signaux d’interet.');
+    strengths.push('Les annonces commencent à générer des signaux d’intérêt.');
   } else {
-    weaknesses.push("Le niveau d'interet acheteur reste encore trop faible.");
+    weaknesses.push("Le niveau d’intérêt acheteur reste encore trop faible.");
   }
 
   if (signals.noContactRate <= READINESS_THRESHOLDS.maxNoContactRateForBoostTest) {
-    strengths.push('Le stock commence a produire des contacts exploitables.');
+    strengths.push('Le stock commence à produire des contacts exploitables.');
   } else {
     weaknesses.push('La conversion vers le contact reste encore faible.');
   }
 
   if (activeCategoryCount >= READINESS_THRESHOLDS.minimumActiveCategoriesForBoostTest) {
-    strengths.push('La marketplace montre deja une diversite categorie suffisante pour un test cible.');
+    strengths.push('La marketplace montre déjà une diversité de catégories suffisante pour un test ciblé.');
   } else {
-    weaknesses.push('La diversite categorie reste trop limitee pour segmenter une offre premium.');
+    weaknesses.push('La diversité de catégories reste trop limitée pour segmenter une offre premium.');
   }
 
   if (activeCityCount >= READINESS_THRESHOLDS.minimumActiveCitiesForBoostTest) {
-    strengths.push('L’activite est repartie sur plusieurs villes.');
+    strengths.push('L’activité est répartie sur plusieurs villes.');
   } else {
-    weaknesses.push('L’activite reste trop concentree ou trop faible cote geographie.');
+    weaknesses.push('L’activité reste trop concentrée ou trop faible côté géographie.');
   }
 
   const isReadyForBoostTest =

@@ -4,7 +4,7 @@
  * Pull-to-refresh is handled inside ListingFeed.
  */
 
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import { View, Text, StyleSheet, Pressable } from 'react-native';
 import { useRouter, type Href } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -77,6 +77,7 @@ export default function HomeScreen() {
   const scrollY = useSharedValue(0);
   const stickyGate = useSharedValue(0);
   const [stickySearchActive, setStickySearchActive] = useState(false);
+  const [showMore, setShowMore] = useState(false);
 
   const scrollHandler = useAnimatedScrollHandler({
     onScroll: (e) => {
@@ -97,6 +98,45 @@ export default function HomeScreen() {
   const handleSearchPress = useCallback(() => {
     router.push('/(tabs)/search');
   }, [router]);
+
+  const secondaryToggleLabel = useMemo(
+    () => (showMore ? 'Voir moins' : 'Voir plus'),
+    [showMore]
+  );
+
+  const secondaryBlock = useMemo(() => (
+    <View style={styles.secondaryWrap}>
+      <AppSectionHeader
+        title="Découvrir plus"
+        subtitle="Annonces à la une, suggestions et recherches"
+      />
+      <Pressable
+        onPress={() => setShowMore((v) => !v)}
+        style={({ pressed }) => [styles.seeMoreBtn, pressed && styles.seeMoreBtnPressed]}
+        accessibilityRole="button"
+        accessibilityLabel={secondaryToggleLabel}
+      >
+        <Ionicons
+          name={showMore ? 'chevron-up' : 'chevron-down'}
+          size={18}
+          color={ui.colors.primary}
+        />
+        <Text style={styles.seeMoreText}>{secondaryToggleLabel}</Text>
+      </Pressable>
+
+      {showMore ? (
+        <View style={styles.secondaryContent}>
+          <NotificationsPromptCard />
+          <BoostedSection />
+          <NearYouSection userCity={null} />
+          <UrgentSection />
+          <SavedSearchAlertsSection />
+          <ForYouSection />
+          <RecentlyViewedSection />
+        </View>
+      ) : null}
+    </View>
+  ), [showMore, secondaryToggleLabel]);
 
   return (
     <Screen noPadding>
@@ -121,6 +161,13 @@ export default function HomeScreen() {
               stickySearchActive={stickySearchActive}
             />
           }
+          extraComponent={secondaryBlock}
+          extraComponentIndex={6}
+          limit={20}
+          footerAction={{
+            label: 'Voir plus d’annonces',
+            onPress: () => router.push('/(tabs)/search'),
+          }}
           contentPaddingHorizontal={contentPaddingHorizontal}
           listingCardFeedPresentation="home"
         />
@@ -309,10 +356,7 @@ function HomeHeaderContent({
           style={styles.searchBarSpacing}
         />
       </Animated.View>
-      <Animated.View entering={FadeInDown.delay(50).duration(400)}>
-        <NotificationsPromptCard />
-      </Animated.View>
-
+      {/* Categories follow search immediately */}
       <Animated.View entering={FadeInDown.delay(100).duration(400)}>
         <CategoryRail
           categories={HOME_CATEGORIES}
@@ -327,7 +371,7 @@ function HomeHeaderContent({
           style={({ pressed }) => [
             appMarketplaceSurface,
             styles.sellCtaLayout,
-            isCompact && styles.sellCtaCompact,
+            styles.sellCtaCompact,
             pressed && styles.sellCtaPressed,
           ]}
           onPress={handleSellCtaPress}
@@ -335,8 +379,8 @@ function HomeHeaderContent({
           accessibilityLabel="Vendre un article"
         >
           <View style={styles.sellCtaTextBlock}>
-            <Text style={styles.sellCtaTitle} numberOfLines={2} ellipsizeMode="tail">
-              {isCompact ? 'Quelque chose à vendre ?' : 'Vous avez quelque chose à vendre ?'}
+            <Text style={styles.sellCtaTitle} numberOfLines={1} ellipsizeMode="tail">
+              Quelque chose à vendre ?
             </Text>
             <Text style={styles.sellCtaSubtitle} numberOfLines={1}>
               Publiez en 30 secondes
@@ -346,19 +390,7 @@ function HomeHeaderContent({
         </Pressable>
       </Animated.View>
 
-      <BoostedSection />
-
-      <NearYouSection userCity={null} />
-
-      <UrgentSection />
-
-      <SavedSearchAlertsSection />
-
-      <ForYouSection />
-
-      <RecentlyViewedSection />
-
-      <Animated.View entering={FadeInDown.delay(350).duration(400)} style={styles.feedIntro}>
+      <Animated.View entering={FadeInDown.delay(150).duration(400)} style={styles.feedIntro}>
         <AppSectionHeader
           title="Nouvelles annonces"
           subtitle="Actualisées en continu, triées par défaut"
@@ -501,5 +533,34 @@ const styles = StyleSheet.create({
   feedIntro: {
     marginTop: ui.spacing.xl,
     marginBottom: ui.spacing.md,
+  },
+  secondaryWrap: {
+    marginTop: ui.spacing.lg,
+    gap: ui.spacing.sm,
+  },
+  seeMoreBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    gap: ui.spacing.xs,
+    marginTop: -ui.spacing.xs,
+    paddingVertical: ui.spacing.sm,
+    paddingHorizontal: ui.spacing.md,
+    borderRadius: ui.radius.pill,
+    backgroundColor: ui.colors.surfaceSubtle,
+    borderWidth: 1,
+    borderColor: ui.colors.borderLight,
+  },
+  seeMoreBtnPressed: {
+    opacity: 0.92,
+    backgroundColor: ui.colors.primarySoft,
+  },
+  seeMoreText: {
+    ...ui.typography.bodySmall,
+    color: ui.colors.primary,
+    fontWeight: '700',
+  },
+  secondaryContent: {
+    gap: ui.spacing.md,
   },
 });

@@ -38,11 +38,13 @@ import {
   sanitizeProfileDisplayValue,
 } from '@/services/profile';
 import { supabase } from '@/lib/supabase';
+import Ionicons from '@expo/vector-icons/Ionicons';
 
 /** Aligné web : maximum 4 photos par annonce. */
 const MAX_LISTING_IMAGES = 4;
 /** Garde-fou trust (Sprint TRUST SAFE) : limite de publications / 24h. */
 const MAX_LISTINGS_PER_24H = 5;
+const TOTAL_STEPS = 3;
 
 type PickedImage = { uri: string; base64: string | null };
 
@@ -72,9 +74,59 @@ type PublishState =
       message: string;
     };
 
+type PrequalStatus = 'loading' | 'ready';
+
+function ChecklistRow({
+  label,
+  ok,
+  hint,
+}: {
+  label: string;
+  ok: boolean;
+  hint?: string;
+}) {
+  return (
+    <View style={styles.checkRow}>
+      <View style={styles.checkIconSlot}>
+        <Ionicons
+          name={ok ? 'checkmark-circle' : 'warning'}
+          size={20}
+          color={ok ? colors.success : colors.warning}
+        />
+      </View>
+      <View style={styles.checkTextSlot}>
+        <Text style={styles.checkLabel}>{label}</Text>
+        {hint ? <Text style={styles.checkHint}>{hint}</Text> : null}
+      </View>
+    </View>
+  );
+}
+
+function StepProgress({ step }: { step: number }) {
+  const safeStep = Math.min(TOTAL_STEPS, Math.max(1, step));
+  const pct = (safeStep / TOTAL_STEPS) * 100;
+  return (
+    <View style={styles.progressWrap} accessibilityRole="progressbar" accessibilityValue={{ now: safeStep, min: 1, max: TOTAL_STEPS }}>
+      <View style={styles.progressHeader}>
+        <Text style={styles.progressTitle}>Publication</Text>
+        <Text style={styles.progressMeta}>
+          Étape {safeStep} / {TOTAL_STEPS}
+        </Text>
+      </View>
+      <View style={styles.progressTrack}>
+        <View style={[styles.progressFill, { width: `${pct}%` }]} />
+      </View>
+    </View>
+  );
+}
+
 export default function SellScreen() {
   const router = useRouter();
   const [publishState, setPublishState] = useState<PublishState>({ status: 'idle' });
+  const [currentStep, setCurrentStep] = useState(1);
+  const [showPrequal, setShowPrequal] = useState(true);
+  const [prequalStatus, setPrequalStatus] = useState<PrequalStatus>('loading');
+  const [profileAny, setProfileAny] = useState<Record<string, unknown> | null>(null);
 
   const [title, setTitle] = useState('');
   const [priceStr, setPriceStr] = useState('');
@@ -110,6 +162,10 @@ export default function SellScreen() {
 
   const resetForm = () => {
     setPublishState({ status: 'idle' });
+    setCurrentStep(1);
+    setShowPrequal(true);
+    setPrequalStatus('loading');
+    setProfileAny(null);
     setSubmitError(null);
     setTitle('');
     setPriceStr('');
@@ -123,6 +179,36 @@ export default function SellScreen() {
     setDynamicLoading(false);
     setDynamicAttributesPilotActive(false);
   };
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const session = await getSession();
+        if (!session?.user) {
+          if (!cancelled) {
+            setProfileAny(null);
+            setPrequalStatus('ready');
+          }
+          return;
+        }
+        const profileRes = await getCurrentProfile();
+        const any = (profileRes.data ?? null) as unknown as Record<string, unknown> | null;
+        if (!cancelled) {
+          setProfileAny(any);
+          setPrequalStatus('ready');
+        }
+      } catch {
+        if (!cancelled) {
+          setProfileAny(null);
+          setPrequalStatus('ready');
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     if (categoryId == null) {
@@ -222,14 +308,14 @@ export default function SellScreen() {
 
     // Aligné web : profil vendeur obligatoire (nom/pseudo) + téléphone obligatoire
     const profileRes = await getCurrentProfile();
-    const profileAny = (profileRes.data ?? null) as unknown as Record<string, unknown> | null;
-    const sellerNameValid = getFirstNonEmptyProfileField(profileAny, [
+    const profileAnyLocal = (profileRes.data ?? null) as unknown as Record<string, unknown> | null;
+    const sellerNameValid = getFirstNonEmptyProfileField(profileAnyLocal, [
       'display_name',
       'username',
       'pseudo',
       'full_name',
     ]);
-    const sellerPhoneValid = getFirstNonEmptyProfileField(profileAny, [
+    const sellerPhoneValid = getFirstNonEmptyProfileField(profileAnyLocal, [
       'whatsapp_phone',
       'phone_number',
       'phone',
@@ -245,7 +331,7 @@ export default function SellScreen() {
       return;
     }
 
-    if (profileAny?.is_banned === true) {
+    if (profileAnyLocal?.is_banned === true) {
       const message = "Votre compte ne peut pas publier d'annonce pour le moment.";
       setSubmitError(message);
       Alert.alert('Publication impossible', message);
@@ -545,135 +631,418 @@ export default function SellScreen() {
     );
   }
 
+  const sellerNamePrequal = getFirstNonEmptyProfileField(profileAny, [
+    'display_name',
+    'username',
+    'pseudo',
+    'full_name',
+  ]);
+  const sellerPhonePrequal = getFirstNonEmptyProfileField(profileAny, [
+    'whatsapp_phone',
+    'phone_number',
+    'phone',
+  ]);
+  const hasProfileSellerName = !!sellerNamePrequal.trim();
+  const hasPhone = !!sellerPhonePrequal.trim();
+  const isAuthed = prequalStatus === 'ready' ? profileAny != null : false;
+
+  if (showPrequal) {
+    return (
+      <Screen>
+        <View style={styles.prequalWrap}>
+          <Text style={styles.prequalTitle}>Avant de publier</Text>
+          <Text style={styles.prequalSubtitle}>
+            Vérifiez ces prérequis pour éviter un refus en fin de parcours.
+          </Text>
+
+          <View style={styles.prequalCard}>
+            <Text style={styles.prequalCardTitle}>Pré‑requis</Text>
+            <ChecklistRow
+              label="Profil vendeur"
+              ok={prequalStatus === 'ready' && isAuthed && hasProfileSellerName}
+              hint={!isAuthed ? 'Connectez‑vous pour vérifier votre profil.' : !hasProfileSellerName ? 'Nom/pseudo manquant (non bloquant ici).' : undefined}
+            />
+            <ChecklistRow
+              label="Téléphone"
+              ok={prequalStatus === 'ready' && isAuthed && hasPhone}
+              hint={!isAuthed ? 'Connectez‑vous pour vérifier votre téléphone.' : !hasPhone ? 'Téléphone manquant (non bloquant ici).' : undefined}
+            />
+            <ChecklistRow
+              label="Photos (1 à 4)"
+              ok={true}
+              hint="Préparez 1 à 4 photos nettes (fond simple, bonne lumière)."
+            />
+          </View>
+
+          {prequalStatus === 'ready' && isAuthed && !hasPhone ? (
+            <View style={styles.softWarning}>
+              <Ionicons name="information-circle-outline" size={18} color={colors.warning} />
+              <Text style={styles.softWarningText}>
+                Conseil: ajoutez un téléphone dans votre profil pour éviter un blocage au moment de publier.
+              </Text>
+            </View>
+          ) : null}
+
+          <View style={styles.prequalActions}>
+            <Button
+              size="lg"
+              onPress={() => {
+                setShowPrequal(false);
+                setCurrentStep(1);
+              }}
+            >
+              Continuer
+            </Button>
+            <Button
+              variant="secondary"
+              onPress={() => router.push('/account/profile')}
+            >
+              Compléter mon profil
+            </Button>
+            <Button variant="ghost" onPress={goBackOrHome}>
+              Annuler
+            </Button>
+          </View>
+        </View>
+      </Screen>
+    );
+  }
+
   return (
     <Screen scroll keyboardAvoid>
+      <StepProgress step={currentStep} />
       <Text style={styles.title}>Vendre</Text>
       <Text style={styles.subtitle}>Publiez votre annonce en quelques minutes.</Text>
 
-      <Input
-        label="Titre"
-        placeholder="Ex. Vélo de ville"
-        value={title}
-        onChangeText={setTitle}
-        maxLength={200}
-      />
-      <Input
-        label="Prix (FCFA)"
-        placeholder="0"
-        value={priceStr}
-        onChangeText={setPriceStr}
-        keyboardType={Platform.OS === 'web' ? 'numeric' : 'decimal-pad'}
-      />
-      <View style={styles.categorySection}>
-        <Text style={styles.label}>Catégorie</Text>
-        <View style={styles.categoryChips}>
-          {LISTING_CATEGORIES.map((category) => {
-            const isSelected = categoryId === category.id;
-            return (
-              <Pressable
-                key={category.id}
-                style={({ pressed }) => [
-                  styles.categoryChip,
-                  isSelected && styles.categoryChipSelected,
-                  pressed && styles.categoryChipPressed,
-                ]}
-                onPress={() => {
-                  setCategoryId(category.id);
-                  setSubmitError(null);
-                }}
-              >
-                <Text
-                  style={[
-                    styles.categoryChipText,
-                    isSelected && styles.categoryChipTextSelected,
-                  ]}
-                >
-                  {category.label}
-                </Text>
-              </Pressable>
-            );
-          })}
+      {prequalStatus === 'ready' && isAuthed && !hasPhone ? (
+        <View style={styles.inlineWarning}>
+          <Ionicons name="warning-outline" size={18} color={colors.warning} />
+          <Text style={styles.inlineWarningText}>
+            Téléphone manquant dans le profil: la publication sera bloquée au moment de publier.
+          </Text>
+          <Pressable onPress={() => router.push('/account/profile')} hitSlop={8}>
+            <Text style={styles.inlineWarningLink}>Compléter</Text>
+          </Pressable>
         </View>
-      </View>
-
-      {dynamicAttributesPilotActive ? (
-        <DynamicCategoryAttributesFields
-          definitions={dynamicDefs}
-          optionsByDefinitionId={dynamicOptionsByDef}
-          loading={dynamicLoading}
-          values={dynamicValues}
-          onChange={handleDynamicChange}
-        />
       ) : null}
 
-      <Input
-        label="Ville (optionnel)"
-        placeholder="Ex. Paris"
-        value={city}
-        onChangeText={setCity}
-      />
-      <Input
-        label="Description"
-        placeholder="Décrivez votre article..."
-        value={description}
-        onChangeText={setDescription}
-        multiline
-        numberOfLines={4}
-        style={styles.descriptionInput}
-      />
-
-      <View style={styles.imagesSection}>
-        <Text style={styles.label}>Photos</Text>
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.thumbsRow}
-        >
-          {images.map((img, i) => (
-            <View key={i} style={styles.thumbWrap}>
-              <Image source={{ uri: img.uri }} style={styles.thumb} />
-              <Button
-                size="sm"
-                variant="ghost"
-                onPress={() => removeImage(i)}
-                style={styles.removeThumb}
-              >
-                ✕
-              </Button>
+      {currentStep === 1 ? (
+        <>
+          <Input
+            label="Titre"
+            placeholder="Ex. Vélo de ville"
+            value={title}
+            onChangeText={setTitle}
+            maxLength={200}
+          />
+          <Input
+            label="Prix (FCFA)"
+            placeholder="0"
+            value={priceStr}
+            onChangeText={setPriceStr}
+            keyboardType={Platform.OS === 'web' ? 'numeric' : 'decimal-pad'}
+          />
+          <View style={styles.categorySection}>
+            <Text style={styles.label}>Catégorie</Text>
+            <View style={styles.categoryChips}>
+              {LISTING_CATEGORIES.map((category) => {
+                const isSelected = categoryId === category.id;
+                return (
+                  <Pressable
+                    key={category.id}
+                    style={({ pressed }) => [
+                      styles.categoryChip,
+                      isSelected && styles.categoryChipSelected,
+                      pressed && styles.categoryChipPressed,
+                    ]}
+                    onPress={() => {
+                      setCategoryId(category.id);
+                      setSubmitError(null);
+                    }}
+                  >
+                    <Text
+                      style={[
+                        styles.categoryChipText,
+                        isSelected && styles.categoryChipTextSelected,
+                      ]}
+                    >
+                      {category.label}
+                    </Text>
+                  </Pressable>
+                );
+              })}
             </View>
-          ))}
-          {images.length < MAX_LISTING_IMAGES && (
-            <Button variant="outline" size="md" onPress={pickImages} style={styles.addPhotoBtn}>
-              + Photo
-            </Button>
-          )}
-        </ScrollView>
-      </View>
+          </View>
+          <Input
+            label="Ville (optionnel)"
+            placeholder="Ex. Paris"
+            value={city}
+            onChangeText={setCity}
+          />
+        </>
+      ) : null}
+
+      {currentStep === 2 ? (
+        <>
+          {dynamicAttributesPilotActive ? (
+            <DynamicCategoryAttributesFields
+              definitions={dynamicDefs}
+              optionsByDefinitionId={dynamicOptionsByDef}
+              loading={dynamicLoading}
+              values={dynamicValues}
+              onChange={handleDynamicChange}
+            />
+          ) : null}
+          <Input
+            label="Description"
+            placeholder="Décrivez votre article..."
+            value={description}
+            onChangeText={setDescription}
+            multiline
+            numberOfLines={4}
+            style={styles.descriptionInput}
+          />
+        </>
+      ) : null}
+
+      {currentStep === 3 ? (
+        <>
+          <View style={styles.imagesSection}>
+            <Text style={styles.label}>Photos</Text>
+            <Text style={styles.stepHelper}>
+              Ajoutez 1 à 4 photos. Une bonne première photo augmente les messages.
+            </Text>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.thumbsRow}
+            >
+              {images.map((img, i) => (
+                <View key={i} style={styles.thumbWrap}>
+                  <Image source={{ uri: img.uri }} style={styles.thumb} />
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onPress={() => removeImage(i)}
+                    style={styles.removeThumb}
+                  >
+                    ✕
+                  </Button>
+                </View>
+              ))}
+              {images.length < MAX_LISTING_IMAGES && (
+                <Button variant="outline" size="md" onPress={pickImages} style={styles.addPhotoBtn}>
+                  + Photo
+                </Button>
+              )}
+            </ScrollView>
+          </View>
+        </>
+      ) : null}
 
       {submitError ? (
         <Text style={styles.submitError}>{submitError}</Text>
       ) : null}
 
       <View style={styles.actions}>
-        <Button
-          size="lg"
-          onPress={handleSubmit}
-          loading={submitLoading}
-          disabled={
-            submitLoading || (dynamicAttributesPilotActive && dynamicLoading)
-          }
-        >
-          {"Publier l'annonce"}
-        </Button>
-        <Button variant="ghost" onPress={goBackOrHome} style={styles.cancel}>
-          Annuler
-        </Button>
+        {currentStep < TOTAL_STEPS ? (
+          <>
+            <Button
+              size="lg"
+              onPress={() => setCurrentStep((s) => Math.min(TOTAL_STEPS, s + 1))}
+              disabled={dynamicAttributesPilotActive && dynamicLoading}
+            >
+              Continuer
+            </Button>
+            <View style={styles.stepActionsRow}>
+              <Button
+                variant="secondary"
+                onPress={() => setCurrentStep((s) => Math.max(1, s - 1))}
+                disabled={currentStep === 1}
+              >
+                Retour
+              </Button>
+              <Button variant="ghost" onPress={goBackOrHome} style={styles.cancelInline}>
+                Annuler
+              </Button>
+            </View>
+          </>
+        ) : (
+          <>
+            <Button
+              size="lg"
+              onPress={handleSubmit}
+              loading={submitLoading}
+              disabled={submitLoading || (dynamicAttributesPilotActive && dynamicLoading)}
+            >
+              {"Publier l'annonce"}
+            </Button>
+            <View style={styles.stepActionsRow}>
+              <Button
+                variant="secondary"
+                onPress={() => setCurrentStep((s) => Math.max(1, s - 1))}
+              >
+                Retour
+              </Button>
+              <Button variant="ghost" onPress={goBackOrHome} style={styles.cancelInline}>
+                Annuler
+              </Button>
+            </View>
+          </>
+        )}
       </View>
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
+  progressWrap: {
+    marginTop: spacing.sm,
+    marginBottom: spacing.base,
+    padding: spacing.base,
+    borderWidth: 1,
+    borderColor: colors.borderLight,
+    backgroundColor: colors.surface,
+    borderRadius: radius.xl,
+    gap: spacing.sm,
+  },
+  progressHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'baseline',
+  },
+  progressTitle: {
+    ...typography.sm,
+    fontWeight: fontWeights.bold,
+    color: colors.text,
+  },
+  progressMeta: {
+    ...typography.xs,
+    color: colors.textMuted,
+    fontWeight: fontWeights.semibold,
+  },
+  progressTrack: {
+    height: 8,
+    borderRadius: 8,
+    backgroundColor: colors.surfaceSubtle,
+    overflow: 'hidden',
+  },
+  progressFill: {
+    height: 8,
+    borderRadius: 8,
+    backgroundColor: colors.primary,
+  },
+  prequalWrap: {
+    paddingTop: spacing.xl,
+    gap: spacing.base,
+  },
+  prequalTitle: {
+    fontSize: typography['2xl'].fontSize,
+    fontWeight: fontWeights.bold,
+    color: colors.text,
+  },
+  prequalSubtitle: {
+    ...typography.base,
+    color: colors.textSecondary,
+  },
+  prequalCard: {
+    borderWidth: 1,
+    borderColor: colors.borderLight,
+    backgroundColor: colors.surface,
+    borderRadius: radius.xl,
+    padding: spacing.base,
+    gap: spacing.sm,
+  },
+  prequalCardTitle: {
+    ...typography.sm,
+    fontWeight: fontWeights.bold,
+    color: colors.text,
+    marginBottom: spacing.xs,
+    textTransform: 'uppercase',
+    letterSpacing: 0.4,
+  },
+  checkRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.sm,
+  },
+  checkIconSlot: {
+    width: 24,
+    paddingTop: 1,
+    alignItems: 'center',
+  },
+  checkTextSlot: {
+    flex: 1,
+    gap: 2,
+  },
+  checkLabel: {
+    ...typography.base,
+    color: colors.text,
+    fontWeight: fontWeights.semibold,
+  },
+  checkHint: {
+    ...typography.xs,
+    color: colors.textMuted,
+  },
+  prequalActions: {
+    gap: spacing.sm,
+    marginTop: spacing.sm,
+  },
+  softWarning: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.sm,
+    padding: spacing.base,
+    borderRadius: radius.xl,
+    backgroundColor: colors.warningLight,
+    borderWidth: 1,
+    borderColor: colors.warning + '33',
+  },
+  softWarningText: {
+    flex: 1,
+    ...typography.sm,
+    color: colors.textSecondary,
+    fontWeight: fontWeights.medium,
+  },
+  inlineWarning: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.base,
+    borderRadius: radius.xl,
+    borderWidth: 1,
+    borderColor: colors.warning + '33',
+    backgroundColor: colors.warningLight,
+    marginBottom: spacing.base,
+  },
+  inlineWarningText: {
+    flex: 1,
+    ...typography.xs,
+    color: colors.textSecondary,
+    fontWeight: fontWeights.semibold,
+  },
+  inlineWarningLink: {
+    ...typography.xs,
+    color: colors.primary,
+    fontWeight: fontWeights.bold,
+    textDecorationLine: 'underline',
+  },
+  stepHelper: {
+    ...typography.xs,
+    color: colors.textMuted,
+    marginBottom: spacing.sm,
+  },
+  stepActionsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing.sm,
+  },
+  cancelInline: {
+    marginTop: 0,
+    alignSelf: 'flex-end',
+  },
   successBlock: {
     paddingTop: spacing['3xl'],
     gap: spacing.lg,
