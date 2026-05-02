@@ -209,7 +209,7 @@ export function ListingFeed({
   }, [feedSuccessData, sortBy]);
 
   const feedData = useMemo(() => {
-    if (state.status === 'loading') return [1, 2, 3, 4, 5, 6];
+    if (state.status === 'loading') return [1, 2, 3];
     
     let list = [...sortedListings];
     
@@ -427,7 +427,7 @@ const styles = StyleSheet.create({
     flexGrow: 1,
   },
   separator: {
-    height: ui.spacing.md,
+    height: 18,
   },
   sortContainer: {
     flexDirection: 'row',

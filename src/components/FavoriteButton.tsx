@@ -1,5 +1,6 @@
 import React, { useEffect } from 'react';
 import { Pressable, StyleSheet } from 'react-native';
+import * as Haptics from 'expo-haptics';
 import Animated, { 
   useAnimatedStyle, 
   useSharedValue, 
@@ -37,11 +38,15 @@ export function FavoriteButton({ listingId, size = 24 }: FavoriteButtonProps) {
   }, [favorite]);
 
   const handlePress = () => {
-    // Discreet heart pop
+    // Premium heart pop animation
     scale.value = withSequence(
-      withTiming(1.2, { duration: 100, easing: Easing.out(Easing.quad) }),
-      withSpring(1, { damping: 15, stiffness: 300 })
+      withTiming(1.25, { duration: 100, easing: Easing.out(Easing.back(2)) }),
+      withTiming(1, { duration: 100, easing: Easing.inOut(Easing.ease) })
     );
+    
+    // Light haptic feedback
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    
     toggleFavorite(listingId);
   };
 

@@ -12,6 +12,7 @@ export { default as Loader } from './Loader';
 export { CategoryRail } from './CategoryRail';
 export { NotificationsPromptCard } from './NotificationsPromptCard';
 export { SkeletonListingCard } from './SkeletonListingCard';
+export { SkeletonShimmer } from './SkeletonShimmer';
 export * from './HeroMarketplaceGrid';
 export { WebPageScreen, isAllowedYoumbiaWebUrl } from './WebPageScreen';
 export * from './ui';

@@ -5,9 +5,10 @@
  */
 
 import React, { useCallback, useMemo, useState } from 'react';
-import { View, Text, StyleSheet, Pressable } from 'react-native';
+import { View, Text, StyleSheet, Pressable, Dimensions } from 'react-native';
 import { useRouter, type Href } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
+import { LinearGradient } from 'expo-linear-gradient';
 import Animated, {
   Extrapolate,
   FadeInDown,
@@ -17,6 +18,8 @@ import Animated, {
   useAnimatedScrollHandler,
   useAnimatedStyle,
   useSharedValue,
+  withTiming,
+  Easing,
   type SharedValue,
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -37,308 +40,163 @@ import {
   SavedSearchAlertsSection,
   ForYouSection,
   RecentlyViewedSection,
+  TopListingsSection,
 } from '@/features/listings';
-import { spacing, ui, colors } from '@/theme';
+import { spacing, ui, colors, shadows } from '@/theme';
 import { useResponsiveLayout, getHomeSearchPlaceholder } from '@/lib/responsiveLayout';
 import { getSession } from '@/services/auth';
 import { buildAuthGateHref } from '@/lib/authGateNavigation';
 import { useUnreadMessagesCount } from '@/hooks/useUnreadMessagesCount';
 import { LISTING_CATEGORIES } from '@/lib/listingCategories';
 
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
+const HORIZONTAL_PADDING = 16;
+
 const AnimatedText = Animated.createAnimatedComponent(Text);
 
-/** Scroll (px, clampé ≥ 0) — plage un peu longue = shrink plus progressif, moins « compressé ». */
-const HERO_SHRINK_RANGE = 100;
-/** Barre inline disparaît en premier (évite deux champs lisibles en même temps). */
-const INLINE_SEARCH_FADE_START = 118;
-const INLINE_SEARCH_FADE_END = 140;
-/** Sticky apparaît légèrement après le début de la sortie inline (chevauchement court). */
-const STICKY_SEARCH_FADE_START = 128;
-const STICKY_SEARCH_FADE_END = 158;
-/** Tap : quand le sticky est assez présent (~40 %) et l’inline déjà quasi sorti. */
-const STICKY_POINTER_THRESHOLD = 138;
+const HOME_CATEGORIES = LISTING_CATEGORIES.map((c) => ({
+  id: String(c.id),
+  label: c.label,
+}));
 
-/** Catégories principales (ordre = intention d’achat) — tap → recherche. */
-const HOME_CATEGORIES = [
-  'Véhicules',
-  'Électronique',
-  'Maison',
-  'Mode',
-  'Immobilier',
-  'Services',
-  'Informatique',
-] as const;
-
-export default function HomeScreen() {
+/**
+ * Header content for the Home screen.
+ * Contains Hero, Search, Categories, and specialized sections.
+ */
+function HomeHeaderContent({
+  scrollY,
+}: {
+  scrollY: SharedValue<number>;
+}) {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { bucket } = useResponsiveLayout();
-  const contentPaddingHorizontal = bucket === 'compact' ? spacing.sm : spacing.base;
-  const searchPlaceholder = getHomeSearchPlaceholder(bucket);
-  const scrollY = useSharedValue(0);
-  const stickyGate = useSharedValue(0);
+  const { isCompact } = useResponsiveLayout();
+  const { count: unreadCount } = useUnreadMessagesCount();
+
   const [stickySearchActive, setStickySearchActive] = useState(false);
-  const [showMore, setShowMore] = useState(false);
 
-  const scrollHandler = useAnimatedScrollHandler({
-    onScroll: (e) => {
-      scrollY.value = e.contentOffset.y;
-    },
-  });
+  // Constants
+  const HERO_HEIGHT = 130;
+  const HEADER_END_POINT = HERO_HEIGHT + 20;
 
-  useAnimatedReaction(
-    () => (Math.max(0, scrollY.value) >= STICKY_POINTER_THRESHOLD ? 1 : 0),
-    (gate) => {
-      if (gate !== stickyGate.value) {
-        stickyGate.value = gate;
-        runOnJS(setStickySearchActive)(gate === 1);
-      }
-    }
-  );
+  // Logo Animation
+  const logoScale = useSharedValue(0.97);
+  React.useEffect(() => {
+    logoScale.value = withTiming(1, { 
+      duration: 300, 
+      easing: Easing.out(Easing.ease) 
+    });
+  }, []);
 
-  const handleSearchPress = useCallback(() => {
+  const logoLoadStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: logoScale.value }],
+  }));
+
+  // Search press handler
+  const onSearchPress = useCallback(() => {
     router.push('/(tabs)/search');
   }, [router]);
 
-  const secondaryToggleLabel = useMemo(
-    () => (showMore ? 'Voir moins' : 'Voir plus'),
-    [showMore]
+  // Category handlers
+  const handleCategoryPress = useCallback(
+    (cat: { id: string; label: string }) => {
+      router.push({
+        pathname: '/(tabs)/search',
+        params: { categoryId: cat.id, categoryName: cat.label },
+      });
+    },
+    [router]
   );
 
-  const secondaryBlock = useMemo(() => (
-    <View style={styles.secondaryWrap}>
-      <AppSectionHeader
-        title="Découvrir plus"
-        subtitle="Annonces à la une, suggestions et recherches"
-      />
-      <Pressable
-        onPress={() => setShowMore((v) => !v)}
-        style={({ pressed }) => [styles.seeMoreBtn, pressed && styles.seeMoreBtnPressed]}
-        accessibilityRole="button"
-        accessibilityLabel={secondaryToggleLabel}
-      >
-        <Ionicons
-          name={showMore ? 'chevron-up' : 'chevron-down'}
-          size={18}
-          color={ui.colors.primary}
-        />
-        <Text style={styles.seeMoreText}>{secondaryToggleLabel}</Text>
-      </Pressable>
+  const handleVoirToutPress = useCallback(() => {
+    router.push('/(tabs)/search');
+  }, [router]);
 
-      {showMore ? (
-        <View style={styles.secondaryContent}>
-          <NotificationsPromptCard />
-          <BoostedSection />
-          <NearYouSection userCity={null} />
-          <UrgentSection />
-          <SavedSearchAlertsSection />
-          <ForYouSection />
-          <RecentlyViewedSection />
-        </View>
-      ) : null}
-    </View>
-  ), [showMore, secondaryToggleLabel]);
+  const handleSellCtaPress = useCallback(async () => {
+    const session = await getSession();
+    if (session) {
+      router.push('/sell');
+    } else {
+      const authHref = buildAuthGateHref({
+        context: 'sell',
+        returnPath: '/sell' as Href,
+      });
+      router.push(authHref);
+    }
+  }, [router]);
 
-  return (
-    <Screen noPadding>
-      <View style={styles.shell}>
-        <HomeStickySearchOverlay
-          scrollY={scrollY}
-          safeTop={insets.top}
-          contentPaddingHorizontal={contentPaddingHorizontal}
-          compact={bucket === 'compact'}
-          placeholder={searchPlaceholder}
-          onPress={handleSearchPress}
-          stickySearchActive={stickySearchActive}
-        />
-        <ListingFeed
-          reanimatedScrollHandler={scrollHandler}
-          listHeaderComponent={
-            <HomeHeaderContent
-              scrollY={scrollY}
-              contentPaddingHorizontal={contentPaddingHorizontal}
-              searchPlaceholder={searchPlaceholder}
-              onSearchPress={handleSearchPress}
-              stickySearchActive={stickySearchActive}
-            />
-          }
-          extraComponent={secondaryBlock}
-          extraComponentIndex={6}
-          limit={20}
-          footerAction={{
-            label: 'Voir plus d’annonces',
-            onPress: () => router.push('/(tabs)/search?from=home'),
-          }}
-          contentPaddingHorizontal={contentPaddingHorizontal}
-          listingCardFeedPresentation="home"
-        />
-      </View>
-    </Screen>
+  // Sticky Search Reaction
+  useAnimatedReaction(
+    () => scrollY.value,
+    (current) => {
+      const shouldBeSticky = current > HEADER_END_POINT;
+      if (shouldBeSticky !== stickySearchActive) {
+        runOnJS(setStickySearchActive)(shouldBeSticky);
+      }
+    }
   );
-}
 
-type HomeStickySearchOverlayProps = {
-  scrollY: SharedValue<number>;
-  safeTop: number;
-  contentPaddingHorizontal: number;
-  compact: boolean;
-  placeholder: string;
-  onPress: () => void;
-  stickySearchActive: boolean;
-};
-
-function HomeStickySearchOverlay({
-  scrollY,
-  safeTop,
-  contentPaddingHorizontal,
-  compact,
-  placeholder,
-  onPress,
-  stickySearchActive,
-}: HomeStickySearchOverlayProps) {
-  const fadeStyle = useAnimatedStyle(() => {
-    const y = Math.max(0, scrollY.value);
-    const o = interpolate(
-      y,
-      [STICKY_SEARCH_FADE_START, STICKY_SEARCH_FADE_END],
-      [0, 1],
+  // Hero Animations
+  const heroAnimStyle = useAnimatedStyle(() => {
+    const opacity = interpolate(
+      scrollY.value,
+      [0, HEADER_END_POINT * 0.6],
+      [1, 0],
       Extrapolate.CLAMP
     );
-    return { opacity: o };
-  });
-
-  return (
-    <Animated.View
-      pointerEvents={stickySearchActive ? 'box-none' : 'none'}
-      style={[
-        styles.stickySearchWrap,
-        {
-          paddingTop: safeTop + 6,
-          paddingHorizontal: contentPaddingHorizontal,
-          backgroundColor: colors.surface,
-        },
-        fadeStyle,
-      ]}
-    >
-      <AppSearchBar
-        placeholder={placeholder}
-        onPress={onPress}
-        compact={compact}
-        style={styles.stickySearchBar}
-      />
-    </Animated.View>
-  );
-}
-
-type HomeHeaderContentProps = {
-  scrollY: SharedValue<number>;
-  contentPaddingHorizontal: number;
-  searchPlaceholder: string;
-  onSearchPress: () => void;
-  stickySearchActive: boolean;
-};
-
-function HomeHeaderContent({
-  scrollY,
-  contentPaddingHorizontal,
-  searchPlaceholder,
-  onSearchPress,
-  stickySearchActive,
-}: HomeHeaderContentProps) {
-  const router = useRouter();
-  const unreadMessages = useUnreadMessagesCount();
-  const { isCompact } = useResponsiveLayout();
-  const railEdge = isCompact ? spacing.sm : spacing.base;
-  const handleCategoryPress = (label: string) => {
-    const category = LISTING_CATEGORIES.find(c => c.label === label);
-    if (category) {
-      // Structured navigation: use official ID and label for display
-      router.push(`/(tabs)/search?categoryLabel=${encodeURIComponent(label)}&categoryId=${category.id}`);
-    } else {
-      // Fallback: search by text for categories not yet mapped to a root ID
-      router.push(`/(tabs)/search?q=${encodeURIComponent(label)}`);
-    }
-  };
-  const handleVoirToutPress = () => router.push('/categories');
-  const handleVoirPlusAnnonces = () => router.push('/(tabs)/search?from=home');
-  const handleSellCtaPress = useCallback(async () => {
-    try {
-      const session = await getSession();
-      if (session?.user) {
-        router.push('/sell' as Href);
-      } else {
-        router.push(buildAuthGateHref('sell'));
-      }
-    } catch {
-      router.push(buildAuthGateHref('sell'));
-    }
-  }, [router]);
-
-  const handleMessagesPress = useCallback(async () => {
-    try {
-      const session = await getSession();
-      if (session?.user) {
-        router.push('/(tabs)/messages' as Href);
-      } else {
-        router.push(buildAuthGateHref('messages'));
-      }
-    } catch {
-      router.push(buildAuthGateHref('messages'));
-    }
-  }, [router]);
-
-  const heroAnimStyle = useAnimatedStyle(() => {
-    const y = Math.max(0, scrollY.value);
-    const t = interpolate(y, [0, HERO_SHRINK_RANGE], [0, 1], Extrapolate.CLAMP);
-    return {
-      transform: [{ scale: 1 - 0.028 * t }],
-      marginBottom: interpolate(y, [0, HERO_SHRINK_RANGE], [8, 5], Extrapolate.CLAMP),
-    };
+    const translateY = interpolate(
+      scrollY.value,
+      [0, HEADER_END_POINT],
+      [0, -20],
+      Extrapolate.CLAMP
+    );
+    return { opacity, transform: [{ translateY }] };
   });
 
   const taglineAnimStyle = useAnimatedStyle(() => {
-    const y = Math.max(0, scrollY.value);
-    const t = interpolate(y, [0, HERO_SHRINK_RANGE], [0, 1], Extrapolate.CLAMP);
-    return { opacity: 1 - 0.12 * t };
+    const opacity = interpolate(
+      scrollY.value,
+      [0, HEADER_END_POINT * 0.4],
+      [1, 0],
+      Extrapolate.CLAMP
+    );
+    return { opacity };
   });
 
   const inlineSearchAnimStyle = useAnimatedStyle(() => {
-    const y = Math.max(0, scrollY.value);
-    return {
-      opacity: interpolate(
-        y,
-        [INLINE_SEARCH_FADE_START, INLINE_SEARCH_FADE_END],
-        [1, 0],
-        Extrapolate.CLAMP
-      ),
-    };
+    const opacity = interpolate(
+      scrollY.value,
+      [HEADER_END_POINT * 0.7, HEADER_END_POINT],
+      [1, 0],
+      Extrapolate.CLAMP
+    );
+    return { opacity };
   });
 
+  const searchPlaceholder = getHomeSearchPlaceholder();
+  const railEdge = HORIZONTAL_PADDING;
+
   return (
-    <View style={[styles.headerRoot, isCompact && styles.headerRootCompact]}>
-      <View
-        style={[
-          styles.header,
-          {
-            marginHorizontal: -contentPaddingHorizontal,
-            paddingHorizontal: spacing.lg,
-          },
-        ]}
-      >
+    <View style={styles.headerRoot}>
+      <LinearGradient
+        colors={['#6EDC5F', '#E9FBEF']}
+        style={styles.heroGradient}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 0.5, y: 1 }}
+      />
+
+      <View style={[styles.topActionsRow, { top: insets.top + 8 }]}>
+        <View style={styles.topActionsSpacer} />
         <Pressable
-          onPress={() => void handleMessagesPress()}
-          style={({ pressed }) => [styles.messagesHit, pressed && styles.messagesHitPressed]}
-          hitSlop={12}
-          accessibilityRole="button"
+          onPress={() => router.push('/messages')}
+          style={({ pressed }) => [styles.topIconBtn, pressed && styles.topIconBtnPressed]}
           accessibilityLabel="Messages"
         >
-          <View style={styles.messagesIconSlot}>
-            <Ionicons name="chatbubble-outline" size={22} color={ui.colors.textSecondary} />
-            {unreadMessages > 0 ? (
-              <View style={styles.messagesBadge} accessibilityElementsHidden>
-                <Text style={styles.messagesBadgeText}>
-                  {unreadMessages > 9 ? '9+' : String(unreadMessages)}
-                </Text>
+          <View style={styles.topIconBadgeWrap}>
+            <Ionicons name="chatbubble-outline" size={24} color={colors.textPrimary} />
+            {unreadCount > 0 ? (
+              <View style={styles.topIconBadge}>
+                <Text style={styles.topIconBadgeText}>{unreadCount > 9 ? '9+' : unreadCount}</Text>
               </View>
             ) : null}
           </View>
@@ -346,9 +204,12 @@ function HomeHeaderContent({
       </View>
 
       <Animated.View style={[styles.hero, heroAnimStyle]} accessibilityRole="header">
-        <View style={styles.logoWrapper}>
-          <BrandSymbol size={58} />
-        </View>
+        <Animated.View 
+          entering={FadeInDown.delay(50).duration(300).springify().damping(12)}
+          style={[styles.logoWrapper, logoLoadStyle]}
+        >
+          <BrandSymbol size={95} />
+        </Animated.View>
         <Text style={styles.brandName}>YOUMBIA</Text>
         <AnimatedText style={[styles.tagline, taglineAnimStyle]}>
           Le marché qui vous élève
@@ -366,6 +227,7 @@ function HomeHeaderContent({
           style={styles.searchBarSpacing}
         />
       </Animated.View>
+
       {/* Categories follow search immediately */}
       <Animated.View entering={FadeInDown.delay(100).duration(400)}>
         <CategoryRail
@@ -390,14 +252,18 @@ function HomeHeaderContent({
         >
           <View style={styles.sellCtaTextBlock}>
             <Text style={styles.sellCtaTitle} numberOfLines={1} ellipsizeMode="tail">
-              Quelque chose à vendre ?
+              Vendez facilement
             </Text>
             <Text style={styles.sellCtaSubtitle} numberOfLines={1}>
               Publiez en 30 secondes
             </Text>
           </View>
-          <Ionicons name="chevron-forward" size={18} color={ui.colors.primary} />
+          <Ionicons name="chevron-forward" size={22} color={ui.colors.primary} style={{ opacity: 0.9 }} />
         </Pressable>
+      </Animated.View>
+
+      <Animated.View entering={FadeInDown.delay(145).duration(400)}>
+        <TopListingsSection />
       </Animated.View>
 
       <Animated.View entering={FadeInDown.delay(150).duration(400)} style={styles.feedIntro}>
@@ -410,9 +276,193 @@ function HomeHeaderContent({
   );
 }
 
+export default function HomeScreen() {
+  const scrollY = useSharedValue(0);
+  const insets = useSafeAreaInsets();
+  const { isCompact } = useResponsiveLayout();
+
+  const onScroll = useAnimatedScrollHandler({
+    onScroll: (event) => {
+      scrollY.value = event.contentOffset.y;
+    },
+  });
+
+  const stickySearchActive = useSharedValue(0);
+
+  useAnimatedReaction(
+    () => scrollY.value,
+    (current) => {
+      stickySearchActive.value = current > 200 ? 1 : 0;
+    }
+  );
+
+  const stickySearchStyle = useAnimatedStyle(() => {
+    return {
+      opacity: interpolate(stickySearchActive.value, [0, 1], [0, 1]),
+      transform: [{ translateY: interpolate(stickySearchActive.value, [0, 1], [-20, 0]) }],
+    };
+  });
+
+  const searchPlaceholder = getHomeSearchPlaceholder();
+
+  return (
+    <Screen style={styles.container}>
+      <Animated.View
+        style={[
+          styles.stickySearchWrap,
+          { paddingTop: insets.top + 4 },
+          stickySearchStyle,
+        ]}
+        pointerEvents="box-none"
+      >
+        <AppSearchBar
+          placeholder={searchPlaceholder}
+          onPress={() => {}}
+          compact={isCompact}
+          style={styles.stickySearchBar}
+        />
+      </Animated.View>
+
+      <ListingFeed
+        listHeaderComponent={<HomeHeaderContent scrollY={scrollY} />}
+        reanimatedScrollHandler={onScroll}
+        listingCardFeedPresentation="home"
+        contentPaddingHorizontal={HORIZONTAL_PADDING}
+      />
+    </Screen>
+  );
+}
+
 const styles = StyleSheet.create({
-  shell: {
+  container: {
     flex: 1,
+    backgroundColor: colors.surface,
+  },
+  headerRoot: {
+    paddingTop: 10,
+    marginTop: 0,
+    paddingBottom: ui.spacing.lg,
+    overflow: 'hidden',
+  },
+  heroGradient: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 380,
+    opacity: 0.85,
+  },
+  topActionsRow: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    flexDirection: 'row',
+    paddingHorizontal: HORIZONTAL_PADDING,
+    zIndex: 10,
+  },
+  topActionsSpacer: {
+    flex: 1,
+  },
+  topIconBtn: {
+    padding: spacing.xs,
+  },
+  topIconBtnPressed: {
+    opacity: 0.7,
+  },
+  topIconBadgeWrap: {
+    position: 'relative',
+  },
+  topIconBadge: {
+    position: 'absolute',
+    top: -4,
+    right: -4,
+    backgroundColor: colors.error,
+    borderRadius: 10,
+    minWidth: 18,
+    height: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 2,
+  },
+  topIconBadgeText: {
+    color: '#fff',
+    fontSize: 10,
+    fontWeight: '700',
+  },
+  hero: {
+    alignItems: 'center',
+    marginTop: 8,
+    marginBottom: 16,
+    paddingHorizontal: HORIZONTAL_PADDING,
+  },
+  logoWrapper: {
+    padding: 2,
+    marginBottom: -4,
+    shadowColor: '#6EDC5F',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 12,
+    elevation: 4,
+  },
+  brandName: {
+    ...ui.typography.h2,
+    fontSize: 20,
+    color: ui.colors.textPrimary,
+    letterSpacing: -0.2,
+    marginTop: 2,
+  },
+  tagline: {
+    ...ui.typography.bodySmall,
+    color: ui.colors.textSecondary,
+    fontSize: 12,
+    marginTop: -2,
+    opacity: 0.8,
+  },
+  searchBarSpacing: {
+    marginHorizontal: HORIZONTAL_PADDING,
+    marginTop: 4,
+    marginBottom: 12,
+  },
+  sellCtaLayout: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#F2FFF5',
+    paddingVertical: ui.spacing.lg + 8,
+    paddingHorizontal: ui.spacing.xl + 4,
+    borderRadius: 24,
+    marginBottom: ui.spacing.xl + 8,
+    marginTop: ui.spacing.md,
+    marginHorizontal: HORIZONTAL_PADDING,
+    borderWidth: 1,
+    borderColor: 'rgba(22, 163, 74, 0.08)',
+    ...shadows.sm,
+  },
+  sellCtaCompact: {
+    paddingVertical: ui.spacing.sm + 10,
+  },
+  sellCtaPressed: {
+    opacity: 0.95,
+    backgroundColor: '#E9FBEF',
+  },
+  sellCtaTextBlock: {
+    flex: 1,
+    gap: 2,
+  },
+  sellCtaTitle: {
+    ...ui.typography.h3,
+    color: ui.colors.textPrimary,
+    fontSize: 18,
+  },
+  sellCtaSubtitle: {
+    ...ui.typography.bodySmall,
+    color: ui.colors.textSecondary,
+    opacity: 0.8,
+  },
+  feedIntro: {
+    marginTop: ui.spacing.xl,
+    marginBottom: ui.spacing.md,
+    paddingHorizontal: HORIZONTAL_PADDING,
   },
   stickySearchWrap: {
     position: 'absolute',
@@ -421,156 +471,13 @@ const styles = StyleSheet.create({
     top: 0,
     zIndex: 20,
     paddingBottom: 6,
+    backgroundColor: colors.surface,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: 'rgba(15, 23, 42, 0.06)',
   },
   stickySearchBar: {
+    marginHorizontal: HORIZONTAL_PADDING,
     marginTop: 2,
     marginBottom: 0,
-  },
-  headerRoot: {
-    paddingTop: 10,
-    marginTop: 0,
-    paddingBottom: ui.spacing.lg,
-  },
-  headerRootCompact: {
-    paddingTop: 8,
-    paddingBottom: ui.spacing.md,
-  },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    alignItems: 'center',
-    paddingTop: 0,
-    paddingBottom: 4,
-    marginTop: 0,
-    width: '100%',
-  },
-  messagesHit: {
-    minWidth: 44,
-    minHeight: 44,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: ui.radius.pill,
-    backgroundColor: ui.colors.surfaceSubtle,
-    borderWidth: 1,
-    borderColor: ui.colors.borderLight,
-  },
-  messagesHitPressed: {
-    opacity: 0.9,
-    backgroundColor: ui.colors.primarySoft,
-  },
-  messagesIconSlot: {
-    width: 24,
-    height: 24,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  messagesBadge: {
-    position: 'absolute',
-    top: -6,
-    right: -8,
-    minWidth: 18,
-    height: 18,
-    paddingHorizontal: 4,
-    borderRadius: 9,
-    backgroundColor: ui.colors.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  messagesBadgeText: {
-    color: ui.colors.surface,
-    fontSize: 10,
-    fontWeight: '700',
-  },
-  hero: {
-    alignItems: 'center',
-    marginTop: 0,
-    paddingHorizontal: ui.spacing.md,
-  },
-  logoWrapper: {
-    backgroundColor: 'rgba(220, 252, 231, 0.45)',
-    padding: ui.spacing.sm,
-    borderRadius: ui.radius.pill,
-    borderWidth: 1,
-    borderColor: ui.colors.borderLight,
-  },
-  brandName: {
-    ...ui.typography.h2,
-    color: ui.colors.primary,
-    letterSpacing: -0.25,
-    marginTop: 8,
-  },
-  tagline: {
-    ...ui.typography.caption,
-    marginTop: 4,
-    textAlign: 'center',
-  },
-  searchBarSpacing: {
-    marginTop: 8,
-  },
-  sellCtaLayout: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: ui.spacing.md,
-    paddingHorizontal: ui.spacing.lg,
-    marginBottom: ui.spacing.lg,
-    marginTop: -ui.spacing.xs,
-  },
-  sellCtaCompact: {
-    paddingVertical: ui.spacing.sm,
-    paddingHorizontal: ui.spacing.sm,
-    marginBottom: ui.spacing.md,
-  },
-  sellCtaPressed: {
-    opacity: 0.94,
-    backgroundColor: ui.colors.primarySoft,
-  },
-  sellCtaTextBlock: {
-    flex: 1,
-    marginRight: ui.spacing.sm,
-  },
-  sellCtaTitle: {
-    ...ui.typography.bodySmall,
-    fontWeight: '600',
-    color: ui.colors.textPrimary,
-  },
-  sellCtaSubtitle: {
-    ...ui.typography.caption,
-    marginTop: ui.spacing.xs,
-  },
-  feedIntro: {
-    marginTop: ui.spacing.xl,
-    marginBottom: ui.spacing.md,
-  },
-  secondaryWrap: {
-    marginTop: ui.spacing.lg,
-    gap: ui.spacing.sm,
-  },
-  seeMoreBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    alignSelf: 'flex-start',
-    gap: ui.spacing.xs,
-    marginTop: -ui.spacing.xs,
-    paddingVertical: ui.spacing.sm,
-    paddingHorizontal: ui.spacing.md,
-    borderRadius: ui.radius.pill,
-    backgroundColor: ui.colors.surfaceSubtle,
-    borderWidth: 1,
-    borderColor: ui.colors.borderLight,
-  },
-  seeMoreBtnPressed: {
-    opacity: 0.92,
-    backgroundColor: ui.colors.primarySoft,
-  },
-  seeMoreText: {
-    ...ui.typography.bodySmall,
-    color: ui.colors.primary,
-    fontWeight: '700',
-  },
-  secondaryContent: {
-    gap: ui.spacing.md,
   },
 });
