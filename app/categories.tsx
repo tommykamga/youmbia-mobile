@@ -7,6 +7,7 @@ import React from 'react';
 import { Text, StyleSheet, Pressable, ScrollView } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Screen, AppHeader } from '@/components';
+import { LISTING_CATEGORIES } from '@/lib/listingCategories';
 import { colors, spacing, typography, fontWeights, radius } from '@/theme';
 
 /** Full list of categories – same as home rail + optional extras. */
@@ -24,7 +25,14 @@ export default function CategoriesScreen() {
   const router = useRouter();
 
   const handleCategoryPress = (label: string) => {
-    router.push(`/(tabs)/search?q=${encodeURIComponent(label)}`);
+    const category = LISTING_CATEGORIES.find(c => c.label === label);
+    if (category) {
+      // Navigation structurée : ID officiel + libellé pour l'affichage
+      router.push(`/(tabs)/search?categoryLabel=${encodeURIComponent(label)}&categoryId=${category.id}`);
+    } else {
+      // Fallback temporaire : recherche par texte si l'ID n'est pas encore mappé
+      router.push(`/(tabs)/search?q=${encodeURIComponent(label)}`);
+    }
   };
 
   return (

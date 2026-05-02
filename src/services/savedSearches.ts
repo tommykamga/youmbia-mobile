@@ -14,6 +14,7 @@ export type SavedSearch = {
   priceMin: number | null;
   priceMax: number | null;
   category: string | null;
+  categoryId: number | null;
   city: string | null;
   createdAt: string;
 };
@@ -82,6 +83,7 @@ function normalizeSavedSearch(value: SavedSearch): SavedSearch {
     priceMin: normalizeNumber(value.priceMin),
     priceMax: normalizeNumber(value.priceMax),
     category: normalizeText(value.category),
+    categoryId: normalizeNumber(value.categoryId),
     city: normalizeText(value.city),
     createdAt: String(value.createdAt ?? '') || new Date().toISOString(),
   };
@@ -126,14 +128,15 @@ function persistStore(nextStore: SavedSearch[]): boolean {
 }
 
 function isSameSearch(
-  a: Pick<SavedSearch, 'query' | 'priceMin' | 'priceMax' | 'category' | 'city'>,
-  b: Pick<SavedSearch, 'query' | 'priceMin' | 'priceMax' | 'category' | 'city'>
+  a: Pick<SavedSearch, 'query' | 'priceMin' | 'priceMax' | 'category' | 'categoryId' | 'city'>,
+  b: Pick<SavedSearch, 'query' | 'priceMin' | 'priceMax' | 'category' | 'categoryId' | 'city'>
 ): boolean {
   return (
     a.query.trim().toLowerCase() === b.query.trim().toLowerCase() &&
     normalizeNumber(a.priceMin) === normalizeNumber(b.priceMin) &&
     normalizeNumber(a.priceMax) === normalizeNumber(b.priceMax) &&
     normalizeText(a.category)?.toLowerCase() === normalizeText(b.category)?.toLowerCase() &&
+    normalizeNumber(a.categoryId) === normalizeNumber(b.categoryId) &&
     normalizeText(a.city)?.toLowerCase() === normalizeText(b.city)?.toLowerCase()
   );
 }
@@ -144,6 +147,7 @@ export function buildSavedSearchHref(search: SavedSearch): string {
   if (search.priceMin != null) params.set('priceMin', String(search.priceMin));
   if (search.priceMax != null) params.set('priceMax', String(search.priceMax));
   if (search.category) params.set('category', search.category);
+  if (search.categoryId != null) params.set('categoryId', String(search.categoryId));
   if (search.city) params.set('city', search.city);
   return `/(tabs)/search?${params.toString()}`;
 }
@@ -157,6 +161,7 @@ export function saveSearch(params: {
   priceMin?: number | null;
   priceMax?: number | null;
   category?: string | null;
+  categoryId?: number | null;
   city?: string | null;
 }): SaveSearchResult {
   const query = params.query?.trim() || '';
@@ -171,6 +176,7 @@ export function saveSearch(params: {
     priceMin: normalizeNumber(params.priceMin),
     priceMax: normalizeNumber(params.priceMax),
     category: normalizeText(params.category),
+    categoryId: normalizeNumber(params.categoryId),
     city: normalizeText(params.city),
     createdAt: new Date().toISOString(),
   };

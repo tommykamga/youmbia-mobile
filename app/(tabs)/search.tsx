@@ -20,7 +20,7 @@ import { useFocusEffect, useLocalSearchParams } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Screen, Loader, EmptyState, Button } from '@/components';
 import { ListingCard } from '@/features/listings';
-import { searchListings, getPublicListings } from '@/services/listings';
+import { searchListings } from '@/services/listings';
 import { getSearchSuggestions } from '@/services/searchSuggestions';
 import { getFavoriteIds as getFavIds } from '@/services/favorites';
 import { sortListings, type SortOption } from '@/utils/sortListings';
@@ -30,6 +30,7 @@ import {
   saveSearch,
   type SavedSearch,
 } from '@/services/savedSearches';
+import { LISTING_CATEGORIES } from '@/lib/listingCategories';
 import { formatPrice } from '@/lib/format';
 import type { PublicListing } from '@/services/listings';
 import { colors, spacing, typography, fontWeights, radius } from '@/theme';
@@ -52,6 +53,7 @@ type AppliedPriceFilters = {
 
 type AppliedSearchFilters = {
   category: string | null;
+  categoryId: number | null;
   city: string | null;
 };
 
@@ -68,11 +70,11 @@ function normalizeMatchText(value: string | null | undefined): string {
     .trim();
 }
 
-function matchesListingCategory(listing: PublicListing, category: string | null): boolean {
-  const normalizedCategory = normalizeMatchText(category);
-  if (!normalizedCategory) return true;
-  const haystack = normalizeMatchText(`${listing.title} ${listing.description ?? ''}`);
-  return haystack.includes(normalizedCategory);
+function getCategoryIdByLabel(label: string | null): number | null {
+  if (!label) return null;
+  const normalized = label.trim().toLowerCase();
+  const found = LISTING_CATEGORIES.find(c => c.label.toLowerCase() === normalized);
+  return found ? found.id : null;
 }
 
 function parsePriceValue(value: string, invalidMessage: string): { value: number | null; error: string | null } {
@@ -113,7 +115,10 @@ export default function SearchScreen() {
     priceMin?: string;
     priceMax?: string;
     category?: string;
+    categoryLabel?: string;
+    categoryId?: string;
     city?: string;
+    from?: string;
   }>();
   const [query, setQuery] = useState('');
   const [submittedQuery, setSubmittedQuery] = useState('');
@@ -123,9 +128,11 @@ export default function SearchScreen() {
   const [priceMax, setPriceMax] = useState<string>('');
   const [category, setCategory] = useState<string>('');
   const [city, setCity] = useState<string>('');
+  const [categoryId, setCategoryId] = useState<number | null>(null);
   const [appliedPriceFilters, setAppliedPriceFilters] = useState<AppliedPriceFilters>({ min: null, max: null });
   const [appliedSearchFilters, setAppliedSearchFilters] = useState<AppliedSearchFilters>({
     category: null,
+    categoryId: null,
     city: null,
   });
   const [priceFilterError, setPriceFilterError] = useState<string | null>(null);
@@ -191,49 +198,66 @@ export default function SearchScreen() {
 
   /** When navigating with query params, pre-fill and run search once. */
   useEffect(() => {
-    const initialQ = typeof params.q === 'string' ? params.q.trim() : '';
-    setQuery(initialQ);
-    runSearch(initialQ);
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- only run when navigation params change
-  }, [params.q, params.priceMin, params.priceMax, params.category, params.city]);
-
-  /** Pre-fill price filters from URL (e.g. from saved search). */
-  useEffect(() => {
+    const nextQ = typeof params.q === 'string' ? params.q.trim() : '';
     const nextMin = typeof params.priceMin === 'string' ? params.priceMin.trim() : '';
     const nextMax = typeof params.priceMax === 'string' ? params.priceMax.trim() : '';
-    const nextCategory = typeof params.category === 'string' ? params.category.trim() : '';
+    const nextCategory = typeof params.categoryLabel === 'string' 
+      ? params.categoryLabel.trim() 
+      : (typeof params.category === 'string' ? params.category.trim() : '');
     const nextCity = typeof params.city === 'string' ? params.city.trim() : '';
+    const nextCategoryIdStr = typeof params.categoryId === 'string' ? params.categoryId.trim() : '';
+    const nextCategoryId = nextCategoryIdStr ? parseInt(nextCategoryIdStr, 10) : getCategoryIdByLabel(nextCategory);
+
+    // Update UI states
+    setQuery(nextQ);
     setPriceMin(nextMin);
     setPriceMax(nextMax);
     setCategory(nextCategory);
     setCity(nextCity);
-    const validation = validatePriceFilters(nextMin, nextMax);
-    if (validation.error) {
-      setAppliedPriceFilters({ min: null, max: null });
-      setAppliedSearchFilters({
-        category: normalizeFilterText(nextCategory),
-        city: normalizeFilterText(nextCity),
-      });
-      setPriceFilterError(validation.error);
-      return;
-    }
-    setAppliedPriceFilters({ min: validation.min, max: validation.max });
-    setAppliedSearchFilters({
-      category: normalizeFilterText(nextCategory),
-      city: normalizeFilterText(nextCity),
-    });
-    setPriceFilterError(null);
-  }, [params.priceMin, params.priceMax, params.category, params.city]);
+    setCategoryId(nextCategoryId);
 
-  const runSearch = useCallback(async (q: string) => {
+    const validation = validatePriceFilters(nextMin, nextMax);
+    const filters: AppliedSearchFilters & AppliedPriceFilters = {
+      category: normalizeFilterText(nextCategory),
+      categoryId: nextCategoryId,
+      city: normalizeFilterText(nextCity),
+      min: validation.error ? null : validation.min,
+      max: validation.error ? null : validation.max,
+    };
+
+    setAppliedPriceFilters({ min: filters.min, max: filters.max });
+    setAppliedSearchFilters({
+      category: filters.category,
+      categoryId: filters.categoryId,
+      city: filters.city,
+    });
+    setPriceFilterError(validation.error);
+
+    // Run search with the newly parsed filters to avoid stale state issues
+    runSearch(nextQ, filters);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- only run when navigation params change
+  }, [params.q, params.priceMin, params.priceMax, params.category, params.categoryLabel, params.categoryId, params.city]);
+
+  const runSearch = useCallback(async (q: string, filters?: Partial<AppliedSearchFilters & AppliedPriceFilters>) => {
     const trimmed = q.trim();
     setSubmittedQuery(trimmed);
     setState({ status: 'loading' });
     
-    // Si vide, on charge le flux public "exploration", sinon on cherche
-    const result = trimmed 
-      ? await searchListings(trimmed)
-      : await getPublicListings(0, 50);
+    // On utilise les filtres appliqués par défaut, sauf si des nouveaux sont passés
+    const searchCategoryId = filters?.categoryId !== undefined ? filters.categoryId : appliedSearchFilters.categoryId;
+    const searchCity = filters?.city !== undefined ? filters.city : appliedSearchFilters.city;
+    const searchMinPrice = filters?.min !== undefined ? filters.min : appliedPriceFilters.min;
+    const searchMaxPrice = filters?.max !== undefined ? filters.max : appliedPriceFilters.max;
+
+    const result = await searchListings({
+      query: trimmed,
+      categoryId: searchCategoryId,
+      city: searchCity,
+      minPrice: searchMinPrice,
+      maxPrice: searchMaxPrice,
+      sortBy: sortBy,
+      pageSize: 50, // On demande un peu plus pour le confort
+    });
 
     if (result.error) {
       setState({ status: 'error', message: result.error.message });
@@ -245,7 +269,7 @@ export default function SearchScreen() {
         ? { status: 'empty', query: trimmed }
         : { status: 'success', data: list, query: trimmed }
     );
-  }, []);
+  }, [appliedSearchFilters, appliedPriceFilters, sortBy]);
 
   /** Scroll results list to top when a new search returns success (Sprint 3.2). */
   const scrollResetKey = state.status === 'success' ? state.query : '';
@@ -269,10 +293,11 @@ export default function SearchScreen() {
     setPriceMax('');
     setCategory('');
     setCity('');
+    setCategoryId(null);
     setAppliedPriceFilters({ min: null, max: null });
-    setAppliedSearchFilters({ category: null, city: null });
+    setAppliedSearchFilters({ category: null, categoryId: null, city: null });
     setPriceFilterError(null);
-    setState({ status: 'idle' });
+    runSearch('');
   }, []);
 
   const handleSuggestionPress = useCallback(
@@ -290,6 +315,7 @@ export default function SearchScreen() {
       priceMin: appliedPriceFilters.min,
       priceMax: appliedPriceFilters.max,
       category: appliedSearchFilters.category,
+      categoryId: appliedSearchFilters.categoryId,
       city: appliedSearchFilters.city,
     });
     loadSavedSearches();
@@ -323,11 +349,21 @@ export default function SearchScreen() {
       setPriceMax(item.priceMax != null ? String(item.priceMax) : '');
       setCategory(item.category ?? '');
       setCity(item.city ?? '');
+      setCategoryId(item.categoryId ?? null);
       setAppliedPriceFilters({ min: item.priceMin ?? null, max: item.priceMax ?? null });
-      setAppliedSearchFilters({ category: item.category ?? null, city: item.city ?? null });
+      setAppliedSearchFilters({ 
+        category: item.category ?? null, 
+        categoryId: item.categoryId ?? null, 
+        city: item.city ?? null 
+      });
       setPriceFilterError(null);
       setSuggestions([]);
-      runSearch(item.query);
+      runSearch(item.query, {
+        categoryId: item.categoryId ?? null,
+        city: item.city ?? null,
+        min: item.priceMin ?? null,
+        max: item.priceMax ?? null,
+      });
     },
     [runSearch]
   );
@@ -379,9 +415,10 @@ export default function SearchScreen() {
   const hasDraftSearchChanges = useMemo(() => {
     return (
       category.trim() !== (appliedSearchFilters.category ?? '') ||
-      city.trim() !== (appliedSearchFilters.city ?? '')
+      city.trim() !== (appliedSearchFilters.city ?? '') ||
+      categoryId !== appliedSearchFilters.categoryId
     );
-  }, [category, city, appliedSearchFilters]);
+  }, [category, city, categoryId, appliedSearchFilters]);
 
   const activeFilterSummary = useMemo(() => {
     const chips: string[] = [];
@@ -403,20 +440,10 @@ export default function SearchScreen() {
   const activeFiltersCount = activeFilterSummary.length;
 
   const filteredListings = useMemo(() => {
-    return sortedListings.filter((l) => {
-      const p = l.price ?? 0;
-      if (appliedPriceFilters.min != null && p < appliedPriceFilters.min) return false;
-      if (appliedPriceFilters.max != null && p > appliedPriceFilters.max) return false;
-      if (
-        appliedSearchFilters.city != null &&
-        normalizeMatchText(l.city) !== normalizeMatchText(appliedSearchFilters.city)
-      ) {
-        return false;
-      }
-      if (!matchesListingCategory(l, appliedSearchFilters.category)) return false;
-      return true;
-    });
-  }, [sortedListings, appliedPriceFilters, appliedSearchFilters]);
+    // Le filtrage est maintenant fait côté serveur (Supabase) via searchListings.
+    // Cette variable reste pour ne pas casser l'UI, mais elle contient juste sortedListings.
+    return sortedListings;
+  }, [sortedListings]);
 
   const handleApplyAllFilters = useCallback(() => {
     const validation = validatePriceFilters(priceMin, priceMax);
@@ -425,22 +452,36 @@ export default function SearchScreen() {
       return;
     }
     setAppliedPriceFilters({ min: validation.min, max: validation.max });
-    setAppliedSearchFilters({
+    const newAppliedSearchFilters = {
       category: normalizeFilterText(category),
+      categoryId: categoryId,
       city: normalizeFilterText(city),
-    });
+    };
+    setAppliedSearchFilters(newAppliedSearchFilters);
     setPriceFilterError(null);
-  }, [priceMin, priceMax, category, city]);
+
+    // On relance la recherche avec les nouveaux filtres
+    runSearch(submittedQuery, {
+      ...newAppliedSearchFilters,
+      min: validation.min,
+      max: validation.max,
+    });
+  }, [priceMin, priceMax, category, categoryId, city, submittedQuery, runSearch]);
 
   const handleResetAllFilters = useCallback(() => {
-    setPriceMin('');
-    setPriceMax('');
-    setCategory('');
     setCity('');
+    setCategoryId(null);
     setAppliedPriceFilters({ min: null, max: null });
-    setAppliedSearchFilters({ category: null, city: null });
+    setAppliedSearchFilters({ category: null, categoryId: null, city: null });
     setPriceFilterError(null);
-  }, []);
+    runSearch(submittedQuery, {
+      category: null,
+      categoryId: null,
+      city: null,
+      min: null,
+      max: null
+    });
+  }, [submittedQuery, runSearch]);
 
   const openFilters = useCallback(() => {
     Keyboard.dismiss();
@@ -509,7 +550,7 @@ export default function SearchScreen() {
         </Pressable>
       </View>
     ),
-    [sortBy, openFilters, hasAppliedPriceFilter, hasAppliedSearchFilter, activeFiltersCount]
+    [sortBy, openFilters, hasAppliedPriceFilter, hasAppliedSearchFilter, activeFiltersCount, setSortBy]
   );
 
   const savedSearchesSection = useMemo(() => {
@@ -550,12 +591,16 @@ export default function SearchScreen() {
   }, [savedSearches, handleSavedSearchPress, handleRemoveSavedSearch]);
 
   const resultsHeader = useMemo(() => {
-    const isExploreMode = !submittedQuery;
+    const isExploreMode = !submittedQuery && !appliedSearchFilters.category && !appliedSearchFilters.city;
+    const isFromHome = params.from === 'home';
+    
     return (
       <View style={styles.resultsHeaderWrap}>
         {isExploreMode ? (
           <View style={styles.exploreHeader}>
-            <Text style={styles.exploreTitle}>Explorez les annonces disponibles</Text>
+            <Text style={styles.exploreTitle}>
+              {isFromHome ? 'Toutes les annonces' : 'Explorez les annonces disponibles'}
+            </Text>
             <Text style={styles.exploreSubtitle}>Découvrez les dernières opportunités publiées</Text>
           </View>
         ) : (
@@ -617,7 +662,11 @@ export default function SearchScreen() {
                     isSelected && styles.filterOptionChipSelected,
                     pressed && styles.filterOptionChipPressed,
                   ]}
-                  onPress={() => setCategory((prev) => (prev.trim() === option ? '' : option))}
+                  onPress={() => {
+                    const newCat = category.trim() === option ? '' : option;
+                    setCategory(newCat);
+                    setCategoryId(getCategoryIdByLabel(newCat));
+                  }}
                 >
                   <Text
                     style={[
@@ -873,35 +922,29 @@ export default function SearchScreen() {
           </View>
         </View>
 
-        {state.status === 'idle' && suggestions.length > 0 && (
-          <>
-            <View style={styles.suggestionsWrap}>
-              {suggestions.map((text) => (
-                <Pressable
-                  key={text}
-                  style={({ pressed }) => [
-                    styles.suggestionRow,
-                    pressed && styles.suggestionRowPressed,
-                  ]}
-                  onPress={() => handleSuggestionPress(text)}
-                >
-                  <Ionicons
-                    name="search"
-                    size={18}
-                    color={colors.textMuted}
-                    style={styles.suggestionIcon}
-                  />
-                  <Text style={styles.suggestionText} numberOfLines={1}>
-                    {text}
-                  </Text>
-                </Pressable>
-              ))}
-            </View>
-          </>
-        )}
-
-        {state.status === 'idle' && suggestions.length === 0 && (
-          <Loader />
+        {suggestions.length > 0 && (
+          <View style={styles.suggestionsWrap}>
+            {suggestions.map((text) => (
+              <Pressable
+                key={text}
+                style={({ pressed }) => [
+                  styles.suggestionRow,
+                  pressed && styles.suggestionRowPressed,
+                ]}
+                onPress={() => handleSuggestionPress(text)}
+              >
+                <Ionicons
+                  name="search"
+                  size={18}
+                  color={colors.textMuted}
+                  style={styles.suggestionIcon}
+                />
+                <Text style={styles.suggestionText} numberOfLines={1}>
+                  {text}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
         )}
 
         {state.status === 'loading' && (
@@ -1103,6 +1146,12 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.sm,
     borderBottomWidth: 1,
     borderBottomColor: colors.borderLight,
+    position: 'absolute',
+    top: 110, // Approx height of header
+    left: 0,
+    right: 0,
+    backgroundColor: colors.surface,
+    zIndex: 50,
   },
   suggestionRow: {
     flexDirection: 'row',

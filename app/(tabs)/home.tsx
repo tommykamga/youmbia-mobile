@@ -43,6 +43,7 @@ import { useResponsiveLayout, getHomeSearchPlaceholder } from '@/lib/responsiveL
 import { getSession } from '@/services/auth';
 import { buildAuthGateHref } from '@/lib/authGateNavigation';
 import { useUnreadMessagesCount } from '@/hooks/useUnreadMessagesCount';
+import { LISTING_CATEGORIES } from '@/lib/listingCategories';
 
 const AnimatedText = Animated.createAnimatedComponent(Text);
 
@@ -166,7 +167,7 @@ export default function HomeScreen() {
           limit={20}
           footerAction={{
             label: 'Voir plus d’annonces',
-            onPress: () => router.push('/(tabs)/search'),
+            onPress: () => router.push('/(tabs)/search?from=home'),
           }}
           contentPaddingHorizontal={contentPaddingHorizontal}
           listingCardFeedPresentation="home"
@@ -248,9 +249,18 @@ function HomeHeaderContent({
   const unreadMessages = useUnreadMessagesCount();
   const { isCompact } = useResponsiveLayout();
   const railEdge = isCompact ? spacing.sm : spacing.base;
-  const handleCategoryPress = (label: string) =>
-    router.push(`/(tabs)/search?q=${encodeURIComponent(label)}`);
+  const handleCategoryPress = (label: string) => {
+    const category = LISTING_CATEGORIES.find(c => c.label === label);
+    if (category) {
+      // Structured navigation: use official ID and label for display
+      router.push(`/(tabs)/search?categoryLabel=${encodeURIComponent(label)}&categoryId=${category.id}`);
+    } else {
+      // Fallback: search by text for categories not yet mapped to a root ID
+      router.push(`/(tabs)/search?q=${encodeURIComponent(label)}`);
+    }
+  };
   const handleVoirToutPress = () => router.push('/categories');
+  const handleVoirPlusAnnonces = () => router.push('/(tabs)/search?from=home');
   const handleSellCtaPress = useCallback(async () => {
     try {
       const session = await getSession();
