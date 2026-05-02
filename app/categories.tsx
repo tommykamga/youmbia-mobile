@@ -13,12 +13,12 @@ import { colors, spacing, typography, fontWeights, radius } from '@/theme';
 /** Full list of categories – same as home rail + optional extras. */
 const ALL_CATEGORIES = [
   'Véhicules',
-  'Mode',
-  'Maison',
   'Électronique',
-  'Sport',
-  'Loisirs',
-  'Autre',
+  'Maison',
+  'Mode',
+  'Immobilier',
+  'Services',
+  'Informatique',
 ];
 
 export default function CategoriesScreen() {

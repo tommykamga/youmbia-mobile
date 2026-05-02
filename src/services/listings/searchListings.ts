@@ -7,6 +7,7 @@
 import { supabase } from '@/lib/supabase';
 import { getSignedUrlsMap, toDisplayImageUrl } from '@/lib/listingImageUrl';
 import { normalizeListingSchemaFeatures } from '@/lib/listingSchemaFeatures';
+import { ROOT_CATEGORY_TREE } from '@/lib/listingCategories';
 import type { PublicListing } from './getPublicListings';
 
 type ListingImageRow = { url: string; sort_order: number | null };
@@ -62,8 +63,50 @@ export type SearchOptions = {
 };
 
 export type SearchListingsResult =
-  | { data: PublicListing[]; error: null }
-  | { data: null; error: { message: string } };
+  | { data: PublicListing[]; total: number; error: null }
+  | { data: null; total: 0; error: { message: string } };
+
+function normalizeSearchText(s: string): string {
+  return String(s ?? '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim();
+}
+
+/**
+ * Calculates a relevance score for a listing based on the search query.
+ * Priorities: Exact Title > Word start in Title > Contains in Title > Word start in Description.
+ */
+function computeRelevanceScore(listing: PublicListing, query: string): number {
+  const q = normalizeSearchText(query);
+  if (!q) return 0;
+
+  const title = normalizeSearchText(listing.title);
+  const description = normalizeSearchText(listing.description ?? '');
+  
+  let score = 0;
+
+  // Title match scoring
+  if (title === q) {
+    score += 100; // Perfect match
+  } else if (title.startsWith(q + ' ') || title.includes(' ' + q + ' ') || title.endsWith(' ' + q)) {
+    score += 50; // Whole word in title
+  } else if (title.startsWith(q)) {
+    score += 30; // Starts with query
+  } else if (title.includes(q)) {
+    score += 10; // Contains query
+  }
+
+  // Description match scoring (lower priority)
+  if (description.includes(' ' + q + ' ') || description.startsWith(q + ' ')) {
+    score += 5;
+  } else if (description.includes(q)) {
+    score += 1;
+  }
+
+  return score;
+}
 
 /**
  * Search active listings by query (title, city, description) and structured filters.
@@ -84,23 +127,37 @@ export async function searchListings(options: SearchOptions = {}): Promise<Searc
   let request = supabase
     .from('listings')
     .select(
-      'id, title, price, city, description, boosted, urgent, district, created_at, updated_at, views_count, user_id, listing_images(url, sort_order)'
+      'id, title, price, city, description, boosted, urgent, district, created_at, updated_at, views_count, user_id, listing_images(url, sort_order)',
+      { count: 'exact' }
     )
     .eq('status', 'active');
 
-  // Text search (OR across title, description, city)
+  // Text search: stricter for short queries to avoid noisy substring matches (e.g. "lit" matching "qualité")
   const trimmed = query.trim();
   if (trimmed) {
     const safe = trimmed.replace(/[%_\\]/g, '');
     const pattern = `%${safe}%`;
-    request = request.or(`title.ilike.${pattern},city.ilike.${pattern},description.ilike.${pattern}`);
+    
+    if (trimmed.length <= 3) {
+      // Short query: prioritize titles and skip descriptions to avoid common substring noise
+      request = request.or(`title.ilike.${pattern},city.ilike.${pattern}`);
+    } else {
+      // Longer query: full search across title, city, and description
+      request = request.or(`title.ilike.${pattern},city.ilike.${pattern},description.ilike.${pattern}`);
+    }
   }
 
-  // Category filter
+  // Category filter: support for root category branches (sub-categories)
   if (categoryId != null && categoryId !== '') {
     const catId = typeof categoryId === 'string' ? parseInt(categoryId, 10) : categoryId;
     if (!isNaN(catId)) {
-      request = request.eq('category_id', catId);
+      const tree = ROOT_CATEGORY_TREE[catId];
+      if (tree && tree.length > 0) {
+        // We use .in() to match the root category or any of its children
+        request = request.in('category_id', tree);
+      } else {
+        request = request.eq('category_id', catId);
+      }
     }
   }
 
@@ -133,10 +190,10 @@ export async function searchListings(options: SearchOptions = {}): Promise<Searc
   const to = from + pageSize - 1;
   request = request.range(from, to);
 
-  const { data, error } = await request;
+  const { data, error, count } = await request;
 
   if (error) {
-    return { data: null, error: { message: error.message } };
+    return { data: null, total: 0, error: { message: error.message } };
   }
 
   const list = (data ?? []) as ListingRow[];
@@ -144,5 +201,18 @@ export async function searchListings(options: SearchOptions = {}): Promise<Searc
     (row.listing_images ?? []).map((img) => String(img.url ?? '').trim()).filter(Boolean)
   );
   const signedMap = await getSignedUrlsMap(allPaths);
-  return { data: list.map((row) => mapRow(row, signedMap)), error: null };
+  const results = list.map((row) => mapRow(row, signedMap));
+
+  // Client-side reranking by relevance score if a query exists
+  if (trimmed && results.length > 0) {
+    results.sort((a, b) => {
+      const scoreA = computeRelevanceScore(a, trimmed);
+      const scoreB = computeRelevanceScore(b, trimmed);
+      if (scoreB !== scoreA) return scoreB - scoreA;
+      // Stable sort by date if scores are equal
+      return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+    });
+  }
+
+  return { data: results, total: count ?? 0, error: null };
 }

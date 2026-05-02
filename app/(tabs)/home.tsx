@@ -64,9 +64,9 @@ const HOME_CATEGORIES = [
   'Électronique',
   'Maison',
   'Mode',
-  'Sport',
-  'Loisirs',
-  'Autre',
+  'Immobilier',
+  'Services',
+  'Informatique',
 ] as const;
 
 export default function HomeScreen() {

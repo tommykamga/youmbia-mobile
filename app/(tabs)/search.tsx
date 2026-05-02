@@ -44,7 +44,7 @@ type SearchState =
   | { status: 'loading' }
   | { status: 'empty'; query: string }
   | { status: 'error'; message: string }
-  | { status: 'success'; data: PublicListing[]; query: string };
+  | { status: 'success'; data: PublicListing[]; query: string; total: number };
 
 type AppliedPriceFilters = {
   min: number | null;
@@ -264,10 +264,11 @@ export default function SearchScreen() {
       return;
     }
     const list = result.data ?? [];
+    const total = result.total ?? 0;
     setState(
       list.length === 0
         ? { status: 'empty', query: trimmed }
-        : { status: 'success', data: list, query: trimmed }
+        : { status: 'success', data: list, query: trimmed, total }
     );
   }, [appliedSearchFilters, appliedPriceFilters, sortBy]);
 
@@ -607,7 +608,7 @@ export default function SearchScreen() {
           <View style={styles.exploreHeader}>
             <Text style={styles.exploreTitle}>Résultats de recherche</Text>
             <Text style={styles.exploreSubtitle}>
-              {filteredListings.length} {filteredListings.length > 1 ? 'annonces trouvées' : 'annonce trouvée'}
+              {state.status === 'success' ? state.total : filteredListings.length} { (state.status === 'success' ? state.total : filteredListings.length) > 1 ? 'annonces trouvées' : 'annonce trouvée'}
             </Text>
           </View>
         )}
