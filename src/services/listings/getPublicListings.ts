@@ -27,6 +27,8 @@ export type PublicListing = {
   /** En contexte favoris : true si le prix a baissé (backend / historique). */
   price_dropped?: boolean;
   updated_at: string;
+  /** ID de la catégorie réelle pour filtrage/recommandations. */
+  category_id?: number | null;
 };
 
 type ListingImageRow = { url: string; sort_order: number | null };
@@ -80,21 +82,35 @@ export type GetPublicListingsResult =
  * Supports pagination via offset/limit (Supabase .range).
  */
 export async function getPublicListings(
-  offset: number = 0,
+  cursorOrOffset: number | string | null = 0,
   limit: number = PAGE_SIZE
 ): Promise<GetPublicListingsResult> {
-  const from = Math.max(0, offset);
+  const isCursor = typeof cursorOrOffset === 'string';
+  const offset = isCursor ? 0 : Math.max(0, cursorOrOffset as number);
+  const from = offset;
   const to = from + Math.max(1, limit) - 1;
 
-  const { data, error } = await supabase
+  let query = supabase
     .from('listings')
     .select(
       'id, title, price, city, description, boosted, urgent, district, created_at, updated_at, views_count, user_id, listing_images(url, sort_order)'
     )
-    .eq('status', 'active')
-    .order('urgent', { ascending: false })
-    .order('created_at', { ascending: false })
-    .range(from, to);
+    .eq('status', 'active');
+
+  if (isCursor && cursorOrOffset) {
+    query = query.lt('created_at', cursorOrOffset);
+    // When using a cursor, we usually don't need offset/limit range, we just limit the results.
+    // We order by created_at descending.
+    query = query.order('created_at', { ascending: false }).limit(limit);
+  } else {
+    // Legacy offset-based pagination
+    query = query
+      .order('urgent', { ascending: false }) // urgent only makes sense if not strictly sorted by cursor
+      .order('created_at', { ascending: false })
+      .range(from, to);
+  }
+
+  const { data, error } = await query;
 
   if (error) {
     return { data: null, error: { message: error.message } };

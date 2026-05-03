@@ -280,6 +280,7 @@ export default function HomeScreen() {
   const scrollY = useSharedValue(0);
   const insets = useSafeAreaInsets();
   const { isCompact } = useResponsiveLayout();
+  const router = useRouter();
 
   const onScroll = useAnimatedScrollHandler({
     onScroll: (event) => {
@@ -328,6 +329,8 @@ export default function HomeScreen() {
         reanimatedScrollHandler={onScroll}
         listingCardFeedPresentation="home"
         contentPaddingHorizontal={HORIZONTAL_PADDING}
+        limit={6}
+        footerAction={{ label: 'Voir plus d\'annonces', onPress: () => router.push('/search') }}
       />
     </Screen>
   );
