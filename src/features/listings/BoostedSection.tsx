@@ -1,22 +1,26 @@
 /**
- * BoostedSection – "À la une" block: horizontal list of boosted listings.
+ * BoostedSection – « À la une » : titre + Voir tout, rail horizontal (max 6).
+ * Chargement : placeholders sans titre (pas de section « vide » trompeuse).
+ * Données inchangées (même requête Supabase que l’historique).
  */
 
 import React, { useCallback, useEffect, useState } from 'react';
-import { View, Text, StyleSheet, FlatList } from 'react-native';
-import Ionicons from '@expo/vector-icons/Ionicons';
+import { View, Text, StyleSheet, FlatList, Pressable } from 'react-native';
 import { supabase } from '@/lib/supabase';
 import { getSignedUrlsMap, toDisplayImageUrl } from '@/lib/listingImageUrl';
 import { normalizeListingSchemaFeatures } from '@/lib/listingSchemaFeatures';
-import { ListingCard, LISTING_CARD_RAIL_STRIDE } from './ListingCard';
+import { ListingCard, LISTING_CARD_RAIL_STRIDE_FEATURED } from './ListingCard';
 import type { PublicListing } from '@/services/listings';
-import { spacing, ui } from '@/theme';
-import { ListingSectionSkeleton } from './ListingSectionSkeleton';
+import { spacing, ui, colors } from '@/theme';
 
 const BOOSTED_LIMIT = 6;
 
-export function BoostedSection() {
-  const ITEM_WIDTH = LISTING_CARD_RAIL_STRIDE;
+export type BoostedSectionProps = {
+  onVoirToutPress?: () => void;
+};
+
+export function BoostedSection({ onVoirToutPress }: BoostedSectionProps) {
+  const ITEM_WIDTH = LISTING_CARD_RAIL_STRIDE_FEATURED;
   const [listings, setListings] = useState<PublicListing[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -39,7 +43,7 @@ export function BoostedSection() {
           (row.listing_images ?? []).map((img: any) => String(img.url ?? '').trim()).filter(Boolean)
         );
         const signedMap = await getSignedUrlsMap(allPaths);
-        
+
         const mapped = rows.map((row) => {
           const images = (row.listing_images ?? [])
             .sort((a: any, b: any) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
@@ -71,14 +75,22 @@ export function BoostedSection() {
   }, [load]);
 
   const keyExtractor = useCallback((item: PublicListing) => item.id, []);
-  
+
   const renderItem = useCallback(
-    ({ item }: { item: PublicListing }) => <ListingCard listing={item} variant="rail" />,
+    ({ item }: { item: PublicListing }) => (
+      <ListingCard listing={item} variant="rail" railPresentation="featured" />
+    ),
     []
   );
 
   if (loading) {
-    return <ListingSectionSkeleton title="À la une" icon="flash" iconColor="#FFB800" />;
+    return (
+      <View style={styles.loadingBlock} accessibilityLabel="Chargement des annonces à la une">
+        {[0, 1, 2].map((k) => (
+          <View key={k} style={styles.loadingCard} />
+        ))}
+      </View>
+    );
   }
 
   if (listings.length === 0) {
@@ -87,14 +99,15 @@ export function BoostedSection() {
 
   return (
     <View style={styles.section}>
-      <View style={styles.titleRow}>
-        <Ionicons
-          name="flash"
-          size={18}
-          color="#FFB800"
-          style={styles.titleIcon}
-        />
-        <Text style={styles.title}>À la une</Text>
+      <View style={styles.headRow}>
+        <Text style={styles.sectionTitle} accessibilityRole="header">
+          🔥 À la une
+        </Text>
+        {onVoirToutPress ? (
+          <Pressable onPress={onVoirToutPress} hitSlop={10} accessibilityRole="link" accessibilityLabel="Voir tout">
+            <Text style={styles.voirTout}>Voir tout</Text>
+          </Pressable>
+        ) : null}
       </View>
       <FlatList
         data={listings}
@@ -114,28 +127,47 @@ export function BoostedSection() {
 }
 
 const styles = StyleSheet.create({
+  loadingBlock: {
+    flexDirection: 'row',
+    gap: 10,
+    paddingHorizontal: 16,
+    paddingVertical: spacing.md,
+    marginBottom: spacing.lg,
+  },
+  loadingCard: {
+    width: 132,
+    height: 172,
+    borderRadius: 14,
+    backgroundColor: colors.surfaceMuted,
+  },
   section: {
     marginBottom: spacing.xl,
+    paddingHorizontal: 0,
   },
-  titleRow: {
+  headRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
     marginBottom: spacing.sm,
   },
-  titleIcon: {
-    marginRight: spacing.xs,
-  },
-  title: {
+  sectionTitle: {
     ...ui.typography.h2,
     letterSpacing: -0.35,
     color: ui.colors.textPrimary,
     flex: 1,
   },
+  voirTout: {
+    ...ui.typography.bodySmall,
+    fontWeight: '600',
+    color: ui.colors.primary,
+  },
   scroll: {
-    marginHorizontal: -spacing.base,
+    flexGrow: 0,
   },
   scrollContent: {
-    paddingHorizontal: spacing.base,
-    paddingBottom: spacing.sm,
+    paddingLeft: 16,
+    paddingRight: 8,
+    paddingBottom: spacing.xs,
   },
 });

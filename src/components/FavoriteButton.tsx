@@ -1,10 +1,9 @@
 import React, { useEffect } from 'react';
 import { Pressable, StyleSheet } from 'react-native';
-import * as Haptics from 'expo-haptics';
-import Animated, { 
-  useAnimatedStyle, 
-  useSharedValue, 
-  withSpring, 
+import Animated, {
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
   withSequence,
   interpolateColor,
   withTiming,
@@ -24,7 +23,7 @@ const AnimatedIonicons = Animated.createAnimatedComponent(Ionicons);
 export function FavoriteButton({ listingId, size = 24 }: FavoriteButtonProps) {
   const { isFavorite, toggleFavorite } = useFavorites();
   const favorite = isFavorite(listingId);
-  
+
   const scale = useSharedValue(1);
   const progress = useSharedValue(favorite ? 1 : 0);
 
@@ -38,15 +37,11 @@ export function FavoriteButton({ listingId, size = 24 }: FavoriteButtonProps) {
   }, [favorite]);
 
   const handlePress = () => {
-    // Premium heart pop animation
+    // Discreet heart pop
     scale.value = withSequence(
-      withTiming(1.25, { duration: 100, easing: Easing.out(Easing.back(2)) }),
-      withTiming(1, { duration: 100, easing: Easing.inOut(Easing.ease) })
+      withTiming(1.2, { duration: 100, easing: Easing.out(Easing.quad) }),
+      withSpring(1, { damping: 15, stiffness: 300 })
     );
-    
-    // Light haptic feedback
-    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    
     toggleFavorite(listingId);
   };
 
@@ -71,7 +66,7 @@ export function FavoriteButton({ listingId, size = 24 }: FavoriteButtonProps) {
     <Pressable
       onPress={handlePress}
       style={({ pressed }) => [
-        styles.heartWrap, 
+        styles.heartWrap,
         pressed && styles.heartWrapPressed
       ]}
       hitSlop={12}

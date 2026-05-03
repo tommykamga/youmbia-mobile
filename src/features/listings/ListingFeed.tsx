@@ -24,7 +24,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { useFavorites } from '@/context/FavoritesContext';
 import { lightCacheKeys, lightCacheRead, lightCacheWrite } from '@/lib/lightCache';
 
-const PAGE_SIZE = 10;
+const PAGE_SIZE = 15;
 
 type HomeFeedCachePayload = { listings: PublicListing[] };
 const INITIAL_NUM_TO_RENDER = Platform.OS === 'ios' ? 8 : 10;
@@ -76,27 +76,58 @@ export function ListingFeed({
   const [sortBy, setSortBy] = useState<SortOption>('recent');
   const [refreshing, setRefreshing] = useState(false);
   const hasLoadedListingsRef = useRef(false);
+  const loadingMoreRef = useRef(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(true);
+  const [loadMoreError, setLoadMoreError] = useState<string | null>(null);
+  const hasMoreRef = useRef(true);
 
   const feedSuccessData = state.status === 'success' ? state.data : null;
   const feedDataLength = feedSuccessData?.length ?? 0;
   const errorMessage = state.status === 'error' ? state.message : null;
 
-  const load = useCallback(async () => {
-    const listResult = await getPublicListings(null, limit || PAGE_SIZE);
+  const load = useCallback(async (pageOffset: number = 0, append: boolean = false) => {
+    const listResult = await getPublicListings(pageOffset, PAGE_SIZE);
     if (listResult.error) {
-      setState({ status: 'error', message: listResult.error.message });
+      if (!append) {
+        setState((prev) => {
+          if (prev.status === 'success' && prev.data.length > 0) {
+            return prev;
+          }
+          return { status: 'error', message: listResult.error.message };
+        });
+      } else setLoadMoreError(listResult.error.message);
       return;
     }
     const list = listResult.data ?? [];
-    setState(
-      list.length === 0
-        ? { status: 'empty' }
-        : { status: 'success', data: list }
-    );
-    if (list.length > 0) {
-      void lightCacheWrite<HomeFeedCachePayload>(lightCacheKeys.homeFeedPublic, { listings: list });
+    const reachedEnd = list.length < PAGE_SIZE;
+    if (append) {
+      setLoadMoreError(null);
+      if (reachedEnd) {
+        hasMoreRef.current = false;
+        setHasMore(false);
+      }
+      setState((prev) => {
+        if (prev.status !== 'success') return prev;
+        const seen = new Set(prev.data.map((i) => i.id));
+        const added = list.filter((i) => !seen.has(i.id));
+        if (added.length === 0) return prev;
+        return { status: 'success' as const, data: [...prev.data, ...added] };
+      });
+    } else {
+      setLoadMoreError(null);
+      setState(
+        list.length === 0
+          ? { status: 'empty' }
+          : { status: 'success', data: list }
+      );
+      hasMoreRef.current = !reachedEnd;
+      setHasMore(!reachedEnd);
+      if (list.length > 0) {
+        void lightCacheWrite<HomeFeedCachePayload>(lightCacheKeys.homeFeedPublic, { listings: list });
+      }
     }
-  }, [limit]);
+  }, []);
 
   /** Load listings only once on mount. Ref guards against strict-mode double mount. */
   useEffect(() => {
@@ -108,7 +139,7 @@ export function ListingFeed({
       if (!cancelled && snap?.payload?.listings?.length) {
         setState({ status: 'success', data: snap.payload.listings });
       }
-      await load();
+      await load(0, false);
       if (!cancelled) setRefreshing(false);
     })();
     return () => {
@@ -127,7 +158,7 @@ export function ListingFeed({
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
-    load().finally(() => setRefreshing(false));
+    load(0, false).finally(() => setRefreshing(false));
   }, [load]);
 
   const keyExtractor = useCallback((item: any) => String(item.id ?? item), []);
@@ -155,7 +186,22 @@ export function ListingFeed({
     []
   );
 
+  const loadMore = useCallback(() => {
+    if (state.status !== 'success' || loadingMoreRef.current || !hasMoreRef.current) return;
 
+    const currentLength = feedDataLength;
+    if (currentLength === 0) return;
+
+    // Si on a atteint la limite, on ne charge plus
+    if (limit && currentLength >= limit) return;
+
+    loadingMoreRef.current = true;
+    setLoadingMore(true);
+    load(currentLength, true).finally(() => {
+      loadingMoreRef.current = false;
+      setLoadingMore(false);
+    });
+  }, [state.status, feedDataLength, load, limit]);
 
   const sortedListings = useMemo(() => {
     const list = feedSuccessData ?? [];
@@ -163,10 +209,10 @@ export function ListingFeed({
   }, [feedSuccessData, sortBy]);
 
   const feedData = useMemo(() => {
-    if (state.status === 'loading') return [1, 2, 3];
-    
+    if (state.status === 'loading') return [1, 2, 3, 4, 5, 6];
+
     let list = [...sortedListings];
-    
+
     // Application de la limite si présente
     if (limit && list.length > limit) {
       list = list.slice(0, limit);
@@ -229,7 +275,7 @@ export function ListingFeed({
           message={errorMessage ?? ''}
           icon={<Ionicons name="alert-circle-outline" size={32} color={colors.error} />}
           action={
-            <Button variant="secondary" onPress={load}>
+            <Button variant="secondary" onPress={() => load(0, false)}>
               Réessayer
             </Button>
           }
@@ -251,23 +297,65 @@ export function ListingFeed({
   }, [state.status, errorMessage, load]);
 
   const listFooter = useMemo(() => {
-    if (state.status !== 'success' || feedDataLength === 0) return null;
+    const dataLength = feedDataLength;
+    if (state.status !== 'success' || dataLength === 0) return null;
 
-    return (
-      <View style={styles.limitFooter}>
-        <View style={styles.limitDivider} />
-        {footerAction && (
-          <Button
-            variant="outline"
-            onPress={footerAction.onPress}
-            style={styles.limitButton}
+    // Cas spécifique : Limite atteinte (Home contrôlée)
+    if (limit && dataLength >= limit) {
+      return (
+        <View style={styles.limitFooter}>
+          <View style={styles.limitDivider} />
+          {footerAction && (
+            <Button
+              variant="outline"
+              onPress={footerAction.onPress}
+              style={styles.limitButton}
+            >
+              {footerAction.label}
+            </Button>
+          )}
+          <View style={styles.footerEndWrap}>
+            <Ionicons name="checkmark-circle-outline" size={18} color={colors.textTertiary} />
+            <Text style={styles.footerEnd}>Vous avez vu toutes les annonces du moment</Text>
+          </View>
+        </View>
+      );
+    }
+
+    if (loadingMore) {
+      return (
+        <View style={styles.footer}>
+          <ActivityIndicator size="small" color={colors.primary} />
+          <Text style={styles.footerText}>Chargement…</Text>
+        </View>
+      );
+    }
+    if (loadMoreError) {
+      return (
+        <View style={styles.footer}>
+          <Text style={styles.footerError}>{loadMoreError}</Text>
+          <Pressable
+            style={({ pressed }) => [styles.footerRetry, pressed && styles.footerRetryPressed]}
+            onPress={() => {
+              setLoadMoreError(null);
+              load(dataLength, true);
+            }}
           >
-            {footerAction.label}
-          </Button>
-        )}
-      </View>
-    );
-  }, [state.status, feedDataLength, footerAction]);
+            <Text style={styles.footerRetryText}>Réessayer</Text>
+          </Pressable>
+        </View>
+      );
+    }
+    if (!hasMore && state.status === 'success' && dataLength > 0) {
+      return (
+        <View style={styles.footerEndWrap}>
+          <Ionicons name="checkmark-circle-outline" size={18} color={colors.textTertiary} />
+          <Text style={styles.footerEnd}>Toutes les annonces ont été chargées</Text>
+        </View>
+      );
+    }
+    return null;
+  }, [state.status, feedDataLength, loadingMore, hasMore, loadMoreError, load, limit, footerAction]);
 
   const listContentStyle = useMemo(
     () => [styles.listContent, { paddingHorizontal: contentPaddingHorizontal }],
@@ -289,6 +377,8 @@ export function ListingFeed({
       maxToRenderPerBatch: 6,
       windowSize: WINDOW_SIZE,
       removeClippedSubviews: Platform.OS === 'ios',
+      onEndReached: loadMore,
+      onEndReachedThreshold: 0.4,
       refreshControl: (
         <RefreshControl
           refreshing={refreshing}
@@ -306,6 +396,7 @@ export function ListingFeed({
       listFooter,
       listEmpty,
       listContentStyle,
+      loadMore,
       refreshing,
       onRefresh,
     ]
@@ -317,16 +408,20 @@ export function ListingFeed({
       <Animated.FlatList
         ref={listRef}
         {...listProps}
+        style={styles.listFlex}
         onScroll={reanimatedScrollHandler}
         scrollEventThrottle={16}
       />
     );
   }
 
-  return <FlatList ref={listRef} {...listProps} />;
+  return <FlatList ref={listRef} {...listProps} style={styles.listFlex} />;
 }
 
 const styles = StyleSheet.create({
+  listFlex: {
+    flex: 1,
+  },
   center: {
     flex: 1,
   },
@@ -336,14 +431,14 @@ const styles = StyleSheet.create({
     flexGrow: 1,
   },
   separator: {
-    height: 18,
+    height: ui.spacing.md,
   },
   sortContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: ui.spacing.sm,
     paddingVertical: ui.spacing.sm,
-    paddingHorizontal: ui.spacing.lg,
+    paddingHorizontal: 16,
     borderBottomWidth: 1,
     borderBottomColor: ui.colors.borderLight,
   },

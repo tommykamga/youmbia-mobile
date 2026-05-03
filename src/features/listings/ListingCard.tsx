@@ -29,21 +29,32 @@ export const LISTING_CARD_RAIL_WIDTH = 220;
 export const LISTING_CARD_RAIL_MARGIN_END = 12;
 export const LISTING_CARD_RAIL_STRIDE = LISTING_CARD_RAIL_WIDTH + LISTING_CARD_RAIL_MARGIN_END;
 
+/** Rail « À la une » : cartes plus larges + snap dédié. */
+export const LISTING_CARD_RAIL_WIDTH_FEATURED = 276;
+export const LISTING_CARD_RAIL_MARGIN_END_FEATURED = 14;
+export const LISTING_CARD_RAIL_STRIDE_FEATURED =
+  LISTING_CARD_RAIL_WIDTH_FEATURED + LISTING_CARD_RAIL_MARGIN_END_FEATURED;
+
+/** Zone image home : ratio largeur/hauteur ≈ 1 / 1.2 (image plus haute). */
+const HOME_IMAGE_ASPECT_RATIO = 1 / 1.2;
+
 const IMAGE_HEIGHT = 160;
-/** Fils d’accueil uniquement — image plus immersive, alignée au radius carte home. */
-const IMAGE_HEIGHT_HOME = 240;
+/** Fils rail standard (hauteur fixe). */
+const IMAGE_HEIGHT_RAIL_FEATURED = Math.round(LISTING_CARD_RAIL_WIDTH_FEATURED / HOME_IMAGE_ASPECT_RATIO);
 const IMAGE_RADIUS = 16;
 /** Radius carte / image home (entre xl et 3xl, rendu marketplace premium). */
-const CARD_RADIUS_HOME = 16;
+const CARD_RADIUS_HOME = 20;
 const HEART_SIZE = 28;
 const HEART_SIZE_HOME = 26;
 const OVERLAY_INSET = spacing.sm;
 
-export type ListingCardVariant = 'feed' | 'rail' | 'top';
+export type ListingCardVariant = 'feed' | 'rail';
 
 export type ListingCardProps = {
   listing: PublicListing;
   variant?: ListingCardVariant;
+  /** Rail « À la une » : carte plus large + image plus haute. */
+  railPresentation?: 'default' | 'featured';
   /**
    * `home` : carte du fil d’accueil uniquement (surface / radius / ombre / image).
    * Ne pas utiliser hors ListingFeed home pour garder les autres écrans inchangés.
@@ -56,6 +67,7 @@ const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 function ListingCardInner({
   listing,
   variant = 'feed',
+  railPresentation = 'default',
   feedPresentation = 'standard',
 }: ListingCardProps) {
   const router = useRouter();
@@ -94,17 +106,6 @@ function ListingCardInner({
   const locationLabel = (locationLine || listing.city || '').trim();
   const metaLine = [locationLabel, metaTimeOrViews].filter(Boolean).join(' • ');
 
-  const sellerBadge = useMemo(() => {
-    if (!listing.created_at) return null;
-    const createdDate = new Date(listing.created_at);
-    const now = new Date();
-    const diffDays = Math.floor((now.getTime() - createdDate.getTime()) / (1000 * 60 * 60 * 24));
-    
-    if (diffDays < 7) return { label: 'Nouveau vendeur', color: '#6B7280' };
-    if (diffDays >= 30) return { label: 'Vendeur actif', color: '#6EDC5F' };
-    return null;
-  }, [listing.created_at]);
-
   const rawStatus = (listing as unknown as { status?: string | null }).status;
   const normalizedStatus = typeof rawStatus === 'string' ? rawStatus.toLowerCase() : null;
   const statusBadgeLabel =
@@ -120,15 +121,6 @@ function ListingCardInner({
   const showNew = isListingNew(listing.created_at);
   const hasBadges = showUrgent || showBoosted || showPriceDropped || showNew || statusBadgeLabel != null;
 
-  const isHomeFeed = feedPresentation === 'home';
-  const isTop = variant === 'top';
-
-  const containerStyle = useMemo(() => {
-    if (isHomeFeed) return styles.cardHome;
-    if (isTop) return [styles.card, styles.cardTop];
-    return styles.card;
-  }, [isHomeFeed, isTop]);
-
   const priceLabel = formatPrice(listing.price);
 
   const handlePress = useCallback(() => {
@@ -136,17 +128,11 @@ function ListingCardInner({
   }, [listing.id, router]);
 
   const onPressIn = () => {
-    scale.value = withTiming(0.97, { 
-      duration: 120, 
-      easing: Easing.out(Easing.ease) 
-    });
+    scale.value = withTiming(0.97, { duration: 100, easing: Easing.out(Easing.quad) });
   };
 
   const onPressOut = () => {
-    scale.value = withTiming(1, { 
-      duration: 120, 
-      easing: Easing.out(Easing.ease) 
-    });
+    scale.value = withSpring(1, { damping: 15, stiffness: 300 });
   };
 
   const renderBadges = () =>
@@ -183,6 +169,9 @@ function ListingCardInner({
       <View style={styles.badgesRow} />
     );
 
+  const isHomeFeed = feedPresentation === 'home' && variant === 'feed';
+  const isFeaturedRail = variant === 'rail' && railPresentation === 'featured';
+
   const renderImageBody = () => (
     <>
       <View style={[styles.topRow, isHomeFeed && styles.topRowHome]}>
@@ -191,9 +180,9 @@ function ListingCardInner({
           <FavoriteButton listingId={listing.id} size={isHomeFeed ? HEART_SIZE_HOME : HEART_SIZE} />
         </View>
       </View>
-      {priceLabel ? (
-        <View style={[styles.priceOverlay, isHomeFeed && styles.priceOverlayHome]}>
-          <Text style={[styles.priceText, isHomeFeed && styles.priceTextHome]}>{priceLabel}</Text>
+      {priceLabel && !isHomeFeed && !isFeaturedRail ? (
+        <View style={styles.priceOverlay}>
+          <Text style={styles.priceText}>{priceLabel}</Text>
         </View>
       ) : null}
     </>
@@ -206,15 +195,27 @@ function ListingCardInner({
       onPressOut={onPressOut}
       entering={FadeInDown.duration(400).springify()}
       style={[
-        containerStyle,
+        isHomeFeed ? styles.cardHome : styles.card,
         variant === 'rail' && styles.cardRail,
+        isFeaturedRail && styles.cardRailFeatured,
+        isHomeFeed && styles.cardHomeBleed,
         animatedStyle,
       ]}
     >
       {firstImage && !imageFailed ? (
         <ImageBackground
           source={{ uri: firstImage }}
-          style={[styles.image, isHomeFeed && styles.imageHome, isHomeFeed && styles.imageHomeTall]}
+          style={[
+            styles.imageBase,
+            !isHomeFeed && !isFeaturedRail && styles.imageHeightFeed,
+            isHomeFeed && styles.imageHome,
+            isHomeFeed && styles.imageHomeAspect,
+            isHomeFeed && styles.imageHomeEdge,
+            isFeaturedRail && styles.imageRailFeatured,
+            !isHomeFeed && !isFeaturedRail && styles.imageRadius,
+            isHomeFeed && styles.imageRadiusHome,
+            isFeaturedRail && styles.imageRadius,
+          ]}
           imageStyle={[styles.imageRadius, isHomeFeed && styles.imageRadiusHome]}
           onError={() => setImageFailed(true)}
         >
@@ -223,10 +224,16 @@ function ListingCardInner({
       ) : (
         <View
           style={[
-            styles.image,
+            styles.imageBase,
             styles.imagePlaceholder,
+            !isHomeFeed && !isFeaturedRail && styles.imageHeightFeed,
             isHomeFeed && styles.imageHome,
-            isHomeFeed && styles.imageHomeTall,
+            isHomeFeed && styles.imageHomeAspect,
+            isHomeFeed && styles.imageHomeEdge,
+            isFeaturedRail && styles.imageRailFeatured,
+            !isHomeFeed && !isFeaturedRail && styles.imageRadius,
+            isHomeFeed && styles.imageRadiusHome,
+            isFeaturedRail && styles.imageRadius,
           ]}
         >
           <View style={styles.placeholderCenter} pointerEvents="none">
@@ -237,24 +244,28 @@ function ListingCardInner({
         </View>
       )}
 
-      <View style={[styles.info, isHomeFeed && styles.infoHome]}>
-        {/* Price moved to overlay on image for premium look */}
+      <View style={[styles.info, isHomeFeed && styles.infoHome, isFeaturedRail && styles.infoRailFeatured]}>
+        {isHomeFeed && priceLabel ? (
+          <Text
+            style={styles.priceHomeLead}
+            numberOfLines={1}
+            ellipsizeMode="tail"
+          >
+            {priceLabel}
+          </Text>
+        ) : null}
+        {isFeaturedRail && priceLabel ? (
+          <Text style={styles.priceRailFeatured} numberOfLines={1} ellipsizeMode="tail">
+            {priceLabel}
+          </Text>
+        ) : null}
         <Text
-          style={[styles.title, isHomeFeed && styles.titleHome]}
+          style={[styles.title, isHomeFeed && styles.titleHome, isFeaturedRail && styles.titleRailFeatured]}
           numberOfLines={2}
           ellipsizeMode="tail"
         >
           {listing.title}
         </Text>
-
-        {sellerBadge && (
-          <View style={styles.sellerBadge}>
-            <Text style={[styles.sellerBadgeText, { color: sellerBadge.color }]}>
-              {sellerBadge.label}
-            </Text>
-          </View>
-        )}
-
         {metaLine ? (
           <Text
             style={[styles.meta, isHomeFeed && styles.metaHome]}
@@ -275,6 +286,7 @@ export const ListingCard = memo(ListingCardInner, (prev, next) => {
   const prevFirstImage = prev.listing.images?.[0] ?? null;
   const nextFirstImage = next.listing.images?.[0] ?? null;
   return (
+    (prev.railPresentation ?? 'default') === (next.railPresentation ?? 'default') &&
     prev.feedPresentation === next.feedPresentation &&
     prev.variant === next.variant &&
     prev.listing.id === next.listing.id &&
@@ -298,6 +310,21 @@ const styles = StyleSheet.create({
     width: LISTING_CARD_RAIL_WIDTH,
     marginRight: LISTING_CARD_RAIL_MARGIN_END,
   },
+  cardRailFeatured: {
+    width: LISTING_CARD_RAIL_WIDTH_FEATURED,
+    marginRight: LISTING_CARD_RAIL_MARGIN_END_FEATURED,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 184, 0, 0.35)',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#FFB800',
+        shadowOffset: { width: 0, height: 6 },
+        shadowOpacity: 0.22,
+        shadowRadius: 14,
+      },
+      android: { elevation: 6 },
+    }),
+  },
   cardHome: {
     backgroundColor: ui.colors.surface,
     borderWidth: 1,
@@ -308,15 +335,29 @@ const styles = StyleSheet.create({
     width: '100%',
     ...ui.shadow.soft,
   },
-  image: {
+  /** Pleine largeur du conteneur (pas d’inset type « carte dans une boîte »). */
+  cardHomeBleed: {
+    marginHorizontal: 0,
+    borderRadius: CARD_RADIUS_HOME,
+  },
+  imageBase: {
     width: '100%',
-    height: IMAGE_HEIGHT,
-    borderRadius: IMAGE_RADIUS,
     overflow: 'hidden',
     backgroundColor: colors.surfaceMuted,
   },
-  imageHomeTall: {
-    height: IMAGE_HEIGHT_HOME,
+  imageHeightFeed: {
+    height: IMAGE_HEIGHT,
+  },
+  imageHomeAspect: {
+    aspectRatio: HOME_IMAGE_ASPECT_RATIO,
+  },
+  /** Léger débordement visuel (carte `overflow: hidden` cadre le rendu). */
+  imageHomeEdge: {
+    marginHorizontal: -6,
+  },
+  imageRailFeatured: {
+    height: IMAGE_HEIGHT_RAIL_FEATURED,
+    borderRadius: IMAGE_RADIUS,
   },
   imageRadius: {
     borderRadius: IMAGE_RADIUS,
@@ -334,19 +375,14 @@ const styles = StyleSheet.create({
     borderTopRightRadius: CARD_RADIUS_HOME,
   },
   topRowHome: {
-    paddingTop: 12,
-    paddingHorizontal: 12,
+    paddingTop: 10,
+    paddingHorizontal: 10,
   },
   heartSlotHome: {
     borderRadius: 22,
     backgroundColor: 'rgba(255,255,255,0.92)',
-    padding: 5,
+    padding: 2,
     overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.12,
-    shadowRadius: 6,
-    elevation: 3,
   },
   imagePlaceholder: {
     position: 'relative',
@@ -469,36 +505,41 @@ const styles = StyleSheet.create({
   },
   priceOverlay: {
     position: 'absolute',
-    bottom: 12,
-    left: 12,
-    backgroundColor: 'rgba(0,0,0,0.65)',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 10,
+    bottom: 10,
+    left: 10,
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 8,
     maxWidth: '92%',
-  },
-  priceOverlayHome: {
-    backgroundColor: 'rgba(15, 23, 42, 0.85)',
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 12,
-    bottom: 16,
-    left: 16,
   },
   priceText: {
     color: '#fff',
-    fontWeight: '700',
-    fontSize: 14,
-  },
-  priceTextHome: {
-    fontSize: 17,
-    fontWeight: '900',
-    letterSpacing: -0.2,
+    fontWeight: '600',
+    fontSize: typography.sm.fontSize,
   },
   info: {
     paddingHorizontal: spacing.sm,
     paddingTop: spacing.sm,
     paddingBottom: spacing.base,
+  },
+  infoRailFeatured: {
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.sm,
+    gap: 2,
+  },
+  priceRailFeatured: {
+    fontSize: 15,
+    lineHeight: 20,
+    fontWeight: fontWeights.black,
+    color: colors.primaryDark,
+    letterSpacing: -0.35,
+    marginBottom: 4,
+  },
+  titleRailFeatured: {
+    fontSize: 13,
+    lineHeight: 17,
+    marginBottom: spacing.xs,
   },
   title: {
     ...typography.sm,
@@ -512,53 +553,32 @@ const styles = StyleSheet.create({
     color: '#6B7280',
   },
   infoHome: {
-    paddingHorizontal: 16,
-    paddingTop: 16,
-    paddingBottom: 22,
-    gap: 4,
+    paddingHorizontal: ui.spacing.md,
+    paddingTop: spacing.base,
+    paddingBottom: ui.spacing.lg,
+    gap: 0,
   },
   priceHomeLead: {
-    fontSize: 19,
-    lineHeight: 24,
+    fontSize: 22,
+    lineHeight: 26,
     fontWeight: fontWeights.black,
     color: colors.primaryDark,
-    letterSpacing: -0.4,
-    marginBottom: ui.spacing.md,
+    letterSpacing: -0.55,
+    marginBottom: ui.spacing.sm,
   },
   titleHome: {
-    fontSize: 17,
-    lineHeight: 23,
-    fontWeight: '700',
+    fontSize: 14,
+    lineHeight: 19,
+    fontWeight: fontWeights.semibold,
     color: ui.colors.textPrimary,
-    marginBottom: 4,
-    letterSpacing: -0.3,
+    marginBottom: spacing.sm,
+    letterSpacing: -0.08,
   },
   metaHome: {
-    fontSize: 13,
-    lineHeight: 18,
-    fontWeight: '500',
-    color: colors.textSecondary,
-    marginTop: 2,
-    opacity: 0.7,
-  },
-  sellerBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 4,
-  },
-  sellerBadgeText: {
     fontSize: 11,
-    fontWeight: '600',
-    letterSpacing: 0.1,
-    textTransform: 'uppercase',
-  },
-  cardTop: {
-    borderWidth: 1,
-    borderColor: 'rgba(15, 23, 42, 0.04)',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.08,
-    shadowRadius: 10,
-    elevation: 4,
+    lineHeight: 15,
+    fontWeight: fontWeights.normal,
+    color: colors.textTertiary,
+    marginTop: 2,
   },
 });

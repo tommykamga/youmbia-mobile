@@ -18,18 +18,10 @@ import { getWindowSizeBucket } from '@/lib/responsiveLayout';
 import { getSession } from '@/services/auth';
 import { buildAuthGateHref } from '@/lib/authGateNavigation';
 import type { AuthGateContextId } from '@/config/authGateContext';
-import Animated, { 
-  useAnimatedStyle, 
-  useSharedValue, 
-  withSpring, 
-  withSequence, 
-  withTiming, 
-  Easing 
-} from 'react-native-reanimated';
 
 const ICON_SIZE = 24;
 const SELL_PILL_ICON_SIZE = 26;
-const SELL_PILL_SIZE = 54;
+const SELL_PILL_SIZE = 44;
 
 /**
  * Onglets protégés : si non connecté → Auth Gate contextuel (pas d’écran tab intermédiaire).
@@ -76,31 +68,14 @@ function TabIcon({
 }
 
 function SellTabIcon({ focused }: { focused: boolean }) {
-  const sellPillScale = useSharedValue(1);
-  const hasBounced = React.useRef(false);
-
-  React.useEffect(() => {
-    if (!hasBounced.current) {
-      hasBounced.current = true;
-      sellPillScale.value = withSequence(
-        withTiming(1.1, { duration: 400, easing: Easing.out(Easing.back(1.5)) }),
-        withSpring(1, { damping: 12, stiffness: 200 })
-      );
-    }
-  }, []);
-
-  const sellPillStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: sellPillScale.value }],
-  }));
-
   return (
-    <Animated.View style={[styles.sellPill, focused && styles.sellPillFocused, sellPillStyle]}>
+    <View style={[styles.sellPill, focused && styles.sellPillFocused]}>
       <Ionicons
         name="add"
         size={SELL_PILL_ICON_SIZE}
         color={colors.surface}
       />
-    </Animated.View>
+    </View>
   );
 }
 
@@ -125,7 +100,7 @@ export default function TabLayout() {
         tabBarInactiveTintColor: colors.tabIconDefault,
         tabBarStyle: [
           styles.tabBar,
-          { 
+          {
             height: totalTabBarHeight,
             paddingBottom: Platform.OS === 'ios' ? insets.bottom + 4 : Math.max(insets.bottom, spacing.xs) + 4,
             paddingTop: bucket === 'compact' ? spacing.xs : spacing.sm,
@@ -217,17 +192,17 @@ export default function TabLayout() {
 const styles = StyleSheet.create({
   tabBar: {
     backgroundColor: colors.surface,
-    borderTopColor: 'rgba(15, 23, 42, 0.06)',
+    borderTopColor: colors.borderLight,
     borderTopWidth: 1,
     ...Platform.select({
       ios: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: -2 },
+        shadowColor: colors.text,
+        shadowOffset: { width: 0, height: -4 },
         shadowOpacity: 0.04,
         shadowRadius: 12,
       },
       android: {
-        elevation: 4,
+        elevation: 8,
       },
     }),
   },
@@ -242,21 +217,21 @@ const styles = StyleSheet.create({
   sellPill: {
     width: SELL_PILL_SIZE,
     height: SELL_PILL_SIZE,
-    borderRadius: SELL_PILL_SIZE / 2,
+    borderRadius: radius.full,
     backgroundColor: colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: -24,
-    borderWidth: 4,
-    borderColor: '#FFFFFF',
+    marginTop: -4,
+    borderWidth: 2,
+    borderColor: 'rgba(255,255,255,0.35)',
     ...Platform.select({
       ios: {
         shadowColor: colors.primary,
-        shadowOffset: { width: 0, height: 12 },
-        shadowOpacity: 0.4,
-        shadowRadius: 16,
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.3,
+        shadowRadius: 8,
       },
-      android: { elevation: 12 },
+      android: { elevation: 6 },
     }),
   },
   sellPillFocused: {

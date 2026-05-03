@@ -4,8 +4,9 @@ import { getDisplayBoosted, normalizeListingSchemaFeatures } from '@/lib/listing
 import type { Tables } from '@/types/database';
 import type { PublicListing } from './getPublicListings';
 
+const CATEGORY_OPTIONS = ['Véhicules', 'Mode', 'Maison', 'Électronique', 'Sport', 'Loisirs', 'Autre'] as const;
 const DEFAULT_LIMIT = 8;
-const FETCH_LIMIT = 50;
+const FETCH_LIMIT = 24;
 const MIN_RESULTS_TO_SHOW = 2;
 const STOPWORDS = new Set([
   'avec', 'dans', 'pour', 'sans', 'chez', 'des', 'les', 'une', 'sur', 'par', 'vous', 'nous',
@@ -29,7 +30,6 @@ type ListingRow = Pick<
   | 'urgent'
   | 'district'
   | 'updated_at'
-  | 'category_id'
 > & {
   listing_images: ListingImageRow[] | null;
 };
@@ -39,7 +39,7 @@ export type SimilarListingInput = {
   title?: string | null;
   city?: string | null;
   description?: string | null;
-  categoryId?: number | null;
+  category?: string | null;
   price?: number | null;
 };
 
@@ -55,7 +55,14 @@ function normalizeText(value: string | null | undefined): string {
     .trim();
 }
 
-
+function inferCategory(value: Pick<SimilarListingInput, 'title' | 'description' | 'category'>): string | null {
+  const explicit = normalizeText(value.category);
+  if (explicit) return explicit;
+  const haystack = normalizeText(`${value.title ?? ''} ${value.description ?? ''}`);
+  if (!haystack) return null;
+  const match = CATEGORY_OPTIONS.find((option) => haystack.includes(normalizeText(option)));
+  return match ? normalizeText(match) : null;
+}
 
 function extractKeywords(value: Pick<SimilarListingInput, 'title' | 'description'>): string[] {
   return Array.from(
@@ -90,7 +97,6 @@ function mapRow(row: ListingRow, signedMap: Map<string, string>): PublicListing 
     views_count: row.views_count ?? 0,
     seller_id: row.user_id ?? '',
     updated_at: row.updated_at,
-    category_id: row.category_id,
     ...schema,
   };
 }
@@ -106,16 +112,15 @@ export async function getSimilarListings(
 
   const safeLimit = Math.max(1, Math.min(limit, DEFAULT_LIMIT));
   const currentCity = normalizeText(input.city);
-  const currentCategoryId = input.categoryId;
+  const currentCategory = input.category || inferCategory(input);
   const currentPrice = input.price;
   const currentKeywords = extractKeywords(input);
 
   try {
-    // 1. Fetch candidates (Active only, exclude current)
     const { data, error } = await supabase
       .from('listings')
       .select(
-        'id, title, price, city, description, boosted, urgent, district, created_at, updated_at, views_count, user_id, category_id, listing_images(url, sort_order)'
+        'id, title, price, city, description, boosted, urgent, district, created_at, updated_at, views_count, user_id, listing_images(url, sort_order)'
       )
       .eq('status', 'active')
       .neq('id', currentId)
@@ -134,7 +139,6 @@ export async function getSimilarListings(
     const candidates = rows.map((row) => mapRow(row, signedMap));
     const seen = new Set<string>();
 
-    // Layer 1: Best Matches (Exact category + other signals)
     const scored = candidates
       .filter((item) => {
         if (!item.id || item.id === currentId) return false;
@@ -144,16 +148,22 @@ export async function getSimilarListings(
       })
       .map((item) => {
         const sameCity = currentCity !== '' && normalizeText(item.city) === currentCity;
-        const sameCategory = currentCategoryId != null && item.category_id === currentCategoryId;
+        const sameCategory =
+          currentCategory != null &&
+          inferCategory({
+            title: item.title,
+            description: item.description ?? null,
+            category: null,
+          }) === currentCategory;
         const sharedKeywords = countSharedKeywords(
           currentKeywords,
           extractKeywords({ title: item.title, description: item.description ?? null })
         );
 
         let score = 0;
-        if (sameCategory) score += 500; // Primary criteria
-        if (sameCity) score += 150;
-        
+        if (sameCity) score += 150; // Priority
+        if (sameCategory) score += 100;
+
         // Price proximity bonus (+/- 25%)
         if (currentPrice != null && item.price != null) {
           const diff = Math.abs(currentPrice - item.price);
@@ -165,8 +175,10 @@ export async function getSimilarListings(
 
         score += Math.min(sharedKeywords, 3) * 10;
 
-        // An item is "Relevant" if it shares at least the category or the city
-        const isRelevant = sameCategory || sameCity;
+        const isRelevant =
+          sameCategory ||
+          sameCity ||
+          sharedKeywords >= 2;
 
         return { item, sameCategory, sameCity, sharedKeywords, score, isRelevant };
       })
@@ -180,18 +192,28 @@ export async function getSimilarListings(
         const bBoost = getDisplayBoosted(b.item) ? 1 : 0;
         if (bBoost !== aBoost) return bBoost - aBoost;
         return Date.parse(b.item.created_at) - Date.parse(a.item.created_at);
-      });
+      })
+      .map((entry) => entry.item);
 
     if (scored.length >= MIN_RESULTS_TO_SHOW) {
-      return { data: scored.slice(0, safeLimit).map(s => s.item), error: null };
+      return { data: scored.slice(0, safeLimit), error: null };
     }
 
-    // Layer 2 & 3: Fallback (Same city or just Recent)
-    // We already have candidates ordered by created_at desc.
-    const fallbackResults = candidates
+    const fallback = candidates
       .filter((item) => item.id !== currentId)
+      .filter((item, index, array) => array.findIndex((candidate) => candidate.id === item.id) === index)
+      .filter((item) => {
+        const sameCity = currentCity !== '' && normalizeText(item.city) === currentCity;
+        const sameCategory =
+          currentCategory != null &&
+          inferCategory({
+            title: item.title,
+            description: item.description ?? null,
+            category: null,
+          }) === currentCategory;
+        return sameCategory || sameCity;
+      })
       .sort((a, b) => {
-        // Boosted/Urgent first in fallback too
         const aUrgent = a.urgent ? 1 : 0;
         const bUrgent = b.urgent ? 1 : 0;
         if (bUrgent !== aUrgent) return bUrgent - aUrgent;
@@ -201,11 +223,11 @@ export async function getSimilarListings(
         return Date.parse(b.created_at) - Date.parse(a.created_at);
       });
 
-    if (fallbackResults.length > 0) {
-      return { data: fallbackResults.slice(0, safeLimit), error: null };
+    if (fallback.length < MIN_RESULTS_TO_SHOW) {
+      return { data: [], error: null };
     }
 
-    return { data: [], error: null };
+    return { data: fallback.slice(0, safeLimit), error: null };
   } catch {
     return { data: [], error: { message: 'Impossible de charger les annonces similaires' } };
   }

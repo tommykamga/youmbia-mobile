@@ -176,12 +176,16 @@ export default function ListingDetailScreen() {
           });
         }
       }
+      const currentCategory = listing.category_id
+        ? LISTING_CATEGORIES.find((c) => c.id === listing.category_id)?.label
+        : null;
+
       const similarResult = await getSimilarListings({
         id: listing.id,
         title: listing.title,
         description: listing.description,
         city: listing.city,
-        categoryId: listing.category_id,
+        category: currentCategory,
         price: listing.price,
       });
 

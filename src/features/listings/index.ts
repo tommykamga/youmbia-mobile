@@ -11,7 +11,6 @@ export { SavedSearchAlertsSection } from './SavedSearchAlertsSection';
 export { ForYouSection } from './ForYouSection';
 export { BoostedSection } from './BoostedSection';
 export { UrgentSection } from './UrgentSection';
-export { TopListingsSection } from './TopListingsSection';
 export { ListingSectionSkeleton } from './ListingSectionSkeleton';
 export { RecentlyViewedSection } from './RecentlyViewedSection';
 export { ListingGallery } from './ListingGallery';
