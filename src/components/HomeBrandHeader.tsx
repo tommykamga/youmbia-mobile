@@ -1,6 +1,9 @@
 /**
- * Header Home — logo YOUMBIA horizontal centré (PNG brand), messages à droite.
- * Taille responsive par largeur d’écran ; `contentFit="contain"` — pas d’étirement ni de crop.
+ * Header Home — logo horizontal YOUMBIA (SVG brand officiel, bundle local),
+ * centré, messages à droite. Pas d’animation / glow / texte React sous le logo.
+ *
+ * Source web : https://www.youmbia.com/brand/youmbia-logo-header.svg
+ * Fichier : `assets/images/youmbia-logo-header.svg` (viewBox 148×40).
  */
 
 import React, { useMemo } from 'react';
@@ -10,17 +13,38 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { ui, colors } from '@/theme';
 
 const SIDE_SLOT = 48;
-/** paddingHorizontal du row (×2) */
 const ROW_H_PADDING = 20;
 
-function getHomeLogoMetrics(screenWidth: number): { logoHeight: number; logoMaxWidth: number } {
+/** Aligné sur `viewBox="0 0 148 40"` du SVG officiel. */
+const LOGO_VIEWBOX_W = 148;
+const LOGO_VIEWBOX_H = 40;
+const LOGO_ASPECT = LOGO_VIEWBOX_W / LOGO_VIEWBOX_H;
+
+function getHomeLogoMetrics(screenWidth: number): { targetHeight: number; logoMaxWidth: number } {
   if (screenWidth < 360) {
-    return { logoHeight: 28, logoMaxWidth: 150 };
+    return { targetHeight: 32, logoMaxWidth: 200 };
   }
   if (screenWidth <= 430) {
-    return { logoHeight: 32, logoMaxWidth: 190 };
+    return { targetHeight: 34, logoMaxWidth: 220 };
   }
-  return { logoHeight: 38, logoMaxWidth: 240 };
+  return { targetHeight: 36, logoMaxWidth: 240 };
+}
+
+function computeLogoBox(
+  screenWidth: number,
+  targetHeight: number,
+  logoMaxWidth: number
+): { logoWidth: number; logoHeight: number } {
+  const reserved = ROW_H_PADDING + SIDE_SLOT * 2;
+  const available = Math.max(64, screenWidth - reserved);
+  const widthAtTargetH = Math.round(targetHeight * LOGO_ASPECT);
+  let w = Math.min(logoMaxWidth, available, widthAtTargetH);
+  let h = Math.round(w / LOGO_ASPECT);
+  if (h > targetHeight) {
+    h = targetHeight;
+    w = Math.min(logoMaxWidth, available, Math.round(h * LOGO_ASPECT));
+  }
+  return { logoWidth: Math.max(1, w), logoHeight: Math.max(1, h) };
 }
 
 export type HomeBrandHeaderProps = {
@@ -32,14 +56,12 @@ export function HomeBrandHeader({ onMessagesPress, unreadCount }: HomeBrandHeade
   const { width } = useWindowDimensions();
 
   const { logoHeight, logoWidth, rowMinHeight } = useMemo(() => {
-    const { logoHeight: h, logoMaxWidth: maxW } = getHomeLogoMetrics(width);
-    const reserved = ROW_H_PADDING + SIDE_SLOT * 2;
-    const available = Math.max(64, width - reserved);
-    const w = Math.min(maxW, available);
+    const { targetHeight, logoMaxWidth } = getHomeLogoMetrics(width);
+    const { logoWidth: w, logoHeight: h } = computeLogoBox(width, targetHeight, logoMaxWidth);
     return {
       logoHeight: h,
       logoWidth: w,
-      rowMinHeight: h + 16,
+      rowMinHeight: h + 12,
     };
   }, [width]);
 
@@ -48,7 +70,7 @@ export function HomeBrandHeader({ onMessagesPress, unreadCount }: HomeBrandHeade
       <View style={styles.sideSlot} />
       <View style={styles.logoWrap} accessibilityRole="header">
         <Image
-          source={require('../../assets/images/web-header-logo-1600x400.png')}
+          source={require('../../assets/images/youmbia-logo-header.svg')}
           style={[styles.logo, { width: logoWidth, height: logoHeight }]}
           contentFit="contain"
           accessibilityLabel="YOUMBIA"

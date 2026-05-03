@@ -4,7 +4,8 @@ const { getDefaultConfig } = require('expo/metro-config');
 const config = getDefaultConfig(__dirname);
 
 // Needed for expo-sqlite Web (wa-sqlite.wasm) when bundling with Metro.
-config.resolver.assetExts = [...config.resolver.assetExts, 'wasm'];
+// SVG en asset pour `expo-image` + `require()` (logo header brandé).
+config.resolver.assetExts = [...config.resolver.assetExts, 'wasm', 'svg'];
 
 module.exports = config;
 
