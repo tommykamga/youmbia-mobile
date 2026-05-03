@@ -1,21 +1,27 @@
 /**
- * Header Home — logo YOUMBIA centré (asset brand), messages à droite.
- * Layout symétrique (slots latéraux égaux) pour un centrage visuel stable.
+ * Header Home — logo YOUMBIA horizontal centré (PNG brand), messages à droite.
+ * Taille responsive par largeur d’écran ; `contentFit="contain"` — pas d’étirement ni de crop.
  */
 
-import React from 'react';
+import React, { useMemo } from 'react';
 import { View, Text, StyleSheet, Pressable, useWindowDimensions } from 'react-native';
 import { Image } from 'expo-image';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { ui, colors } from '@/theme';
 
 const SIDE_SLOT = 48;
-/** ~+12 % visibilité logo, sans explosion de hauteur header. */
-const LOGO_SCALE = 1.12;
-const LOGO_BASE_W = 260;
-const LOGO_BASE_H = 38;
-const LOGO_MAX_W = Math.round(LOGO_BASE_W * LOGO_SCALE);
-const LOGO_H = Math.round(LOGO_BASE_H * LOGO_SCALE);
+/** paddingHorizontal du row (×2) */
+const ROW_H_PADDING = 20;
+
+function getHomeLogoMetrics(screenWidth: number): { logoHeight: number; logoMaxWidth: number } {
+  if (screenWidth < 360) {
+    return { logoHeight: 28, logoMaxWidth: 150 };
+  }
+  if (screenWidth <= 430) {
+    return { logoHeight: 32, logoMaxWidth: 190 };
+  }
+  return { logoHeight: 38, logoMaxWidth: 240 };
+}
 
 export type HomeBrandHeaderProps = {
   onMessagesPress: () => void;
@@ -24,18 +30,26 @@ export type HomeBrandHeaderProps = {
 
 export function HomeBrandHeader({ onMessagesPress, unreadCount }: HomeBrandHeaderProps) {
   const { width } = useWindowDimensions();
-  const logoW = Math.min(
-    LOGO_MAX_W,
-    Math.max(Math.round(160 * LOGO_SCALE), width - SIDE_SLOT * 2 - 24)
-  );
+
+  const { logoHeight, logoWidth, rowMinHeight } = useMemo(() => {
+    const { logoHeight: h, logoMaxWidth: maxW } = getHomeLogoMetrics(width);
+    const reserved = ROW_H_PADDING + SIDE_SLOT * 2;
+    const available = Math.max(64, width - reserved);
+    const w = Math.min(maxW, available);
+    return {
+      logoHeight: h,
+      logoWidth: w,
+      rowMinHeight: h + 16,
+    };
+  }, [width]);
 
   return (
-    <View style={styles.row}>
+    <View style={[styles.row, { minHeight: rowMinHeight }]}>
       <View style={styles.sideSlot} />
       <View style={styles.logoWrap} accessibilityRole="header">
         <Image
           source={require('../../assets/images/web-header-logo-1600x400.png')}
-          style={[styles.logo, { width: logoW, height: LOGO_H }]}
+          style={[styles.logo, { width: logoWidth, height: logoHeight }]}
           contentFit="contain"
           accessibilityLabel="YOUMBIA"
         />
@@ -69,7 +83,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    minHeight: LOGO_H + 12,
     paddingVertical: 8,
     paddingHorizontal: 10,
     backgroundColor: colors.surface,
