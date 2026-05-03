@@ -4,9 +4,11 @@
  */
 
 import { supabase } from '@/lib/supabase';
-import { getSignedUrlsMap, toDisplayImageUrl } from '@/lib/listingImageUrl';
+import { getSignedUrlsMap, listingStoragePathsForCardCover, mapListingCardImages } from '@/lib/listingImageUrl';
+import { normalizeListingSchemaFeatures } from '@/lib/listingSchemaFeatures';
 import type { Tables } from '@/types/database';
 import type { PublicListing } from '@/services/listings';
+import { listingPublicListSelect } from '@/services/listings/listingListSelect';
 
 export type UserProfile = {
   id: string;
@@ -37,30 +39,41 @@ type UserProfileRow = Pick<
   | 'is_flagged'
 >;
 
-type ListingImageRow = Pick<Tables<'listing_images'>, 'url' | 'sort_order'>;
+type ListingImageRow = Pick<Tables<'listing_images'>, 'url' | 'sort_order' | 'thumb_path' | 'medium_path'>;
 
 type ListingRow = Pick<
   Tables<'listings'>,
-  'id' | 'title' | 'price' | 'city' | 'created_at' | 'updated_at' | 'views_count' | 'user_id'
+  | 'id'
+  | 'title'
+  | 'price'
+  | 'city'
+  | 'category_id'
+  | 'created_at'
+  | 'updated_at'
+  | 'views_count'
+  | 'user_id'
+  | 'boosted'
+  | 'urgent'
+  | 'district'
 > & {
   listing_images: ListingImageRow[] | null;
 };
 
 function mapListingRow(row: ListingRow, signedMap: Map<string, string>): PublicListing {
-  const images = (row.listing_images ?? [])
-    .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
-    .map((img) => toDisplayImageUrl(img.url ?? '', signedMap))
-    .filter((url) => url !== '');
+  const images = mapListingCardImages(row.listing_images, signedMap);
+  const schema = normalizeListingSchemaFeatures(row);
   return {
     id: row.id,
     title: row.title,
     price: row.price,
     city: row.city ?? '',
+    category_id: row.category_id ?? null,
     created_at: row.created_at,
     updated_at: row.updated_at,
     images,
     views_count: row.views_count ?? 0,
     seller_id: row.user_id ?? '',
+    ...schema,
   };
 }
 
@@ -111,7 +124,7 @@ export async function getUserProfile(userId: string): Promise<GetUserProfileResu
 
   const { data: listingRows, error: listingsError } = await supabase
     .from('listings')
-    .select('id, title, price, city, created_at, updated_at, views_count, user_id, listing_images(url, sort_order)')
+    .select(listingPublicListSelect(false))
     .eq('user_id', id)
     .eq('status', 'active')
     .order('created_at', { ascending: false });
@@ -120,10 +133,8 @@ export async function getUserProfile(userId: string): Promise<GetUserProfileResu
     return { data: null, error: { message: listingsError.message } };
   }
 
-  const rows = (listingRows ?? []) as ListingRow[];
-  const allPaths = rows.flatMap((row) =>
-    (row.listing_images ?? []).map((img) => String(img.url ?? '').trim()).filter(Boolean)
-  );
+  const rows = (listingRows ?? []) as unknown as ListingRow[];
+  const allPaths = rows.flatMap((row) => listingStoragePathsForCardCover(row.listing_images));
   const signedMap = await getSignedUrlsMap(allPaths);
   const listings = rows.map((row) => mapListingRow(row, signedMap));
 

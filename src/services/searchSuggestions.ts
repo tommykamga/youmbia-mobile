@@ -34,7 +34,7 @@ export async function getSearchSuggestions(
     .eq('status', 'active')
     .ilike('title', pattern)
     .order('created_at', { ascending: false })
-    .limit(SUGGESTIONS_LIMIT * 2);
+    .limit(SUGGESTIONS_LIMIT + 2);
 
   if (error) {
     return { data: null, error: { message: error.message } };

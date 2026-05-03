@@ -20,6 +20,10 @@ import {
 } from '@/services/notifications';
 import { FavoritesProvider } from '@/context/FavoritesContext';
 
+/**
+ * Polling sync notifications (messages + recherches enregistrées), actif quand l’app est au premier plan.
+ * 45s ≥ 30s recommandé pour limiter la charge ; augmenter (ex. 90s) si besoin côté serveur — à valider produit.
+ */
 const MESSAGE_NOTIFICATIONS_POLL_MS = 45000;
 /** Délai avant le 1er sync messages / recherches sauvegardées pour ne pas concurrencer session + 1er rendu. */
 const STARTUP_NOTIFICATION_SYNC_DELAY_MS = 2500;

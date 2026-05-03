@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { useFocusEffect } from 'expo-router';
 import { getUnreadMessagesCount } from '@/services/conversations';
 import { getSession } from '@/services/auth';
@@ -9,16 +9,28 @@ const isSupabaseConfigured =
   !!process.env.EXPO_PUBLIC_SUPABASE_URL?.trim() &&
   !!process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY?.trim();
 
+/** Garde-fou anti-refetch silencieux à chaque focus layout (≥ 30s). */
+const UNREAD_COUNT_FOCUS_MIN_INTERVAL_MS = 60_000;
+
 /**
  * Hook to fetch the total unread messages count for the current user.
- * Refreshes every time the tab layout comes into focus.
+ * Refreshes on tab layout focus, avec intervalle minimum entre deux appels réseau.
  * Always returns a number (0 as fallback) – never throws.
  */
 export function useUnreadMessagesCount() {
   const [unreadCount, setUnreadCount] = useState<number>(0);
+  const lastFetchAtRef = useRef(0);
 
   const fetchCount = useCallback(async () => {
     if (!isSupabaseConfigured) return;
+    const now = Date.now();
+    if (
+      lastFetchAtRef.current > 0 &&
+      now - lastFetchAtRef.current < UNREAD_COUNT_FOCUS_MIN_INTERVAL_MS
+    ) {
+      return;
+    }
+    lastFetchAtRef.current = now;
     try {
       const session = await getSession();
       const userId = session?.user?.id;

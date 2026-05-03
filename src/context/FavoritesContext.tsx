@@ -7,6 +7,9 @@ import { useRouter } from 'expo-router';
 import { buildAuthGateHref } from '@/lib/authGateNavigation';
 import { lightCacheKeys, lightCacheRead, lightCacheRemove, lightCacheWrite } from '@/lib/lightCache';
 
+/** Si le cache léger favoris est encore frais, éviter un `getFavoriteIds` réseau au montage du provider. */
+const FAVORITES_PROVIDER_MOUNT_NETWORK_COOLDOWN_MS = 2 * 60 * 1000;
+
 type FavoritesCachePayload = { userId: string; ids: string[] };
 
 type FavoritesContextType = {
@@ -60,11 +63,16 @@ export function FavoritesProvider({ children }: { children: React.ReactNode }) {
         }
         const uid = session.user.id;
         const cached = await lightCacheRead<FavoritesCachePayload>(lightCacheKeys.favorites);
+        let hydratedFromFreshCache = false;
         if (cached?.payload?.userId === uid && Array.isArray(cached.payload.ids)) {
           setFavorites(new Set(cached.payload.ids));
           setLoading(false);
+          hydratedFromFreshCache =
+            cached.ageMs >= 0 && cached.ageMs < FAVORITES_PROVIDER_MOUNT_NETWORK_COOLDOWN_MS;
         }
-        await refresh();
+        if (!hydratedFromFreshCache) {
+          await refresh();
+        }
       })();
     });
     return () => {
