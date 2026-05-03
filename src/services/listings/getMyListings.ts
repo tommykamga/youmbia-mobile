@@ -4,16 +4,17 @@
  */
 
 import { supabase } from '@/lib/supabase';
-import { getSignedUrlsMap, toDisplayImageUrl } from '@/lib/listingImageUrl';
+import { getSignedUrlsMap, listingStoragePathsForCardCover, mapListingCardImages } from '@/lib/listingImageUrl';
 import { normalizeListingSchemaFeatures } from '@/lib/listingSchemaFeatures';
 import type { Tables } from '@/types/database';
 import type { PublicListing } from './getPublicListings';
+import { LISTING_MY_LISTINGS_SELECT } from './listingListSelect';
 
 export type MyListing = PublicListing & {
   status: string;
 };
 
-type ListingImageRow = Pick<Tables<'listing_images'>, 'url' | 'sort_order'>;
+type ListingImageRow = Pick<Tables<'listing_images'>, 'url' | 'sort_order' | 'thumb_path' | 'medium_path'>;
 
 type ListingRow = Pick<
   Tables<'listings'>,
@@ -21,6 +22,7 @@ type ListingRow = Pick<
   | 'title'
   | 'price'
   | 'city'
+  | 'category_id'
   | 'description'
   | 'created_at'
   | 'updated_at'
@@ -36,15 +38,13 @@ type ListingRow = Pick<
 
 function mapRow(row: ListingRow, signedMap: Map<string, string>): MyListing {
   const schema = normalizeListingSchemaFeatures(row);
-  const images = (row.listing_images ?? [])
-    .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
-    .map((img) => toDisplayImageUrl(img.url ?? '', signedMap))
-    .filter((url) => url !== '');
+  const images = mapListingCardImages(row.listing_images, signedMap);
   const base: PublicListing = {
     id: row.id,
     title: row.title,
     price: row.price,
     city: row.city ?? '',
+    category_id: row.category_id ?? null,
     description: row.description ?? null,
     created_at: row.created_at,
     updated_at: row.updated_at,
@@ -78,9 +78,7 @@ export async function getMyListings(): Promise<GetMyListingsResult> {
 
   const { data, error } = await supabase
     .from('listings')
-    .select(
-      'id, title, price, city, description, boosted, urgent, district, created_at, updated_at, views_count, user_id, status, listing_images(url, sort_order)'
-    )
+    .select(LISTING_MY_LISTINGS_SELECT)
     .eq('user_id', user.id)
     .order('updated_at', { ascending: false })
     .order('created_at', { ascending: false });
@@ -89,10 +87,8 @@ export async function getMyListings(): Promise<GetMyListingsResult> {
     return { data: null, error: { message: error.message } };
   }
 
-  const list = (data ?? []) as ListingRow[];
-  const allPaths = list.flatMap((row) =>
-    (row.listing_images ?? []).map((img) => String(img.url ?? '').trim()).filter(Boolean)
-  );
+  const list = (data ?? []) as unknown as ListingRow[];
+  const allPaths = list.flatMap((row) => listingStoragePathsForCardCover(row.listing_images));
   const signedMap = await getSignedUrlsMap(allPaths);
   return { data: list.map((row) => mapRow(row, signedMap)), error: null };
 }

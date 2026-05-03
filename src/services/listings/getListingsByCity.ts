@@ -4,17 +4,24 @@
  */
 
 import { supabase } from '@/lib/supabase';
-import { getSignedUrlsMap, toDisplayImageUrl } from '@/lib/listingImageUrl';
+import { getSignedUrlsMap, listingStoragePathsForCardCover, mapListingCardImages } from '@/lib/listingImageUrl';
 import { normalizeListingSchemaFeatures } from '@/lib/listingSchemaFeatures';
 import type { PublicListing } from './getPublicListings';
+import { listingPublicListSelect } from './listingListSelect';
 
-type ListingImageRow = { url: string; sort_order: number | null };
+type ListingImageRow = {
+  url: string;
+  sort_order: number | null;
+  thumb_path?: string | null;
+  medium_path?: string | null;
+};
 
 type ListingRow = {
   id: string;
   title: string;
   price: number;
   city: string;
+  category_id?: number | null;
   created_at: string;
   views_count: number | null;
   user_id: string | null;
@@ -28,16 +35,14 @@ type ListingRow = {
 const DEFAULT_LIMIT = 6;
 
 function mapRow(row: ListingRow, signedMap: Map<string, string>): PublicListing {
-  const images = (row.listing_images ?? [])
-    .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
-    .map((img) => toDisplayImageUrl(img.url ?? '', signedMap))
-    .filter((url) => url !== '');
+  const images = mapListingCardImages(row.listing_images, signedMap);
   const schema = normalizeListingSchemaFeatures(row);
   return {
     id: row.id,
     title: row.title,
     price: row.price,
     city: row.city,
+    category_id: row.category_id ?? null,
     created_at: row.created_at,
     images,
     views_count: row.views_count ?? 0,
@@ -66,9 +71,7 @@ export async function getListingsByCity(
 
   const { data, error } = await supabase
     .from('listings')
-    .select(
-      'id, title, price, city, boosted, urgent, district, created_at, updated_at, views_count, user_id, listing_images(url, sort_order)'
-    )
+    .select(listingPublicListSelect(false))
     .eq('status', 'active')
     .ilike('city', trimmed)
     .order('urgent', { ascending: false })
@@ -79,10 +82,8 @@ export async function getListingsByCity(
     return { data: null, error: { message: error.message } };
   }
 
-  const list = (data ?? []) as ListingRow[];
-  const allPaths = list.flatMap((row) =>
-    (row.listing_images ?? []).map((img) => String(img.url ?? '').trim()).filter(Boolean)
-  );
+  const list = (data ?? []) as unknown as ListingRow[];
+  const allPaths = list.flatMap((row) => listingStoragePathsForCardCover(row.listing_images));
   const signedMap = await getSignedUrlsMap(allPaths);
   return { data: list.map((row) => mapRow(row, signedMap)), error: null };
 }

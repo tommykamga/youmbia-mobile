@@ -29,7 +29,7 @@ export const lightCacheKeys = {
   favorites: 'favorites',
   profile: (userId: string) => `profile.${userId}`,
   conversations: (userId: string) => `inbox.${userId}`,
-  /** Feed public premier écran — pas lié à un utilisateur. */
+  /** Feed public premier écran — pas lié à un utilisateur (âge pour skip réseau : voir `skipNetworkRevalidateWithinMs` sur Home). */
   homeFeedPublic: 'homeFeed.public',
 } as const;
 

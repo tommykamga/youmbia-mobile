@@ -5,9 +5,17 @@
 
 import { decode } from 'base64-arraybuffer';
 import { supabase } from '@/lib/supabase';
+import { compressListingPhotoForStorageUpload } from '@/lib/listingPhotoUploadCompression';
 
 const BUCKET = 'listing-images';
 const MAX_IMAGES_PER_LISTING = 4;
+
+/** Source photo : `uri` / `mimeType` optionnels (meilleure compression depuis fichier local). */
+export type ListingImageUploadInput = {
+  base64: string;
+  uri?: string;
+  mimeType?: string | null;
+};
 
 export type UploadListingImagesResult =
   | {
@@ -33,12 +41,12 @@ function getUploadErrorMessage(message: string, fallback: string): string {
 }
 
 /**
- * Each item: base64 string (from image picker with base64: true).
- * Uploads to userId/listingId/0.jpg, userId/listingId/1.jpg, ... then inserts listing_images.
+ * Chaque entrée : base64 (picker `base64: true`) + optionnellement `uri` / `mimeType` pour compression client (JPEG max 1200px) avant envoi Storage.
+ * Chemins : userId/listingId/0.jpg, … puis lignes `listing_images`.
  */
 export async function uploadListingImages(
   listingId: string,
-  images: { base64: string }[],
+  images: ListingImageUploadInput[],
   options?: { sortOrders?: number[] }
 ): Promise<UploadListingImagesResult> {
   try {
@@ -96,7 +104,18 @@ export async function uploadListingImages(
 
     for (let i = 0; i < images.length; i++) {
       const sortOrder = sortOrders[i]!;
-      const base64 = images[i].base64?.replace(/^data:image\/\w+;base64,/, '') ?? '';
+      const raw = images[i].base64?.replace(/^data:image\/\w+;base64,/, '') ?? '';
+      if (!raw) {
+        failedCount += 1;
+        lastErrorMessage = "Certaines photos n'ont pas pu être préparées.";
+        continue;
+      }
+      const { base64: prepared } = await compressListingPhotoForStorageUpload({
+        base64: raw,
+        uri: images[i].uri,
+        mimeType: images[i].mimeType,
+      });
+      const base64 = prepared?.replace(/^data:image\/\w+;base64,/, '') ?? '';
       if (!base64) {
         failedCount += 1;
         lastErrorMessage = "Certaines photos n'ont pas pu être préparées.";

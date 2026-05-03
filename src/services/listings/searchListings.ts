@@ -5,19 +5,26 @@
  */
 
 import { supabase } from '@/lib/supabase';
-import { getSignedUrlsMap, toDisplayImageUrl } from '@/lib/listingImageUrl';
+import { getSignedUrlsMap, listingStoragePathsForCardCover, mapListingCardImages } from '@/lib/listingImageUrl';
 import { normalizeListingSchemaFeatures } from '@/lib/listingSchemaFeatures';
 import { ROOT_CATEGORY_TREE } from '@/lib/listingCategories';
 import type { PublicListing } from './getPublicListings';
+import { listingPublicListSelect } from './listingListSelect';
 
-type ListingImageRow = { url: string; sort_order: number | null };
+type ListingImageRow = {
+  url: string;
+  sort_order: number | null;
+  thumb_path?: string | null;
+  medium_path?: string | null;
+};
 
 type ListingRow = {
   id: string;
   title: string;
   price: number;
   city: string;
-  description: string | null;
+  category_id?: number | null;
+  description?: string | null;
   created_at: string;
   views_count: number | null;
   user_id: string | null;
@@ -28,20 +35,20 @@ type ListingRow = {
   listing_images: ListingImageRow[] | null;
 };
 
-const PAGE_SIZE = 30;
+const PAGE_SIZE = 20;
 
 function mapRow(row: ListingRow, signedMap: Map<string, string>): PublicListing {
-  const images = (row.listing_images ?? [])
-    .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
-    .map((img) => toDisplayImageUrl(img.url ?? '', signedMap))
-    .filter((url) => url !== '');
+  const images = mapListingCardImages(row.listing_images, signedMap);
   const schema = normalizeListingSchemaFeatures(row);
   return {
     id: row.id,
     title: row.title,
     price: row.price,
     city: row.city,
-    description: row.description ?? null,
+    category_id: row.category_id ?? null,
+    ...(row.description != null && String(row.description).trim() !== ''
+      ? { description: row.description }
+      : {}),
     created_at: row.created_at,
     images,
     views_count: row.views_count ?? 0,
@@ -75,8 +82,8 @@ function normalizeSearchText(s: string): string {
 }
 
 /**
- * Calculates a relevance score for a listing based on the search query.
- * Priorities: Exact Title > Word start in Title > Contains in Title > Word start in Description.
+ * Tri client après récupération (le filtre `description.ilike` reste côté serveur quand la requête est longue).
+ * Le payload liste n’inclut plus `description` — le score description reste à 0 côté client (économie d’egress).
  */
 function computeRelevanceScore(listing: PublicListing, query: string): number {
   const q = normalizeSearchText(query);
@@ -124,16 +131,19 @@ export async function searchListings(options: SearchOptions = {}): Promise<Searc
     pageSize = PAGE_SIZE,
   } = options;
 
+  const trimmed = query.trim();
+  const listSelect = listingPublicListSelect(trimmed.length > 3);
+
   let request = supabase
     .from('listings')
     .select(
-      'id, title, price, city, description, boosted, urgent, district, created_at, updated_at, views_count, user_id, listing_images(url, sort_order)',
-      { count: 'exact' }
+      listSelect,
+      /** `estimated` évite un COUNT(*) complet — moins de charge DB / egress sur grosses tables. */
+      { count: 'estimated' }
     )
     .eq('status', 'active');
 
   // Text search: stricter for short queries to avoid noisy substring matches (e.g. "lit" matching "qualité")
-  const trimmed = query.trim();
   if (trimmed) {
     const safe = trimmed.replace(/[%_\\]/g, '');
     const pattern = `%${safe}%`;
@@ -196,10 +206,8 @@ export async function searchListings(options: SearchOptions = {}): Promise<Searc
     return { data: null, total: 0, error: { message: error.message } };
   }
 
-  const list = (data ?? []) as ListingRow[];
-  const allPaths = list.flatMap((row) =>
-    (row.listing_images ?? []).map((img) => String(img.url ?? '').trim()).filter(Boolean)
-  );
+  const list = (data ?? []) as unknown as ListingRow[];
+  const allPaths = list.flatMap((row) => listingStoragePathsForCardCover(row.listing_images));
   const signedMap = await getSignedUrlsMap(allPaths);
   const results = list.map((row) => mapRow(row, signedMap));
 

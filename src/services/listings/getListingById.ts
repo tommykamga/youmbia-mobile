@@ -19,6 +19,8 @@ export type ListingDetail = {
   views_count: number;
   seller_id: string;
   images: string[];
+  /** Chemins `listing_images.url` restants : signés à la demande par la galerie (moins d’egress au chargement). */
+  galleryLazySourcePaths?: string[];
   /** Quartier ou zone (localisation améliorée). */
   district?: string | null;
   /** Badge "Urgent". */
@@ -48,6 +50,11 @@ export type ListingDetail = {
 
 type ListingImageRow = { url: string; sort_order: number | null };
 
+/**
+ * Colonnes alignées sur `getPublicListings` + `status` (statut annonce).
+ * On évite condition / brand / model / category_id ici : si absentes en base,
+ * PostgREST fait échouer tout le `select` alors que le fil public fonctionne.
+ */
 type ListingRow = {
   id: string;
   title: string;
@@ -61,20 +68,9 @@ type ListingRow = {
   boosted?: boolean | null;
   district?: string | null;
   urgent?: boolean | null;
-  condition?: string | null;
-  brand?: string | null;
-  model?: string | null;
-  category_id?: number | null;
   listing_images: ListingImageRow[] | null;
+  category_id: number | null;
 };
-
-function mapImages(rows: ListingImageRow[] | null, signedMap: Map<string, string>): string[] {
-  if (!rows?.length) return [];
-  return [...rows]
-    .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
-    .map((img) => toDisplayImageUrl(img.url ?? '', signedMap))
-    .filter((url) => url !== '');
-}
 
 export type GetListingByIdResult =
   | { data: ListingDetail; error: null }
@@ -90,7 +86,7 @@ export async function getListingById(id: string): Promise<GetListingByIdResult> 
   const { data: listingRow, error: listingError } = await supabase
     .from('listings')
     .select(
-      'id, title, price, city, description, boosted, urgent, district, condition, brand, model, created_at, views_count, user_id, status, category_id, listing_images(url, sort_order)'
+      'id, title, price, city, description, boosted, urgent, district, created_at, views_count, user_id, status, category_id, listing_images(url, sort_order)'
     )
     .eq('id', id)
     .maybeSingle();
@@ -118,10 +114,11 @@ export async function getListingById(id: string): Promise<GetListingByIdResult> 
 
   const sellerId = row.user_id ?? null;
 
-  const paths = (row.listing_images ?? [])
-    .map((i) => String(i.url ?? '').trim())
-    .filter(Boolean);
-  const signedMap = await getSignedUrlsMap(paths);
+  const sortedImages = [...(row.listing_images ?? [])].sort(
+    (a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0)
+  );
+  const paths = sortedImages.map((i) => String(i.url ?? '').trim()).filter(Boolean);
+  const signedMap = await getSignedUrlsMap(paths.length > 0 ? [paths[0]] : []);
 
   let seller: ListingDetail['seller'] = null;
   if (sellerId) {
@@ -160,6 +157,8 @@ export async function getListingById(id: string): Promise<GetListingByIdResult> 
   }
 
   const { boosted, district, urgent } = normalizeListingSchemaFeatures(row);
+  const firstDisplay = paths.length > 0 ? toDisplayImageUrl(paths[0], signedMap).trim() : '';
+  const lazyRest = paths.slice(1);
   const data: ListingDetail = {
     id: row.id,
     title: row.title,
@@ -170,12 +169,13 @@ export async function getListingById(id: string): Promise<GetListingByIdResult> 
     created_at: row.created_at,
     views_count: row.views_count ?? 0,
     seller_id: row.user_id ?? '',
-    images: mapImages(row.listing_images, signedMap),
+    images: firstDisplay ? [firstDisplay] : [],
+    ...(lazyRest.length > 0 ? { galleryLazySourcePaths: lazyRest } : {}),
     district,
     urgent,
-    condition: row.condition ?? null,
-    brand: row.brand ?? null,
-    model: row.model ?? null,
+    condition: null,
+    brand: null,
+    model: null,
     category_id: row.category_id ?? null,
     seller,
   };

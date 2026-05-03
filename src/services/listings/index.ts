@@ -32,7 +32,7 @@ export type { CreateListingPayload, CreateListingResult } from './createListing'
 export type { SaveListingDynamicAttributeValuesResult } from './saveListingDynamicAttributeValues';
 export type { DeleteListingDynamicAttributeValuesResult } from './deleteListingDynamicAttributeValuesForDefinitions';
 export type { DeleteListingResult } from './deleteListing';
-export type { UploadListingImagesResult } from './uploadListingImages';
+export type { UploadListingImagesResult, ListingImageUploadInput } from './uploadListingImages';
 export type { DeleteListingImageResult } from './deleteListingImage';
 export type { MyListing, GetMyListingsResult } from './getMyListings';
 export type { ListingStats, GetListingStatsResult } from './getListingStats';

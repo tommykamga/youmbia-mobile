@@ -1,12 +1,13 @@
 import { supabase } from '@/lib/supabase';
-import { getSignedUrlsMap, toDisplayImageUrl } from '@/lib/listingImageUrl';
+import { getSignedUrlsMap, listingStoragePathsForCardCover, mapListingCardImages } from '@/lib/listingImageUrl';
 import { getDisplayBoosted, normalizeListingSchemaFeatures } from '@/lib/listingSchemaFeatures';
 import type { Tables } from '@/types/database';
 import type { PublicListing } from './getPublicListings';
+import { listingPublicListSelect } from './listingListSelect';
 
 const CATEGORY_OPTIONS = ['Véhicules', 'Mode', 'Maison', 'Électronique', 'Sport', 'Loisirs', 'Autre'] as const;
-const DEFAULT_LIMIT = 8;
-const FETCH_LIMIT = 24;
+const DEFAULT_LIMIT = 4;
+const FETCH_LIMIT = 16;
 const MIN_RESULTS_TO_SHOW = 2;
 const STOPWORDS = new Set([
   'avec', 'dans', 'pour', 'sans', 'chez', 'des', 'les', 'une', 'sur', 'par', 'vous', 'nous',
@@ -14,7 +15,10 @@ const STOPWORDS = new Set([
   'grande', 'prix', 'annonce', 'vendeur', 'neuf', 'neuve',
 ]);
 
-type ListingImageRow = Pick<Tables<'listing_images'>, 'url' | 'sort_order'>;
+type ListingImageRow = Pick<
+  Tables<'listing_images'>,
+  'url' | 'sort_order' | 'thumb_path' | 'medium_path'
+>;
 
 type ListingRow = Pick<
   Tables<'listings'>,
@@ -22,7 +26,7 @@ type ListingRow = Pick<
   | 'title'
   | 'price'
   | 'city'
-  | 'description'
+  | 'category_id'
   | 'created_at'
   | 'views_count'
   | 'user_id'
@@ -81,17 +85,14 @@ function countSharedKeywords(a: string[], b: string[]): number {
 }
 
 function mapRow(row: ListingRow, signedMap: Map<string, string>): PublicListing {
-  const images = (row.listing_images ?? [])
-    .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
-    .map((img) => toDisplayImageUrl(img.url ?? '', signedMap))
-    .filter((url) => url !== '');
+  const images = mapListingCardImages(row.listing_images, signedMap);
   const schema = normalizeListingSchemaFeatures(row);
   return {
     id: row.id,
     title: row.title,
     price: row.price,
     city: row.city ?? '',
-    description: row.description ?? null,
+    category_id: row.category_id ?? null,
     created_at: row.created_at,
     images,
     views_count: row.views_count ?? 0,
@@ -119,9 +120,7 @@ export async function getSimilarListings(
   try {
     const { data, error } = await supabase
       .from('listings')
-      .select(
-        'id, title, price, city, description, boosted, urgent, district, created_at, updated_at, views_count, user_id, listing_images(url, sort_order)'
-      )
+      .select(listingPublicListSelect(false))
       .eq('status', 'active')
       .neq('id', currentId)
       .order('created_at', { ascending: false })
@@ -131,10 +130,8 @@ export async function getSimilarListings(
       return { data: [], error: { message: 'Impossible de charger les annonces similaires' } };
     }
 
-    const rows = (data ?? []) as ListingRow[];
-    const allPaths = rows.flatMap((row) =>
-      (row.listing_images ?? []).map((img) => String(img.url ?? '').trim()).filter(Boolean)
-    );
+    const rows = (data ?? []) as unknown as ListingRow[];
+    const allPaths = rows.flatMap((row) => listingStoragePathsForCardCover(row.listing_images));
     const signedMap = await getSignedUrlsMap(allPaths);
     const candidates = rows.map((row) => mapRow(row, signedMap));
     const seen = new Set<string>();
