@@ -1,4 +1,4 @@
-import React, { memo, useCallback, useEffect, useMemo, useState } from 'react';
+import React, { memo, useCallback, useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -62,6 +62,46 @@ export type ListingCardProps = {
   feedPresentation?: 'standard' | 'home';
 };
 
+/** Clé stable (URL / chemin) pour l’image de couverture — évite de dépendre de l’objet `listing` entier. */
+function listingCardCoverImageKey(listing: PublicListing): string {
+  const any = listing as unknown as Record<string, unknown>;
+  const candidates = [
+    any.imageUrl,
+    any.mainImageUrl,
+    any.image_url,
+    Array.isArray(any.images) ? (any.images[0] as unknown) : undefined,
+  ];
+  for (const c of candidates) {
+    const s = typeof c === 'string' ? c.trim() : '';
+    if (s) return s;
+  }
+  return '';
+}
+
+function listingCardPropsAreEqual(prev: ListingCardProps, next: ListingCardProps): boolean {
+  if ((prev.railPresentation ?? 'default') !== (next.railPresentation ?? 'default')) return false;
+  if (prev.feedPresentation !== next.feedPresentation) return false;
+  if (prev.variant !== next.variant) return false;
+  const a = prev.listing;
+  const b = next.listing;
+  if (a.id !== b.id) return false;
+  if (a.title !== b.title) return false;
+  if (a.price !== b.price) return false;
+  if (a.city !== b.city) return false;
+  if ((a.district ?? '') !== (b.district ?? '')) return false;
+  if (a.views_count !== b.views_count) return false;
+  if (a.created_at !== b.created_at) return false;
+  if (a.updated_at !== b.updated_at) return false;
+  if (Boolean(a.boosted) !== Boolean(b.boosted)) return false;
+  if (Boolean(a.urgent) !== Boolean(b.urgent)) return false;
+  if (Boolean(a.price_dropped) !== Boolean(b.price_dropped)) return false;
+  if (listingCardCoverImageKey(a) !== listingCardCoverImageKey(b)) return false;
+  const ps = (a as unknown as { status?: string | null }).status ?? null;
+  const ns = (b as unknown as { status?: string | null }).status ?? null;
+  if (ps !== ns) return false;
+  return true;
+}
+
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
 function ListingCardInner({
@@ -78,20 +118,8 @@ function ListingCardInner({
     transform: [{ scale: scale.value }],
   }));
 
-  const firstImage = useMemo(() => {
-    const any = listing as unknown as Record<string, unknown>;
-    const candidates = [
-      any.imageUrl,
-      any.mainImageUrl,
-      any.image_url,
-      Array.isArray(any.images) ? (any.images[0] as unknown) : undefined,
-    ];
-    for (const c of candidates) {
-      const s = typeof c === 'string' ? c.trim() : '';
-      if (s) return s;
-    }
-    return undefined;
-  }, [listing]);
+  const coverKey = listingCardCoverImageKey(listing);
+  const firstImage = coverKey.length > 0 ? coverKey : undefined;
 
   useEffect(() => {
     // Si l’URL change (refresh / nouvelles signed URLs), on retente le chargement.
@@ -280,23 +308,7 @@ function ListingCardInner({
   );
 }
 
-export const ListingCard = memo(ListingCardInner, (prev, next) => {
-  const prevStatus = (prev.listing as unknown as { status?: string | null }).status ?? null;
-  const nextStatus = (next.listing as unknown as { status?: string | null }).status ?? null;
-  const prevFirstImage = prev.listing.images?.[0] ?? null;
-  const nextFirstImage = next.listing.images?.[0] ?? null;
-  return (
-    (prev.railPresentation ?? 'default') === (next.railPresentation ?? 'default') &&
-    prev.feedPresentation === next.feedPresentation &&
-    prev.variant === next.variant &&
-    prev.listing.id === next.listing.id &&
-    prev.listing.updated_at === next.listing.updated_at &&
-    prevStatus === nextStatus &&
-    prevFirstImage === nextFirstImage &&
-    prev.listing.views_count === next.listing.views_count &&
-    prev.listing.created_at === next.listing.created_at
-  );
-});
+export const ListingCard = memo(ListingCardInner, listingCardPropsAreEqual);
 
 const styles = StyleSheet.create({
   card: {

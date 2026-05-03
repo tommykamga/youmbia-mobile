@@ -33,6 +33,12 @@ import {
 import { getSession, onAuthStateChange } from '@/services/auth';
 import { buildAuthGateHref } from '@/lib/authGateNavigation';
 import { useUnreadMessagesCount } from '@/hooks/useUnreadMessagesCount';
+/** Anti-refetch réseau au retour onglet Home si le cache léger a moins de 2 min (ListingFeed + lightCache). */
+const HOME_LISTING_FEED_NETWORK_COOLDOWN_MS = 2 * 60 * 1000;
+
+/** Sections connectées (Pour vous, Près de vous, Urgent, récentes) — désactivées pour réduire l’egress. */
+const HOME_ENABLE_CONNECTED_LISTING_SECTIONS = false;
+const HOME_FEED_PAGE_SIZE = 6;
 
 type AuthState = 'loading' | 'guest' | 'user';
 
@@ -113,14 +119,14 @@ function HomeHeader({
         </Pressable>
       </View>
 
-      {authState === 'user' && (
+      {authState === 'user' && HOME_ENABLE_CONNECTED_LISTING_SECTIONS ? (
         <View style={styles.connectedSections}>
           <ForYouSection />
           <NearYouSection userCity={null} />
           <UrgentSection />
           <RecentlyViewedSection />
         </View>
-      )}
+      ) : null}
 
       <View style={styles.feedIntro}>
         <AppSectionHeader title="Nouvelles annonces" subtitle="Actualisées en continu" />
@@ -213,7 +219,11 @@ export default function HomeScreen() {
           <View style={styles.homeFeedSlot}>
             <ListingFeed
               listHeaderComponent={headerComponent}
-              limit={20}
+              limit={HOME_FEED_PAGE_SIZE}
+              fetchPageSize={HOME_FEED_PAGE_SIZE}
+              skipNetworkRevalidateWithinMs={HOME_LISTING_FEED_NETWORK_COOLDOWN_MS}
+              disableInfiniteScroll
+              listInitialNumToRender={4}
               footerAction={{
                 label: 'Voir plus d\'annonces',
                 onPress: () => router.push('/(tabs)/search?from=home'),

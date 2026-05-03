@@ -25,6 +25,7 @@ import { useFavorites } from '@/context/FavoritesContext';
 import { lightCacheKeys, lightCacheRead, lightCacheWrite } from '@/lib/lightCache';
 
 const PAGE_SIZE = 15;
+const FAVORITES_FOCUS_REFRESH_MIN_INTERVAL_MS = 120_000;
 
 type HomeFeedCachePayload = { listings: PublicListing[] };
 const INITIAL_NUM_TO_RENDER = Platform.OS === 'ios' ? 8 : 10;
@@ -56,6 +57,17 @@ export type ListingFeedProps = {
   limit?: number;
   /** Action à afficher en fin de flux (si limité). */
   footerAction?: { label: string; onPress: () => void };
+  /** Taille de page réseau (défaut 15). Home peut passer 6 pour limiter l’egress. */
+  fetchPageSize?: number;
+  /**
+   * Si le cache `lightCacheKeys.homeFeedPublic` est plus récent que ce délai (ms),
+   * ne pas relancer `getPublicListings` au montage (pull-to-refresh recharge toujours).
+   */
+  skipNetworkRevalidateWithinMs?: number;
+  /** Pas de chargement au scroll du fil (ex. Home plafonné à `limit`). */
+  disableInfiniteScroll?: boolean;
+  /** Surcharge `initialNumToRender` FlatList (listes courtes Home). */
+  listInitialNumToRender?: number;
 };
 
 export function ListingFeed({
@@ -67,6 +79,10 @@ export function ListingFeed({
   extraComponentIndex = 6,
   limit,
   footerAction,
+  fetchPageSize,
+  skipNetworkRevalidateWithinMs,
+  disableInfiniteScroll = false,
+  listInitialNumToRender,
 }: ListingFeedProps) {
   const listRef = useRef<any>(null);
   useScrollToTop(listRef);
@@ -81,13 +97,16 @@ export function ListingFeed({
   const [hasMore, setHasMore] = useState(true);
   const [loadMoreError, setLoadMoreError] = useState<string | null>(null);
   const hasMoreRef = useRef(true);
+  const lastFavoritesFocusRefreshRef = useRef(0);
+
+  const effectivePageSize = fetchPageSize ?? PAGE_SIZE;
 
   const feedSuccessData = state.status === 'success' ? state.data : null;
   const feedDataLength = feedSuccessData?.length ?? 0;
   const errorMessage = state.status === 'error' ? state.message : null;
 
   const load = useCallback(async (pageOffset: number = 0, append: boolean = false) => {
-    const listResult = await getPublicListings(pageOffset, PAGE_SIZE);
+    const listResult = await getPublicListings(pageOffset, effectivePageSize);
     if (listResult.error) {
       if (!append) {
         setState((prev) => {
@@ -100,7 +119,7 @@ export function ListingFeed({
       return;
     }
     const list = listResult.data ?? [];
-    const reachedEnd = list.length < PAGE_SIZE;
+    const reachedEnd = list.length < effectivePageSize;
     if (append) {
       setLoadMoreError(null);
       if (reachedEnd) {
@@ -121,13 +140,18 @@ export function ListingFeed({
           ? { status: 'empty' }
           : { status: 'success', data: list }
       );
-      hasMoreRef.current = !reachedEnd;
-      setHasMore(!reachedEnd);
+      if (disableInfiniteScroll) {
+        hasMoreRef.current = false;
+        setHasMore(false);
+      } else {
+        hasMoreRef.current = !reachedEnd;
+        setHasMore(!reachedEnd);
+      }
       if (list.length > 0) {
         void lightCacheWrite<HomeFeedCachePayload>(lightCacheKeys.homeFeedPublic, { listings: list });
       }
     }
-  }, []);
+  }, [disableInfiniteScroll, effectivePageSize]);
 
   /** Load listings only once on mount. Ref guards against strict-mode double mount. */
   useEffect(() => {
@@ -139,16 +163,31 @@ export function ListingFeed({
       if (!cancelled && snap?.payload?.listings?.length) {
         setState({ status: 'success', data: snap.payload.listings });
       }
-      await load(0, false);
+      const skipNetwork =
+        skipNetworkRevalidateWithinMs != null &&
+        snap != null &&
+        snap.payload.listings.length > 0 &&
+        snap.ageMs < skipNetworkRevalidateWithinMs;
+      if (!cancelled && skipNetwork) {
+        hasMoreRef.current = false;
+        setHasMore(false);
+      } else if (!cancelled) {
+        await load(0, false);
+      }
       if (!cancelled) setRefreshing(false);
     })();
     return () => {
       cancelled = true;
     };
-  }, [load]);
+  }, [load, skipNetworkRevalidateWithinMs]);
 
   useFocusEffect(
     useCallback(() => {
+      const now = Date.now();
+      if (now - lastFavoritesFocusRefreshRef.current < FAVORITES_FOCUS_REFRESH_MIN_INTERVAL_MS) {
+        return;
+      }
+      lastFavoritesFocusRefreshRef.current = now;
       const task = InteractionManager.runAfterInteractions(() => {
         void refreshFavorites();
       });
@@ -373,12 +412,12 @@ export function ListingFeed({
       ListEmptyComponent: listEmpty,
       contentContainerStyle: listContentStyle,
       showsVerticalScrollIndicator: false,
-      initialNumToRender: INITIAL_NUM_TO_RENDER,
+      initialNumToRender: listInitialNumToRender ?? INITIAL_NUM_TO_RENDER,
       maxToRenderPerBatch: 6,
       windowSize: WINDOW_SIZE,
       removeClippedSubviews: Platform.OS === 'ios',
-      onEndReached: loadMore,
-      onEndReachedThreshold: 0.4,
+      onEndReached: disableInfiniteScroll ? undefined : loadMore,
+      onEndReachedThreshold: disableInfiniteScroll ? undefined : 0.4,
       refreshControl: (
         <RefreshControl
           refreshing={refreshing}
@@ -397,6 +436,8 @@ export function ListingFeed({
       listEmpty,
       listContentStyle,
       loadMore,
+      disableInfiniteScroll,
+      listInitialNumToRender,
       refreshing,
       onRefresh,
     ]
