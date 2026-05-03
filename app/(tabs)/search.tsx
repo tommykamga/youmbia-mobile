@@ -36,6 +36,31 @@ import type { PublicListing } from '@/services/listings';
 import { colors, spacing, typography, fontWeights, radius } from '@/theme';
 
 const SUGGESTIONS_DEBOUNCE_MS = 300;
+/** Debounce saisie → lancement recherche principale (egress). */
+const SEARCH_QUERY_DEBOUNCE_MS = 600;
+/** Ne pas relancer `runSearch` si les params de navigation sont identiques sous ce délai (anti double effet / focus). */
+const SEARCH_NAV_PARAMS_RUN_COOLDOWN_MS = 2 * 60 * 1000;
+/** Première page recherche — le reste au bouton « Voir plus » (egress). */
+const SEARCH_INITIAL_PAGE_SIZE = 6;
+
+type SearchPage1SessionCacheEntry = {
+  empty: boolean;
+  data: PublicListing[];
+  total: number;
+};
+
+/** Cache mémoire session : première page par clé query + filtres appliqués (hors tri UI). */
+const searchSessionPage1Cache = new Map<string, SearchPage1SessionCacheEntry>();
+
+function buildSearchPage1SessionKey(parts: {
+  q: string;
+  categoryId: number | null;
+  city: string | null;
+  min: number | null;
+  max: number | null;
+}): string {
+  return JSON.stringify(parts);
+}
 const PRICE_INPUT_PATTERN = /^\d+$/;
 const CATEGORY_OPTIONS = ['Véhicules', 'Mode', 'Maison', 'Électronique', 'Sport', 'Loisirs', 'Autre'] as const;
 
@@ -44,7 +69,14 @@ type SearchState =
   | { status: 'loading' }
   | { status: 'empty'; query: string }
   | { status: 'error'; message: string }
-  | { status: 'success'; data: PublicListing[]; query: string; total: number };
+  | {
+      status: 'success';
+      data: PublicListing[];
+      query: string;
+      total: number;
+      page: number;
+      hasMore: boolean;
+    };
 
 type AppliedPriceFilters = {
   min: number | null;
@@ -138,15 +170,31 @@ export default function SearchScreen() {
   const [priceFilterError, setPriceFilterError] = useState<string | null>(null);
   const [favoriteIds, setFavoriteIds] = useState<Set<string>>(new Set());
   const lastFavoritesFetchAtRef = useRef<number>(0);
-  const FAVORITES_FETCH_TTL_MS = 45_000;
+  const FAVORITES_FETCH_TTL_MS = 120_000;
+  const [loadingMoreSearch, setLoadingMoreSearch] = useState(false);
   const [savedSearches, setSavedSearches] = useState<SavedSearch[]>([]);
   const [savedSearchFeedback, setSavedSearchFeedback] = useState<string | null>(null);
   const [suggestions, setSuggestions] = useState<string[]>([]);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [savedOpen, setSavedOpen] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const mainSearchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastDisplayedPage1KeyRef = useRef<string | null>(null);
+  const searchSeqRef = useRef(0);
+  const runSearchRef = useRef<(q: string, filters?: Partial<AppliedSearchFilters & AppliedPriceFilters>) => Promise<void>>(
+    async () => {}
+  );
   const resultsListRef = useRef<FlatList<PublicListing> | null>(null);
   const savedSearchFeedbackTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastNavParamsSearchEffectKeyRef = useRef<string>('');
+  const lastNavParamsSearchEffectAtRef = useRef(0);
+
+  const clearPendingMainSearchDebounce = useCallback(() => {
+    if (mainSearchDebounceRef.current) {
+      clearTimeout(mainSearchDebounceRef.current);
+      mainSearchDebounceRef.current = null;
+    }
+  }, []);
 
   const loadFavorites = useCallback(async () => {
     const now = Date.now();
@@ -196,19 +244,108 @@ export default function SearchScreen() {
     };
   }, [query]);
 
+  const runSearch = useCallback(async (q: string, filters?: Partial<AppliedSearchFilters & AppliedPriceFilters>) => {
+    const trimmed = q.trim();
+
+    const searchCategoryId = filters?.categoryId !== undefined ? filters.categoryId : appliedSearchFilters.categoryId;
+    const searchCity = filters?.city !== undefined ? filters.city : appliedSearchFilters.city;
+    const searchMinPrice = filters?.min !== undefined ? filters.min : appliedPriceFilters.min;
+    const searchMaxPrice = filters?.max !== undefined ? filters.max : appliedPriceFilters.max;
+
+    const page1Key = buildSearchPage1SessionKey({
+      q: trimmed,
+      categoryId: searchCategoryId,
+      city: searchCity,
+      min: searchMinPrice,
+      max: searchMaxPrice,
+    });
+
+    if (page1Key === lastDisplayedPage1KeyRef.current) {
+      setSubmittedQuery(trimmed);
+      return;
+    }
+
+    const cached = searchSessionPage1Cache.get(page1Key);
+    if (cached) {
+      setSubmittedQuery(trimmed);
+      lastDisplayedPage1KeyRef.current = page1Key;
+      if (cached.empty) {
+        setState({ status: 'empty', query: trimmed });
+      } else {
+        setState({
+          status: 'success',
+          data: cached.data.slice(),
+          query: trimmed,
+          total: cached.total,
+          page: 1,
+          hasMore: cached.data.length === SEARCH_INITIAL_PAGE_SIZE,
+        });
+      }
+      return;
+    }
+
+    const seq = ++searchSeqRef.current;
+    setSubmittedQuery(trimmed);
+    setState({ status: 'loading' });
+
+    const result = await searchListings({
+      query: trimmed,
+      categoryId: searchCategoryId,
+      city: searchCity,
+      minPrice: searchMinPrice,
+      maxPrice: searchMaxPrice,
+      sortBy: sortBy,
+      page: 1,
+      pageSize: SEARCH_INITIAL_PAGE_SIZE,
+    });
+
+    if (seq !== searchSeqRef.current) return;
+
+    if (result.error) {
+      setState({ status: 'error', message: result.error.message });
+      return;
+    }
+    const list = result.data ?? [];
+    const total = result.total ?? 0;
+    const empty = list.length === 0;
+    searchSessionPage1Cache.set(page1Key, {
+      empty,
+      data: list.slice(),
+      total,
+    });
+    lastDisplayedPage1KeyRef.current = page1Key;
+
+    if (seq !== searchSeqRef.current) return;
+
+    setState(
+      empty
+        ? { status: 'empty', query: trimmed }
+        : {
+            status: 'success',
+            data: list,
+            query: trimmed,
+            total,
+            page: 1,
+            hasMore: list.length === SEARCH_INITIAL_PAGE_SIZE,
+          }
+    );
+  }, [appliedSearchFilters, appliedPriceFilters, sortBy]);
+
+  runSearchRef.current = runSearch;
+
   /** When navigating with query params, pre-fill and run search once. */
   useEffect(() => {
+    clearPendingMainSearchDebounce();
     const nextQ = typeof params.q === 'string' ? params.q.trim() : '';
     const nextMin = typeof params.priceMin === 'string' ? params.priceMin.trim() : '';
     const nextMax = typeof params.priceMax === 'string' ? params.priceMax.trim() : '';
-    const nextCategory = typeof params.categoryLabel === 'string' 
-      ? params.categoryLabel.trim() 
+    const nextCategory = typeof params.categoryLabel === 'string'
+      ? params.categoryLabel.trim()
       : (typeof params.category === 'string' ? params.category.trim() : '');
     const nextCity = typeof params.city === 'string' ? params.city.trim() : '';
     const nextCategoryIdStr = typeof params.categoryId === 'string' ? params.categoryId.trim() : '';
     const nextCategoryId = nextCategoryIdStr ? parseInt(nextCategoryIdStr, 10) : getCategoryIdByLabel(nextCategory);
 
-    // Update UI states
     setQuery(nextQ);
     setPriceMin(nextMin);
     setPriceMax(nextMax);
@@ -233,44 +370,105 @@ export default function SearchScreen() {
     });
     setPriceFilterError(validation.error);
 
-    // Run search with the newly parsed filters to avoid stale state issues
-    runSearch(nextQ, filters);
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- only run when navigation params change
-  }, [params.q, params.priceMin, params.priceMax, params.category, params.categoryLabel, params.categoryId, params.city]);
-
-  const runSearch = useCallback(async (q: string, filters?: Partial<AppliedSearchFilters & AppliedPriceFilters>) => {
-    const trimmed = q.trim();
-    setSubmittedQuery(trimmed);
-    setState({ status: 'loading' });
-    
-    // On utilise les filtres appliqués par défaut, sauf si des nouveaux sont passés
-    const searchCategoryId = filters?.categoryId !== undefined ? filters.categoryId : appliedSearchFilters.categoryId;
-    const searchCity = filters?.city !== undefined ? filters.city : appliedSearchFilters.city;
-    const searchMinPrice = filters?.min !== undefined ? filters.min : appliedPriceFilters.min;
-    const searchMaxPrice = filters?.max !== undefined ? filters.max : appliedPriceFilters.max;
-
-    const result = await searchListings({
-      query: trimmed,
-      categoryId: searchCategoryId,
-      city: searchCity,
-      minPrice: searchMinPrice,
-      maxPrice: searchMaxPrice,
-      sortBy: sortBy,
-      pageSize: 50, // On demande un peu plus pour le confort
+    const navParamsKey = JSON.stringify({
+      q: params.q ?? '',
+      priceMin: params.priceMin ?? '',
+      priceMax: params.priceMax ?? '',
+      category: params.category ?? '',
+      categoryLabel: params.categoryLabel ?? '',
+      categoryId: params.categoryId ?? '',
+      city: params.city ?? '',
+      appliedMin: validation.error ? 'err' : String(validation.min ?? ''),
+      appliedMax: validation.error ? 'err' : String(validation.max ?? ''),
     });
+    const now = Date.now();
+    const skipDuplicateRunSearch =
+      navParamsKey === lastNavParamsSearchEffectKeyRef.current &&
+      now - lastNavParamsSearchEffectAtRef.current < SEARCH_NAV_PARAMS_RUN_COOLDOWN_MS;
+    if (!skipDuplicateRunSearch) {
+      lastNavParamsSearchEffectKeyRef.current = navParamsKey;
+      lastNavParamsSearchEffectAtRef.current = now;
+      void runSearchRef.current(nextQ, filters);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only run when navigation params change
+  }, [
+    params.q,
+    params.priceMin,
+    params.priceMax,
+    params.category,
+    params.categoryLabel,
+    params.categoryId,
+    params.city,
+    clearPendingMainSearchDebounce,
+  ]);
 
-    if (result.error) {
-      setState({ status: 'error', message: result.error.message });
+  /** Recherche principale debouncée : ≥ 2 caractères uniquement (pas d’exploration auto sur champ vide). */
+  useEffect(() => {
+    const trimmed = query.trim();
+    if (mainSearchDebounceRef.current) {
+      clearTimeout(mainSearchDebounceRef.current);
+      mainSearchDebounceRef.current = null;
+    }
+    if (trimmed.length < 2) {
       return;
     }
-    const list = result.data ?? [];
-    const total = result.total ?? 0;
-    setState(
-      list.length === 0
-        ? { status: 'empty', query: trimmed }
-        : { status: 'success', data: list, query: trimmed, total }
-    );
-  }, [appliedSearchFilters, appliedPriceFilters, sortBy]);
+    mainSearchDebounceRef.current = setTimeout(() => {
+      mainSearchDebounceRef.current = null;
+      void runSearchRef.current(trimmed);
+    }, SEARCH_QUERY_DEBOUNCE_MS);
+    return () => {
+      if (mainSearchDebounceRef.current) {
+        clearTimeout(mainSearchDebounceRef.current);
+        mainSearchDebounceRef.current = null;
+      }
+    };
+  }, [query]);
+
+  const loadMoreSearchResults = useCallback(async () => {
+    if (state.status !== 'success' || !state.hasMore || loadingMoreSearch) return;
+    setLoadingMoreSearch(true);
+    const nextPage = state.page + 1;
+    try {
+      const result = await searchListings({
+        query: state.query,
+        categoryId: appliedSearchFilters.categoryId,
+        city: appliedSearchFilters.city,
+        minPrice: appliedPriceFilters.min,
+        maxPrice: appliedPriceFilters.max,
+        sortBy,
+        page: nextPage,
+        pageSize: SEARCH_INITIAL_PAGE_SIZE,
+      });
+      if (result.error) {
+        return;
+      }
+      const batch = result.data ?? [];
+      const nextTotal = result.total ?? 0;
+      setState((prev) => {
+        if (prev.status !== 'success') return prev;
+        const seen = new Set(prev.data.map((i) => i.id));
+        const added = batch.filter((i) => !seen.has(i.id));
+        return {
+          status: 'success',
+          data: [...prev.data, ...added],
+          query: prev.query,
+          total: nextTotal > 0 ? nextTotal : prev.total,
+          page: nextPage,
+          hasMore: batch.length === SEARCH_INITIAL_PAGE_SIZE,
+        };
+      });
+    } finally {
+      setLoadingMoreSearch(false);
+    }
+  }, [
+    state,
+    loadingMoreSearch,
+    appliedSearchFilters.categoryId,
+    appliedSearchFilters.city,
+    appliedPriceFilters.min,
+    appliedPriceFilters.max,
+    sortBy,
+  ]);
 
   /** Scroll results list to top when a new search returns success (Sprint 3.2). */
   const scrollResetKey = state.status === 'success' ? state.query : '';
@@ -281,12 +479,15 @@ export default function SearchScreen() {
   }, [state.status, scrollResetKey]);
 
   const handleSubmit = useCallback(() => {
+    clearPendingMainSearchDebounce();
     Keyboard.dismiss();
     setSuggestions([]);
     runSearch(query);
-  }, [query, runSearch]);
+  }, [query, runSearch, clearPendingMainSearchDebounce]);
 
   const handleResetSearch = useCallback(() => {
+    clearPendingMainSearchDebounce();
+    lastDisplayedPage1KeyRef.current = null;
     setQuery('');
     setSubmittedQuery('');
     setSuggestions([]);
@@ -299,15 +500,16 @@ export default function SearchScreen() {
     setAppliedSearchFilters({ category: null, categoryId: null, city: null });
     setPriceFilterError(null);
     runSearch('');
-  }, []);
+  }, [runSearch, clearPendingMainSearchDebounce]);
 
   const handleSuggestionPress = useCallback(
     (suggestion: string) => {
+      clearPendingMainSearchDebounce();
       setQuery(suggestion);
       setSuggestions([]);
       runSearch(suggestion);
     },
-    [runSearch]
+    [runSearch, clearPendingMainSearchDebounce]
   );
 
   const handleSaveSearch = useCallback(() => {
@@ -344,6 +546,7 @@ export default function SearchScreen() {
 
   const handleSavedSearchPress = useCallback(
     (item: SavedSearch) => {
+      clearPendingMainSearchDebounce();
       setQuery(item.query);
       setSubmittedQuery(item.query);
       setPriceMin(item.priceMin != null ? String(item.priceMin) : '');
@@ -366,7 +569,7 @@ export default function SearchScreen() {
         max: item.priceMax ?? null,
       });
     },
-    [runSearch]
+    [runSearch, clearPendingMainSearchDebounce]
   );
 
   const handleRemoveSavedSearch = useCallback(
@@ -452,6 +655,7 @@ export default function SearchScreen() {
       setPriceFilterError(validation.error);
       return;
     }
+    clearPendingMainSearchDebounce();
     setAppliedPriceFilters({ min: validation.min, max: validation.max });
     const newAppliedSearchFilters = {
       category: normalizeFilterText(category),
@@ -467,9 +671,10 @@ export default function SearchScreen() {
       min: validation.min,
       max: validation.max,
     });
-  }, [priceMin, priceMax, category, categoryId, city, submittedQuery, runSearch]);
+  }, [priceMin, priceMax, category, categoryId, city, submittedQuery, runSearch, clearPendingMainSearchDebounce]);
 
   const handleResetAllFilters = useCallback(() => {
+    clearPendingMainSearchDebounce();
     setCity('');
     setCategoryId(null);
     setAppliedPriceFilters({ min: null, max: null });
@@ -482,7 +687,7 @@ export default function SearchScreen() {
       min: null,
       max: null
     });
-  }, [submittedQuery, runSearch]);
+  }, [submittedQuery, runSearch, clearPendingMainSearchDebounce]);
 
   const openFilters = useCallback(() => {
     Keyboard.dismiss();
@@ -638,6 +843,8 @@ export default function SearchScreen() {
     activeFilterSummary,
     submittedQuery,
     filteredListings.length,
+    state,
+    params.from,
   ]);
 
   const filtersSheetContent = useMemo(
@@ -871,6 +1078,8 @@ export default function SearchScreen() {
             {query.length > 0 ? (
               <Pressable
                 onPress={() => {
+                  clearPendingMainSearchDebounce();
+                  lastDisplayedPage1KeyRef.current = null;
                   setQuery('');
                   setState({ status: 'idle' });
                   setSubmittedQuery('');
@@ -987,12 +1196,25 @@ export default function SearchScreen() {
             renderItem={renderItem}
             ItemSeparatorComponent={itemSeparator}
             ListHeaderComponent={resultsHeader}
+            ListFooterComponent={
+              state.hasMore ? (
+                <View style={styles.searchLoadMoreFooter}>
+                  <Button
+                    variant="outline"
+                    onPress={loadMoreSearchResults}
+                    loading={loadingMoreSearch}
+                  >
+                    Voir plus d&apos;annonces
+                  </Button>
+                </View>
+              ) : null
+            }
             contentContainerStyle={styles.listContent}
             showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
-            initialNumToRender={Platform.OS === 'ios' ? 10 : 12}
-            maxToRenderPerBatch={Platform.OS === 'ios' ? 6 : 8}
-            windowSize={Platform.OS === 'ios' ? 6 : 10}
+            initialNumToRender={Platform.OS === 'ios' ? 6 : 8}
+            maxToRenderPerBatch={Platform.OS === 'ios' ? 4 : 6}
+            windowSize={Platform.OS === 'ios' ? 5 : 8}
             removeClippedSubviews={Platform.OS === 'ios'}
             ListEmptyComponent={
               <EmptyState
@@ -1055,6 +1277,11 @@ export default function SearchScreen() {
 }
 
 const styles = StyleSheet.create({
+  searchLoadMoreFooter: {
+    paddingVertical: spacing.lg,
+    paddingHorizontal: spacing.base,
+    alignItems: 'center',
+  },
   keyboard: {
     flex: 1,
   },

@@ -55,7 +55,7 @@ type LoadState =
   | { status: 'ready'; listing: ListingForEdit };
 
 type ImageItem = ListingForEdit['imageItems'][number];
-type PickedImage = { uri: string; base64: string | null };
+type PickedImage = { uri: string; base64: string | null; mimeType?: string | null };
 
 export default function ListingEditScreen() {
   const router = useRouter();
@@ -223,6 +223,7 @@ export default function ListingEditScreen() {
     const picked: PickedImage[] = result.assets.map((a) => ({
       uri: a.uri,
       base64: a.base64 ?? null,
+      mimeType: a.mimeType ?? null,
     }));
 
     const pickedWithBase64 = picked.filter(
@@ -244,7 +245,11 @@ export default function ListingEditScreen() {
       const sortOrders = availableSlots.slice(0, pickedWithBase64.length);
       const uploadResult = await uploadListingImages(
         loadState.listing.id,
-        pickedWithBase64.map((p) => ({ base64: p.base64 })),
+        pickedWithBase64.map((p) => ({
+          base64: p.base64,
+          uri: p.uri,
+          mimeType: p.mimeType ?? null,
+        })),
         { sortOrders }
       );
 

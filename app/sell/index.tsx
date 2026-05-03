@@ -46,7 +46,7 @@ const MAX_LISTING_IMAGES = 4;
 const MAX_LISTINGS_PER_24H = 5;
 const TOTAL_STEPS = 3;
 
-type PickedImage = { uri: string; base64: string | null };
+type PickedImage = { uri: string; base64: string | null; mimeType?: string | null };
 
 function getFirstNonEmptyProfileField(
   profile: Record<string, unknown> | null | undefined,
@@ -287,6 +287,7 @@ export default function SellScreen() {
     const newImages: PickedImage[] = result.assets.map((a) => ({
       uri: a.uri,
       base64: a.base64 ?? null,
+      mimeType: a.mimeType ?? null,
     }));
     setImages((prev) => [...prev, ...newImages].slice(0, MAX_LISTING_IMAGES));
     setSubmitError(null);
@@ -453,7 +454,11 @@ export default function SellScreen() {
       if (withBase64.length > 0) {
         const uploadResult = await uploadListingImages(
           listingId,
-          withBase64.map((img) => ({ base64: img.base64 }))
+          withBase64.map((img) => ({
+            base64: img.base64,
+            uri: img.uri,
+            mimeType: img.mimeType ?? null,
+          }))
         );
 
         const uploadedCount = uploadResult.data.uploadedCount;
@@ -523,7 +528,11 @@ export default function SellScreen() {
     try {
       const uploadResult = await uploadListingImages(
         publishState.listingId,
-        withBase64.map((img) => ({ base64: img.base64 }))
+        withBase64.map((img) => ({
+          base64: img.base64,
+          uri: img.uri,
+          mimeType: img.mimeType ?? null,
+        }))
       );
 
       const uploadedCount = uploadResult.data.uploadedCount;

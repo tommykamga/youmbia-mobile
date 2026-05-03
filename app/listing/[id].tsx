@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   ScrollView,
@@ -9,6 +9,8 @@ import {
   Alert,
   FlatList,
   Platform,
+  type NativeSyntheticEvent,
+  type NativeScrollEvent,
 } from 'react-native';
 import { useLocalSearchParams, useRouter, useFocusEffect, type Href } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -48,6 +50,8 @@ import {
   openWhatsAppForListing,
 } from '@/lib/sellerContact';
 import { useResponsiveLayout } from '@/lib/responsiveLayout';
+import { FF_SIMILAR_LISTINGS } from '@/lib/featureFlags';
+import { peekListingDetailSession, putListingDetailSession } from '@/services/listings/listingDetailSessionCache';
 
 type State =
   | { status: 'loading' }
@@ -67,6 +71,19 @@ const REPORT_REASONS = ['Arnaque', 'Faux produit', 'Contenu interdit', 'Autre'] 
  */
 
 /** Map known listing error messages to premium title + body for EmptyState. */
+/** expo-router peut exposer les query params en `string | string[]`. */
+function coalesceRouteParam(param: string | string[] | undefined): string | undefined {
+  if (typeof param === 'string') {
+    const t = param.trim();
+    return t.length > 0 ? t : undefined;
+  }
+  if (Array.isArray(param) && param.length > 0) {
+    const t = String(param[0]).trim();
+    return t.length > 0 ? t : undefined;
+  }
+  return undefined;
+}
+
 function getListingErrorDisplay(message: string): { title: string; body: string } {
   if (message === 'Annonce introuvable') {
     return {
@@ -112,13 +129,15 @@ export default function ListingDetailScreen() {
   const CARD_WIDTH = screenWidth * 0.8;
   const CARD_GAP = isCompact ? spacing.sm : spacing.base;
 
-  const { id, contact: contactParam } = useLocalSearchParams<{ id: string; contact?: string }>();
+  const params = useLocalSearchParams<{ id?: string | string[]; contact?: string | string[] }>();
+  const id = useMemo(() => coalesceRouteParam(params.id), [params.id]);
+  const contactParam = useMemo(() => coalesceRouteParam(params.contact), [params.contact]);
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const [state, setState] = useState<State>({ status: 'loading' });
   const [isFavorite, setIsFavorite] = useState(false);
   const lastFavoriteIdsFetchAtRef = useRef<number>(0);
-  const FAVORITES_FETCH_TTL_MS = 45_000;
+  const FAVORITES_FETCH_TTL_MS = 120_000;
   const [reportModalVisible, setReportModalVisible] = useState(false);
   const [reportLoading, setReportLoading] = useState(false);
   const [reportReason, setReportReason] = useState<string | null>(null);
@@ -130,14 +149,24 @@ export default function ListingDetailScreen() {
     listingCount: null,
   });
   const [similarListings, setSimilarListings] = useState<PublicListing[]>([]);
-  const [similarLoading, setSimilarLoading] = useState(true);
+  const [similarLoading, setSimilarLoading] = useState(false);
+  const similarLoadStartedRef = useRef(false);
+  const scrollLayoutHeightRef = useRef(0);
   /** Évite double signalement immédiat en session (Sprint 7.1). */
   const [reportedListingId, setReportedListingId] = useState<string | null>(null);
   /** Évite de rejouer l’action contact après retour auth (pas de boucle). */
   const contactHandledRef = useRef<string | null>(null);
+  const listingIdRef = useRef<string | undefined>(undefined);
+  listingIdRef.current = id;
 
   useEffect(() => {
     contactHandledRef.current = null;
+  }, [id]);
+
+  useEffect(() => {
+    similarLoadStartedRef.current = false;
+    setSimilarListings([]);
+    setSimilarLoading(false);
   }, [id]);
 
   useEffect(() => {
@@ -146,9 +175,39 @@ export default function ListingDetailScreen() {
       return;
     }
     setSellerStats({ memberSince: null, listingCount: null });
-    setSimilarLoading(true);
-    setSimilarListings([]);
     let cancelled = false;
+
+    const cached = peekListingDetailSession(id);
+    if (cached) {
+      setState({
+        status: 'success',
+        listing: cached.listing,
+        dynamicAttributes: cached.dynamicAttributes,
+      });
+      addRecentlyViewedListingId(id);
+      void (async () => {
+        const favResult = await getFavoriteIds();
+        if (cancelled) return;
+        if (favResult.data && id) {
+          setIsFavorite(favResult.data.includes(id));
+        }
+        lastFavoriteIdsFetchAtRef.current = Date.now();
+        const sellerId = cached.listing.seller_id;
+        if (sellerId) {
+          const statsResult = await getSellerStats(sellerId);
+          if (!cancelled && !statsResult.error) {
+            setSellerStats({
+              memberSince: statsResult.data.memberSince,
+              listingCount: statsResult.data.listingCount,
+            });
+          }
+        }
+      })();
+      return () => {
+        cancelled = true;
+      };
+    }
+
     (async () => {
       const [listingResult, favResult, dynamicAttributes] = await Promise.all([
         getListingById(id),
@@ -162,6 +221,7 @@ export default function ListingDetailScreen() {
       }
       const listing = listingResult.data!;
       setState({ status: 'success', listing, dynamicAttributes });
+      putListingDetailSession(id, listing, dynamicAttributes);
       addRecentlyViewedListingId(id);
       if (favResult.data && id) {
         setIsFavorite(favResult.data.includes(id));
@@ -176,28 +236,67 @@ export default function ListingDetailScreen() {
           });
         }
       }
-      const currentCategory = listing.category_id
-        ? LISTING_CATEGORIES.find((c) => c.id === listing.category_id)?.label
-        : null;
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [id]);
 
-      const similarResult = await getSimilarListings({
-        id: listing.id,
-        title: listing.title,
-        description: listing.description,
-        city: listing.city,
-        category: currentCategory,
-        price: listing.price,
-      });
-
-      if (!cancelled) {
-        setSimilarLoading(false);
+  const tryBeginSimilarLoad = useCallback(() => {
+    if (!FF_SIMILAR_LISTINGS) return;
+    if (similarLoadStartedRef.current) return;
+    if (state.status !== 'success') return;
+    similarLoadStartedRef.current = true;
+    setSimilarLoading(true);
+    const listing = state.listing;
+    const currentCategory = listing.category_id
+      ? LISTING_CATEGORIES.find((c) => c.id === listing.category_id)?.label
+      : null;
+    const targetListingId = listing.id;
+    void (async () => {
+      try {
+        const similarResult = await getSimilarListings(
+          {
+            id: listing.id,
+            title: listing.title,
+            description: listing.description,
+            city: listing.city,
+            category: currentCategory,
+            price: listing.price,
+          },
+          4
+        );
+        if (listingIdRef.current !== targetListingId) return;
         if (!similarResult.error) {
-          setSimilarListings(similarResult.data.slice(0, 8));
+          setSimilarListings(similarResult.data);
+        }
+      } finally {
+        if (listingIdRef.current === targetListingId) {
+          setSimilarLoading(false);
         }
       }
     })();
-    return () => { cancelled = true; };
-  }, [id]);
+  }, [state]);
+
+  const handleDetailScroll = useCallback(
+    (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+      const { contentOffset, layoutMeasurement, contentSize } = e.nativeEvent;
+      if (layoutMeasurement.height + contentOffset.y >= contentSize.height - 320) {
+        tryBeginSimilarLoad();
+      }
+    },
+    [tryBeginSimilarLoad]
+  );
+
+  const handleDetailContentSizeChange = useCallback(
+    (_w: number, contentHeight: number) => {
+      const lh = scrollLayoutHeightRef.current;
+      if (lh > 0 && contentHeight > 0 && contentHeight <= lh + 40) {
+        tryBeginSimilarLoad();
+      }
+    },
+    [tryBeginSimilarLoad]
+  );
 
   /** Refresh favorite state when screen gains focus (e.g. return from Favorites tab). */
   useFocusEffect(
@@ -334,7 +433,7 @@ export default function ListingDetailScreen() {
   }, [id, state, router]);
 
   useEffect(() => {
-    const contact = typeof contactParam === 'string' ? contactParam : undefined;
+    const contact = contactParam;
     if (!contact || !isSellerContactAction(contact) || state.status !== 'success' || !id) return;
 
     const listing = state.listing;
@@ -481,8 +580,18 @@ export default function ListingDetailScreen() {
           { paddingBottom: 120 + insets.bottom },
         ]}
         showsVerticalScrollIndicator={false}
+        onLayout={(ev) => {
+          scrollLayoutHeightRef.current = ev.nativeEvent.layout.height;
+        }}
+        onContentSizeChange={handleDetailContentSizeChange}
+        onScroll={handleDetailScroll}
+        scrollEventThrottle={16}
       >
-        <ListingGallery images={listing.images} />
+        <ListingGallery
+          key={listing.id}
+          images={listing.images}
+          lazySourcePaths={listing.galleryLazySourcePaths}
+        />
         <View style={[styles.body, isCompact && styles.bodyCompact]}>
           <ListingMeta
             title={listing.title}
@@ -518,11 +627,11 @@ export default function ListingDetailScreen() {
             onCallPress={handleSecureCall}
             onSmsPress={handleSecureSms}
           />
-          {(similarLoading || similarListings.length > 0) ? (
+          {FF_SIMILAR_LISTINGS && (similarLoading || similarListings.length > 0) ? (
             <View style={styles.similarSection}>
               <Text style={styles.similarTitle}>Annonces similaires</Text>
               <FlatList
-                data={similarLoading ? ([{ id: 'skele-1' }, { id: 'skele-2' }, { id: 'skele-3' }] as any) : similarListings}
+                data={similarLoading ? ([{ id: 'skele-1' }, { id: 'skele-2' }] as any) : similarListings}
                 horizontal
                 keyExtractor={similarKeyExtractor}
                 renderItem={similarLoading ? renderSkeletonItem : renderSimilarItem}

@@ -6,10 +6,11 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { View, Text, StyleSheet, FlatList } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { supabase } from '@/lib/supabase';
-import { getSignedUrlsMap, toDisplayImageUrl } from '@/lib/listingImageUrl';
+import { getSignedUrlsMap, listingStoragePathsForCardCover, mapListingCardImages } from '@/lib/listingImageUrl';
 import { normalizeListingSchemaFeatures } from '@/lib/listingSchemaFeatures';
 import { ListingCard, LISTING_CARD_RAIL_STRIDE } from './ListingCard';
 import type { PublicListing } from '@/services/listings';
+import { listingPublicListSelect } from '@/services/listings/listingListSelect';
 import { colors, spacing, ui } from '@/theme';
 import { ListingSectionSkeleton } from './ListingSectionSkeleton';
 
@@ -25,9 +26,7 @@ export function UrgentSection() {
     try {
       const { data, error } = await supabase
         .from('listings')
-        .select(
-          'id, title, price, city, boosted, urgent, district, created_at, updated_at, views_count, user_id, listing_images(url, sort_order)'
-        )
+        .select(listingPublicListSelect(false))
         .eq('status', 'active')
         .eq('urgent', true)
         .order('created_at', { ascending: false })
@@ -35,22 +34,20 @@ export function UrgentSection() {
 
       if (!error && data) {
         const rows = data as any[];
-        const allPaths = rows.flatMap((row) =>
-          (row.listing_images ?? []).map((img: any) => String(img.url ?? '').trim()).filter(Boolean)
+        const allPaths = rows.flatMap((row: any) =>
+          listingStoragePathsForCardCover(row.listing_images)
         );
         const signedMap = await getSignedUrlsMap(allPaths);
         
         const mapped = rows.map((row) => {
-          const images = (row.listing_images ?? [])
-            .sort((a: any, b: any) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
-            .map((img: any) => toDisplayImageUrl(img.url ?? '', signedMap))
-            .filter((url: string) => url !== '');
+          const images = mapListingCardImages(row.listing_images, signedMap);
           const schema = normalizeListingSchemaFeatures(row);
           return {
             id: row.id,
             title: row.title,
             price: row.price,
             city: row.city,
+            category_id: row.category_id ?? null,
             created_at: row.created_at,
             images,
             views_count: row.views_count ?? 0,
