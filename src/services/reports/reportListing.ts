@@ -2,6 +2,9 @@
  * Report a listing (e.g. inappropriate, scam).
  * Reuses existing backend: insert into listing_reports (listing_id, user_id, reason).
  * Auth required; caller should redirect to login if not authenticated.
+ *
+ * TODO (produit / alignement web) : le schéma expose aussi `reports` avec `report_status`.
+ * Ne pas migrer sans coordination backend + web — flux mobile inchangé tant que `listing_reports` est la cible validée.
  */
 
 import { supabase } from '@/lib/supabase';

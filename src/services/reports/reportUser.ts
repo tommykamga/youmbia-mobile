@@ -2,6 +2,8 @@
  * Report a user (seller) – trust & safety.
  * Requires backend table user_reports (reported_user_id, reporter_user_id, reason).
  * Auth required.
+ *
+ * TODO (produit / alignement web) : voir `reportListing.ts` — table unifiée `reports` vs `user_reports` à valider côté modération.
  */
 
 import { supabase } from '@/lib/supabase';

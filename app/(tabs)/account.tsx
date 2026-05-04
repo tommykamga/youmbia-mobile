@@ -7,6 +7,10 @@ import { getSession, signOut } from '@/services/auth';
 import { spacing, colors, typography, fontWeights, radius } from '@/theme';
 import Animated, { useSharedValue, useAnimatedStyle, withTiming, Easing, withSpring } from 'react-native-reanimated';
 import { buildAuthGateHref } from '@/lib/authGateNavigation';
+import Constants from 'expo-constants';
+
+const APP_VERSION_LABEL =
+  Constants.expoConfig?.version ?? Constants.nativeAppVersion ?? '—';
 
 type RouteItem = {
   icon: keyof typeof Ionicons.glyphMap;
@@ -231,7 +235,7 @@ export default function AccountScreen() {
           </View>
         </View>
 
-        <Text style={styles.version}>Version 3.0.2</Text>
+        <Text style={styles.version}>Version {APP_VERSION_LABEL}</Text>
       </ScrollView>
     </Screen>
   );

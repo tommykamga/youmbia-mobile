@@ -22,8 +22,7 @@ type ProfileCachePayload = {
 };
 
 function logProfileDev(phase: string, payload?: Record<string, unknown>) {
-  if (typeof __DEV__ !== 'undefined' && __DEV__) {
-     
+  if (__DEV__) {
     console.log(`[profile] ${phase}`, payload ?? {});
   }
 }

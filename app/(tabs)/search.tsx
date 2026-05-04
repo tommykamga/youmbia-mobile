@@ -390,7 +390,6 @@ export default function SearchScreen() {
       lastNavParamsSearchEffectAtRef.current = now;
       void runSearchRef.current(nextQ, filters);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- only run when navigation params change
   }, [
     params.q,
     params.priceMin,
@@ -841,6 +840,7 @@ export default function SearchScreen() {
     hasAppliedPriceFilter,
     hasAppliedSearchFilter,
     activeFilterSummary,
+    appliedSearchFilters,
     submittedQuery,
     filteredListings.length,
     state,

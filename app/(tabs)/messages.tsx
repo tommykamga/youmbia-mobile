@@ -144,8 +144,7 @@ export default function MessagesScreen() {
       }
 
       const result = await getConversations();
-      if (typeof __DEV__ !== 'undefined' && __DEV__) {
-         
+      if (__DEV__) {
         console.log('[messages/inbox]', {
           userId: session.user.id,
           request: 'getConversations',
@@ -177,8 +176,7 @@ export default function MessagesScreen() {
       setStatus(data.length > 0 ? 'success' : 'empty');
       await lightCacheWrite<InboxCachePayload>(cacheKey, { userId: uid, conversations: data });
     } catch (e: unknown) {
-      if (typeof __DEV__ !== 'undefined' && __DEV__) {
-         
+      if (__DEV__) {
         console.warn('[messages/inbox] fetchInbox exception', e);
       }
       if (shownFromCacheRef.current) {

@@ -55,7 +55,6 @@ export async function compressListingPhotoForStorageUpload(input: {
 
   if (shouldSkipListingPhotoRasterCompression(input.mimeType, input.uri)) {
     if (__DEV__) {
-      // eslint-disable-next-line no-console
       console.log('[listingPhotoUpload]', {
         skip: 'svg-or-non-raster-policy',
         beforeBytes: beforeApprox,
@@ -86,14 +85,12 @@ export async function compressListingPhotoForStorageUpload(input: {
     const outRaw = result.base64 ? stripDataUrlBase64Prefix(result.base64) : '';
     if (!outRaw) {
       if (__DEV__) {
-        // eslint-disable-next-line no-console
         console.warn('[listingPhotoUpload] compression empty result, using original');
       }
       return { base64: stripped };
     }
 
     if (__DEV__) {
-      // eslint-disable-next-line no-console
       console.log('[listingPhotoUpload]', {
         beforeBytes: beforeApprox,
         afterBytes: approxDecodedBytesFromRawBase64(outRaw),
@@ -103,7 +100,6 @@ export async function compressListingPhotoForStorageUpload(input: {
     return { base64: outRaw };
   } catch (e) {
     if (__DEV__) {
-      // eslint-disable-next-line no-console
       console.warn('[listingPhotoUpload] compression failed, using original', e);
     }
     return { base64: stripped };
