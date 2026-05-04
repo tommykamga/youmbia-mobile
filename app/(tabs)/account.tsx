@@ -309,6 +309,9 @@ const styles = StyleSheet.create({
   section: {
     marginTop: spacing.md,
     paddingHorizontal: spacing.base,
+    maxWidth: 760,
+    width: '100%',
+    alignSelf: 'center',
   },
   sectionTitle: {
     ...typography.sm,

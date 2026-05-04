@@ -280,6 +280,9 @@ const styles = StyleSheet.create({
   center: { flex: 1, paddingTop: spacing['3xl'] },
   emptyAction: { minWidth: 220, marginTop: spacing.lg },
   list: {
+    maxWidth: 760,
+    width: '100%',
+    alignSelf: 'center',
     paddingBottom: spacing.xl,
   },
   row: {

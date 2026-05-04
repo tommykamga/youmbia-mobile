@@ -270,6 +270,9 @@ const styles = StyleSheet.create({
   center: { flex: 1, paddingTop: spacing['3xl'] },
   keyboard: { flex: 1, backgroundColor: colors.background },
   listContent: {
+    maxWidth: 760,
+    width: '100%',
+    alignSelf: 'center',
     paddingHorizontal: spacing.base,
     paddingTop: spacing.base,
     flexGrow: 1,

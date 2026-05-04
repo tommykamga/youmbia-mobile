@@ -370,6 +370,9 @@ export default function UserProfileScreen() {
 const styles = StyleSheet.create({
   center: { flex: 1 },
   header: {
+    maxWidth: 900,
+    width: '100%',
+    alignSelf: 'center',
     padding: spacing.base,
     paddingBottom: spacing.lg,
   },
@@ -534,6 +537,9 @@ const styles = StyleSheet.create({
     marginTop: spacing.xl,
   },
   listContent: {
+    maxWidth: 900,
+    width: '100%',
+    alignSelf: 'center',
     padding: spacing.base,
     paddingBottom: spacing['3xl'],
     flexGrow: 1,

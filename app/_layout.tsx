@@ -5,6 +5,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import SplashScreenCustom from '@/features/splash/SplashScreen';
 import 'react-native-reanimated';
 import { Alert, AppState, Linking } from 'react-native';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { colors } from '@/theme';
 import { getSession, onAuthStateChange } from '@/services/auth';
 import { handleSupabaseAuthDeepLink } from '@/services/auth/handleSupabaseAuthDeepLink';
@@ -296,27 +297,29 @@ export default function RootLayout() {
   }
 
   return (
-    <FavoritesProvider>
-      <StatusBar style="dark" />
-      <Stack
-        screenOptions={{
-          headerShown: false,
-          contentStyle: { backgroundColor: colors.background },
-          animation: 'slide_from_right',
-        }}
-      >
-        <Stack.Screen name="index" />
-        <Stack.Screen name="(auth)" options={{ headerShown: false }} />
-        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        <Stack.Screen name="listing/[id]" options={{ headerShown: false }} />
-        <Stack.Screen name="conversation/[id]" options={{ headerShown: false }} />
-        <Stack.Screen name="account" options={{ headerShown: false }} />
-        <Stack.Screen name="sell/index" options={{ headerShown: false }} />
-        <Stack.Screen name="categories" options={{ headerShown: false }} />
-        <Stack.Screen name="help" options={{ headerShown: false }} />
-        <Stack.Screen name="terms" options={{ headerShown: false }} />
-        <Stack.Screen name="privacy" options={{ headerShown: false }} />
-      </Stack>
-    </FavoritesProvider>
+    <SafeAreaProvider>
+      <FavoritesProvider>
+        <StatusBar style="dark" translucent />
+        <Stack
+          screenOptions={{
+            headerShown: false,
+            contentStyle: { backgroundColor: colors.background },
+            animation: 'slide_from_right',
+          }}
+        >
+          <Stack.Screen name="index" />
+          <Stack.Screen name="(auth)" options={{ headerShown: false }} />
+          <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+          <Stack.Screen name="listing/[id]" options={{ headerShown: false }} />
+          <Stack.Screen name="conversation/[id]" options={{ headerShown: false }} />
+          <Stack.Screen name="account" options={{ headerShown: false }} />
+          <Stack.Screen name="sell/index" options={{ headerShown: false }} />
+          <Stack.Screen name="categories" options={{ headerShown: false }} />
+          <Stack.Screen name="help" options={{ headerShown: false }} />
+          <Stack.Screen name="terms" options={{ headerShown: false }} />
+          <Stack.Screen name="privacy" options={{ headerShown: false }} />
+        </Stack>
+      </FavoritesProvider>
+    </SafeAreaProvider>
   );
 }

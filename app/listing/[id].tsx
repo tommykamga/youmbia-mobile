@@ -732,6 +732,9 @@ const styles = StyleSheet.create({
     paddingBottom: FOOTER_HEIGHT_ESTIMATE + spacing['4xl'],
   },
   body: {
+    maxWidth: 900,
+    width: '100%',
+    alignSelf: 'center',
     padding: spacing.base,
   },
   bodyCompact: {

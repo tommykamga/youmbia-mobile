@@ -160,6 +160,9 @@ const styles = StyleSheet.create({
   },
   center: { flex: 1 },
   listContent: {
+    maxWidth: 760,
+    width: '100%',
+    alignSelf: 'center',
     padding: spacing.base,
     paddingBottom: spacing['3xl'],
     flexGrow: 1,

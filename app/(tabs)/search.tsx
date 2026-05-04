@@ -1286,6 +1286,9 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   header: {
+    maxWidth: 760,
+    width: '100%',
+    alignSelf: 'center',
     paddingHorizontal: spacing.base,
     paddingTop: spacing.md,
     paddingBottom: spacing.sm,
@@ -1471,6 +1474,9 @@ const styles = StyleSheet.create({
     marginTop: spacing.base,
   },
   listContent: {
+    maxWidth: 760,
+    width: '100%',
+    alignSelf: 'center',
     padding: spacing.base,
     paddingBottom: spacing['3xl'],
     flexGrow: 1,

@@ -658,7 +658,8 @@ export default function SellScreen() {
   if (showPrequal) {
     return (
       <Screen>
-        <View style={styles.prequalWrap}>
+        <View style={styles.content}>
+          <View style={styles.prequalWrap}>
           <Text style={styles.prequalTitle}>Avant de publier</Text>
           <Text style={styles.prequalSubtitle}>
             Vérifiez ces prérequis pour éviter un refus en fin de parcours.
@@ -712,6 +713,7 @@ export default function SellScreen() {
               Annuler
             </Button>
           </View>
+          </View>
         </View>
       </Screen>
     );
@@ -719,77 +721,78 @@ export default function SellScreen() {
 
   return (
     <Screen scroll keyboardAvoid>
-      <StepProgress step={currentStep} />
-      <Text style={styles.title}>Vendre</Text>
-      <Text style={styles.subtitle}>Publiez votre annonce en quelques minutes.</Text>
+      <View style={styles.content}>
+        <StepProgress step={currentStep} />
+        <Text style={styles.title}>Vendre</Text>
+        <Text style={styles.subtitle}>Publiez votre annonce en quelques minutes.</Text>
 
-      {prequalStatus === 'ready' && isAuthed && !hasPhone ? (
-        <View style={styles.inlineWarning}>
-          <Ionicons name="warning-outline" size={18} color={colors.warning} />
-          <Text style={styles.inlineWarningText}>
-            Téléphone manquant dans le profil: la publication sera bloquée au moment de publier.
-          </Text>
-          <Pressable onPress={() => router.push('/account/profile')} hitSlop={8}>
-            <Text style={styles.inlineWarningLink}>Compléter</Text>
-          </Pressable>
-        </View>
-      ) : null}
-
-      {currentStep === 1 ? (
-        <>
-          <Input
-            label="Titre"
-            placeholder="Ex. Vélo de ville"
-            value={title}
-            onChangeText={setTitle}
-            maxLength={200}
-          />
-          <Input
-            label="Prix (FCFA)"
-            placeholder="0"
-            value={priceStr}
-            onChangeText={setPriceStr}
-            keyboardType={Platform.OS === 'web' ? 'numeric' : 'decimal-pad'}
-          />
-          <View style={styles.categorySection}>
-            <Text style={styles.label}>Catégorie</Text>
-            <View style={styles.categoryChips}>
-              {LISTING_CATEGORIES.map((category) => {
-                const isSelected = categoryId === category.id;
-                return (
-                  <Pressable
-                    key={category.id}
-                    style={({ pressed }) => [
-                      styles.categoryChip,
-                      isSelected && styles.categoryChipSelected,
-                      pressed && styles.categoryChipPressed,
-                    ]}
-                    onPress={() => {
-                      setCategoryId(category.id);
-                      setSubmitError(null);
-                    }}
-                  >
-                    <Text
-                      style={[
-                        styles.categoryChipText,
-                        isSelected && styles.categoryChipTextSelected,
-                      ]}
-                    >
-                      {category.label}
-                    </Text>
-                  </Pressable>
-                );
-              })}
-            </View>
+        {prequalStatus === 'ready' && isAuthed && !hasPhone ? (
+          <View style={styles.inlineWarning}>
+            <Ionicons name="warning-outline" size={18} color={colors.warning} />
+            <Text style={styles.inlineWarningText}>
+              Téléphone manquant dans le profil: la publication sera bloquée au moment de publier.
+            </Text>
+            <Pressable onPress={() => router.push('/account/profile')} hitSlop={8}>
+              <Text style={styles.inlineWarningLink}>Compléter</Text>
+            </Pressable>
           </View>
-          <Input
-            label="Ville (optionnel)"
-            placeholder="Ex. Paris"
-            value={city}
-            onChangeText={setCity}
-          />
-        </>
-      ) : null}
+        ) : null}
+
+        {currentStep === 1 ? (
+          <>
+            <Input
+              label="Titre"
+              placeholder="Ex. Vélo de ville"
+              value={title}
+              onChangeText={setTitle}
+              maxLength={200}
+            />
+            <Input
+              label="Prix (FCFA)"
+              placeholder="0"
+              value={priceStr}
+              onChangeText={setPriceStr}
+              keyboardType={Platform.OS === 'web' ? 'numeric' : 'decimal-pad'}
+            />
+            <View style={styles.categorySection}>
+              <Text style={styles.label}>Catégorie</Text>
+              <View style={styles.categoryChips}>
+                {LISTING_CATEGORIES.map((category) => {
+                  const isSelected = categoryId === category.id;
+                  return (
+                    <Pressable
+                      key={category.id}
+                      style={({ pressed }) => [
+                        styles.categoryChip,
+                        isSelected && styles.categoryChipSelected,
+                        pressed && styles.categoryChipPressed,
+                      ]}
+                      onPress={() => {
+                        setCategoryId(category.id);
+                        setSubmitError(null);
+                      }}
+                    >
+                      <Text
+                        style={[
+                          styles.categoryChipText,
+                          isSelected && styles.categoryChipTextSelected,
+                        ]}
+                      >
+                        {category.label}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            </View>
+            <Input
+              label="Ville (optionnel)"
+              placeholder="Ex. Paris"
+              value={city}
+              onChangeText={setCity}
+            />
+          </>
+        ) : null}
 
       {currentStep === 2 ? (
         <>
@@ -849,62 +852,68 @@ export default function SellScreen() {
         </>
       ) : null}
 
-      {submitError ? (
-        <Text style={styles.submitError}>{submitError}</Text>
-      ) : null}
+        {submitError ? (
+          <Text style={styles.submitError}>{submitError}</Text>
+        ) : null}
 
-      <View style={styles.actions}>
-        {currentStep < TOTAL_STEPS ? (
-          <>
-            <Button
-              size="lg"
-              onPress={() => setCurrentStep((s) => Math.min(TOTAL_STEPS, s + 1))}
-              disabled={dynamicAttributesPilotActive && dynamicLoading}
-            >
-              Continuer
-            </Button>
-            <View style={styles.stepActionsRow}>
+        <View style={styles.actions}>
+          {currentStep < TOTAL_STEPS ? (
+            <>
               <Button
-                variant="secondary"
-                onPress={() => setCurrentStep((s) => Math.max(1, s - 1))}
-                disabled={currentStep === 1}
+                size="lg"
+                onPress={() => setCurrentStep((s) => Math.min(TOTAL_STEPS, s + 1))}
+                disabled={dynamicAttributesPilotActive && dynamicLoading}
               >
-                Retour
+                Continuer
               </Button>
-              <Button variant="ghost" onPress={goBackOrHome} style={styles.cancelInline}>
-                Annuler
-              </Button>
-            </View>
-          </>
-        ) : (
-          <>
-            <Button
-              size="lg"
-              onPress={handleSubmit}
-              loading={submitLoading}
-              disabled={submitLoading || (dynamicAttributesPilotActive && dynamicLoading)}
-            >
-              {"Publier l'annonce"}
-            </Button>
-            <View style={styles.stepActionsRow}>
+              <View style={styles.stepActionsRow}>
+                <Button
+                  variant="secondary"
+                  onPress={() => setCurrentStep((s) => Math.max(1, s - 1))}
+                  disabled={currentStep === 1}
+                >
+                  Retour
+                </Button>
+                <Button variant="ghost" onPress={goBackOrHome} style={styles.cancelInline}>
+                  Annuler
+                </Button>
+              </View>
+            </>
+          ) : (
+            <>
               <Button
-                variant="secondary"
-                onPress={() => setCurrentStep((s) => Math.max(1, s - 1))}
+                size="lg"
+                onPress={handleSubmit}
+                loading={submitLoading}
+                disabled={submitLoading || (dynamicAttributesPilotActive && dynamicLoading)}
               >
-                Retour
+                {"Publier l'annonce"}
               </Button>
-              <Button variant="ghost" onPress={goBackOrHome} style={styles.cancelInline}>
-                Annuler
-              </Button>
-            </View>
-          </>
-        )}
+              <View style={styles.stepActionsRow}>
+                <Button
+                  variant="secondary"
+                  onPress={() => setCurrentStep((s) => Math.max(1, s - 1))}
+                >
+                  Retour
+                </Button>
+                <Button variant="ghost" onPress={goBackOrHome} style={styles.cancelInline}>
+                  Annuler
+                </Button>
+              </View>
+            </>
+          )}
+        </View>
       </View>
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
+  content: {
+    maxWidth: 520,
+    width: '100%',
+    alignSelf: 'center',
+  },
   progressWrap: {
     marginTop: spacing.sm,
     marginBottom: spacing.base,
