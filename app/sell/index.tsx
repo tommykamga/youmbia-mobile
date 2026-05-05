@@ -44,7 +44,6 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 const MAX_LISTING_IMAGES = 4;
 /** Garde-fou trust (Sprint TRUST SAFE) : limite de publications / 24h. */
 const MAX_LISTINGS_PER_24H = 5;
-const TOTAL_STEPS = 3;
 
 type PickedImage = { uri: string; base64: string | null; mimeType?: string | null };
 
@@ -102,28 +101,9 @@ function ChecklistRow({
   );
 }
 
-function StepProgress({ step }: { step: number }) {
-  const safeStep = Math.min(TOTAL_STEPS, Math.max(1, step));
-  const pct = (safeStep / TOTAL_STEPS) * 100;
-  return (
-    <View style={styles.progressWrap} accessibilityRole="progressbar" accessibilityValue={{ now: safeStep, min: 1, max: TOTAL_STEPS }}>
-      <View style={styles.progressHeader}>
-        <Text style={styles.progressTitle}>Publication</Text>
-        <Text style={styles.progressMeta}>
-          Étape {safeStep} / {TOTAL_STEPS}
-        </Text>
-      </View>
-      <View style={styles.progressTrack}>
-        <View style={[styles.progressFill, { width: `${pct}%` }]} />
-      </View>
-    </View>
-  );
-}
-
 export default function SellScreen() {
   const router = useRouter();
   const [publishState, setPublishState] = useState<PublishState>({ status: 'idle' });
-  const [currentStep, setCurrentStep] = useState(1);
   const [showPrequal, setShowPrequal] = useState(true);
   const [prequalStatus, setPrequalStatus] = useState<PrequalStatus>('loading');
   const [profileAny, setProfileAny] = useState<Record<string, unknown> | null>(null);
@@ -162,7 +142,6 @@ export default function SellScreen() {
 
   const resetForm = () => {
     setPublishState({ status: 'idle' });
-    setCurrentStep(1);
     setShowPrequal(true);
     setPrequalStatus('loading');
     setProfileAny(null);
@@ -369,7 +348,7 @@ export default function SellScreen() {
       return;
     }
     if (!description.trim()) {
-      setSubmitError('Veuillez ajouter une description à votre annonce.');
+      setSubmitError('Ajoutez une description à votre annonce.');
       return;
     }
     if (images.length === 0 || !images.some((img) => !!img.base64 || !!img.uri)) {
@@ -698,7 +677,6 @@ export default function SellScreen() {
               size="lg"
               onPress={() => {
                 setShowPrequal(false);
-                setCurrentStep(1);
               }}
             >
               Continuer
@@ -720,26 +698,62 @@ export default function SellScreen() {
   }
 
   return (
-    <Screen scroll keyboardAvoid>
-      <View style={styles.content}>
-        <StepProgress step={currentStep} />
-        <Text style={styles.title}>Vendre</Text>
-        <Text style={styles.subtitle}>Publiez votre annonce en quelques minutes.</Text>
+    <Screen keyboardAvoid scroll={false}>
+      <View style={styles.formLayout}>
+        <ScrollView
+          style={styles.formScroll}
+          contentContainerStyle={styles.formScrollContent}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          <View style={styles.content}>
+            <Text style={styles.title}>Vendre</Text>
+            <Text style={styles.subtitle}>Publiez votre annonce en quelques minutes.</Text>
 
-        {prequalStatus === 'ready' && isAuthed && !hasPhone ? (
-          <View style={styles.inlineWarning}>
-            <Ionicons name="warning-outline" size={18} color={colors.warning} />
-            <Text style={styles.inlineWarningText}>
-              Téléphone manquant dans le profil: la publication sera bloquée au moment de publier.
-            </Text>
-            <Pressable onPress={() => router.push('/account/profile')} hitSlop={8}>
-              <Text style={styles.inlineWarningLink}>Compléter</Text>
-            </Pressable>
-          </View>
-        ) : null}
+            {prequalStatus === 'ready' && isAuthed && !hasPhone ? (
+              <View style={styles.inlineWarning}>
+                <Ionicons name="warning-outline" size={18} color={colors.warning} />
+                <Text style={styles.inlineWarningText}>
+                  Téléphone manquant dans le profil: la publication sera bloquée au moment de publier.
+                </Text>
+                <Pressable onPress={() => router.push('/account/profile')} hitSlop={8}>
+                  <Text style={styles.inlineWarningLink}>Compléter</Text>
+                </Pressable>
+              </View>
+            ) : null}
 
-        {currentStep === 1 ? (
-          <>
+            <View style={styles.imagesSection}>
+              <Text style={styles.label}>Photos</Text>
+              <Text style={styles.stepHelper}>
+                Ajoutez 1 à 4 photos. Une bonne première photo augmente les messages.
+              </Text>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.thumbsRow}
+                keyboardShouldPersistTaps="handled"
+              >
+                {images.map((img, i) => (
+                  <View key={i} style={styles.thumbWrap}>
+                    <Image source={{ uri: img.uri }} style={styles.thumb} />
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onPress={() => removeImage(i)}
+                      style={styles.removeThumb}
+                    >
+                      ✕
+                    </Button>
+                  </View>
+                ))}
+                {images.length < MAX_LISTING_IMAGES && (
+                  <Button variant="outline" size="md" onPress={pickImages} style={styles.addPhotoBtn}>
+                    + Photo
+                  </Button>
+                )}
+              </ScrollView>
+            </View>
+
             <Input
               label="Titre"
               placeholder="Ex. Vélo de ville"
@@ -747,13 +761,17 @@ export default function SellScreen() {
               onChangeText={setTitle}
               maxLength={200}
             />
+
             <Input
-              label="Prix (FCFA)"
-              placeholder="0"
-              value={priceStr}
-              onChangeText={setPriceStr}
-              keyboardType={Platform.OS === 'web' ? 'numeric' : 'decimal-pad'}
+              label="Description"
+              placeholder="Décrivez votre article..."
+              value={description}
+              onChangeText={setDescription}
+              multiline
+              numberOfLines={4}
+              style={styles.descriptionInput}
             />
+
             <View style={styles.categorySection}>
               <Text style={styles.label}>Catégorie</Text>
               <View style={styles.categoryChips}>
@@ -785,123 +803,47 @@ export default function SellScreen() {
                 })}
               </View>
             </View>
+
+            {dynamicAttributesPilotActive ? (
+              <DynamicCategoryAttributesFields
+                definitions={dynamicDefs}
+                optionsByDefinitionId={dynamicOptionsByDef}
+                loading={dynamicLoading}
+                values={dynamicValues}
+                onChange={handleDynamicChange}
+              />
+            ) : null}
+
+            <Input
+              label="Prix (FCFA)"
+              placeholder="0"
+              value={priceStr}
+              onChangeText={setPriceStr}
+              keyboardType={Platform.OS === 'web' ? 'numeric' : 'decimal-pad'}
+            />
+
             <Input
               label="Ville (optionnel)"
-              placeholder="Ex. Paris"
+              placeholder="Ex. Douala"
               value={city}
               onChangeText={setCity}
             />
-          </>
-        ) : null}
-
-      {currentStep === 2 ? (
-        <>
-          {dynamicAttributesPilotActive ? (
-            <DynamicCategoryAttributesFields
-              definitions={dynamicDefs}
-              optionsByDefinitionId={dynamicOptionsByDef}
-              loading={dynamicLoading}
-              values={dynamicValues}
-              onChange={handleDynamicChange}
-            />
-          ) : null}
-          <Input
-            label="Description"
-            placeholder="Décrivez votre article..."
-            value={description}
-            onChangeText={setDescription}
-            multiline
-            numberOfLines={4}
-            style={styles.descriptionInput}
-          />
-        </>
-      ) : null}
-
-      {currentStep === 3 ? (
-        <>
-          <View style={styles.imagesSection}>
-            <Text style={styles.label}>Photos</Text>
-            <Text style={styles.stepHelper}>
-              Ajoutez 1 à 4 photos. Une bonne première photo augmente les messages.
-            </Text>
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.thumbsRow}
-            >
-              {images.map((img, i) => (
-                <View key={i} style={styles.thumbWrap}>
-                  <Image source={{ uri: img.uri }} style={styles.thumb} />
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onPress={() => removeImage(i)}
-                    style={styles.removeThumb}
-                  >
-                    ✕
-                  </Button>
-                </View>
-              ))}
-              {images.length < MAX_LISTING_IMAGES && (
-                <Button variant="outline" size="md" onPress={pickImages} style={styles.addPhotoBtn}>
-                  + Photo
-                </Button>
-              )}
-            </ScrollView>
           </View>
-        </>
-      ) : null}
+        </ScrollView>
 
-        {submitError ? (
-          <Text style={styles.submitError}>{submitError}</Text>
-        ) : null}
-
-        <View style={styles.actions}>
-          {currentStep < TOTAL_STEPS ? (
-            <>
-              <Button
-                size="lg"
-                onPress={() => setCurrentStep((s) => Math.min(TOTAL_STEPS, s + 1))}
-                disabled={dynamicAttributesPilotActive && dynamicLoading}
-              >
-                Continuer
-              </Button>
-              <View style={styles.stepActionsRow}>
-                <Button
-                  variant="secondary"
-                  onPress={() => setCurrentStep((s) => Math.max(1, s - 1))}
-                  disabled={currentStep === 1}
-                >
-                  Retour
-                </Button>
-                <Button variant="ghost" onPress={goBackOrHome} style={styles.cancelInline}>
-                  Annuler
-                </Button>
-              </View>
-            </>
-          ) : (
-            <>
-              <Button
-                size="lg"
-                onPress={handleSubmit}
-                loading={submitLoading}
-                disabled={submitLoading || (dynamicAttributesPilotActive && dynamicLoading)}
-              >
-                {"Publier l'annonce"}
-              </Button>
-              <View style={styles.stepActionsRow}>
-                <Button
-                  variant="secondary"
-                  onPress={() => setCurrentStep((s) => Math.max(1, s - 1))}
-                >
-                  Retour
-                </Button>
-                <Button variant="ghost" onPress={goBackOrHome} style={styles.cancelInline}>
-                  Annuler
-                </Button>
-              </View>
-            </>
-          )}
+        <View style={styles.stickyFooter}>
+          {submitError ? <Text style={styles.submitErrorSticky}>{submitError}</Text> : null}
+          <Button
+            size="lg"
+            onPress={handleSubmit}
+            loading={submitLoading}
+            disabled={submitLoading || (dynamicAttributesPilotActive && dynamicLoading)}
+          >
+            {"Publier l'annonce"}
+          </Button>
+          <Button variant="ghost" onPress={goBackOrHome}>
+            Annuler
+          </Button>
         </View>
       </View>
     </Screen>
@@ -909,46 +851,40 @@ export default function SellScreen() {
 }
 
 const styles = StyleSheet.create({
+  formLayout: {
+    flex: 1,
+  },
+  formScroll: {
+    flex: 1,
+  },
+  formScrollContent: {
+    flexGrow: 1,
+    paddingBottom: spacing['2xl'],
+  },
+  stickyFooter: {
+    gap: spacing.sm,
+    paddingTop: spacing.base,
+    paddingBottom: spacing.sm,
+    paddingHorizontal: spacing.base,
+    borderTopWidth: 1,
+    borderTopColor: colors.borderLight,
+    backgroundColor: colors.background,
+    ...Platform.select({
+      ios: {
+        shadowColor: colors.text,
+        shadowOffset: { width: 0, height: -6 },
+        shadowOpacity: 0.05,
+        shadowRadius: 10,
+      },
+      android: {
+        elevation: 10,
+      },
+    }),
+  },
   content: {
     maxWidth: 520,
     width: '100%',
     alignSelf: 'center',
-  },
-  progressWrap: {
-    marginTop: spacing.sm,
-    marginBottom: spacing.base,
-    padding: spacing.base,
-    borderWidth: 1,
-    borderColor: colors.borderLight,
-    backgroundColor: colors.surface,
-    borderRadius: radius.xl,
-    gap: spacing.sm,
-  },
-  progressHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'baseline',
-  },
-  progressTitle: {
-    ...typography.sm,
-    fontWeight: fontWeights.bold,
-    color: colors.text,
-  },
-  progressMeta: {
-    ...typography.xs,
-    color: colors.textMuted,
-    fontWeight: fontWeights.semibold,
-  },
-  progressTrack: {
-    height: 8,
-    borderRadius: 8,
-    backgroundColor: colors.surfaceSubtle,
-    overflow: 'hidden',
-  },
-  progressFill: {
-    height: 8,
-    borderRadius: 8,
-    backgroundColor: colors.primary,
   },
   prequalWrap: {
     paddingTop: spacing.xl,
@@ -1050,16 +986,6 @@ const styles = StyleSheet.create({
     ...typography.xs,
     color: colors.textMuted,
     marginBottom: spacing.sm,
-  },
-  stepActionsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: spacing.sm,
-  },
-  cancelInline: {
-    marginTop: 0,
-    alignSelf: 'flex-end',
   },
   successBlock: {
     paddingTop: spacing['3xl'],
@@ -1174,16 +1100,9 @@ const styles = StyleSheet.create({
   addPhotoBtn: {
     alignSelf: 'center',
   },
-  submitError: {
+  submitErrorSticky: {
     ...typography.sm,
     color: colors.error,
-    marginBottom: spacing.base,
-  },
-  actions: {
-    gap: spacing.base,
-    marginTop: spacing.lg,
-  },
-  cancel: {
-    marginTop: spacing.base,
+    marginBottom: spacing.xs,
   },
 });

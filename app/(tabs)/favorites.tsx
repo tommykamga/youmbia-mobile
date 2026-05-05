@@ -7,7 +7,7 @@ import React, { useCallback, useEffect, useState, useMemo } from 'react';
 import { FlatList, View, StyleSheet, RefreshControl, Platform } from 'react-native';
 import { useRouter, Redirect } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { Screen, Loader, EmptyState, Button, BrandSymbol } from '@/components';
+import { Screen, Loader, EmptyState, Button, AppHeader } from '@/components';
 import { getFavorites } from '@/services/favorites';
 import { getSession } from '@/services/auth';
 import { ListingCard } from '@/features/listings';
@@ -87,10 +87,8 @@ export default function FavoritesScreen() {
 
   if (state.status === 'error') {
     return (
-      <Screen>
-        <View style={styles.brandBar}>
-          <BrandSymbol size={52} />
-        </View>
+      <Screen noPadding>
+        <AppHeader title="Favoris" noBorder />
         <EmptyState title="Erreur" message={state.message} style={styles.center} />
       </Screen>
     );
@@ -98,10 +96,8 @@ export default function FavoritesScreen() {
 
   if (state.status === 'empty') {
     return (
-      <Screen>
-        <View style={styles.brandBar}>
-          <BrandSymbol size={52} />
-        </View>
+      <Screen noPadding>
+        <AppHeader title="Favoris" noBorder />
         <EmptyState
           icon={<Ionicons name="heart-outline" size={24} color={colors.primary} />}
           title="Aucune annonce favorite"
@@ -119,14 +115,10 @@ export default function FavoritesScreen() {
     );
   }
 
-  const listHeader = (
-    <View style={styles.brandBar}>
-      <BrandSymbol size={52} />
-    </View>
-  );
+  const listHeader = <AppHeader title="Favoris" noBorder />;
 
   return (
-    <Screen>
+    <Screen noPadding>
       <FlatList
         data={displayData}
         keyExtractor={keyExtractor}
@@ -152,12 +144,6 @@ export default function FavoritesScreen() {
 }
 
 const styles = StyleSheet.create({
-  brandBar: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingTop: 0,
-    paddingBottom: spacing.xs,
-  },
   center: { flex: 1 },
   listContent: {
     maxWidth: 760,

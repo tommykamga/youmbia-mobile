@@ -2,7 +2,7 @@
  * Champs attributs dynamiques — création d’annonce (pilotes Véhicules + Électronique).
  */
 
-import React from 'react';
+import React, { useMemo, useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -10,8 +10,11 @@ import {
   Pressable,
   ActivityIndicator,
   Platform,
+  Modal,
+  ScrollView,
 } from 'react-native';
 import { Input } from '@/components/Input';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { colors, spacing, typography, fontWeights, radius } from '@/theme';
 import type {
   CategoryAttributeOption,
@@ -39,6 +42,46 @@ export function DynamicCategoryAttributesFields({
   values,
   onChange,
 }: Props) {
+  const [selectOpen, setSelectOpen] = useState(false);
+  const [activeSelectKey, setActiveSelectKey] = useState<string | null>(null);
+  const [activeSelectDefId, setActiveSelectDefId] = useState<string | null>(null);
+  const [activeSelectLabel, setActiveSelectLabel] = useState<string>('');
+
+  const openSelect = useCallback(
+    (def: EffectiveCategoryAttributeDefinitionResolved) => {
+      setActiveSelectKey(def.key);
+      setActiveSelectDefId(def.definition_id);
+      setActiveSelectLabel(fieldLabel(def));
+      setSelectOpen(true);
+    },
+    []
+  );
+
+  const closeSelect = useCallback(() => {
+    setSelectOpen(false);
+  }, []);
+
+  const activeOptions = useMemo(() => {
+    if (!activeSelectDefId) return [];
+    return optionsByDefinitionId.get(activeSelectDefId) ?? [];
+  }, [activeSelectDefId, optionsByDefinitionId]);
+
+  const activeValue = activeSelectKey ? (values[activeSelectKey] ?? '') : '';
+  const activeValueLabel = useMemo(() => {
+    if (!activeValue) return 'Sélectionnez…';
+    const opt = activeOptions.find((o) => o.value === activeValue);
+    return opt?.label_fr ?? activeValue;
+  }, [activeOptions, activeValue]);
+
+  const handleSelectPick = useCallback(
+    (next: string) => {
+      if (!activeSelectKey) return;
+      onChange(activeSelectKey, next);
+      closeSelect();
+    },
+    [activeSelectKey, onChange, closeSelect]
+  );
+
   if (loading) {
     return (
       <View style={styles.loadingBox}>
@@ -127,33 +170,41 @@ export function DynamicCategoryAttributesFields({
           }
           case 'select': {
             const opts = optionsByDefinitionId.get(def.definition_id) ?? [];
-            const withEmpty = [{ value: '', label: 'Sélectionnez…' }, ...opts.map((o) => ({ value: o.value, label: o.label_fr }))];
+            const selectedOpt = v
+              ? opts.find((o) => o.value === v) ?? null
+              : null;
+            const display = selectedOpt?.label_fr ?? (v ? v : 'Sélectionnez…');
+            const disabled = opts.length === 0;
             return (
               <View key={def.key} style={styles.fieldBlock}>
                 <Text style={styles.label}>{label}</Text>
-                <View style={styles.chipsWrap}>
-                  {withEmpty.map((opt) => {
-                    const selected = v === opt.value;
-                    return (
-                      <Pressable
-                        key={`${def.key}-${opt.value || 'empty'}`}
-                        style={({ pressed }) => [
-                          styles.chip,
-                          selected && styles.chipSelected,
-                          pressed && styles.chipPressed,
-                        ]}
-                        onPress={() => onChange(def.key, opt.value)}
-                      >
-                        <Text
-                          style={[styles.chipText, selected && styles.chipTextSelected]}
-                          numberOfLines={2}
-                        >
-                          {opt.label}
-                        </Text>
-                      </Pressable>
-                    );
-                  })}
-                </View>
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.selectRow,
+                    disabled && styles.selectRowDisabled,
+                    pressed && !disabled && styles.selectRowPressed,
+                  ]}
+                  onPress={() => {
+                    if (disabled) return;
+                    openSelect(def);
+                  }}
+                >
+                  <Text
+                    style={[
+                      styles.selectValue,
+                      !v && styles.selectValuePlaceholder,
+                      disabled && styles.selectValueDisabled,
+                    ]}
+                    numberOfLines={1}
+                  >
+                    {disabled ? 'Aucune option disponible' : display}
+                  </Text>
+                  <Ionicons
+                    name="chevron-forward"
+                    size={18}
+                    color={disabled ? colors.textMuted : colors.textSecondary}
+                  />
+                </Pressable>
               </View>
             );
           }
@@ -161,6 +212,69 @@ export function DynamicCategoryAttributesFields({
             return null;
         }
       })}
+
+      <Modal
+        visible={selectOpen}
+        transparent
+        animationType="slide"
+        onRequestClose={closeSelect}
+      >
+        <Pressable style={styles.sheetOverlay} onPress={closeSelect}>
+          <Pressable style={styles.sheet} onPress={(e) => e.stopPropagation()}>
+            <View style={styles.sheetHeader}>
+              <Text style={styles.sheetTitle} numberOfLines={1}>
+                {activeSelectLabel || 'Sélection'}
+              </Text>
+              <Pressable
+                onPress={closeSelect}
+                hitSlop={10}
+                style={({ pressed }) => [styles.sheetCloseBtn, pressed && styles.sheetCloseBtnPressed]}
+              >
+                <Ionicons name="close" size={22} color={colors.textMuted} />
+              </Pressable>
+            </View>
+
+            <ScrollView
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+            >
+              <Pressable
+                style={({ pressed }) => [styles.optionRow, pressed && styles.optionRowPressed]}
+                onPress={() => handleSelectPick('')}
+              >
+                <Text style={styles.optionText}>—</Text>
+                {activeValue === '' ? (
+                  <Ionicons name="checkmark" size={18} color={colors.primary} />
+                ) : null}
+              </Pressable>
+
+              {activeOptions.map((opt) => {
+                const selected = activeValue === opt.value;
+                return (
+                  <Pressable
+                    key={opt.id}
+                    style={({ pressed }) => [styles.optionRow, pressed && styles.optionRowPressed]}
+                    onPress={() => handleSelectPick(opt.value)}
+                  >
+                    <Text style={[styles.optionText, selected && styles.optionTextSelected]} numberOfLines={2}>
+                      {opt.label_fr || opt.value}
+                    </Text>
+                    {selected ? (
+                      <Ionicons name="checkmark" size={18} color={colors.primary} />
+                    ) : null}
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+
+            <View style={styles.sheetFooter}>
+              <Text style={styles.sheetFooterHint} numberOfLines={1}>
+                Choix actuel : {activeValueLabel}
+              </Text>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </View>
   );
 }
@@ -238,5 +352,107 @@ const styles = StyleSheet.create({
   chipTextSelected: {
     color: colors.primary,
     fontWeight: fontWeights.semibold,
+  },
+
+  selectRow: {
+    minHeight: 48,
+    borderRadius: radius.xl,
+    borderWidth: 1,
+    borderColor: colors.borderLight,
+    backgroundColor: colors.surface,
+    paddingHorizontal: spacing.base,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing.sm,
+  },
+  selectRowPressed: {
+    backgroundColor: colors.surfaceSubtle,
+  },
+  selectRowDisabled: {
+    opacity: 0.7,
+  },
+  selectValue: {
+    flex: 1,
+    minWidth: 0,
+    ...typography.sm,
+    color: colors.text,
+    fontWeight: fontWeights.medium,
+  },
+  selectValuePlaceholder: {
+    color: colors.textMuted,
+    fontWeight: fontWeights.medium,
+  },
+  selectValueDisabled: {
+    color: colors.textMuted,
+  },
+
+  sheetOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.35)',
+    justifyContent: 'flex-end',
+  },
+  sheet: {
+    backgroundColor: colors.surface,
+    borderTopLeftRadius: radius['2xl'],
+    borderTopRightRadius: radius['2xl'],
+    paddingBottom: spacing.lg,
+    maxHeight: '84%',
+  },
+  sheetHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: spacing.base,
+    paddingTop: spacing.base,
+    paddingBottom: spacing.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.borderLight,
+  },
+  sheetTitle: {
+    flex: 1,
+    minWidth: 0,
+    ...typography.base,
+    fontWeight: fontWeights.bold,
+    color: colors.text,
+    marginRight: spacing.sm,
+  },
+  sheetCloseBtn: {
+    padding: spacing.xs,
+  },
+  sheetCloseBtnPressed: {
+    opacity: 0.75,
+  },
+  optionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing.base,
+    paddingVertical: spacing.base,
+    paddingHorizontal: spacing.base,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.borderLight,
+  },
+  optionRowPressed: {
+    backgroundColor: colors.surfaceSubtle,
+  },
+  optionText: {
+    flex: 1,
+    minWidth: 0,
+    ...typography.sm,
+    color: colors.text,
+    fontWeight: fontWeights.medium,
+  },
+  optionTextSelected: {
+    color: colors.primary,
+    fontWeight: fontWeights.semibold,
+  },
+  sheetFooter: {
+    paddingHorizontal: spacing.base,
+    paddingTop: spacing.sm,
+  },
+  sheetFooterHint: {
+    ...typography.xs,
+    color: colors.textMuted,
   },
 });

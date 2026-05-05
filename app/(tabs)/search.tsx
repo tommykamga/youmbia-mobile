@@ -1,7 +1,7 @@
 /**
  * Search tab – Sprint 2.2.
  * Complete search: query input, loading/error/empty/results, ListingCard, tap → listing detail.
- * Data: searchListings(query) → title/city/description ilike; instant suggestions (debounced).
+ * Data: searchListings(query) → title/city/description ilike; suggestions dans la feuille de recherche.
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -15,11 +15,17 @@ import {
   KeyboardAvoidingView,
   Platform,
   Modal,
+  ScrollView,
 } from 'react-native';
-import { useFocusEffect, useLocalSearchParams } from 'expo-router';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useFocusEffect, useLocalSearchParams, useRouter, type Href } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { Screen, Loader, EmptyState, Button } from '@/components';
-import { ListingCard } from '@/features/listings';
+import { Screen, Loader, EmptyState, Button, HomeBrandHeader, HomeCategoryStrip } from '@/components';
+import { ListingCard, ListingFeed } from '@/features/listings';
+import {
+  HomeMarketplaceFeedHeader,
+  useAuthStateForHome,
+} from '@/features/home/HomeMarketplaceFeedHeader';
 import { searchListings } from '@/services/listings';
 import { getSearchSuggestions } from '@/services/searchSuggestions';
 import { getFavoriteIds as getFavIds } from '@/services/favorites';
@@ -33,15 +39,20 @@ import {
 import { LISTING_CATEGORIES } from '@/lib/listingCategories';
 import { formatPrice } from '@/lib/format';
 import type { PublicListing } from '@/services/listings';
-import { colors, spacing, typography, fontWeights, radius } from '@/theme';
+import { colors, spacing, typography, fontWeights, radius, shadows } from '@/theme';
+import { getSession } from '@/services/auth';
+import { buildAuthGateHref } from '@/lib/authGateNavigation';
+import { useResponsiveLayout, getScrollBottomReserveForTabBar } from '@/lib/responsiveLayout';
 
 const SUGGESTIONS_DEBOUNCE_MS = 300;
-/** Debounce saisie → lancement recherche principale (egress). */
-const SEARCH_QUERY_DEBOUNCE_MS = 600;
 /** Ne pas relancer `runSearch` si les params de navigation sont identiques sous ce délai (anti double effet / focus). */
 const SEARCH_NAV_PARAMS_RUN_COOLDOWN_MS = 2 * 60 * 1000;
 /** Première page recherche — le reste au bouton « Voir plus » (egress). */
 const SEARCH_INITIAL_PAGE_SIZE = 6;
+const HOME_LISTING_FEED_NETWORK_COOLDOWN_MS = 2 * 60 * 1000;
+const HOME_FEED_PAGE_SIZE = 6;
+/** Apostrophe typographique (’). Constante JS : évite le rendu littéral « \\u2019 » si mis en JSX texte brut. */
+const LABEL_VOIR_PLUS_ANNONCES = 'Voir plus d\u2019annonces';
 
 type SearchPage1SessionCacheEntry = {
   empty: boolean;
@@ -63,6 +74,8 @@ function buildSearchPage1SessionKey(parts: {
 }
 const PRICE_INPUT_PATTERN = /^\d+$/;
 const CATEGORY_OPTIONS = ['Véhicules', 'Mode', 'Maison', 'Électronique', 'Sport', 'Loisirs', 'Autre'] as const;
+
+const SEARCH_FIELD_PLACEHOLDER = 'Rechercher';
 
 type SearchState =
   | { status: 'idle' }
@@ -142,6 +155,7 @@ function validatePriceFilters(priceMin: string, priceMax: string): {
 }
 
 export default function SearchScreen() {
+  const router = useRouter();
   const params = useLocalSearchParams<{
     q?: string;
     priceMin?: string;
@@ -174,10 +188,11 @@ export default function SearchScreen() {
   const [loadingMoreSearch, setLoadingMoreSearch] = useState(false);
   const [savedSearches, setSavedSearches] = useState<SavedSearch[]>([]);
   const [savedSearchFeedback, setSavedSearchFeedback] = useState<string | null>(null);
-  const [suggestions, setSuggestions] = useState<string[]>([]);
+  const [overlaySuggestions, setOverlaySuggestions] = useState<string[]>([]);
   const [filtersOpen, setFiltersOpen] = useState(false);
+  const [searchOverlayOpen, setSearchOverlayOpen] = useState(false);
+  const [overlayDraft, setOverlayDraft] = useState('');
   const [savedOpen, setSavedOpen] = useState(false);
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const mainSearchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastDisplayedPage1KeyRef = useRef<string | null>(null);
   const searchSeqRef = useRef(0);
@@ -188,6 +203,10 @@ export default function SearchScreen() {
   const savedSearchFeedbackTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastNavParamsSearchEffectKeyRef = useRef<string>('');
   const lastNavParamsSearchEffectAtRef = useRef(0);
+  const overlayInputRef = useRef<TextInput | null>(null);
+  const overlaySuggestDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** Clic « Voir plus d’annonces » sur le feed accueil : lancer une recherche sans mot-clé ni injection UI. */
+  const browseFromHomeFooterRef = useRef(false);
 
   const clearPendingMainSearchDebounce = useCallback(() => {
     if (mainSearchDebounceRef.current) {
@@ -215,42 +234,70 @@ export default function SearchScreen() {
     }, [loadFavorites, loadSavedSearches])
   );
 
-  /** Debounced suggestions: trigger after 300ms when query length >= 2. */
+  /** Suggestions dans la feuille de recherche uniquement (pas de recherche auto sur la saisie principale). */
   useEffect(() => {
-    if (debounceRef.current) {
-      clearTimeout(debounceRef.current);
-      debounceRef.current = null;
-    }
-    const trimmed = query.trim();
-    if (trimmed.length < 2) {
-      setSuggestions([]);
+    if (!searchOverlayOpen) {
+      if (overlaySuggestDebounceRef.current) {
+        clearTimeout(overlaySuggestDebounceRef.current);
+        overlaySuggestDebounceRef.current = null;
+      }
+      setOverlaySuggestions([]);
       return;
     }
-    debounceRef.current = setTimeout(() => {
-      debounceRef.current = null;
+    if (overlaySuggestDebounceRef.current) {
+      clearTimeout(overlaySuggestDebounceRef.current);
+      overlaySuggestDebounceRef.current = null;
+    }
+    const trimmed = overlayDraft.trim();
+    if (trimmed.length < 2) {
+      setOverlaySuggestions([]);
+      return;
+    }
+    overlaySuggestDebounceRef.current = setTimeout(() => {
+      overlaySuggestDebounceRef.current = null;
       getSearchSuggestions(trimmed).then((result) => {
         if (result.error) {
-          setSuggestions([]);
+          setOverlaySuggestions([]);
           return;
         }
-        setSuggestions(result.data ?? []);
+        setOverlaySuggestions(result.data ?? []);
       });
     }, SUGGESTIONS_DEBOUNCE_MS);
     return () => {
-      if (debounceRef.current) {
-        clearTimeout(debounceRef.current);
-        debounceRef.current = null;
+      if (overlaySuggestDebounceRef.current) {
+        clearTimeout(overlaySuggestDebounceRef.current);
+        overlaySuggestDebounceRef.current = null;
       }
     };
-  }, [query]);
+  }, [overlayDraft, searchOverlayOpen]);
 
   const runSearch = useCallback(async (q: string, filters?: Partial<AppliedSearchFilters & AppliedPriceFilters>) => {
     const trimmed = q.trim();
+    const browseFromHome = browseFromHomeFooterRef.current;
+    if (browseFromHome) {
+      browseFromHomeFooterRef.current = false;
+    }
 
     const searchCategoryId = filters?.categoryId !== undefined ? filters.categoryId : appliedSearchFilters.categoryId;
     const searchCity = filters?.city !== undefined ? filters.city : appliedSearchFilters.city;
     const searchMinPrice = filters?.min !== undefined ? filters.min : appliedPriceFilters.min;
     const searchMaxPrice = filters?.max !== undefined ? filters.max : appliedPriceFilters.max;
+
+    const hasSearchIntent =
+      browseFromHome ||
+      trimmed.length >= 2 ||
+      searchCategoryId != null ||
+      (searchCity != null && String(searchCity).trim() !== '') ||
+      searchMinPrice != null ||
+      searchMaxPrice != null;
+
+    if (!hasSearchIntent) {
+      searchSeqRef.current += 1;
+      setSubmittedQuery('');
+      setState({ status: 'idle' });
+      lastDisplayedPage1KeyRef.current = null;
+      return;
+    }
 
     const page1Key = buildSearchPage1SessionKey({
       q: trimmed,
@@ -401,28 +448,6 @@ export default function SearchScreen() {
     clearPendingMainSearchDebounce,
   ]);
 
-  /** Recherche principale debouncée : ≥ 2 caractères uniquement (pas d’exploration auto sur champ vide). */
-  useEffect(() => {
-    const trimmed = query.trim();
-    if (mainSearchDebounceRef.current) {
-      clearTimeout(mainSearchDebounceRef.current);
-      mainSearchDebounceRef.current = null;
-    }
-    if (trimmed.length < 2) {
-      return;
-    }
-    mainSearchDebounceRef.current = setTimeout(() => {
-      mainSearchDebounceRef.current = null;
-      void runSearchRef.current(trimmed);
-    }, SEARCH_QUERY_DEBOUNCE_MS);
-    return () => {
-      if (mainSearchDebounceRef.current) {
-        clearTimeout(mainSearchDebounceRef.current);
-        mainSearchDebounceRef.current = null;
-      }
-    };
-  }, [query]);
-
   const loadMoreSearchResults = useCallback(async () => {
     if (state.status !== 'success' || !state.hasMore || loadingMoreSearch) return;
     setLoadingMoreSearch(true);
@@ -477,19 +502,45 @@ export default function SearchScreen() {
     }
   }, [state.status, scrollResetKey]);
 
-  const handleSubmit = useCallback(() => {
-    clearPendingMainSearchDebounce();
+  const openSearchOverlay = useCallback(() => {
     Keyboard.dismiss();
-    setSuggestions([]);
-    runSearch(query);
-  }, [query, runSearch, clearPendingMainSearchDebounce]);
+    setOverlayDraft(query);
+    setSearchOverlayOpen(true);
+  }, [query]);
+
+  const closeSearchOverlay = useCallback(() => {
+    Keyboard.dismiss();
+    setSearchOverlayOpen(false);
+    setOverlaySuggestions([]);
+  }, []);
+
+  useEffect(() => {
+    if (!searchOverlayOpen) return;
+    const t = setTimeout(() => overlayInputRef.current?.focus(), 280);
+    return () => clearTimeout(t);
+  }, [searchOverlayOpen]);
+
+  /** Validation mot-clé depuis la feuille de recherche (submit clavier ou suggestion). */
+  const submitKeywordSearch = useCallback(
+    (explicit?: string) => {
+      const q = (explicit !== undefined ? explicit : overlayDraft).trim();
+      clearPendingMainSearchDebounce();
+      Keyboard.dismiss();
+      setOverlaySuggestions([]);
+      setQuery(q);
+      runSearch(q);
+      setSearchOverlayOpen(false);
+    },
+    [overlayDraft, runSearch, clearPendingMainSearchDebounce]
+  );
 
   const handleResetSearch = useCallback(() => {
     clearPendingMainSearchDebounce();
     lastDisplayedPage1KeyRef.current = null;
     setQuery('');
     setSubmittedQuery('');
-    setSuggestions([]);
+    setOverlayDraft('');
+    setOverlaySuggestions([]);
     setPriceMin('');
     setPriceMax('');
     setCategory('');
@@ -501,14 +552,11 @@ export default function SearchScreen() {
     runSearch('');
   }, [runSearch, clearPendingMainSearchDebounce]);
 
-  const handleSuggestionPress = useCallback(
+  const handleOverlaySuggestionPress = useCallback(
     (suggestion: string) => {
-      clearPendingMainSearchDebounce();
-      setQuery(suggestion);
-      setSuggestions([]);
-      runSearch(suggestion);
+      submitKeywordSearch(suggestion);
     },
-    [runSearch, clearPendingMainSearchDebounce]
+    [submitKeywordSearch]
   );
 
   const handleSaveSearch = useCallback(() => {
@@ -560,7 +608,7 @@ export default function SearchScreen() {
         city: item.city ?? null 
       });
       setPriceFilterError(null);
-      setSuggestions([]);
+      setOverlaySuggestions([]);
       runSearch(item.query, {
         categoryId: item.categoryId ?? null,
         city: item.city ?? null,
@@ -640,7 +688,25 @@ export default function SearchScreen() {
     return chips;
   }, [appliedPriceFilters, appliedSearchFilters]);
 
-  const activeFiltersCount = activeFilterSummary.length;
+  /** Chips sous « Résultats de recherche » : mot-clé, catégorie, agrégat filtres (ville / prix). */
+  const resultsChipsDisplay = useMemo(() => {
+    const chips: string[] = [];
+    const kw = submittedQuery.trim();
+    if (kw.length >= 2) {
+      chips.push(kw.length > 28 ? `« ${kw.slice(0, 25)}… »` : `« ${kw} »`);
+    }
+    if (appliedSearchFilters.category) {
+      chips.push(`Catégorie ${appliedSearchFilters.category}`);
+    }
+    let filterExtras = 0;
+    if (appliedSearchFilters.city) filterExtras += 1;
+    if (appliedPriceFilters.min != null) filterExtras += 1;
+    if (appliedPriceFilters.max != null) filterExtras += 1;
+    if (filterExtras > 0) {
+      chips.push(`Filtres (${filterExtras})`);
+    }
+    return chips;
+  }, [submittedQuery, appliedSearchFilters.category, appliedSearchFilters.city, appliedPriceFilters]);
 
   const filteredListings = useMemo(() => {
     // Le filtrage est maintenant fait côté serveur (Supabase) via searchListings.
@@ -702,6 +768,145 @@ export default function SearchScreen() {
 
   const closeSaved = useCallback(() => setSavedOpen(false), []);
 
+  const handleNotificationsPress = useCallback(() => {
+    router.push('/notifications' as Href);
+  }, [router]);
+
+  const { width, bucket } = useResponsiveLayout();
+  const insets = useSafeAreaInsets();
+  const scrollBottomReserve = useMemo(
+    () => getScrollBottomReserveForTabBar(width, insets.bottom),
+    [width, insets.bottom]
+  );
+  const searchChrome = useMemo(() => {
+    const borderColor = 'rgba(15,23,42,0.04)';
+    const searchBg = '#F4F6F8';
+    const rowShadow = Platform.select({
+      ios: {
+        shadowColor: '#0F172A',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.05,
+        shadowRadius: 10,
+      },
+      android: { elevation: 2 },
+      default: {},
+    });
+    if (width < 380) {
+      return {
+        hPad: 16,
+        searchMinH: 47,
+        searchPadV: 10,
+        stripPadTop: 2,
+        searchIconSize: 21,
+        searchRadius: 20,
+        searchBg,
+        borderColor,
+        rowShadow,
+      };
+    }
+    if (width >= 430) {
+      return {
+        hPad: 28,
+        searchMinH: 53,
+        searchPadV: 13,
+        stripPadTop: 4,
+        searchIconSize: 23,
+        searchRadius: 21,
+        searchBg,
+        borderColor,
+        rowShadow,
+      };
+    }
+    return {
+      hPad: 20,
+      searchMinH: 50,
+      searchPadV: 12,
+      stripPadTop: 3,
+      searchIconSize: 22,
+      searchRadius: 20,
+      searchBg,
+      borderColor,
+      rowShadow,
+    };
+  }, [width]);
+  const authState = useAuthStateForHome();
+
+  const showMarketplaceHomeFeed = state.status === 'idle';
+
+  const handleBoostedVoirTout = useCallback(() => {}, []);
+
+  const handleCategoriesVoirTout = useCallback(() => {
+    router.push('/categories' as Href);
+  }, [router]);
+
+  const handleSellPress = useCallback(async () => {
+    try {
+      const session = await getSession();
+      if (session?.user) {
+        router.push('/sell' as Href);
+      } else {
+        router.push(buildAuthGateHref('sell'));
+      }
+    } catch {
+      router.push(buildAuthGateHref('sell'));
+    }
+  }, [router]);
+
+  const handleQuickCategoryPress = useCallback(
+    (id: string, label: string) => {
+      const cid = parseInt(id, 10);
+      const cidOk = Number.isFinite(cid) ? cid : null;
+      const nextCat = normalizeFilterText(label);
+      setCategory(label);
+      setCategoryId(cidOk);
+      setSearchOverlayOpen(false);
+      clearPendingMainSearchDebounce();
+      lastDisplayedPage1KeyRef.current = null;
+      setAppliedSearchFilters((prev) => ({
+        ...prev,
+        category: nextCat,
+        categoryId: cidOk,
+      }));
+      void runSearchRef.current(query.trim(), {
+        category: nextCat,
+        categoryId: cidOk,
+        city: appliedSearchFilters.city,
+        min: appliedPriceFilters.min,
+        max: appliedPriceFilters.max,
+      });
+    },
+    [
+      query,
+      appliedSearchFilters.city,
+      appliedPriceFilters.min,
+      appliedPriceFilters.max,
+      clearPendingMainSearchDebounce,
+    ]
+  );
+
+  const marketplaceListHeader = useMemo(
+    () => (
+      <HomeMarketplaceFeedHeader
+        authState={authState}
+        bucket={bucket}
+        onBoostedVoirTout={handleBoostedVoirTout}
+        onCategoryPress={handleQuickCategoryPress}
+        onCategoriesVoirTout={handleCategoriesVoirTout}
+        onSellPress={handleSellPress}
+        showCategoryStrip={false}
+        showSellCta={false}
+      />
+    ),
+    [
+      authState,
+      bucket,
+      handleBoostedVoirTout,
+      handleQuickCategoryPress,
+      handleCategoriesVoirTout,
+      handleSellPress,
+    ]
+  );
+
   const sortBar = useMemo(
     () => (
       <View style={styles.sortRow}>
@@ -711,7 +916,7 @@ export default function SearchScreen() {
             onPress={() => setSortBy('recent')}
           >
             <Text style={[styles.sortOptionText, sortBy === 'recent' && styles.sortOptionTextActive]}>
-              Récent
+              Plus récentes
             </Text>
           </Pressable>
           <Pressable
@@ -733,29 +938,32 @@ export default function SearchScreen() {
         </View>
         <Pressable
           style={({ pressed }) => [
-            styles.filtersBtn,
-            (hasAppliedPriceFilter || hasAppliedSearchFilter) && styles.filtersBtnActive,
-            pressed && styles.filtersBtnPressed,
+            styles.sortFiltersIconBtn,
+            (hasAppliedPriceFilter || hasAppliedSearchFilter) && styles.sortFiltersIconBtnActive,
+            pressed && styles.sortFiltersIconBtnPressed,
           ]}
           onPress={openFilters}
+          hitSlop={10}
+          accessibilityRole="button"
+          accessibilityLabel="Filtres"
         >
           <Ionicons
             name="options-outline"
-            size={18}
-            color={(hasAppliedPriceFilter || hasAppliedSearchFilter) ? colors.primary : colors.textMuted}
+            size={20}
+            color={
+              hasAppliedPriceFilter || hasAppliedSearchFilter ? colors.primary : colors.textMuted
+            }
           />
-          <Text
-            style={[
-              styles.filtersBtnText,
-              (hasAppliedPriceFilter || hasAppliedSearchFilter) && styles.filtersBtnTextActive,
-            ]}
-          >
-            Filtres{activeFiltersCount > 0 ? ` (${activeFiltersCount})` : ''}
-          </Text>
         </Pressable>
       </View>
     ),
-    [sortBy, openFilters, hasAppliedPriceFilter, hasAppliedSearchFilter, activeFiltersCount, setSortBy]
+    [
+      sortBy,
+      setSortBy,
+      openFilters,
+      hasAppliedPriceFilter,
+      hasAppliedSearchFilter,
+    ]
   );
 
   const savedSearchesSection = useMemo(() => {
@@ -796,9 +1004,13 @@ export default function SearchScreen() {
   }, [savedSearches, handleSavedSearchPress, handleRemoveSavedSearch]);
 
   const resultsHeader = useMemo(() => {
-    const isExploreMode = !submittedQuery && !appliedSearchFilters.category && !appliedSearchFilters.city;
+    const isExploreMode =
+      !submittedQuery.trim() &&
+      !appliedSearchFilters.category &&
+      !appliedSearchFilters.city &&
+      !hasAppliedPriceFilter;
     const isFromHome = params.from === 'home';
-    
+
     return (
       <View style={styles.resultsHeaderWrap}>
         {isExploreMode ? (
@@ -812,39 +1024,41 @@ export default function SearchScreen() {
           <View style={styles.exploreHeader}>
             <Text style={styles.exploreTitle}>Résultats de recherche</Text>
             <Text style={styles.exploreSubtitle}>
-              {state.status === 'success' ? state.total : filteredListings.length} { (state.status === 'success' ? state.total : filteredListings.length) > 1 ? 'annonces trouvées' : 'annonce trouvée'}
+              {state.status === 'success' ? state.total : filteredListings.length}{' '}
+              {(state.status === 'success' ? state.total : filteredListings.length) > 1
+                ? 'annonces trouvées'
+                : 'annonce trouvée'}
             </Text>
           </View>
         )}
 
         {sortBar}
 
-        {(hasAppliedPriceFilter || hasAppliedSearchFilter) && (
+        {resultsChipsDisplay.length > 0 ? (
           <View style={styles.activeChipsRow}>
-            {activeFilterSummary.slice(0, 3).map((chip) => (
+            {resultsChipsDisplay.slice(0, 4).map((chip) => (
               <View key={chip} style={styles.filterChip}>
                 <Text style={styles.filterChipText}>{chip}</Text>
               </View>
             ))}
-            {activeFilterSummary.length > 3 ? (
+            {resultsChipsDisplay.length > 4 ? (
               <View style={styles.moreChip}>
-                <Text style={styles.moreChipText}>+{activeFilterSummary.length - 3}</Text>
+                <Text style={styles.moreChipText}>+{resultsChipsDisplay.length - 4}</Text>
               </View>
             ) : null}
           </View>
-        )}
+        ) : null}
       </View>
     );
   }, [
     sortBar,
     hasAppliedPriceFilter,
-    hasAppliedSearchFilter,
-    activeFilterSummary,
     appliedSearchFilters,
     submittedQuery,
     filteredListings.length,
     state,
     params.from,
+    resultsChipsDisplay,
   ]);
 
   const filtersSheetContent = useMemo(
@@ -1055,184 +1269,329 @@ export default function SearchScreen() {
   );
 
   return (
-    <Screen>
+    <Screen noPadding safe={false}>
       <KeyboardAvoidingView
         style={styles.keyboard}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
       >
-        <View style={styles.header}>
-          <View style={styles.searchRow}>
-            <Ionicons name="search" size={20} color={colors.textMuted} style={styles.searchIcon} />
-            <TextInput
-              style={styles.input}
-              placeholder="Que recherchez-vous ?"
-              placeholderTextColor={colors.textMuted}
-              value={query}
-              onChangeText={setQuery}
-              onSubmitEditing={handleSubmit}
-              returnKeyType="search"
-              autoCapitalize="none"
-              autoCorrect={false}
-            />
-            {query.length > 0 ? (
-              <Pressable
-                onPress={() => {
-                  clearPendingMainSearchDebounce();
-                  lastDisplayedPage1KeyRef.current = null;
-                  setQuery('');
-                  setState({ status: 'idle' });
-                  setSubmittedQuery('');
-                }}
-                hitSlop={8}
-                style={({ pressed }) => [styles.clearBtn, pressed && styles.clearBtnPressed]}
-              >
-                <Ionicons name="close-circle" size={20} color={colors.textMuted} />
-              </Pressable>
-            ) : null}
-          </View>
-          <View style={styles.headerActionsRow}>
-            <Pressable
-              style={({ pressed }) => [styles.submitBtn, pressed && styles.submitBtnPressed]}
-              onPress={handleSubmit}
-            >
-              <Text style={styles.submitLabel}>Rechercher</Text>
-            </Pressable>
-            <Pressable
-              style={({ pressed }) => [
-                styles.headerSecondaryBtn,
-                (hasAppliedPriceFilter || hasAppliedSearchFilter) && styles.headerSecondaryBtnActive,
-                pressed && styles.headerSecondaryBtnPressed,
-              ]}
-              onPress={openFilters}
-            >
-              <Ionicons
-                name="options-outline"
-                size={18}
-                color={(hasAppliedPriceFilter || hasAppliedSearchFilter) ? colors.primary : colors.textMuted}
+        <SafeAreaView style={styles.safeMarketplace} edges={['top', 'left', 'right']}>
+          <View style={styles.marketplaceColumn}>
+            <View style={styles.topStackMarketplace}>
+              <HomeBrandHeader
+                onNotificationsPress={handleNotificationsPress}
+                unreadCount={0}
+                searchTabLayout
               />
-              <Text
+              <View
                 style={[
-                  styles.headerSecondaryBtnText,
-                  (hasAppliedPriceFilter || hasAppliedSearchFilter) && styles.headerSecondaryBtnTextActive,
+                  styles.searchStripMarketplace,
+                  {
+                    paddingHorizontal: searchChrome.hPad,
+                    paddingTop: searchChrome.stripPadTop,
+                  },
                 ]}
               >
-                Filtres
-              </Text>
-            </Pressable>
-            {savedSearches.length > 0 ? (
-              <Pressable
-                style={({ pressed }) => [styles.headerSecondaryBtn, pressed && styles.headerSecondaryBtnPressed]}
-                onPress={openSaved}
-              >
-                <Ionicons name="time-outline" size={18} color={colors.textMuted} />
-                <Text style={styles.headerSecondaryBtnText}>Enregistrées</Text>
-              </Pressable>
-            ) : null}
-          </View>
-        </View>
-
-        {suggestions.length > 0 && (
-          <View style={styles.suggestionsWrap}>
-            {suggestions.map((text) => (
-              <Pressable
-                key={text}
-                style={({ pressed }) => [
-                  styles.suggestionRow,
-                  pressed && styles.suggestionRowPressed,
-                ]}
-                onPress={() => handleSuggestionPress(text)}
-              >
-                <Ionicons
-                  name="search"
-                  size={18}
-                  color={colors.textMuted}
-                  style={styles.suggestionIcon}
-                />
-                <Text style={styles.suggestionText} numberOfLines={1}>
-                  {text}
-                </Text>
-              </Pressable>
-            ))}
-          </View>
-        )}
-
-        {state.status === 'loading' && (
-          <Loader />
-        )}
-
-        {state.status === 'error' && (
-          <EmptyState
-            title="Erreur"
-            message={state.message}
-            style={styles.centerEdge}
-          />
-        )}
-
-        {state.status === 'empty' && (
-          <>
-            <EmptyState
-              icon={<Ionicons name="search-outline" size={24} color={colors.primary} />}
-              title="Aucun résultat"
-                message={`Essayez un autre mot-clé ou modifiez vos filtres pour "${state.query}".`}
-              action={
-                <View style={styles.emptyAction}>
-                  <Button variant="secondary" onPress={handleResetSearch}>
-                      Réinitialiser la recherche
-                  </Button>
-                </View>
-              }
-              style={styles.centerEdge}
-            />
-          </>
-        )}
-
-        {state.status === 'success' && (
-          <FlatList
-            ref={resultsListRef}
-            data={filteredListings}
-            extraData={favoriteIds}
-            keyExtractor={keyExtractor}
-            renderItem={renderItem}
-            ItemSeparatorComponent={itemSeparator}
-            ListHeaderComponent={resultsHeader}
-            ListFooterComponent={
-              state.hasMore ? (
-                <View style={styles.searchLoadMoreFooter}>
-                  <Button
-                    variant="outline"
-                    onPress={loadMoreSearchResults}
-                    loading={loadingMoreSearch}
+                <View
+                  style={[
+                    styles.searchRow,
+                    searchChrome.rowShadow,
+                    {
+                      minHeight: searchChrome.searchMinH,
+                      paddingVertical: searchChrome.searchPadV,
+                      paddingHorizontal: Math.min(searchChrome.hPad, 18),
+                      backgroundColor: searchChrome.searchBg,
+                      borderColor: searchChrome.borderColor,
+                      borderWidth: 1,
+                      borderRadius: searchChrome.searchRadius,
+                    },
+                  ]}
+                >
+                  <Ionicons
+                    name="search"
+                    size={searchChrome.searchIconSize}
+                    color={colors.textMuted}
+                    style={styles.searchIcon}
+                  />
+                  <Pressable
+                    style={styles.searchFieldPressable}
+                    onPress={openSearchOverlay}
+                    accessibilityRole="button"
+                    accessibilityLabel="Ouvrir la recherche"
                   >
-                    Voir plus d&apos;annonces
-                  </Button>
+                    <Text
+                      style={[styles.searchFieldText, !query.trim() && styles.searchFieldPlaceholder]}
+                      numberOfLines={1}
+                    >
+                      {query.trim() ? query.trim() : SEARCH_FIELD_PLACEHOLDER}
+                    </Text>
+                  </Pressable>
+                  {query.trim().length > 0 ? (
+                    <Pressable
+                      onPress={() => {
+                        clearPendingMainSearchDebounce();
+                        lastDisplayedPage1KeyRef.current = null;
+                        setQuery('');
+                        setOverlayDraft('');
+                        setState({ status: 'idle' });
+                        setSubmittedQuery('');
+                      }}
+                      hitSlop={8}
+                      style={({ pressed }) => [styles.clearBtn, pressed && styles.clearBtnPressed]}
+                    >
+                      <Ionicons
+                        name="close-circle"
+                        size={searchChrome.searchIconSize}
+                        color={colors.textMuted}
+                      />
+                    </Pressable>
+                  ) : null}
                 </View>
-              ) : null
-            }
-            contentContainerStyle={styles.listContent}
-            showsVerticalScrollIndicator={false}
-            keyboardShouldPersistTaps="handled"
-            initialNumToRender={Platform.OS === 'ios' ? 6 : 8}
-            maxToRenderPerBatch={Platform.OS === 'ios' ? 4 : 6}
-            windowSize={Platform.OS === 'ios' ? 5 : 8}
-            removeClippedSubviews={Platform.OS === 'ios'}
-            ListEmptyComponent={
-              <EmptyState
-                icon={<Ionicons name="options-outline" size={24} color={colors.primary} />}
-                title="Aucun résultat avec ces filtres"
-                message="Essayez de réinitialiser ou d’assouplir vos filtres de catégorie, ville ou prix."
-                action={
-                  <View style={styles.emptyAction}>
-                    <Button variant="secondary" onPress={handleResetSearch}>
-                      Réinitialiser la recherche
-                    </Button>
+                <HomeCategoryStrip
+                  bucket={bucket}
+                  onCategoryPress={handleQuickCategoryPress}
+                  onAutresPress={handleCategoriesVoirTout}
+                  parentContentPad={searchChrome.hPad}
+                  selectedCategoryId={appliedSearchFilters.categoryId}
+                />
+                {savedSearches.length > 0 ? (
+                  <View style={styles.savedQuickRow}>
+                    <Pressable
+                      style={({ pressed }) => [
+                        styles.savedQuickBtn,
+                        pressed && styles.savedQuickBtnPressed,
+                      ]}
+                      onPress={openSaved}
+                      accessibilityRole="button"
+                      accessibilityLabel="Recherches enregistrées"
+                    >
+                      <Ionicons name="time-outline" size={18} color={colors.textMuted} />
+                      <Text style={styles.savedQuickBtnText}>Enregistrées</Text>
+                    </Pressable>
                   </View>
-                }
-                style={styles.listEmpty}
-              />
-            }
-          />
-        )}
+                ) : null}
+              </View>
+            </View>
+
+            <View style={styles.feedSlot}>
+              {showMarketplaceHomeFeed ? (
+                <ListingFeed
+                  listHeaderComponent={marketplaceListHeader}
+                  limit={HOME_FEED_PAGE_SIZE}
+                  fetchPageSize={HOME_FEED_PAGE_SIZE}
+                  skipNetworkRevalidateWithinMs={HOME_LISTING_FEED_NETWORK_COOLDOWN_MS}
+                  disableInfiniteScroll
+                  listInitialNumToRender={4}
+                  footerAction={{
+                    label: LABEL_VOIR_PLUS_ANNONCES,
+                    onPress: () => {
+                      clearPendingMainSearchDebounce();
+                      lastDisplayedPage1KeyRef.current = null;
+                      setQuery('');
+                      setOverlayDraft('');
+                      browseFromHomeFooterRef.current = true;
+                      void runSearchRef.current('', {
+                        categoryId: appliedSearchFilters.categoryId,
+                        category: appliedSearchFilters.category,
+                        city: appliedSearchFilters.city,
+                        min: appliedPriceFilters.min,
+                        max: appliedPriceFilters.max,
+                      });
+                    },
+                  }}
+                  contentPaddingHorizontal={0}
+                  listingCardFeedPresentation="home"
+                  contentBottomInset={scrollBottomReserve}
+                />
+              ) : (
+                <>
+                  {state.status === 'loading' && <Loader />}
+
+                  {state.status === 'error' && (
+                    <EmptyState
+                      title="Erreur"
+                      message={state.message}
+                      style={styles.centerEdge}
+                    />
+                  )}
+
+                  {state.status === 'empty' && (
+                    <EmptyState
+                      icon={<Ionicons name="search-outline" size={24} color={colors.primary} />}
+                      title="Aucun résultat"
+                      message={`Essayez un autre mot-clé ou modifiez vos filtres pour "${state.query}".`}
+                      action={
+                        <View style={styles.emptyAction}>
+                          <Button variant="secondary" onPress={handleResetSearch}>
+                            Réinitialiser la recherche
+                          </Button>
+                        </View>
+                      }
+                      style={styles.centerEdge}
+                    />
+                  )}
+
+                  {state.status === 'success' && (
+                    <FlatList
+                      ref={resultsListRef}
+                      data={filteredListings}
+                      extraData={favoriteIds}
+                      keyExtractor={keyExtractor}
+                      renderItem={renderItem}
+                      ItemSeparatorComponent={itemSeparator}
+                      ListHeaderComponent={resultsHeader}
+                      ListFooterComponent={
+                        state.hasMore ? (
+                          <View style={styles.searchLoadMoreFooter}>
+                            <Button
+                              variant="outline"
+                              onPress={loadMoreSearchResults}
+                              loading={loadingMoreSearch}
+                            >
+                              {LABEL_VOIR_PLUS_ANNONCES}
+                            </Button>
+                          </View>
+                        ) : null
+                      }
+                      contentContainerStyle={[
+                        styles.listContent,
+                        { paddingBottom: spacing['3xl'] + scrollBottomReserve },
+                      ]}
+                      showsVerticalScrollIndicator={false}
+                      keyboardShouldPersistTaps="handled"
+                      initialNumToRender={Platform.OS === 'ios' ? 6 : 8}
+                      maxToRenderPerBatch={Platform.OS === 'ios' ? 4 : 6}
+                      windowSize={Platform.OS === 'ios' ? 5 : 8}
+                      removeClippedSubviews={Platform.OS === 'ios'}
+                      ListEmptyComponent={
+                        <EmptyState
+                          icon={<Ionicons name="options-outline" size={24} color={colors.primary} />}
+                          title="Aucun résultat avec ces filtres"
+                          message="Essayez de réinitialiser ou d’assouplir vos filtres de catégorie, ville ou prix."
+                          action={
+                            <View style={styles.emptyAction}>
+                              <Button variant="secondary" onPress={handleResetSearch}>
+                                Réinitialiser la recherche
+                              </Button>
+                            </View>
+                          }
+                          style={styles.listEmpty}
+                        />
+                      }
+                    />
+                  )}
+                </>
+              )}
+            </View>
+          </View>
+        </SafeAreaView>
+
+        {/* Feuille recherche : champ + « Rechercher par catégorie » (pas d’icône filtres ici). */}
+        <Modal
+          visible={searchOverlayOpen}
+          transparent
+          animationType="slide"
+          onRequestClose={closeSearchOverlay}
+        >
+          <Pressable style={styles.sheetOverlay} onPress={closeSearchOverlay}>
+            <Pressable style={[styles.sheet, styles.searchOverlaySheet]} onPress={(e) => e.stopPropagation()}>
+              <KeyboardAvoidingView
+                behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+                style={styles.searchOverlayKeyboardInner}
+              >
+                <SafeAreaView edges={['top', 'bottom']} style={styles.searchOverlaySheetInner}>
+                  <View style={styles.searchOverlayTopBar}>
+                    <Pressable
+                      onPress={closeSearchOverlay}
+                      hitSlop={12}
+                      style={({ pressed }) => [styles.searchOverlayBack, pressed && styles.searchOverlayBackPressed]}
+                      accessibilityRole="button"
+                      accessibilityLabel="Retour"
+                    >
+                      <Ionicons name="arrow-back" size={22} color={colors.text} />
+                    </Pressable>
+                    <View style={styles.searchOverlayInlineInputShell}>
+                      <Ionicons
+                        name="search"
+                        size={20}
+                        color={colors.textMuted}
+                        style={styles.searchOverlayInlineSearchIcon}
+                      />
+                      <TextInput
+                        ref={overlayInputRef}
+                        style={styles.searchOverlayInlineTextInput}
+                        placeholder={SEARCH_FIELD_PLACEHOLDER}
+                        placeholderTextColor={colors.textTertiary}
+                        value={overlayDraft}
+                        onChangeText={setOverlayDraft}
+                        returnKeyType="search"
+                        onSubmitEditing={() => submitKeywordSearch()}
+                        autoCapitalize="none"
+                        autoCorrect={false}
+                      />
+                      {overlayDraft.trim().length > 0 ? (
+                        <Pressable
+                          hitSlop={8}
+                          onPress={() => setOverlayDraft('')}
+                          style={({ pressed }) => [styles.searchOverlayClear, pressed && { opacity: 0.7 }]}
+                        >
+                          <Ionicons name="close-circle" size={20} color={colors.textMuted} />
+                        </Pressable>
+                      ) : null}
+                    </View>
+                  </View>
+
+                  <Pressable
+                    style={({ pressed }) => [
+                      styles.searchOverlayCategoryLink,
+                      pressed && styles.searchOverlayCategoryLinkPressed,
+                    ]}
+                    onPress={() => {
+                      closeSearchOverlay();
+                      handleCategoriesVoirTout();
+                    }}
+                    accessibilityRole="button"
+                    accessibilityLabel="Rechercher par catégorie"
+                  >
+                    <Text style={styles.searchOverlayCategoryLinkText}>Rechercher par catégorie</Text>
+                    <Ionicons name="chevron-forward" size={20} color={colors.textMuted} />
+                  </Pressable>
+
+                  <ScrollView
+                    keyboardShouldPersistTaps="handled"
+                    showsVerticalScrollIndicator={false}
+                    contentContainerStyle={styles.searchOverlayScrollContentBelow}
+                  >
+                    {overlaySuggestions.length > 0 ? (
+                      <View style={styles.searchOverlaySuggestions}>
+                        {overlaySuggestions.map((text) => (
+                          <Pressable
+                            key={text}
+                            style={({ pressed }) => [
+                              styles.suggestionRow,
+                              pressed && styles.suggestionRowPressed,
+                            ]}
+                            onPress={() => handleOverlaySuggestionPress(text)}
+                          >
+                            <Ionicons
+                              name="search"
+                              size={18}
+                              color={colors.textMuted}
+                              style={styles.suggestionIcon}
+                            />
+                            <Text style={styles.suggestionText} numberOfLines={1}>
+                              {text}
+                            </Text>
+                          </Pressable>
+                        ))}
+                      </View>
+                    ) : null}
+                  </ScrollView>
+                </SafeAreaView>
+              </KeyboardAvoidingView>
+            </Pressable>
+          </Pressable>
+        </Modal>
 
         {/* Bottom sheet: filtres */}
         <Modal
@@ -1285,36 +1644,72 @@ const styles = StyleSheet.create({
   keyboard: {
     flex: 1,
   },
-  header: {
-    maxWidth: 760,
-    width: '100%',
-    alignSelf: 'center',
-    paddingHorizontal: spacing.base,
-    paddingTop: spacing.md,
-    paddingBottom: spacing.sm,
+  safeMarketplace: {
+    flex: 1,
+    backgroundColor: colors.surface,
+  },
+  marketplaceColumn: {
+    flex: 1,
+  },
+  topStackMarketplace: {
+    backgroundColor: colors.surface,
     borderBottomWidth: 1,
     borderBottomColor: colors.borderLight,
   },
-  headerActionsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-    flexWrap: 'wrap',
+  searchStripMarketplace: {
+    paddingBottom: spacing.sm,
+  },
+  feedSlot: {
+    flex: 1,
+    minHeight: 0,
+    backgroundColor: colors.surface,
   },
   searchRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colors.surfaceSubtle,
-    borderWidth: 1,
-    borderColor: colors.borderLight,
-    borderRadius: radius['2xl'],
-    paddingVertical: spacing.base,
-    paddingHorizontal: spacing.base,
     marginBottom: spacing.sm,
-    minHeight: 52,
   },
   searchIcon: {
     marginRight: spacing.sm,
+  },
+  searchFieldPressable: {
+    flex: 1,
+    minWidth: 0,
+    justifyContent: 'center',
+    paddingVertical: spacing.xs,
+  },
+  searchFieldText: {
+    ...typography.base,
+    color: colors.text,
+    fontWeight: fontWeights.medium,
+  },
+  searchFieldPlaceholder: {
+    color: colors.textTertiary,
+    fontWeight: fontWeights.normal,
+  },
+  savedQuickRow: {
+    marginTop: spacing.xs,
+    marginBottom: spacing.xs,
+  },
+  savedQuickBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    gap: spacing.xs,
+    paddingVertical: spacing.xs,
+    paddingHorizontal: spacing.sm,
+    borderRadius: radius.lg,
+    backgroundColor: colors.surfaceSubtle,
+    borderWidth: 1,
+    borderColor: colors.borderLight,
+  },
+  savedQuickBtnPressed: {
+    opacity: 0.9,
+  },
+  savedQuickBtnText: {
+    ...typography.sm,
+    color: colors.text,
+    fontWeight: fontWeights.semibold,
   },
   input: {
     flex: 1,
@@ -1328,61 +1723,85 @@ const styles = StyleSheet.create({
   clearBtnPressed: {
     opacity: 0.7,
   },
-  submitBtn: {
-    alignSelf: 'flex-start',
-    backgroundColor: colors.primary,
-    paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.base,
-    borderRadius: radius.lg,
+  searchOverlaySheet: {
+    maxHeight: '92%',
   },
-  submitBtnPressed: {
-    opacity: 0.9,
+  searchOverlayKeyboardInner: {
+    maxHeight: '100%',
   },
-  submitLabel: {
-    ...typography.sm,
-    fontWeight: fontWeights.semibold,
-    color: colors.surface,
+  searchOverlaySheetInner: {
+    maxHeight: '100%',
   },
-  headerSecondaryBtn: {
-    alignSelf: 'flex-start',
+  searchOverlayTopBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.xs,
-    paddingVertical: spacing.sm,
+    gap: spacing.sm,
     paddingHorizontal: spacing.base,
-    borderRadius: radius.lg,
-    backgroundColor: colors.surfaceSubtle,
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.sm,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.borderLight,
+  },
+  searchOverlayBack: {
+    padding: spacing.xs,
+    marginLeft: -spacing.xs,
+  },
+  searchOverlayBackPressed: {
+    opacity: 0.75,
+  },
+  searchOverlayInlineInputShell: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    minWidth: 0,
     borderWidth: 1,
     borderColor: colors.borderLight,
+    borderRadius: radius.xl,
+    backgroundColor: colors.surfaceSubtle,
+    paddingHorizontal: spacing.sm,
+    minHeight: 44,
   },
-  headerSecondaryBtnActive: {
-    borderColor: colors.primary + '44',
-    backgroundColor: colors.primary + '12',
+  searchOverlayInlineSearchIcon: {
+    marginRight: spacing.xs,
   },
-  headerSecondaryBtnPressed: {
-    opacity: 0.9,
-  },
-  headerSecondaryBtnText: {
-    ...typography.sm,
+  searchOverlayInlineTextInput: {
+    flex: 1,
+    minWidth: 0,
+    ...typography.base,
     color: colors.text,
-    fontWeight: fontWeights.medium,
+    paddingVertical: spacing.sm,
   },
-  headerSecondaryBtnTextActive: {
-    color: colors.primary,
+  searchOverlayClear: {
+    padding: spacing.xs,
+  },
+  searchOverlayCategoryLink: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: spacing.base,
+    paddingHorizontal: spacing.base,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.borderLight,
+  },
+  searchOverlayCategoryLinkPressed: {
+    backgroundColor: colors.surfaceSubtle,
+  },
+  searchOverlayCategoryLinkText: {
+    ...typography.base,
+    color: colors.text,
     fontWeight: fontWeights.semibold,
   },
-  suggestionsWrap: {
+  searchOverlayScrollContentBelow: {
     paddingHorizontal: spacing.base,
-    paddingTop: spacing.xs,
-    paddingBottom: spacing.sm,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.borderLight,
-    position: 'absolute',
-    top: 110, // Approx height of header
-    left: 0,
-    right: 0,
-    backgroundColor: colors.surface,
-    zIndex: 50,
+    paddingTop: spacing.sm,
+    paddingBottom: spacing['2xl'],
+  },
+  searchOverlaySuggestions: {
+    marginTop: spacing.xs,
+    borderWidth: 1,
+    borderColor: colors.borderLight,
+    borderRadius: radius.lg,
+    overflow: 'hidden',
   },
   suggestionRow: {
     flexDirection: 'row',
@@ -1478,7 +1897,6 @@ const styles = StyleSheet.create({
     width: '100%',
     alignSelf: 'center',
     padding: spacing.base,
-    paddingBottom: spacing['3xl'],
     flexGrow: 1,
   },
   separator: {
@@ -1491,6 +1909,23 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
     paddingVertical: spacing.sm,
     paddingHorizontal: spacing.base,
+  },
+  sortFiltersIconBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: radius.lg,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: colors.borderLight,
+    backgroundColor: colors.surface,
+  },
+  sortFiltersIconBtnActive: {
+    borderColor: colors.primary + '44',
+    backgroundColor: colors.primary + '10',
+  },
+  sortFiltersIconBtnPressed: {
+    opacity: 0.88,
   },
   sortContainerInline: {
     flexDirection: 'row',

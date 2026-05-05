@@ -16,11 +16,13 @@ import { useFavorites } from '@/context/FavoritesContext';
 type FavoriteButtonProps = {
   listingId: string;
   size?: number;
+  /** Cercle discret type fil d’accueil (ombre légère, 44pt). */
+  surface?: 'default' | 'home';
 };
 
 const AnimatedIonicons = Animated.createAnimatedComponent(Ionicons);
 
-export function FavoriteButton({ listingId, size = 24 }: FavoriteButtonProps) {
+export function FavoriteButton({ listingId, size = 24, surface = 'default' }: FavoriteButtonProps) {
   const { isFavorite, toggleFavorite } = useFavorites();
   const favorite = isFavorite(listingId);
 
@@ -66,8 +68,8 @@ export function FavoriteButton({ listingId, size = 24 }: FavoriteButtonProps) {
     <Pressable
       onPress={handlePress}
       style={({ pressed }) => [
-        styles.heartWrap,
-        pressed && styles.heartWrapPressed
+        surface === 'home' ? styles.heartWrapHome : styles.heartWrap,
+        pressed && styles.heartWrapPressed,
       ]}
       hitSlop={12}
     >
@@ -99,5 +101,21 @@ const styles = StyleSheet.create({
   },
   heartWrapPressed: {
     opacity: 0.9,
+  },
+  heartWrapHome: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    padding: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.94)',
+    borderWidth: 1,
+    borderColor: 'rgba(15,23,42,0.06)',
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 2,
   },
 });

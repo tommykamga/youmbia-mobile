@@ -1,27 +1,81 @@
 /**
- * Premium bottom tab bar – YOUMBIA brand, safe-area aware, cross-platform icons.
- * Order: Home | Search | Vendre (center) | Favoris | Compte. Messages : route masquée (accès home / compte).
- *
- * Icons: @expo/vector-icons (Ionicons) – one icon set for iOS and Android, no platform branching.
- *
- * Sell tab: Currently a tab that redirects to /sell. It could later be refactored to a
- * prominent FAB/action that opens the same flow without occupying a tab slot (see product decision).
+ * Bottom tab bar YOUMBIA — hiérarchie premium (filled/outline + cercle Vendre discret).
+ * Order: Chercher | Messages | Vendre | Favoris | Compte.
  */
 
 import React, { useMemo } from 'react';
-import { View, StyleSheet, Platform, useWindowDimensions } from 'react-native';
+import { View, Text, StyleSheet, Platform, useWindowDimensions } from 'react-native';
 import { Tabs, useRouter, type Href } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { colors, spacing, radius, typography } from '@/theme';
-import { getWindowSizeBucket } from '@/lib/responsiveLayout';
+import { colors, typography } from '@/theme';
+import { getTabBarVisualMetrics } from '@/lib/responsiveLayout';
 import { getSession } from '@/services/auth';
 import { buildAuthGateHref } from '@/lib/authGateNavigation';
 import type { AuthGateContextId } from '@/config/authGateContext';
 
-const ICON_SIZE = 24;
-const SELL_PILL_ICON_SIZE = 26;
-const SELL_PILL_SIZE = 44;
+const TAB_BAR_TOP_BORDER = 'rgba(15,23,42,0.06)';
+const TAB_ACTIVE = colors.tabIconSelected;
+const TAB_ICON_INACTIVE = 'rgba(15, 23, 42, 0.42)';
+const TAB_LABEL_INACTIVE = 'rgba(15, 23, 42, 0.45)';
+
+/** Cercle Vendre : 28–32 px, + blanc 17–19. */
+const SELL_CIRCLE = 30;
+const SELL_PLUS_SIZE = 18;
+const SELL_CIRCLE_INACTIVE = 'rgba(22, 163, 74, 0.42)';
+const SELL_LABEL_INACTIVE = 'rgba(15, 23, 42, 0.5)';
+
+/** Hauteur slot icône commune (= diamètre cercle Vendre) → labels alignés. */
+const TAB_ICON_SLOT_H = 30;
+
+const TAB_ICON_NAMES = {
+  search: { active: 'search' as const, inactive: 'search-outline' as const },
+  messages: { active: 'chatbubbles' as const, inactive: 'chatbubbles-outline' as const },
+  favorites: { active: 'heart' as const, inactive: 'heart-outline' as const },
+  account: { active: 'person' as const, inactive: 'person-outline' as const },
+};
+
+type TabIconKey = keyof typeof TAB_ICON_NAMES;
+
+function makeTabBarLabel(label: string, fontSize: number) {
+  return function TabBarLabel(_props: { focused: boolean; color: string }) {
+    const { focused } = _props;
+    return (
+      <Text
+        numberOfLines={1}
+        style={{
+          fontSize,
+          fontWeight: focused ? '600' : '500',
+          color: focused ? TAB_ACTIVE : TAB_LABEL_INACTIVE,
+          marginTop: 0,
+          textAlign: 'center',
+        }}
+      >
+        {label}
+      </Text>
+    );
+  };
+}
+
+function makeSellTabBarLabel(fontSize: number) {
+  return function SellTabBarLabel(_props: { focused: boolean; color: string }) {
+    const { focused } = _props;
+    return (
+      <Text
+        numberOfLines={1}
+        style={{
+          fontSize,
+          fontWeight: '600',
+          color: focused ? TAB_ACTIVE : SELL_LABEL_INACTIVE,
+          marginTop: 0,
+          textAlign: 'center',
+        }}
+      >
+        Vendre
+      </Text>
+    );
+  };
+}
 
 /**
  * Onglets protégés : si non connecté → Auth Gate contextuel (pas d’écran tab intermédiaire).
@@ -44,37 +98,22 @@ async function navigateProtectedTab(
   }
 }
 
-const TAB_ICONS: Record<string, React.ComponentProps<typeof Ionicons>['name']> = {
-  home: 'home',
-  search: 'search',
-  favorites: 'heart',
-  account: 'person',
-};
-
-function TabIcon({
-  name,
-  color,
-}: {
-  name: keyof typeof TAB_ICONS;
-  color: string;
-}) {
-  return (
-    <Ionicons
-      name={TAB_ICONS[name]}
-      size={ICON_SIZE}
-      color={color}
-    />
-  );
+function TabIconSlot({ children }: { children: React.ReactNode }) {
+  return <View style={styles.iconSlot}>{children}</View>;
 }
 
-function SellTabIcon({ focused }: { focused: boolean }) {
+function TabGlyphIcon({ tabKey, focused, size }: { tabKey: TabIconKey; focused: boolean; size: number }) {
+  const pair = TAB_ICON_NAMES[tabKey];
+  const name = focused ? pair.active : pair.inactive;
+  const iconColor = focused ? TAB_ACTIVE : TAB_ICON_INACTIVE;
+  return <Ionicons name={name} size={size} color={iconColor} />;
+}
+
+function SellCircleIcon({ focused }: { focused: boolean }) {
+  const bg = focused ? TAB_ACTIVE : SELL_CIRCLE_INACTIVE;
   return (
-    <View style={[styles.sellPill, focused && styles.sellPillFocused]}>
-      <Ionicons
-        name="add"
-        size={SELL_PILL_ICON_SIZE}
-        color={colors.surface}
-      />
+    <View style={[styles.sellCircle, { backgroundColor: bg }]}>
+      <Ionicons name="add" size={SELL_PLUS_SIZE} color={colors.surface} />
     </View>
   );
 }
@@ -83,31 +122,31 @@ export default function TabLayout() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
-  const bucket = getWindowSizeBucket(width);
 
-  const tabBarMetrics = useMemo(() => {
-    const labelFontSize = bucket === 'compact' ? 10 : bucket === 'regular' ? 11 : 12;
-    const itemPadV = bucket === 'compact' ? 2 : 4;
-    const barHeight = bucket === 'compact' ? 58 : 64;
-    return { labelFontSize, itemPadV, barHeight };
-  }, [bucket]);
+  const tabBarMetrics = useMemo(() => getTabBarVisualMetrics(width), [width]);
 
+  const tabBarBottomPad = insets.bottom > 0 ? insets.bottom : 6;
   const totalTabBarHeight = tabBarMetrics.barHeight + insets.bottom;
+
+  const iconSize = tabBarMetrics.tabIconSize;
+
   return (
     <Tabs
+      initialRouteName="search"
       screenOptions={{
-        tabBarActiveTintColor: colors.tabIconSelected,
-        tabBarInactiveTintColor: colors.tabIconDefault,
+        tabBarActiveTintColor: TAB_ACTIVE,
+        tabBarInactiveTintColor: TAB_ICON_INACTIVE,
         tabBarStyle: [
           styles.tabBar,
           {
             height: totalTabBarHeight,
-            paddingBottom: Platform.OS === 'ios' ? insets.bottom + 4 : Math.max(insets.bottom, spacing.xs) + 4,
-            paddingTop: bucket === 'compact' ? spacing.xs : spacing.sm,
+            paddingBottom: tabBarBottomPad,
+            paddingTop: tabBarMetrics.paddingTop,
           },
         ],
-        tabBarLabelStyle: [styles.tabBarLabel, { fontSize: tabBarMetrics.labelFontSize }],
-        tabBarItemStyle: [styles.tabBarItem, { paddingVertical: tabBarMetrics.itemPadV, minWidth: 0 }],
+        tabBarLabelStyle: styles.tabBarLabelBase,
+        tabBarIconStyle: [styles.tabBarIcon, { marginBottom: tabBarMetrics.tabIconMarginBottom }],
+        tabBarItemStyle: [styles.tabBarItem, { paddingVertical: 0, minWidth: 0 }],
         headerStyle: { backgroundColor: colors.surface },
         headerTitleStyle: {
           fontWeight: '700',
@@ -119,30 +158,41 @@ export default function TabLayout() {
       }}
     >
       <Tabs.Screen
-        name="home"
+        name="search"
         options={{
-          title: 'Accueil',
+          title: 'Chercher',
           headerShown: false,
-          tabBarIcon: ({ color }) => <TabIcon name="home" color={color} />,
+          tabBarLabel: makeTabBarLabel('Chercher', tabBarMetrics.labelFontSize),
+          tabBarIcon: ({ focused }) => (
+            <TabIconSlot>
+              <TabGlyphIcon tabKey="search" focused={focused} size={iconSize} />
+            </TabIconSlot>
+          ),
         }}
       />
       <Tabs.Screen
-        name="search"
+        name="messages"
         options={{
-          title: bucket === 'compact' ? 'Chercher' : 'Rechercher',
-          tabBarIcon: ({ color }) => <TabIcon name="search" color={color} />,
+          title: 'Messages',
+          headerShown: false,
+          tabBarLabel: makeTabBarLabel('Messages', tabBarMetrics.labelFontSize),
+          tabBarIcon: ({ focused }) => (
+            <TabIconSlot>
+              <TabGlyphIcon tabKey="messages" focused={focused} size={iconSize} />
+            </TabIconSlot>
+          ),
         }}
       />
       <Tabs.Screen
         name="sell"
         options={{
           title: 'Vendre',
-          tabBarIcon: ({ focused }) => <SellTabIcon focused={focused} />,
-          tabBarLabelStyle: [
-            styles.tabBarLabel,
-            styles.sellLabel,
-            { fontSize: tabBarMetrics.labelFontSize },
-          ],
+          tabBarLabel: makeSellTabBarLabel(tabBarMetrics.labelFontSize),
+          tabBarIcon: ({ focused }) => (
+            <TabIconSlot>
+              <SellCircleIcon focused={focused} />
+            </TabIconSlot>
+          ),
         }}
         listeners={{
           tabPress: (e) => {
@@ -155,7 +205,13 @@ export default function TabLayout() {
         name="favorites"
         options={{
           title: 'Favoris',
-          tabBarIcon: ({ color }) => <TabIcon name="favorites" color={color} />,
+          headerShown: false,
+          tabBarLabel: makeTabBarLabel('Favoris', tabBarMetrics.labelFontSize),
+          tabBarIcon: ({ focused }) => (
+            <TabIconSlot>
+              <TabGlyphIcon tabKey="favorites" focused={focused} size={iconSize} />
+            </TabIconSlot>
+          ),
         }}
         listeners={{
           tabPress: (e) => {
@@ -165,24 +221,30 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
-        name="messages"
-        options={{
-          title: 'Messages',
-          href: null,
-          headerShown: false,
-        }}
-      />
-      <Tabs.Screen
         name="account"
         options={{
           title: 'Compte',
-          tabBarIcon: ({ color }) => <TabIcon name="account" color={color} />,
+          headerShown: false,
+          tabBarLabel: makeTabBarLabel('Compte', tabBarMetrics.labelFontSize),
+          tabBarIcon: ({ focused }) => (
+            <TabIconSlot>
+              <TabGlyphIcon tabKey="account" focused={focused} size={iconSize} />
+            </TabIconSlot>
+          ),
         }}
         listeners={{
           tabPress: (e) => {
             e.preventDefault();
             void navigateProtectedTab(router, '/(tabs)/account' as Href, 'account');
           },
+        }}
+      />
+      <Tabs.Screen
+        name="home"
+        options={{
+          title: 'Accueil',
+          href: null,
+          headerShown: false,
         }}
       />
     </Tabs>
@@ -192,53 +254,39 @@ export default function TabLayout() {
 const styles = StyleSheet.create({
   tabBar: {
     backgroundColor: colors.surface,
-    borderTopColor: colors.borderLight,
-    borderTopWidth: 1,
+    borderTopColor: TAB_BAR_TOP_BORDER,
+    borderTopWidth: StyleSheet.hairlineWidth,
     ...Platform.select({
       ios: {
-        shadowColor: colors.text,
-        shadowOffset: { width: 0, height: -4 },
-        shadowOpacity: 0.04,
-        shadowRadius: 12,
+        shadowColor: '#0F172A',
+        shadowOffset: { width: 0, height: -1 },
+        shadowOpacity: 0.03,
+        shadowRadius: 6,
       },
       android: {
-        elevation: 8,
+        elevation: 0,
       },
     }),
   },
-  tabBarLabel: {
-    fontSize: 12,
-    fontWeight: '600',
-    marginTop: 2,
+  iconSlot: {
+    height: TAB_ICON_SLOT_H,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  tabBarItem: {
-    paddingVertical: spacing.xs,
-  },
-  sellPill: {
-    width: SELL_PILL_SIZE,
-    height: SELL_PILL_SIZE,
-    borderRadius: radius.full,
-    backgroundColor: colors.primary,
+  sellCircle: {
+    width: SELL_CIRCLE,
+    height: SELL_CIRCLE,
+    borderRadius: SELL_CIRCLE / 2,
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: -4,
-    borderWidth: 2,
-    borderColor: 'rgba(255,255,255,0.35)',
-    ...Platform.select({
-      ios: {
-        shadowColor: colors.primary,
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.3,
-        shadowRadius: 8,
-      },
-      android: { elevation: 6 },
-    }),
   },
-  sellPillFocused: {
-    backgroundColor: colors.primaryDark,
+  tabBarIcon: {
+    marginTop: 0,
   },
-  sellLabel: {
-    color: colors.primary,
-    fontWeight: '700',
+  tabBarLabelBase: {
+    marginTop: 0,
+  },
+  tabBarItem: {
+    paddingVertical: 0,
   },
 });

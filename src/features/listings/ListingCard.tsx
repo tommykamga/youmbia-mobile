@@ -1,4 +1,4 @@
-import React, { memo, useCallback, useEffect, useState } from 'react';
+import React, { memo, useCallback, useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -6,6 +6,7 @@ import {
   Pressable,
   Platform,
   ImageBackground,
+  useWindowDimensions,
 } from 'react-native';
 import Animated, {
   useSharedValue,
@@ -43,9 +44,9 @@ const IMAGE_HEIGHT = 160;
 const IMAGE_HEIGHT_RAIL_FEATURED = Math.round(LISTING_CARD_RAIL_WIDTH_FEATURED / HOME_IMAGE_ASPECT_RATIO);
 const IMAGE_RADIUS = 16;
 /** Radius carte / image home (entre xl et 3xl, rendu marketplace premium). */
-const CARD_RADIUS_HOME = 20;
+const CARD_RADIUS_HOME = 21;
 const HEART_SIZE = 28;
-const HEART_SIZE_HOME = 26;
+const HEART_SIZE_HOME = 20;
 const OVERLAY_INSET = spacing.sm;
 
 export type ListingCardVariant = 'feed' | 'rail';
@@ -111,6 +112,7 @@ function ListingCardInner({
   feedPresentation = 'standard',
 }: ListingCardProps) {
   const router = useRouter();
+  const { width: winW } = useWindowDimensions();
   const scale = useSharedValue(1);
   const [imageFailed, setImageFailed] = useState(false);
 
@@ -200,12 +202,30 @@ function ListingCardInner({
   const isHomeFeed = feedPresentation === 'home' && variant === 'feed';
   const isFeaturedRail = variant === 'rail' && railPresentation === 'featured';
 
+  const homeImageAspect = useMemo(() => {
+    if (!isHomeFeed) return HOME_IMAGE_ASPECT_RATIO;
+    if (winW < 380) return 1 / 1.36;
+    if (winW >= 430) return 1 / 1.14;
+    return HOME_IMAGE_ASPECT_RATIO;
+  }, [isHomeFeed, winW]);
+
+  const homeRadius = useMemo(() => {
+    if (!isHomeFeed) return CARD_RADIUS_HOME;
+    if (winW < 380) return 18;
+    if (winW >= 430) return 21;
+    return CARD_RADIUS_HOME;
+  }, [isHomeFeed, winW]);
+
   const renderImageBody = () => (
     <>
       <View style={[styles.topRow, isHomeFeed && styles.topRowHome]}>
         {renderBadges()}
         <View style={[styles.heartSlot, isHomeFeed && styles.heartSlotHome]}>
-          <FavoriteButton listingId={listing.id} size={isHomeFeed ? HEART_SIZE_HOME : HEART_SIZE} />
+          <FavoriteButton
+            listingId={listing.id}
+            size={isHomeFeed ? HEART_SIZE_HOME : HEART_SIZE}
+            surface={isHomeFeed ? 'home' : 'default'}
+          />
         </View>
       </View>
       {priceLabel && !isHomeFeed && !isFeaturedRail ? (
@@ -227,6 +247,7 @@ function ListingCardInner({
         variant === 'rail' && styles.cardRail,
         isFeaturedRail && styles.cardRailFeatured,
         isHomeFeed && styles.cardHomeBleed,
+        isHomeFeed && { borderRadius: homeRadius },
         animatedStyle,
       ]}
     >
@@ -237,14 +258,25 @@ function ListingCardInner({
             styles.imageBase,
             !isHomeFeed && !isFeaturedRail && styles.imageHeightFeed,
             isHomeFeed && styles.imageHome,
-            isHomeFeed && styles.imageHomeAspect,
+            isHomeFeed && { aspectRatio: homeImageAspect },
             isHomeFeed && styles.imageHomeEdge,
             isFeaturedRail && styles.imageRailFeatured,
             !isHomeFeed && !isFeaturedRail && styles.imageRadius,
-            isHomeFeed && styles.imageRadiusHome,
+            isHomeFeed && {
+              borderTopLeftRadius: homeRadius,
+              borderTopRightRadius: homeRadius,
+            },
             isFeaturedRail && styles.imageRadius,
           ]}
-          imageStyle={[styles.imageRadius, isHomeFeed && styles.imageRadiusHome]}
+          imageStyle={[
+            styles.imageRadius,
+            isHomeFeed && {
+              borderBottomLeftRadius: 0,
+              borderBottomRightRadius: 0,
+              borderTopLeftRadius: homeRadius,
+              borderTopRightRadius: homeRadius,
+            },
+          ]}
           onError={() => setImageFailed(true)}
         >
           {renderImageBody()}
@@ -256,11 +288,14 @@ function ListingCardInner({
             styles.imagePlaceholder,
             !isHomeFeed && !isFeaturedRail && styles.imageHeightFeed,
             isHomeFeed && styles.imageHome,
-            isHomeFeed && styles.imageHomeAspect,
+            isHomeFeed && { aspectRatio: homeImageAspect },
             isHomeFeed && styles.imageHomeEdge,
             isFeaturedRail && styles.imageRailFeatured,
             !isHomeFeed && !isFeaturedRail && styles.imageRadius,
-            isHomeFeed && styles.imageRadiusHome,
+            isHomeFeed && {
+              borderTopLeftRadius: homeRadius,
+              borderTopRightRadius: homeRadius,
+            },
             isFeaturedRail && styles.imageRadius,
           ]}
         >
@@ -340,12 +375,21 @@ const styles = StyleSheet.create({
   cardHome: {
     backgroundColor: ui.colors.surface,
     borderWidth: 1,
-    borderColor: ui.colors.borderLight,
+    borderColor: 'rgba(15,23,42,0.06)',
     borderRadius: CARD_RADIUS_HOME,
     overflow: 'hidden',
     padding: 0,
     width: '100%',
-    ...ui.shadow.soft,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#0F172A',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.055,
+        shadowRadius: 10,
+      },
+      android: { elevation: 2 },
+      default: {},
+    }),
   },
   /** Pleine largeur du conteneur (pas d’inset type « carte dans une boîte »). */
   cardHomeBleed: {
@@ -391,10 +435,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
   },
   heartSlotHome: {
-    borderRadius: 22,
-    backgroundColor: 'rgba(255,255,255,0.92)',
-    padding: 2,
-    overflow: 'hidden',
+    marginLeft: 'auto',
+    backgroundColor: 'transparent',
+    padding: 0,
+    overflow: 'visible',
   },
   imagePlaceholder: {
     position: 'relative',
@@ -493,27 +537,28 @@ const styles = StyleSheet.create({
     color: colors.surface,
   },
   badgeNew: {
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 5,
-    borderRadius: radius.sm,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: radius.md,
     backgroundColor: colors.surface,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: 'rgba(15,23,42,0.08)',
     ...Platform.select({
       ios: {
-        shadowColor: colors.text,
+        shadowColor: '#0F172A',
         shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: 0.06,
-        shadowRadius: 2,
+        shadowOpacity: 0.04,
+        shadowRadius: 3,
       },
       android: { elevation: 1 },
     }),
   },
   badgeNewText: {
-    ...typography.xs,
-    fontWeight: fontWeights.bold,
+    fontSize: 11,
+    lineHeight: 14,
+    fontWeight: '600',
     color: colors.textSecondary,
-    letterSpacing: 0.2,
+    letterSpacing: 0.15,
   },
   priceOverlay: {
     position: 'absolute',
@@ -571,11 +616,11 @@ const styles = StyleSheet.create({
     gap: 0,
   },
   priceHomeLead: {
-    fontSize: 22,
-    lineHeight: 26,
-    fontWeight: fontWeights.black,
+    fontSize: 18,
+    lineHeight: 22,
+    fontWeight: '700',
     color: colors.primaryDark,
-    letterSpacing: -0.55,
+    letterSpacing: -0.4,
     marginBottom: ui.spacing.sm,
   },
   titleHome: {

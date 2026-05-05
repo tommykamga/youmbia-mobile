@@ -44,7 +44,7 @@ export function AppHeader({
     <View
       style={[
         styles.wrapper,
-        { paddingTop: insets.top + spacing.sm, paddingBottom: spacing.sm },
+        { paddingTop: insets.top + spacing.xs, paddingBottom: spacing.xs },
         !noBorder && styles.border,
         style,
       ]}

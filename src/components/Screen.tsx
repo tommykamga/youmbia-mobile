@@ -21,8 +21,14 @@ type ScreenProps = {
   style?: StyleProp<ViewStyle>;
   /** Scrollable content. */
   scroll?: boolean;
+  /** Optional ScrollView contentContainerStyle override. */
+  scrollContentContainerStyle?: StyleProp<ViewStyle>;
+  /** Extra bottom padding (useful when keyboard is open). */
+  scrollExtraBottomPadding?: number;
   /** Keyboard avoiding (useful for auth forms). */
   keyboardAvoid?: boolean;
+  /** Keyboard vertical offset (iOS). */
+  keyboardVerticalOffset?: number;
 };
 
 /**
@@ -35,7 +41,10 @@ export function Screen({
   safe = true,
   style,
   scroll = false,
+  scrollContentContainerStyle,
+  scrollExtraBottomPadding,
   keyboardAvoid = false,
+  keyboardVerticalOffset = 0,
 }: ScreenProps) {
   const insets = useSafeAreaInsets();
 
@@ -51,7 +60,13 @@ export function Screen({
       {scroll ? (
         <ScrollView
           style={styles.scroll}
-          contentContainerStyle={styles.scrollContent}
+          contentContainerStyle={[
+            styles.scrollContent,
+            typeof scrollExtraBottomPadding === 'number' && scrollExtraBottomPadding > 0
+              ? { paddingBottom: scrollExtraBottomPadding }
+              : null,
+            scrollContentContainerStyle,
+          ]}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
@@ -68,7 +83,7 @@ export function Screen({
       <KeyboardAvoidingView
         style={styles.keyboardView}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        keyboardVerticalOffset={0}
+        keyboardVerticalOffset={keyboardVerticalOffset}
       >
         {content}
       </KeyboardAvoidingView>

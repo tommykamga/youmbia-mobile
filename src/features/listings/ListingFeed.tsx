@@ -68,6 +68,10 @@ export type ListingFeedProps = {
   disableInfiniteScroll?: boolean;
   /** Surcharge `initialNumToRender` FlatList (listes courtes Home). */
   listInitialNumToRender?: number;
+  /**
+   * Marge basse supplémentaire (ex. hauteur tab bar + safe area) pour que le dernier item ne soit pas masqué.
+   */
+  contentBottomInset?: number;
 };
 
 export function ListingFeed({
@@ -83,6 +87,7 @@ export function ListingFeed({
   skipNetworkRevalidateWithinMs,
   disableInfiniteScroll = false,
   listInitialNumToRender,
+  contentBottomInset = 0,
 }: ListingFeedProps) {
   const listRef = useRef<any>(null);
   useScrollToTop(listRef);
@@ -397,8 +402,14 @@ export function ListingFeed({
   }, [state.status, feedDataLength, loadingMore, hasMore, loadMoreError, load, limit, footerAction]);
 
   const listContentStyle = useMemo(
-    () => [styles.listContent, { paddingHorizontal: contentPaddingHorizontal }],
-    [contentPaddingHorizontal]
+    () => [
+      styles.listContent,
+      {
+        paddingHorizontal: contentPaddingHorizontal,
+        paddingBottom: spacing['3xl'] + contentBottomInset,
+      },
+    ],
+    [contentPaddingHorizontal, contentBottomInset]
   );
 
   const listProps = useMemo(
@@ -468,7 +479,6 @@ const styles = StyleSheet.create({
   },
   listContent: {
     paddingTop: 0,
-    paddingBottom: spacing['3xl'],
     flexGrow: 1,
   },
   separator: {
@@ -477,15 +487,15 @@ const styles = StyleSheet.create({
   sortContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: ui.spacing.sm,
-    paddingVertical: ui.spacing.sm,
+    gap: 6,
+    paddingVertical: 6,
     paddingHorizontal: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: ui.colors.borderLight,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: 'rgba(15,23,42,0.08)',
   },
   sortOption: {
-    paddingVertical: spacing.xs,
-    paddingHorizontal: spacing.sm,
+    paddingVertical: 5,
+    paddingHorizontal: 10,
     borderRadius: radius.lg,
   },
   sortOptionActive: {

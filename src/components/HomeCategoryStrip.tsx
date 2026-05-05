@@ -1,30 +1,43 @@
 /**
- * Bande catégories Home — grille compacte responsive (pas de swipe horizontal cheap).
- * Petits écrans : 3 + Autres ; moyens : 4 + Autres ; grands : 5 + Autres.
+ * Bande catégories — scroll horizontal, états actif/inactif (tuiles compactes type Leboncoin).
+ * Icônes rendues directement dans la tuile : pas de wrapper, pas de fond / radius sous l’icône.
  */
 
 import React, { useMemo } from 'react';
-import { View, Text, StyleSheet, Pressable } from 'react-native';
+import {
+  View,
+  Text,
+  StyleSheet,
+  Pressable,
+  ScrollView,
+  Platform,
+} from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { LISTING_CATEGORIES } from '@/lib/listingCategories';
 import type { WindowSizeBucket } from '@/lib/responsiveLayout';
-import { ui, colors, spacing } from '@/theme';
-
-const CATEGORY_ICON: Record<string, string> = {
-  Véhicules: 'car-outline',
-  Mode: 'shirt-outline',
-  Maison: 'home-outline',
-  Électronique: 'laptop-outline',
-  Immobilier: 'business-outline',
-  Services: 'construct-outline',
-  Informatique: 'desktop-outline',
-};
+import { spacing, colors } from '@/theme';
 
 const AUTRES_LABEL = 'Autres';
 
-/** Libellés courts affichés uniquement sur la Home (navigation inchangée : `cat.label` conservé). */
-const HOME_CATEGORY_SHORT_LABEL: Record<string, string> = {
-  Véhicules: 'Véhicules',
+/** Jetons locaux au strip rapide (ne pas élargir aux autres écrans sans besoin explicite). */
+const STRIP = {
+  activeBg: 'rgba(110, 220, 95, 0.10)',
+  activeBorder: 'rgba(22, 163, 74, 0.45)',
+  activeBorderWidth: 1.35,
+  inactiveBg: '#FFFFFF',
+  inactiveBorder: 'rgba(15, 23, 42, 0.06)',
+  inactiveBorderWidth: 1,
+  radius: 17,
+  itemGap: 16,
+  iconActive: colors.primary,
+  iconInactive: 'rgba(15, 23, 42, 0.45)',
+  labelActive: colors.primary,
+  labelInactive: 'rgba(15, 23, 42, 0.70)',
+} as const;
+
+/** Libellés courts affichés (pas de troncature sur ces chaînes). */
+const STRIP_LABEL: Record<string, string> = {
+  Véhicules: 'Auto',
   Électronique: 'Tech',
   Maison: 'Maison',
   Mode: 'Mode',
@@ -33,114 +46,239 @@ const HOME_CATEGORY_SHORT_LABEL: Record<string, string> = {
   Informatique: 'Info',
 };
 
-function homeCategoryDisplayLabel(fullLabel: string): string {
-  return HOME_CATEGORY_SHORT_LABEL[fullLabel] ?? fullLabel;
+const CATEGORY_ICON_ACTIVE: Record<string, keyof typeof Ionicons.glyphMap> = {
+  Véhicules: 'car',
+  Mode: 'shirt',
+  Maison: 'home',
+  Électronique: 'laptop',
+  Immobilier: 'business',
+  Services: 'construct',
+  Informatique: 'hardware-chip',
+};
+
+const CATEGORY_ICON_INACTIVE: Record<string, keyof typeof Ionicons.glyphMap> = {
+  Véhicules: 'car-outline',
+  Mode: 'shirt-outline',
+  Maison: 'home-outline',
+  Électronique: 'laptop-outline',
+  Immobilier: 'business-outline',
+  Services: 'construct-outline',
+  Informatique: 'hardware-chip-outline',
+};
+
+function stripLabel(fullLabel: string): string {
+  return STRIP_LABEL[fullLabel] ?? fullLabel;
 }
 
-function mainCountForBucket(bucket: WindowSizeBucket): number {
-  if (bucket === 'compact') return 3;
-  if (bucket === 'regular') return 4;
-  return 5;
+function targetScreenInset(bucket: WindowSizeBucket): number {
+  if (bucket === 'large') return 24;
+  return 20;
 }
+
+/** Largeur / hauteur fixes — pas d’étirement pour remplir l’écran (scroll type Leboncoin). */
+function stripDimensions(bucket: WindowSizeBucket): {
+  itemWidth: number;
+  minHeight: number;
+  iconSize: number;
+} {
+  if (bucket === 'large') {
+    return { itemWidth: 62, minHeight: 66, iconSize: 19 };
+  }
+  if (bucket === 'compact') {
+    return { itemWidth: 58, minHeight: 62, iconSize: 18 };
+  }
+  return { itemWidth: 60, minHeight: 64, iconSize: 19 };
+}
+
+/** Ombre légère iOS uniquement — pas d’elevation Android (évite halo / plaque claire derrière l’icône). */
+const cellShadow = Platform.select({
+  ios: {
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 6,
+  },
+  default: {},
+});
+
+const androidIconStyle =
+  Platform.OS === 'android'
+    ? ({
+        backgroundColor: 'transparent' as const,
+        includeFontPadding: false,
+      } as const)
+    : null;
 
 export type HomeCategoryStripProps = {
   bucket: WindowSizeBucket;
   onCategoryPress: (id: string, label: string) => void;
   onAutresPress: () => void;
+  insetHorizontal?: number;
+  parentContentPad?: number;
+  selectedCategoryId?: number | null;
 };
 
-export function HomeCategoryStrip({ bucket, onCategoryPress, onAutresPress }: HomeCategoryStripProps) {
-  const nMain = mainCountForBucket(bucket);
-  const { visible, restCount } = useMemo(() => {
-    const list = [...LISTING_CATEGORIES];
-    const main = list.slice(0, nMain);
-    const rest = Math.max(0, list.length - nMain);
-    return { visible: main, restCount: rest };
-  }, [nMain]);
+export function HomeCategoryStrip({
+  bucket,
+  onCategoryPress,
+  onAutresPress,
+  insetHorizontal,
+  parentContentPad,
+  selectedCategoryId = null,
+}: HomeCategoryStripProps) {
+  const insetTarget = targetScreenInset(bucket);
+
+  const outerStyle = useMemo(() => {
+    if (parentContentPad != null) {
+      const delta = insetTarget - parentContentPad;
+      return {
+        marginHorizontal: Math.min(0, delta),
+        paddingHorizontal: Math.max(0, delta),
+      };
+    }
+    return { paddingHorizontal: insetHorizontal ?? insetTarget };
+  }, [parentContentPad, insetHorizontal, insetTarget]);
+
+  const { itemWidth, minHeight, iconSize } = stripDimensions(bucket);
+
+  /** Pas de `foreground: true` (évite une plaque / carré clair derrière le glyphe sur Android). */
+  const ripple =
+    Platform.OS === 'android'
+      ? { color: 'rgba(15, 23, 42, 0.08)', borderless: false }
+      : undefined;
 
   return (
-    <View style={styles.wrap}>
-      <View style={styles.row}>
-        {visible.map((cat) => {
-          const iconName = CATEGORY_ICON[cat.label] ?? 'grid-outline';
+    <View style={[styles.wrap, outerStyle]}>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.scrollContent}
+        decelerationRate="fast"
+      >
+        {LISTING_CATEGORIES.map((cat) => {
+          const isActive = selectedCategoryId != null && selectedCategoryId === cat.id;
+          const iconActive =
+            CATEGORY_ICON_ACTIVE[cat.label] ?? ('grid' as keyof typeof Ionicons.glyphMap);
+          const iconInactive =
+            CATEGORY_ICON_INACTIVE[cat.label] ?? ('grid-outline' as keyof typeof Ionicons.glyphMap);
+          const iconName = isActive ? iconActive : iconInactive;
+
           return (
             <Pressable
               key={cat.id}
-              style={({ pressed }) => [styles.cell, pressed && styles.cellPressed]}
+              android_ripple={ripple}
+              hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
+              style={({ pressed }) => [
+                styles.cell,
+                cellShadow,
+                {
+                  width: itemWidth,
+                  marginRight: STRIP.itemGap,
+                  minHeight,
+                  paddingVertical: 9,
+                  paddingHorizontal: 7,
+                  backgroundColor: isActive ? STRIP.activeBg : STRIP.inactiveBg,
+                  borderColor: isActive ? STRIP.activeBorder : STRIP.inactiveBorder,
+                  borderWidth: isActive ? STRIP.activeBorderWidth : STRIP.inactiveBorderWidth,
+                  borderRadius: STRIP.radius,
+                },
+                pressed && styles.cellPressed,
+              ]}
               onPress={() => onCategoryPress(String(cat.id), cat.label)}
               accessibilityRole="button"
               accessibilityLabel={cat.label}
+              accessibilityState={{ selected: isActive }}
             >
               <Ionicons
-                name={iconName as keyof typeof Ionicons.glyphMap}
-                size={22}
-                color={ui.colors.primary}
+                name={iconName}
+                size={iconSize}
+                color={isActive ? STRIP.iconActive : STRIP.iconInactive}
+                style={androidIconStyle ?? undefined}
               />
-              <Text style={styles.label} numberOfLines={1}>
-                {homeCategoryDisplayLabel(cat.label)}
+              <Text
+                style={[
+                  styles.label,
+                  isActive ? styles.labelActive : styles.labelInactive,
+                ]}
+                numberOfLines={1}
+              >
+                {stripLabel(cat.label)}
               </Text>
             </Pressable>
           );
         })}
         <Pressable
-          style={({ pressed }) => [styles.cell, styles.cellAutres, pressed && styles.cellPressed]}
+          android_ripple={ripple}
+          hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
+          style={({ pressed }) => [
+            styles.cell,
+            cellShadow,
+            {
+              width: itemWidth,
+              marginRight: 0,
+              minHeight,
+              paddingVertical: 9,
+              paddingHorizontal: 7,
+              backgroundColor: STRIP.inactiveBg,
+              borderColor: STRIP.inactiveBorder,
+              borderWidth: STRIP.inactiveBorderWidth,
+              borderRadius: STRIP.radius,
+            },
+            pressed && styles.cellPressed,
+          ]}
           onPress={onAutresPress}
           accessibilityRole="button"
-          accessibilityLabel={restCount > 0 ? `${AUTRES_LABEL}, ${restCount} autres catégories` : AUTRES_LABEL}
+          accessibilityLabel={AUTRES_LABEL}
         >
-          <Ionicons name="apps-outline" size={22} color={ui.colors.textSecondary} />
-          <Text style={[styles.label, styles.labelAutres]} numberOfLines={1}>
+          <Ionicons
+            name="grid-outline"
+            size={iconSize}
+            color={STRIP.iconInactive}
+            style={androidIconStyle ?? undefined}
+          />
+          <Text
+            style={[styles.label, styles.labelInactive]}
+            numberOfLines={1}
+          >
             {AUTRES_LABEL}
           </Text>
         </Pressable>
-      </View>
+      </ScrollView>
     </View>
   );
 }
 
-const CELL_RADIUS = 15;
-
 const styles = StyleSheet.create({
   wrap: {
-    paddingHorizontal: 12,
-    marginBottom: spacing.md,
+    marginBottom: spacing.sm,
   },
-  row: {
+  scrollContent: {
     flexDirection: 'row',
-    alignItems: 'stretch',
-    gap: 8,
+    alignItems: 'center',
+    paddingVertical: 4,
+    paddingRight: 4,
   },
   cell: {
-    flex: 1,
-    minWidth: 0,
     alignItems: 'center',
-    justifyContent: 'flex-start',
-    paddingVertical: 10,
-    paddingHorizontal: 4,
-    gap: 6,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: ui.colors.borderLight,
-    borderRadius: CELL_RADIUS,
-    minHeight: 78,
-  },
-  cellAutres: {
-    backgroundColor: colors.surface,
+    justifyContent: 'center',
   },
   cellPressed: {
-    opacity: 0.88,
-    backgroundColor: ui.colors.primarySoft,
-    borderColor: ui.colors.primary + '35',
+    opacity: 0.92,
+    transform: [{ scale: 0.98 }],
   },
   label: {
+    marginTop: 4,
     fontSize: 11,
-    lineHeight: 14,
-    fontWeight: '600',
-    color: ui.colors.textPrimary,
+    lineHeight: 13,
     textAlign: 'center',
     width: '100%',
   },
-  labelAutres: {
-    color: ui.colors.textSecondary,
+  labelActive: {
+    fontWeight: '700',
+    color: STRIP.labelActive,
+  },
+  labelInactive: {
+    fontWeight: '600',
+    color: STRIP.labelInactive,
   },
 });
