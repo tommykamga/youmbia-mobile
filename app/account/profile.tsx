@@ -168,8 +168,8 @@ export default function AccountProfileScreen() {
 
   if (state.status === 'loading') {
     return (
-      <Screen>
-        <AppHeader title="Mon Profil" showBack noBorder />
+      <Screen safe={false}>
+        <AppHeader title="Mon Profil" showBack noBorder density="compact" />
         <Loader />
       </Screen>
     );
@@ -181,19 +181,21 @@ export default function AccountProfileScreen() {
 
   if (state.status === 'error') {
     return (
-      <Screen>
-        <AppHeader title="Mon Profil" showBack noBorder />
-        <EmptyState
-          icon={<Ionicons name="alert-circle-outline" size={56} color={colors.textSecondary} />}
-          title="Erreur de chargement"
-          message={state.message}
-          action={
-            <Button variant="secondary" onPress={load} style={{ minWidth: 200, marginTop: spacing.lg }}>
-              Réessayer
-            </Button>
-          }
-          style={styles.center}
-        />
+      <Screen safe={false}>
+        <AppHeader title="Mon Profil" showBack noBorder density="compact" />
+        <View style={styles.emptyWrapPlain}>
+          <EmptyState
+            variant="plain"
+            icon={<Ionicons name="alert-circle-outline" size={24} color={colors.textSecondary} />}
+            title="Erreur de chargement"
+            message={state.message}
+            action={
+              <Button variant="secondary" onPress={load} style={{ minWidth: 220, marginTop: spacing.sm }}>
+                Réessayer
+              </Button>
+            }
+          />
+        </View>
       </Screen>
     );
   }
@@ -202,8 +204,8 @@ export default function AccountProfileScreen() {
   const showIncomplete = state.status === 'success' && state.incomplete;
 
   return (
-    <Screen keyboardAvoid scroll={false} noPadding>
-      <AppHeader title="Modifier profil" showBack noBorder />
+    <Screen keyboardAvoid scroll={false} noPadding safe={false}>
+      <AppHeader title="Modifier profil" showBack noBorder density="compact" />
       
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         
@@ -285,6 +287,13 @@ export default function AccountProfileScreen() {
 
 const styles = StyleSheet.create({
   center: { flex: 1, paddingTop: spacing['3xl'] },
+  emptyWrapPlain: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: spacing.xl,
+    paddingBottom: spacing.xl,
+  },
   scrollContent: {
     paddingBottom: spacing['3xl'],
     backgroundColor: '#F9FAFB',
@@ -292,11 +301,11 @@ const styles = StyleSheet.create({
   },
   avatarSection: {
     alignItems: 'center',
-    paddingVertical: spacing['2xl'],
+    paddingVertical: spacing.xl,
     backgroundColor: colors.surface,
     borderBottomWidth: 1,
     borderBottomColor: colors.borderLight,
-    marginBottom: spacing.lg,
+    marginBottom: spacing.base,
   },
   avatarWrap: {
     position: 'relative',

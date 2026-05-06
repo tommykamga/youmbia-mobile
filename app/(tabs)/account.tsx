@@ -249,11 +249,12 @@ const styles = StyleSheet.create({
   headerCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: spacing.lg,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.base,
     backgroundColor: colors.surface,
     borderBottomWidth: 1,
     borderBottomColor: colors.borderLight,
-    marginBottom: spacing.sm,
+    marginBottom: spacing.xs,
   },
   avatar: {
     width: 64,
@@ -302,7 +303,7 @@ const styles = StyleSheet.create({
     fontWeight: fontWeights.bold,
   },
   section: {
-    marginTop: spacing.md,
+    marginTop: spacing.sm,
     paddingHorizontal: spacing.base,
     maxWidth: 760,
     width: '100%',

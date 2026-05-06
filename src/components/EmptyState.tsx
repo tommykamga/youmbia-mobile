@@ -13,23 +13,32 @@ type EmptyStateProps = {
   icon?: React.ReactNode;
   /** Optional action (e.g. Button "Voir toutes les annonces"). */
   action?: React.ReactNode;
+  /** Visual style. `card` is legacy; `plain` is compact marketplace style. */
+  variant?: 'card' | 'plain';
   style?: StyleProp<ViewStyle>;
 };
 
-export function EmptyState({ title, message, icon, action, style }: EmptyStateProps) {
+export function EmptyState({
+  title,
+  message,
+  icon,
+  action,
+  variant = 'card',
+  style,
+}: EmptyStateProps) {
   return (
-    <View style={[styles.wrapper, style]}>
+    <View style={[styles.wrapper, variant === 'plain' ? styles.wrapperPlain : null, style]}>
       {icon ? (
-        <View style={styles.iconWrap}>
+        <View style={[styles.iconWrap, variant === 'plain' ? styles.iconWrapPlain : null]}>
           {icon}
         </View>
       ) : null}
-      <Text style={styles.title}>{title}</Text>
+      <Text style={[styles.title, variant === 'plain' ? styles.titlePlain : null]}>{title}</Text>
       {message ? (
-        <Text style={styles.message}>{message}</Text>
+        <Text style={[styles.message, variant === 'plain' ? styles.messagePlain : null]}>{message}</Text>
       ) : null}
       {action ? (
-        <View style={styles.action}>{action}</View>
+        <View style={[styles.action, variant === 'plain' ? styles.actionPlain : null]}>{action}</View>
       ) : null}
     </View>
   );
@@ -47,6 +56,15 @@ const styles = StyleSheet.create({
     borderColor: colors.borderLight,
     marginHorizontal: spacing.base,
   },
+  wrapperPlain: {
+    paddingVertical: spacing.xl,
+    paddingHorizontal: spacing.base,
+    backgroundColor: 'transparent',
+    borderWidth: 0,
+    borderRadius: 0,
+    borderColor: 'transparent',
+    marginHorizontal: 0,
+  },
   iconWrap: {
     width: 56,
     height: 56,
@@ -56,6 +74,9 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surfaceSubtle,
     marginBottom: spacing.lg,
   },
+  iconWrapPlain: {
+    marginBottom: spacing.xl,
+  },
   title: {
     ...typography.lg,
     fontWeight: fontWeights.bold,
@@ -63,14 +84,24 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginBottom: spacing.sm,
   },
+  titlePlain: {
+    ...typography.xl,
+    fontWeight: fontWeights.bold,
+  },
   message: {
     ...typography.base,
     color: colors.textMuted,
     textAlign: 'center',
-    maxWidth: 280,
-    marginBottom: spacing.xl,
+    maxWidth: 320,
+    marginBottom: spacing.lg,
+  },
+  messagePlain: {
+    maxWidth: 340,
   },
   action: {
     marginTop: spacing.sm,
+  },
+  actionPlain: {
+    marginTop: spacing.xl,
   },
 });

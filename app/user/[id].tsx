@@ -185,8 +185,8 @@ export default function UserProfileScreen() {
 
   if (state.status === 'loading') {
     return (
-      <Screen>
-        <AppHeader title="Profil" showBack />
+      <Screen safe={false}>
+        <AppHeader title="Profil" showBack density="compact" />
         <Loader />
       </Screen>
     );
@@ -194,13 +194,15 @@ export default function UserProfileScreen() {
 
   if (state.status === 'error') {
     return (
-      <Screen>
-        <AppHeader title="Profil" showBack />
-        <EmptyState
-          title="Profil introuvable"
-          message={state.message}
-          style={styles.center}
-        />
+      <Screen safe={false}>
+        <AppHeader title="Profil" showBack density="compact" />
+        <View style={styles.emptyWrapPlain}>
+          <EmptyState
+            variant="plain"
+            title="Profil introuvable"
+            message={state.message}
+          />
+        </View>
       </Screen>
     );
   }
@@ -288,8 +290,8 @@ export default function UserProfileScreen() {
   );
 
   return (
-    <Screen scroll={false}>
-      <AppHeader title="Profil vendeur" showBack />
+    <Screen scroll={false} safe={false}>
+      <AppHeader title="Profil vendeur" showBack density="compact" />
       <Modal
         visible={reportModalVisible}
         transparent
@@ -369,6 +371,13 @@ export default function UserProfileScreen() {
 
 const styles = StyleSheet.create({
   center: { flex: 1 },
+  emptyWrapPlain: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: spacing.xl,
+    paddingBottom: spacing.xl,
+  },
   header: {
     maxWidth: 900,
     width: '100%',

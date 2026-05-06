@@ -39,7 +39,7 @@ import {
 import { LISTING_CATEGORIES } from '@/lib/listingCategories';
 import { formatPrice } from '@/lib/format';
 import type { PublicListing } from '@/services/listings';
-import { colors, spacing, typography, fontWeights, radius, shadows } from '@/theme';
+import { colors, spacing, typography, fontWeights, radius } from '@/theme';
 import { getSession } from '@/services/auth';
 import { buildAuthGateHref } from '@/lib/authGateNavigation';
 import { useResponsiveLayout, getScrollBottomReserveForTabBar } from '@/lib/responsiveLayout';

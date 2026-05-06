@@ -119,17 +119,13 @@ function sortConversationsInbox(data: Conversation[]): void {
 }
 
 export default function MessagesScreen() {
-  const { height: windowHeight } = useWindowDimensions();
+  useWindowDimensions();
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [status, setStatus] = useState<'loading' | 'error_network' | 'error_generic' | 'success' | 'empty' | 'unauthenticated'>('loading');
   const [refreshing, setRefreshing] = useState(false);
   const shownFromCacheRef = useRef(false);
 
-  // Évite une carte "empty state" trop haute (premium, sans vide inutile).
-  const emptyCardMinHeight = Math.min(
-    520,
-    Math.max(420, Math.round(windowHeight * 0.62))
-  );
+  const tabsBottomPad = 72;
 
   const fetchInbox = useCallback(async () => {
     try {
@@ -231,19 +227,21 @@ export default function MessagesScreen() {
     return (
       <Screen noPadding safe={false}>
         <AppHeader title="Boîte de réception" noBorder density="compact" />
-        <EmptyState
-          icon={<Ionicons name="cloud-offline-outline" size={24} color={colors.error} />}
-          title="Internet indisponible"
-          message="Vérifiez votre connexion réseau puis rechargez vos messages."
-          action={
-            <View style={styles.emptyAction}>
-              <Button variant="secondary" onPress={() => fetchInbox()}>
-                Réessayer
-              </Button>
-            </View>
-          }
-          style={[styles.center, { minHeight: emptyCardMinHeight }]}
-        />
+        <View style={[styles.contentArea, { paddingBottom: tabsBottomPad }]}>
+          <EmptyState
+            variant="plain"
+            icon={<Ionicons name="cloud-offline-outline" size={24} color={colors.error} />}
+            title="Internet indisponible"
+            message="Vérifiez votre connexion réseau puis rechargez vos messages."
+            action={
+              <View style={styles.emptyAction}>
+                <Button variant="secondary" onPress={() => fetchInbox()} style={styles.emptyCta}>
+                  Réessayer
+                </Button>
+              </View>
+            }
+          />
+        </View>
       </Screen>
     );
   }
@@ -252,19 +250,21 @@ export default function MessagesScreen() {
     return (
       <Screen noPadding safe={false}>
         <AppHeader title="Boîte de réception" noBorder density="compact" />
-        <EmptyState
-          icon={<Ionicons name="alert-circle-outline" size={24} color={colors.textSecondary} />}
-          title="Oups ! Erreur serveur"
-          message="Nous n'arrivons pas à charger vos conversations. Nos équipes sont sur le coup."
-          action={
-            <View style={styles.emptyAction}>
-              <Button variant="secondary" onPress={() => fetchInbox()}>
-                Réessayer
-              </Button>
-            </View>
-          }
-          style={[styles.center, { minHeight: emptyCardMinHeight }]}
-        />
+        <View style={[styles.contentArea, { paddingBottom: tabsBottomPad }]}>
+          <EmptyState
+            variant="plain"
+            icon={<Ionicons name="alert-circle-outline" size={24} color={colors.textSecondary} />}
+            title="Oups ! Erreur serveur"
+            message="Nous n'arrivons pas à charger vos conversations. Nos équipes sont sur le coup."
+            action={
+              <View style={styles.emptyAction}>
+                <Button variant="secondary" onPress={() => fetchInbox()} style={styles.emptyCta}>
+                  Réessayer
+                </Button>
+              </View>
+            }
+          />
+        </View>
       </Screen>
     );
   }
@@ -273,12 +273,14 @@ export default function MessagesScreen() {
     return (
       <Screen noPadding safe={false}>
         <AppHeader title="Boîte de réception" noBorder density="compact" />
-        <EmptyState
-          icon={<Ionicons name="chatbubbles-outline" size={24} color={colors.primary} />}
-          title="Aucun message"
-          message="C'est bien calme ici. Vos futurs échanges avec les acheteurs et vendeurs apparaîtront dans cette boîte de réception."
-          style={[styles.center, { minHeight: emptyCardMinHeight }]}
-        />
+        <View style={[styles.contentArea, { paddingBottom: tabsBottomPad }]}>
+          <EmptyState
+            variant="plain"
+            icon={<Ionicons name="chatbubbles-outline" size={24} color={colors.primary} />}
+            title="Aucun message"
+            message="Vos échanges avec les vendeurs apparaîtront ici."
+          />
+        </View>
       </Screen>
     );
   }
@@ -304,14 +306,29 @@ export default function MessagesScreen() {
 }
 
 const styles = StyleSheet.create({
-  center: { justifyContent: 'center' },
-  emptyAction: { minWidth: 220 },
+  contentArea: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: spacing.xl,
+    transform: [{ translateY: -32 }],
+  },
+  emptyAction: { width: '100%', alignItems: 'center' },
+  emptyCta: { width: '78%', minHeight: 52, borderRadius: radius.lg },
+  list: {
+    maxWidth: 760,
+    width: '100%',
+    alignSelf: 'center',
+    paddingHorizontal: spacing.base,
+    paddingTop: spacing.xs,
+    paddingBottom: spacing['3xl'],
+  },
   listContent: {
     maxWidth: 760,
     width: '100%',
     alignSelf: 'center',
     paddingHorizontal: spacing.base,
-    paddingTop: spacing.sm,
+    paddingTop: spacing.xs,
     paddingBottom: spacing['3xl'],
     flexGrow: 1,
   },

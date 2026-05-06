@@ -196,14 +196,16 @@ export default function ConversationThreadScreen() {
 
   if (status === 'error') {
     return (
-      <Screen>
-        <AppHeader title="Conversation" showBack noBorder />
-        <EmptyState 
-          icon={<Ionicons name="alert-circle-outline" size={56} color={colors.textSecondary} />}
-          title="Erreur de chargement" 
-          message={errorMessage} 
-          style={styles.center} 
-        />
+      <Screen safe={false}>
+        <AppHeader title="Conversation" showBack noBorder density="compact" />
+        <View style={styles.contentArea}>
+          <EmptyState
+            variant="plain"
+            icon={<Ionicons name="alert-circle-outline" size={24} color={colors.textSecondary} />}
+            title="Erreur de chargement"
+            message={errorMessage}
+          />
+        </View>
       </Screen>
     );
   }
@@ -211,8 +213,8 @@ export default function ConversationThreadScreen() {
   const inputPaddingBottom = insets.bottom > 0 ? insets.bottom : spacing.base;
 
   return (
-    <Screen scroll={false} noPadding>
-      <AppHeader title={title} showBack noBorder />
+    <Screen scroll={false} noPadding safe={false}>
+      <AppHeader title={title} showBack noBorder density="compact" />
       
       {status === 'loading' && <MessagesSkeleton />}
 
@@ -267,7 +269,6 @@ export default function ConversationThreadScreen() {
 }
 
 const styles = StyleSheet.create({
-  center: { flex: 1, paddingTop: spacing['3xl'] },
   keyboard: { flex: 1, backgroundColor: colors.background },
   listContent: {
     maxWidth: 760,
@@ -276,6 +277,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.base,
     paddingTop: spacing.base,
     flexGrow: 1,
+  },
+  contentArea: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: spacing.xl, // ~24
+    paddingBottom: spacing.xl,
+    transform: [{ translateY: -24 }],
   },
   emptyWrap: {
     flex: 1,

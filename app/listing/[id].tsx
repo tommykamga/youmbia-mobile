@@ -527,7 +527,8 @@ export default function ListingDetailScreen() {
 
   if (state.status === 'loading') {
     return (
-      <Screen>
+      <Screen safe={false}>
+        <AppHeader title="Annonce" showBack density="compact" />
         <Loader />
       </Screen>
     );
@@ -536,17 +537,20 @@ export default function ListingDetailScreen() {
   if (state.status === 'error') {
     const { title, body } = getListingErrorDisplay(state.message);
     return (
-      <Screen>
-        <EmptyState
-          title={title}
-          message={body}
-          style={styles.center}
-          action={
-            <Button variant="secondary" onPress={() => router.back()}>
-              Retour
-            </Button>
-          }
-        />
+      <Screen safe={false}>
+        <AppHeader title="Annonce" showBack density="compact" />
+        <View style={styles.emptyWrapPlain}>
+          <EmptyState
+            variant="plain"
+            title={title}
+            message={body}
+            action={
+              <Button variant="secondary" onPress={() => router.back()}>
+                Retour
+              </Button>
+            }
+          />
+        </View>
       </Screen>
     );
   }
@@ -571,8 +575,8 @@ export default function ListingDetailScreen() {
   const similarKeyExtractor = (item: any, index: number) => item.id || `skele-${index}`;
 
   return (
-    <Screen scroll={false} noPadding>
-      <AppHeader title="Annonce" showBack />
+    <Screen scroll={false} noPadding safe={false}>
+      <AppHeader title="Annonce" showBack density="compact" />
       <ScrollView
         style={styles.scroll}
         contentContainerStyle={[
@@ -727,6 +731,13 @@ export default function ListingDetailScreen() {
 
 const styles = StyleSheet.create({
   center: { flex: 1 },
+  emptyWrapPlain: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: spacing.xl,
+    paddingBottom: spacing.xl,
+  },
   scroll: { flex: 1 },
   scrollContent: {
     paddingBottom: FOOTER_HEIGHT_ESTIMATE + spacing['4xl'],

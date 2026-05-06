@@ -36,8 +36,8 @@ export default function CategoriesScreen() {
   };
 
   return (
-    <Screen>
-      <AppHeader title="Catégories" showBack />
+    <Screen safe={false}>
+      <AppHeader title="Catégories" showBack density="compact" />
       <ScrollView
         style={styles.scroll}
         contentContainerStyle={styles.content}

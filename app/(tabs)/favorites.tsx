@@ -4,7 +4,7 @@
  */
 
 import React, { useCallback, useEffect, useState, useMemo } from 'react';
-import { FlatList, View, StyleSheet, RefreshControl, Platform } from 'react-native';
+import { FlatList, View, StyleSheet, RefreshControl, Platform, Text } from 'react-native';
 import { useRouter, Redirect } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Screen, Loader, EmptyState, Button, AppHeader } from '@/components';
@@ -12,7 +12,7 @@ import { getFavorites } from '@/services/favorites';
 import { getSession } from '@/services/auth';
 import { ListingCard } from '@/features/listings';
 import type { PublicListing } from '@/services/listings';
-import { spacing, colors } from '@/theme';
+import { spacing, colors, typography, fontWeights } from '@/theme';
 import { useFavorites } from '@/context/FavoritesContext';
 import { buildAuthGateHref } from '@/lib/authGateNavigation';
 
@@ -89,7 +89,9 @@ export default function FavoritesScreen() {
     return (
       <Screen noPadding safe={false}>
         <AppHeader title="Favoris" noBorder density="compact" />
-        <EmptyState title="Erreur" message={state.message} style={styles.center} />
+        <View style={styles.emptyWrap}>
+          <EmptyState variant="plain" title="Erreur" message={state.message} />
+        </View>
       </Screen>
     );
   }
@@ -98,19 +100,23 @@ export default function FavoritesScreen() {
     return (
       <Screen noPadding safe={false}>
         <AppHeader title="Favoris" noBorder density="compact" />
-        <EmptyState
-          icon={<Ionicons name="heart-outline" size={24} color={colors.primary} />}
-          title="Aucune annonce favorite"
-          message="Les annonces que vous aimez apparaîtront ici."
-          action={
-            <View style={styles.emptyAction}>
-              <Button variant="secondary" onPress={() => router.replace('/(tabs)/home')}>
-                Découvrir les annonces
-              </Button>
-            </View>
-          }
-          style={styles.center}
-        />
+        <View style={styles.emptyWrap}>
+          <EmptyState
+            variant="plain"
+            icon={<Ionicons name="heart-outline" size={24} color={colors.primary} />}
+            title="Aucun favori pour le moment"
+            message="Les annonces que vous aimez apparaîtront ici."
+            action={
+              <View style={styles.emptyAction}>
+                <Button variant="secondary" onPress={() => router.replace('/(tabs)/home')} style={styles.emptyCta}>
+                  <Text style={styles.emptyCtaText} numberOfLines={1} adjustsFontSizeToFit>
+                    Découvrir les annonces
+                  </Text>
+                </Button>
+              </View>
+            }
+          />
+        </View>
       </Screen>
     );
   }
@@ -144,13 +150,20 @@ export default function FavoritesScreen() {
 }
 
 const styles = StyleSheet.create({
-  center: { flex: 1 },
+  emptyWrap: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: spacing.xl,
+    paddingBottom: 72,
+    transform: [{ translateY: -32 }],
+  },
   listContent: {
     maxWidth: 760,
     width: '100%',
     alignSelf: 'center',
     paddingHorizontal: spacing.base,
-    paddingTop: spacing.sm,
+    paddingTop: spacing.xs,
     paddingBottom: spacing['3xl'],
     flexGrow: 1,
   },
@@ -158,6 +171,21 @@ const styles = StyleSheet.create({
     height: spacing.base,
   },
   emptyAction: {
-    minWidth: 220,
+    width: '100%',
+    alignItems: 'center',
+  },
+  emptyCta: {
+    alignSelf: 'center',
+    maxWidth: 340,
+    width: 'auto',
+    minHeight: 52,
+    paddingHorizontal: 26,
+    borderRadius: 18,
+  },
+  emptyCtaText: {
+    ...typography.base,
+    fontSize: 16,
+    lineHeight: 24,
+    fontWeight: fontWeights.bold,
   },
 });

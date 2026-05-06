@@ -446,6 +446,8 @@ export default function AccountListingsScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [statsByListingId, setStatsByListingId] = useState<Record<string, ListingStats>>({});
 
+  const bottomPad = 24;
+
   const load = useCallback(async () => {
     const result = await getMyListings();
     if (result.error) {
@@ -557,8 +559,8 @@ export default function AccountListingsScreen() {
   const itemSeparator = useCallback(() => <View style={styles.separator} />, []);
 
   return (
-    <Screen>
-      <AppHeader title="Mes annonces" showBack />
+    <Screen safe={false}>
+      <AppHeader title="Mes annonces" showBack density="compact" />
       {state.status === 'loading' && (
         <Loader />
       )}
@@ -566,31 +568,39 @@ export default function AccountListingsScreen() {
         <Redirect href={buildAuthGateHref('listings')} />
       )}
       {state.status === 'error' && (
-        <EmptyState
-          title="Erreur"
-          message={state.message}
-          action={
-            <Button variant="secondary" onPress={() => load()}>
-              Réessayer
-            </Button>
-          }
-          style={styles.center}
-        />
+        <View style={[styles.contentArea, { paddingBottom: bottomPad }]}>
+          <EmptyState
+            variant="plain"
+            title="Erreur"
+            message={state.message}
+            action={
+              <View style={styles.emptyAction}>
+                <Button variant="secondary" onPress={() => load()} style={styles.emptyCta}>
+                  Réessayer
+                </Button>
+              </View>
+            }
+          />
+        </View>
       )}
       {state.status === 'empty' && (
-        <EmptyState
-          icon={<Ionicons name="pricetags-outline" size={24} color={colors.primary} />}
-          title="Aucune annonce publiee"
-          message="Publiez votre premiere annonce en quelques minutes."
-          action={
-            <View style={styles.emptyAction}>
-              <Button variant="secondary" onPress={() => router.push('/sell')}>
-                Publier une annonce
-              </Button>
-            </View>
-          }
-          style={styles.center}
-        />
+        <View style={[styles.contentArea, { paddingBottom: bottomPad }]}>
+          <EmptyState
+            variant="plain"
+            icon={<Ionicons name="pricetags-outline" size={24} color={colors.primary} />}
+            title="Aucune annonce publiée"
+            message="Publiez votre première annonce en quelques minutes."
+            action={
+              <View style={styles.emptyAction}>
+                <Button onPress={() => router.push('/sell')} style={styles.emptyCta}>
+                  <Text style={styles.emptyCtaText} numberOfLines={1} adjustsFontSizeToFit>
+                    Publier une annonce
+                  </Text>
+                </Button>
+              </View>
+            }
+          />
+        </View>
       )}
       {state.status === 'success' && (
         <FlatList
@@ -618,9 +628,16 @@ export default function AccountListingsScreen() {
 }
 
 const styles = StyleSheet.create({
-  center: { flex: 1 },
+  contentArea: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: spacing.xl,
+    transform: [{ translateY: -24 }],
+  },
   listContent: {
-    padding: spacing.base,
+    paddingHorizontal: spacing.base,
+    paddingTop: spacing.xs,
     paddingBottom: spacing['3xl'],
   },
   separator: { height: spacing.base },
@@ -682,7 +699,22 @@ const styles = StyleSheet.create({
     color: colors.primary,
   },
   emptyAction: {
-    minWidth: 220,
+    width: '100%',
+    alignItems: 'center',
+  },
+  emptyCta: {
+    alignSelf: 'center',
+    maxWidth: 340,
+    width: 'auto',
+    minHeight: 52,
+    paddingHorizontal: 26,
+    borderRadius: radius.lg,
+  },
+  emptyCtaText: {
+    ...typography.base,
+    fontSize: 16,
+    lineHeight: 24,
+    fontWeight: fontWeights.bold,
   },
   actions: {
     flexDirection: 'row',

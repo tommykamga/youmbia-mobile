@@ -26,8 +26,8 @@ export default function AccountSettingsScreen() {
   const appVersion = Constants.expoConfig?.version ?? '1.0.0';
 
   return (
-    <Screen scroll={false}>
-      <AppHeader title="Paramètres" showBack />
+    <Screen scroll={false} safe={false}>
+      <AppHeader title="Paramètres" showBack density="compact" />
       <View style={styles.content}>
         <Button
           variant="secondary"

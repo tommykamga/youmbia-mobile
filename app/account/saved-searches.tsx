@@ -81,20 +81,22 @@ export default function SavedSearchesScreen() {
 
   if (list.length === 0) {
     return (
-      <Screen>
-        <AppHeader title="Recherches sauvegardées" showBack />
-        <EmptyState
-          title="Aucune recherche sauvegardée"
-          message="Sur l'écran Recherche, lancez une recherche puis appuyez sur « Sauvegarder cette recherche »."
-          style={styles.center}
-        />
+      <Screen safe={false}>
+        <AppHeader title="Recherches sauvegardées" showBack density="compact" />
+        <View style={styles.emptyWrap}>
+          <EmptyState
+            variant="plain"
+            title="Aucune recherche sauvegardée"
+            message="Sur l'écran Recherche, lancez une recherche puis appuyez sur « Sauvegarder cette recherche »."
+          />
+        </View>
       </Screen>
     );
   }
 
   return (
-    <Screen>
-      <AppHeader title="Recherches sauvegardées" showBack />
+    <Screen safe={false}>
+      <AppHeader title="Recherches sauvegardées" showBack density="compact" />
       <FlatList
         data={list}
         keyExtractor={keyExtractor}
@@ -107,9 +109,17 @@ export default function SavedSearchesScreen() {
 }
 
 const styles = StyleSheet.create({
-  center: { flex: 1 },
+  emptyWrap: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: spacing.xl,
+    paddingBottom: spacing.xl,
+    transform: [{ translateY: -24 }],
+  },
   listContent: {
-    padding: spacing.base,
+    paddingHorizontal: spacing.base,
+    paddingTop: spacing.xs,
     paddingBottom: spacing['3xl'],
   },
   row: {

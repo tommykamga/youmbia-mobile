@@ -13,8 +13,8 @@ export default function NotificationsScreen() {
   }, [router]);
 
   return (
-    <Screen>
-      <AppHeader title="Notifications" showBack />
+    <Screen safe={false}>
+      <AppHeader title="Notifications" showBack density="compact" />
       <View style={styles.content}>
         <View style={styles.card}>
           <View style={styles.icon}>
@@ -47,7 +47,7 @@ export default function NotificationsScreen() {
 
 const styles = StyleSheet.create({
   content: {
-    paddingTop: spacing.base,
+    paddingTop: spacing.sm,
     gap: spacing.base,
   },
   card: {

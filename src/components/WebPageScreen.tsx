@@ -68,8 +68,8 @@ export function WebPageScreen({ url, title }: WebPageScreenProps) {
 
   if (!initialValid) {
     return (
-      <Screen noPadding>
-        <AppHeader title={title} showBack />
+      <Screen noPadding safe={false}>
+        <AppHeader title={title} showBack density="compact" />
         <EmptyState
           icon={<Ionicons name="shield-outline" size={56} color={colors.error} />}
           title="Lien non autorisé"
@@ -82,8 +82,8 @@ export function WebPageScreen({ url, title }: WebPageScreenProps) {
 
   if (Platform.OS === 'web') {
     return (
-      <Screen noPadding>
-        <AppHeader title={title} showBack />
+      <Screen noPadding safe={false}>
+        <AppHeader title={title} showBack density="compact" />
         <EmptyState
           icon={<Ionicons name="open-outline" size={56} color={colors.primary} />}
           title={title}
@@ -100,8 +100,8 @@ export function WebPageScreen({ url, title }: WebPageScreenProps) {
   }
 
   return (
-    <Screen noPadding>
-      <AppHeader title={title} showBack />
+    <Screen noPadding safe={false}>
+      <AppHeader title={title} showBack density="compact" />
       <View style={styles.container}>
         {loadError != null ? (
           <EmptyState

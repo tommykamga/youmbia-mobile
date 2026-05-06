@@ -370,23 +370,27 @@ export default function ListingEditScreen() {
 
   if (loadState.status === 'error') {
     return (
-      <Screen>
-        <EmptyState
-          title="Impossible de charger"
-          message={loadState.message}
-          action={
-            <Button variant="secondary" onPress={() => router.back()}>
-              Retour
-            </Button>
-          }
-        />
+      <Screen safe={false}>
+        <AppHeader title="Modifier l’annonce" showBack density="compact" />
+        <View style={styles.contentArea}>
+          <EmptyState
+            variant="plain"
+            title="Impossible de charger"
+            message={loadState.message}
+            action={
+              <Button variant="secondary" onPress={() => router.back()}>
+                Retour
+              </Button>
+            }
+          />
+        </View>
       </Screen>
     );
   }
 
   return (
-    <Screen scroll keyboardAvoid>
-      <AppHeader title="Modifier l’annonce" showBack />
+    <Screen scroll keyboardAvoid safe={false}>
+      <AppHeader title="Modifier l’annonce" showBack density="compact" />
       <Text style={styles.subtitle}>Catégorie : {categoryLabel}</Text>
 
       {images.length > 0 ? (
@@ -487,6 +491,13 @@ export default function ListingEditScreen() {
 }
 
 const styles = StyleSheet.create({
+  contentArea: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: spacing.xl,
+    paddingBottom: spacing.xl,
+  },
   subtitle: {
     fontSize: typography.sm.fontSize,
     color: colors.textSecondary,
