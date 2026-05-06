@@ -72,6 +72,11 @@ export type ListingFeedProps = {
    * Marge basse supplémentaire (ex. hauteur tab bar + safe area) pour que le dernier item ne soit pas masqué.
    */
   contentBottomInset?: number;
+  /**
+   * Optional external ref to the underlying FlatList.
+   * Useful when a parent needs to scroll the feed to top (e.g. tap search bar).
+   */
+  externalScrollRef?: React.MutableRefObject<any | null>;
 };
 
 export function ListingFeed({
@@ -88,9 +93,17 @@ export function ListingFeed({
   disableInfiniteScroll = false,
   listInitialNumToRender,
   contentBottomInset = 0,
+  externalScrollRef,
 }: ListingFeedProps) {
   const listRef = useRef<any>(null);
   useScrollToTop(listRef);
+  const setListNode = useCallback(
+    (node: any | null) => {
+      listRef.current = node;
+      if (externalScrollRef) externalScrollRef.current = node;
+    },
+    [externalScrollRef]
+  );
 
   const { refresh: refreshFavorites } = useFavorites();
   const [state, setState] = useState<FeedState>({ status: 'loading' });
@@ -458,7 +471,7 @@ export function ListingFeed({
   if (reanimatedScrollHandler) {
     return (
       <Animated.FlatList
-        ref={listRef}
+        ref={setListNode}
         {...listProps}
         style={styles.listFlex}
         onScroll={reanimatedScrollHandler}
@@ -467,7 +480,7 @@ export function ListingFeed({
     );
   }
 
-  return <FlatList ref={listRef} {...listProps} style={styles.listFlex} />;
+  return <FlatList ref={setListNode} {...listProps} style={styles.listFlex} />;
 }
 
 const styles = StyleSheet.create({

@@ -200,6 +200,8 @@ export default function SearchScreen() {
     async () => {}
   );
   const resultsListRef = useRef<FlatList<PublicListing> | null>(null);
+  const homeFeedListRef = useRef<any>(null);
+  const lastResultsScrollOffsetRef = useRef(0);
   const savedSearchFeedbackTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastNavParamsSearchEffectKeyRef = useRef<string>('');
   const lastNavParamsSearchEffectAtRef = useRef(0);
@@ -502,11 +504,34 @@ export default function SearchScreen() {
     }
   }, [state.status, scrollResetKey]);
 
+  const scrollActiveListToTop = useCallback((): boolean => {
+    const canScrollResults = resultsListRef.current != null && state.status === 'success';
+    const list = canScrollResults ? resultsListRef.current : homeFeedListRef.current;
+    if (!list || typeof (list as any).scrollToOffset !== 'function') return false;
+
+    const isLikelyAlreadyTop = canScrollResults && lastResultsScrollOffsetRef.current <= 4;
+    if (isLikelyAlreadyTop) return false;
+
+    try {
+      (list as any).scrollToOffset({ offset: 0, animated: true });
+      return true;
+    } catch {
+      return false;
+    }
+  }, [state.status]);
+
   const openSearchOverlay = useCallback(() => {
     Keyboard.dismiss();
     setOverlayDraft(query);
-    setSearchOverlayOpen(true);
-  }, [query]);
+    const didScroll = scrollActiveListToTop();
+    // Avoid "double animation": let the scroll start before sliding the sheet.
+    const delayMs = didScroll ? 180 : 0;
+    if (delayMs > 0) {
+      setTimeout(() => setSearchOverlayOpen(true), delayMs);
+    } else {
+      setSearchOverlayOpen(true);
+    }
+  }, [query, scrollActiveListToTop]);
 
   const closeSearchOverlay = useCallback(() => {
     Keyboard.dismiss();
@@ -1402,6 +1427,7 @@ export default function SearchScreen() {
                   contentPaddingHorizontal={0}
                   listingCardFeedPresentation="home"
                   contentBottomInset={scrollBottomReserve}
+                  externalScrollRef={homeFeedListRef}
                 />
               ) : (
                 <>
@@ -1459,6 +1485,10 @@ export default function SearchScreen() {
                       ]}
                       showsVerticalScrollIndicator={false}
                       keyboardShouldPersistTaps="handled"
+                      onScroll={(e) => {
+                        lastResultsScrollOffsetRef.current = e.nativeEvent.contentOffset.y ?? 0;
+                      }}
+                      scrollEventThrottle={16}
                       initialNumToRender={Platform.OS === 'ios' ? 6 : 8}
                       maxToRenderPerBatch={Platform.OS === 'ios' ? 4 : 6}
                       windowSize={Platform.OS === 'ios' ? 5 : 8}
