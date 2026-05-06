@@ -1386,10 +1386,15 @@ export default function SearchScreen() {
                     accessibilityLabel="Ouvrir la recherche"
                   >
                     <Text
-                      style={[styles.searchFieldText, !query.trim() && styles.searchFieldPlaceholder]}
+                      style={[
+                        styles.searchFieldText,
+                        !(searchOverlayOpen ? overlayDraft : query).trim() && styles.searchFieldPlaceholder,
+                      ]}
                       numberOfLines={1}
                     >
-                      {query.trim() ? query.trim() : SEARCH_FIELD_PLACEHOLDER}
+                      {(searchOverlayOpen ? overlayDraft : query).trim()
+                        ? (searchOverlayOpen ? overlayDraft : query).trim()
+                        : SEARCH_FIELD_PLACEHOLDER}
                     </Text>
                   </Pressable>
                   {query.trim().length > 0 ? (
