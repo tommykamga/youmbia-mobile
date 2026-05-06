@@ -160,9 +160,9 @@ export default function AccountScreen() {
   }
 
   return (
-    <Screen noPadding>
+    <Screen noPadding safe={false}>
+      <AppHeader title="Compte" noBorder density="compact" />
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        <AppHeader title="Compte" noBorder />
 
         {/* User Profile Header Card */}
         <View style={styles.headerCard}>
@@ -249,11 +249,11 @@ const styles = StyleSheet.create({
   headerCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: spacing.xl,
+    padding: spacing.lg,
     backgroundColor: colors.surface,
     borderBottomWidth: 1,
     borderBottomColor: colors.borderLight,
-    marginBottom: spacing.base,
+    marginBottom: spacing.sm,
   },
   avatar: {
     width: 64,

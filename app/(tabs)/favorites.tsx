@@ -87,8 +87,8 @@ export default function FavoritesScreen() {
 
   if (state.status === 'error') {
     return (
-      <Screen noPadding>
-        <AppHeader title="Favoris" noBorder />
+      <Screen noPadding safe={false}>
+        <AppHeader title="Favoris" noBorder density="compact" />
         <EmptyState title="Erreur" message={state.message} style={styles.center} />
       </Screen>
     );
@@ -96,8 +96,8 @@ export default function FavoritesScreen() {
 
   if (state.status === 'empty') {
     return (
-      <Screen noPadding>
-        <AppHeader title="Favoris" noBorder />
+      <Screen noPadding safe={false}>
+        <AppHeader title="Favoris" noBorder density="compact" />
         <EmptyState
           icon={<Ionicons name="heart-outline" size={24} color={colors.primary} />}
           title="Aucune annonce favorite"
@@ -115,10 +115,10 @@ export default function FavoritesScreen() {
     );
   }
 
-  const listHeader = <AppHeader title="Favoris" noBorder />;
+  const listHeader = <AppHeader title="Favoris" noBorder density="compact" />;
 
   return (
-    <Screen noPadding>
+    <Screen noPadding safe={false}>
       <FlatList
         data={displayData}
         keyExtractor={keyExtractor}
@@ -149,7 +149,8 @@ const styles = StyleSheet.create({
     maxWidth: 760,
     width: '100%',
     alignSelf: 'center',
-    padding: spacing.base,
+    paddingHorizontal: spacing.base,
+    paddingTop: spacing.sm,
     paddingBottom: spacing['3xl'],
     flexGrow: 1,
   },

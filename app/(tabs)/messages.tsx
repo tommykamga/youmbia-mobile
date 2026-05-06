@@ -1,5 +1,5 @@
 import React, { useCallback, useRef, useState } from 'react';
-import { FlatList, View, Text, StyleSheet, Pressable, RefreshControl } from 'react-native';
+import { FlatList, View, Text, StyleSheet, Pressable, RefreshControl, useWindowDimensions } from 'react-native';
 import { useRouter, useFocusEffect, Redirect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Screen, EmptyState, Button, AppHeader } from '@/components';
@@ -119,10 +119,17 @@ function sortConversationsInbox(data: Conversation[]): void {
 }
 
 export default function MessagesScreen() {
+  const { height: windowHeight } = useWindowDimensions();
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [status, setStatus] = useState<'loading' | 'error_network' | 'error_generic' | 'success' | 'empty' | 'unauthenticated'>('loading');
   const [refreshing, setRefreshing] = useState(false);
   const shownFromCacheRef = useRef(false);
+
+  // Évite une carte "empty state" trop haute (premium, sans vide inutile).
+  const emptyCardMinHeight = Math.min(
+    520,
+    Math.max(420, Math.round(windowHeight * 0.62))
+  );
 
   const fetchInbox = useCallback(async () => {
     try {
@@ -209,16 +216,23 @@ export default function MessagesScreen() {
     return <Redirect href={buildAuthGateHref('messages')} />;
   }
 
-  return (
-    <Screen noPadding>
-      <AppHeader title="Boîte de réception" noBorder brandStrip />
-      
-      {status === 'loading' && <MessagesSkeleton />}
+  if (status === 'loading') {
+    return (
+      <Screen noPadding safe={false}>
+        <AppHeader title="Boîte de réception" noBorder density="compact" />
+        <View style={styles.listContent}>
+          <MessagesSkeleton />
+        </View>
+      </Screen>
+    );
+  }
 
-
-      {status === 'error_network' && (
+  if (status === 'error_network') {
+    return (
+      <Screen noPadding safe={false}>
+        <AppHeader title="Boîte de réception" noBorder density="compact" />
         <EmptyState
-          icon={<Ionicons name="cloud-offline-outline" size={56} color={colors.error} />}
+          icon={<Ionicons name="cloud-offline-outline" size={24} color={colors.error} />}
           title="Internet indisponible"
           message="Vérifiez votre connexion réseau puis rechargez vos messages."
           action={
@@ -228,13 +242,18 @@ export default function MessagesScreen() {
               </Button>
             </View>
           }
-          style={styles.center}
+          style={[styles.center, { minHeight: emptyCardMinHeight }]}
         />
-      )}
+      </Screen>
+    );
+  }
 
-      {status === 'error_generic' && (
+  if (status === 'error_generic') {
+    return (
+      <Screen noPadding safe={false}>
+        <AppHeader title="Boîte de réception" noBorder density="compact" />
         <EmptyState
-          icon={<Ionicons name="alert-circle-outline" size={56} color={colors.textSecondary} />}
+          icon={<Ionicons name="alert-circle-outline" size={24} color={colors.textSecondary} />}
           title="Oups ! Erreur serveur"
           message="Nous n'arrivons pas à charger vos conversations. Nos équipes sont sur le coup."
           action={
@@ -244,44 +263,57 @@ export default function MessagesScreen() {
               </Button>
             </View>
           }
-          style={styles.center}
+          style={[styles.center, { minHeight: emptyCardMinHeight }]}
         />
-      )}
+      </Screen>
+    );
+  }
 
-      {status === 'empty' && (
+  if (status === 'empty') {
+    return (
+      <Screen noPadding safe={false}>
+        <AppHeader title="Boîte de réception" noBorder density="compact" />
         <EmptyState
-          icon={<Ionicons name="chatbubbles-outline" size={56} color={colors.primary} />}
+          icon={<Ionicons name="chatbubbles-outline" size={24} color={colors.primary} />}
           title="Aucun message"
           message="C'est bien calme ici. Vos futurs échanges avec les acheteurs et vendeurs apparaîtront dans cette boîte de réception."
-          style={styles.center}
+          style={[styles.center, { minHeight: emptyCardMinHeight }]}
         />
-      )}
+      </Screen>
+    );
+  }
 
-      {status === 'success' && (
-        <FlatList
-          data={conversations}
-          renderItem={renderItem}
-          keyExtractor={(item) => item.id}
-          ItemSeparatorComponent={() => <View style={styles.separator} />}
-          contentContainerStyle={styles.list}
-          refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />
-          }
-          showsVerticalScrollIndicator={false}
-        />
-      )}
+  const listHeader = <AppHeader title="Boîte de réception" noBorder density="compact" />;
+
+  return (
+    <Screen noPadding safe={false}>
+      <FlatList
+        data={conversations}
+        renderItem={renderItem}
+        keyExtractor={(item) => item.id}
+        ItemSeparatorComponent={() => <View style={styles.separator} />}
+        ListHeaderComponent={listHeader}
+        contentContainerStyle={styles.listContent}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />
+        }
+        showsVerticalScrollIndicator={false}
+      />
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  center: { flex: 1, paddingTop: spacing['3xl'] },
-  emptyAction: { minWidth: 220, marginTop: spacing.lg },
-  list: {
+  center: { justifyContent: 'center' },
+  emptyAction: { minWidth: 220 },
+  listContent: {
     maxWidth: 760,
     width: '100%',
     alignSelf: 'center',
-    paddingBottom: spacing.xl,
+    paddingHorizontal: spacing.base,
+    paddingTop: spacing.sm,
+    paddingBottom: spacing['3xl'],
+    flexGrow: 1,
   },
   row: {
     flexDirection: 'row',

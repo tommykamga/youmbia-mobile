@@ -16,6 +16,8 @@ type AppHeaderProps = {
   title: string;
   /** Bandeau logo YOUMBIA au-dessus du titre (onglets type Messages). */
   brandStrip?: boolean;
+  /** Densité visuelle du header (pour tabs type Leboncoin). */
+  density?: 'default' | 'compact';
   /** Show back button (uses router.back()). */
   showBack?: boolean;
   /** Right-side element (e.g. icon button or text). */
@@ -30,6 +32,7 @@ type AppHeaderProps = {
 export function AppHeader({
   title,
   brandStrip = false,
+  density = 'default',
   showBack = false,
   right,
   noBorder,
@@ -40,11 +43,16 @@ export function AppHeader({
   const router = useRouter();
   const fallbackHref: Href = '/(tabs)/home';
 
+  const densityStyles =
+    density === 'compact'
+      ? { paddingTop: insets.top + 2, paddingBottom: 6, rowMinHeight: 40 }
+      : { paddingTop: insets.top + spacing.xs, paddingBottom: spacing.xs, rowMinHeight: 44 };
+
   return (
     <View
       style={[
         styles.wrapper,
-        { paddingTop: insets.top + spacing.xs, paddingBottom: spacing.xs },
+        { paddingTop: densityStyles.paddingTop, paddingBottom: densityStyles.paddingBottom },
         !noBorder && styles.border,
         style,
       ]}
@@ -54,7 +62,7 @@ export function AppHeader({
           <BrandSymbol size={36} />
         </View>
       ) : null}
-      <View style={styles.row}>
+      <View style={[styles.row, { minHeight: densityStyles.rowMinHeight }]}>
         {showBack ? (
           <Pressable
             onPress={() => {
