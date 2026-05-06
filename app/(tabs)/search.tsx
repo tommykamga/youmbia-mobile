@@ -882,11 +882,51 @@ export default function SearchScreen() {
       const cid = parseInt(id, 10);
       const cidOk = Number.isFinite(cid) ? cid : null;
       const nextCat = normalizeFilterText(label);
-      setCategory(label);
-      setCategoryId(cidOk);
       setSearchOverlayOpen(false);
       clearPendingMainSearchDebounce();
       lastDisplayedPage1KeyRef.current = null;
+
+      const isSameCategory =
+        cidOk != null && appliedSearchFilters.categoryId != null && cidOk === appliedSearchFilters.categoryId;
+
+      if (isSameCategory) {
+        // Toggle off: remove category filter.
+        setCategory('');
+        setCategoryId(null);
+        setAppliedSearchFilters((prev) => ({
+          ...prev,
+          category: null,
+          categoryId: null,
+        }));
+
+        const hasOtherActiveFilters =
+          !!query.trim() ||
+          !!appliedSearchFilters.city ||
+          appliedPriceFilters.min != null ||
+          appliedPriceFilters.max != null;
+
+        if (!hasOtherActiveFilters) {
+          // Return to global marketplace feed (home).
+          browseFromHomeFooterRef.current = false;
+          setState({ status: 'idle' });
+          setSubmittedQuery('');
+          setOverlayDraft('');
+          return;
+        }
+
+        void runSearchRef.current(query.trim(), {
+          category: null,
+          categoryId: null,
+          city: appliedSearchFilters.city,
+          min: appliedPriceFilters.min,
+          max: appliedPriceFilters.max,
+        });
+        return;
+      }
+
+      // Toggle on / replace: apply new category filter.
+      setCategory(label);
+      setCategoryId(cidOk);
       setAppliedSearchFilters((prev) => ({
         ...prev,
         category: nextCat,
@@ -902,6 +942,7 @@ export default function SearchScreen() {
     },
     [
       query,
+      appliedSearchFilters.categoryId,
       appliedSearchFilters.city,
       appliedPriceFilters.min,
       appliedPriceFilters.max,
