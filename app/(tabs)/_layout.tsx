@@ -22,7 +22,9 @@ const TAB_LABEL_INACTIVE = 'rgba(15, 23, 42, 0.45)';
 /** Cercle Vendre : 28–32 px, + blanc 17–19. */
 const SELL_CIRCLE = 30;
 const SELL_PLUS_SIZE = 18;
-const SELL_CIRCLE_INACTIVE = 'rgba(22, 163, 74, 0.42)';
+/** Vert YOUMBIA plus profond, plus visible (micro-UI). */
+const SELL_CIRCLE_ACTIVE = '#16A34A';
+const SELL_CIRCLE_INACTIVE = 'rgba(22, 163, 74, 0.72)';
 const SELL_LABEL_INACTIVE = 'rgba(15, 23, 42, 0.5)';
 
 /** Hauteur slot icône commune (= diamètre cercle Vendre) → labels alignés. */
@@ -110,7 +112,7 @@ function TabGlyphIcon({ tabKey, focused, size }: { tabKey: TabIconKey; focused: 
 }
 
 function SellCircleIcon({ focused }: { focused: boolean }) {
-  const bg = focused ? TAB_ACTIVE : SELL_CIRCLE_INACTIVE;
+  const bg = focused ? SELL_CIRCLE_ACTIVE : SELL_CIRCLE_INACTIVE;
   return (
     <View style={[styles.sellCircle, { backgroundColor: bg }]}>
       <Ionicons name="add" size={SELL_PLUS_SIZE} color={colors.surface} />
