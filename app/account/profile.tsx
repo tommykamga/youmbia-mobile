@@ -1,5 +1,5 @@
 import React, { useCallback, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Pressable, Alert } from 'react-native';
 import { Screen, AppHeader, Button, Input, Loader, EmptyState } from '@/components';
 import {
   getCurrentProfile,
@@ -13,11 +13,18 @@ import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, typography, fontWeights, radius } from '@/theme';
 import { buildAuthGateHref } from '@/lib/authGateNavigation';
 import { lightCacheKeys, lightCacheRead, lightCacheWrite } from '@/lib/lightCache';
+import * as ImagePicker from 'expo-image-picker';
+import { decode } from 'base64-arraybuffer';
+import * as ImageManipulator from 'expo-image-manipulator';
+import { supabase } from '@/lib/supabase';
+import { resolveSingleAvatarUrl, AVATARS_BUCKET } from '@/lib/avatarImageUrl';
+import { Image as ExpoImage } from 'expo-image';
 
 type ProfileCachePayload = {
   userId: string;
   fullName: string;
   phone: string;
+  avatarUrl: string;
   incomplete: boolean;
 };
 
@@ -38,6 +45,9 @@ export default function AccountProfileScreen() {
   const [fullName, setFullName] = useState('');
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
+  const [avatarUrlRaw, setAvatarUrlRaw] = useState<string>('');
+  const [avatarDisplayUrl, setAvatarDisplayUrl] = useState<string>('');
+  const [avatarUploading, setAvatarUploading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saveSuccess, setSaveSuccess] = useState<string | null>(null);
@@ -65,6 +75,11 @@ export default function AccountProfileScreen() {
       if (cached?.payload?.userId === userId) {
         setFullName(cached.payload.fullName);
         setPhone(cached.payload.phone);
+        setAvatarUrlRaw(cached.payload.avatarUrl);
+        // Lazy resolve (may fail if bucket not available) — safe fallback is initial.
+        void resolveSingleAvatarUrl(cached.payload.avatarUrl).then((u) => {
+          if (u) setAvatarDisplayUrl(u);
+        });
         setState({
           status: 'success',
           incomplete: cached.payload.incomplete,
@@ -98,12 +113,21 @@ export default function AccountProfileScreen() {
       const phoneVal = sanitizeProfileDisplayValue(result.data?.phone);
       setFullName(name);
       setPhone(phoneVal);
+      const rawAvatar = String(result.data?.avatar_url ?? '').trim();
+      setAvatarUrlRaw(rawAvatar);
+      try {
+        const resolved = await resolveSingleAvatarUrl(rawAvatar);
+        setAvatarDisplayUrl(resolved);
+      } catch {
+        setAvatarDisplayUrl('');
+      }
       const incomplete = !name.trim() && !phoneVal.trim();
       setState({ status: 'success', incomplete });
       await lightCacheWrite<ProfileCachePayload>(cacheKey, {
         userId,
         fullName: name,
         phone: phoneVal,
+        avatarUrl: rawAvatar,
         incomplete,
       });
       logProfileDev('fetch_end', { outcome: 'success', incomplete });
@@ -161,10 +185,120 @@ export default function AccountProfileScreen() {
         userId: uid,
         fullName: fn,
         phone: ph,
+        avatarUrl: avatarUrlRaw,
         incomplete: incompleteAfter,
       });
     }
-  }, [fullName, phone]);
+  }, [fullName, phone, avatarUrlRaw]);
+
+  const handlePickAvatar = useCallback(async () => {
+    if (avatarUploading || saving) return;
+    setSaveError(null);
+    setSaveSuccess(null);
+
+    const session = await getSession();
+    const userId = session?.user?.id;
+    if (!userId) {
+      setSaveError('Connexion requise.');
+      return;
+    }
+
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert(
+        'Permission requise',
+        "Autorisez l'accès aux photos pour choisir une photo de profil."
+      );
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      allowsMultipleSelection: false,
+      quality: 1,
+      base64: true,
+    });
+
+    if (result.canceled || !result.assets?.length) return;
+    const asset = result.assets[0]!;
+    const originalBase64 = (asset.base64 ?? '').replace(/^data:image\/\w+;base64,/, '');
+    if (!originalBase64) {
+      setSaveError("Impossible de préparer l'image. Réessayez.");
+      return;
+    }
+
+    setAvatarUploading(true);
+    try {
+      // Resize/compress client-side (safe default): 512px max width, JPEG.
+      const manipulated = await ImageManipulator.manipulateAsync(
+        asset.uri,
+        [{ resize: { width: 512 } }],
+        { compress: 0.82, format: ImageManipulator.SaveFormat.JPEG, base64: true }
+      );
+      const preparedBase64 = (manipulated.base64 ?? originalBase64).replace(
+        /^data:image\/\w+;base64,/,
+        ''
+      );
+      if (!preparedBase64) {
+        setSaveError("Impossible de préparer l'image. Réessayez.");
+        return;
+      }
+
+      // Storage path: stable overwrite for "replace avatar" UX.
+      const path = `${userId}/avatar.jpg`;
+      const uploadOnce = async (bucket: string) => {
+        return await supabase.storage.from(bucket).upload(path, decode(preparedBase64), {
+          contentType: 'image/jpeg',
+          upsert: true,
+        });
+      };
+
+      // Try configured bucket; if it doesn't exist, fall back to known existing bucket.
+      let upload = await uploadOnce(AVATARS_BUCKET);
+      if (upload.error) {
+        const msg = String(upload.error.message ?? '').toLowerCase();
+        const bucketMissing =
+          msg.includes('bucket') || msg.includes('not found') || msg.includes('does not exist');
+        if (bucketMissing && AVATARS_BUCKET !== 'listing-images') {
+          upload = await uploadOnce('listing-images');
+        }
+      }
+
+      if (upload.error) {
+        setSaveError("Impossible d'envoyer la photo. Réessayez.");
+        return;
+      }
+
+      const updateRes = await updateProfile({ avatar_url: path });
+      if (updateRes.error) {
+        setSaveError("Photo envoyée, mais impossible d'enregistrer le profil. Réessayez.");
+        return;
+      }
+
+      setAvatarUrlRaw(path);
+      try {
+        const resolved = await resolveSingleAvatarUrl(path);
+        setAvatarDisplayUrl(resolved);
+      } catch {
+        setAvatarDisplayUrl('');
+      }
+
+      // Update cache so Account tab can refresh without extra fetch.
+      await lightCacheWrite<ProfileCachePayload>(lightCacheKeys.profile(userId), {
+        userId,
+        fullName,
+        phone,
+        avatarUrl: path,
+        incomplete: state.status === 'success' ? state.incomplete : false,
+      });
+
+      setSaveSuccess('Photo de profil mise à jour.');
+    } catch (e) {
+      setSaveError(e instanceof Error ? e.message : "Impossible de mettre à jour la photo.");
+    } finally {
+      setAvatarUploading(false);
+    }
+  }, [avatarUploading, saving, fullName, phone, state]);
 
   if (state.status === 'loading') {
     return (
@@ -211,15 +345,32 @@ export default function AccountProfileScreen() {
         
         {/* Avatar Section */}
         <View style={styles.avatarSection}>
-          <View style={styles.avatarWrap}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Changer la photo de profil"
+            onPress={handlePickAvatar}
+            disabled={avatarUploading || saving}
+            style={({ pressed }) => [
+              styles.avatarWrap,
+              pressed && { opacity: 0.92 },
+              (avatarUploading || saving) && { opacity: 0.7 },
+            ]}
+          >
             <View style={styles.avatar}>
-              <Text style={styles.avatarText}>{initial}</Text>
+              {avatarDisplayUrl ? (
+                <ExpoImage source={{ uri: avatarDisplayUrl }} style={styles.avatarImg} contentFit="cover" />
+              ) : (
+                <Text style={styles.avatarText}>{initial}</Text>
+              )}
             </View>
             <View style={styles.cameraBadge}>
-              <Ionicons name="camera" size={14} color={colors.surface} />
+              <Ionicons name={avatarUploading ? 'cloud-upload' : 'camera'} size={14} color={colors.surface} />
             </View>
-          </View>
+          </Pressable>
           <Text style={styles.emailText}>{email}</Text>
+          <Text style={styles.avatarHint}>
+            {avatarUploading ? 'Mise à jour…' : 'Touchez pour changer la photo'}
+          </Text>
         </View>
 
         <View style={styles.formContainer}>
@@ -325,6 +476,11 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 6,
     elevation: 3,
+    overflow: 'hidden',
+  },
+  avatarImg: {
+    width: 80,
+    height: 80,
   },
   avatarText: {
     ...typography['3xl'],
@@ -348,6 +504,11 @@ const styles = StyleSheet.create({
     ...typography.sm,
     color: colors.textSecondary,
     fontWeight: fontWeights.medium,
+  },
+  avatarHint: {
+    ...typography.xs,
+    color: colors.textTertiary,
+    marginTop: spacing.xs,
   },
   formContainer: {
     paddingHorizontal: spacing.base,

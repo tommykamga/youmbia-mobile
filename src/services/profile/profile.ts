@@ -150,6 +150,7 @@ export async function checkPhoneUniquenessForPublish(
 export type UpdateProfilePayload = {
   full_name?: string | null;
   phone?: string | null;
+  avatar_url?: string | null;
 };
 
 export type UpdateProfileResult =
@@ -180,6 +181,10 @@ export async function updateProfile(payload: UpdateProfilePayload): Promise<Upda
       return { data: null, error: { message: normalized.error } };
     }
     updates.phone = normalized.value;
+  }
+  if (payload.avatar_url !== undefined) {
+    const v = typeof payload.avatar_url === 'string' ? payload.avatar_url.trim() : '';
+    updates.avatar_url = v || null;
   }
   if (Object.keys(updates).length === 0) {
     return getCurrentProfile();
@@ -213,6 +218,7 @@ export async function updateProfile(payload: UpdateProfilePayload): Promise<Upda
     const upsertPayload: Record<string, unknown> = { id: user.id };
     if (Object.prototype.hasOwnProperty.call(updates, 'full_name')) upsertPayload.full_name = updates.full_name;
     if (Object.prototype.hasOwnProperty.call(updates, 'phone')) upsertPayload.phone = updates.phone;
+    if (Object.prototype.hasOwnProperty.call(updates, 'avatar_url')) upsertPayload.avatar_url = updates.avatar_url;
 
     const { data: upserted, error: upsertError } = await supabase
       .from('profiles')

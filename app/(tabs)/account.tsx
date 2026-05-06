@@ -8,6 +8,9 @@ import { spacing, colors, typography, fontWeights, radius } from '@/theme';
 import Animated, { useSharedValue, useAnimatedStyle, withTiming, Easing, withSpring } from 'react-native-reanimated';
 import { buildAuthGateHref } from '@/lib/authGateNavigation';
 import Constants from 'expo-constants';
+import { lightCacheKeys, lightCacheRead } from '@/lib/lightCache';
+import { resolveSingleAvatarUrl } from '@/lib/avatarImageUrl';
+import { Image as ExpoImage } from 'expo-image';
 
 const APP_VERSION_LABEL =
   Constants.expoConfig?.version ?? Constants.nativeAppVersion ?? '—';
@@ -98,6 +101,7 @@ export default function AccountScreen() {
   const [email, setEmail] = useState<string | null>(null);
   const [status, setStatus] = useState<'loading' | 'unauthenticated' | 'authenticated'>('loading');
   const [signingOut, setSigningOut] = useState(false);
+  const [avatarDisplayUrl, setAvatarDisplayUrl] = useState<string>('');
 
   const editScale = useSharedValue(1);
   const editAnimatedStyle = useAnimatedStyle(() => ({
@@ -116,6 +120,19 @@ export default function AccountScreen() {
       const session = await getSession();
       if (session?.user) {
         setEmail(session.user.email ?? 'Utilisateur YOUMBIA');
+        setAvatarDisplayUrl('');
+        const cached = await lightCacheRead<{ userId: string; avatarUrl: string }>(
+          lightCacheKeys.profile(session.user.id)
+        );
+        const raw = String(cached?.payload?.avatarUrl ?? '').trim();
+        if (raw) {
+          try {
+            const resolved = await resolveSingleAvatarUrl(raw);
+            if (resolved) setAvatarDisplayUrl(resolved);
+          } catch {
+            // ignore
+          }
+        }
         setStatus('authenticated');
       } else {
         setStatus('unauthenticated');
@@ -167,9 +184,13 @@ export default function AccountScreen() {
         {/* User Profile Header Card */}
         <View style={styles.headerCard}>
           <View style={styles.avatar}>
-            <Text style={styles.avatarText}>
-              {email?.charAt(0).toUpperCase() || '?'}
-            </Text>
+            {avatarDisplayUrl ? (
+              <ExpoImage source={{ uri: avatarDisplayUrl }} style={styles.avatarImg} contentFit="cover" />
+            ) : (
+              <Text style={styles.avatarText}>
+                {email?.charAt(0).toUpperCase() || '?'}
+              </Text>
+            )}
           </View>
           <View style={styles.userInfo}>
             <Text style={styles.userName} numberOfLines={1}>
@@ -271,6 +292,11 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.05,
     shadowRadius: 4,
     elevation: 2,
+    overflow: 'hidden',
+  },
+  avatarImg: {
+    width: 64,
+    height: 64,
   },
   avatarText: {
     ...typography['2xl'],
