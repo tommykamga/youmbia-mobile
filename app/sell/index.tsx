@@ -16,8 +16,13 @@ import {
 import { useRouter, useFocusEffect, type Href } from 'expo-router';
 import { buildAuthGateHref } from '@/lib/authGateNavigation';
 import { buildAccountProfileHref } from '@/lib/profileReturnNavigation';
+import {
+  getSellerProfileDisplayName,
+  getSellerProfilePhone,
+  isSellerProfileComplete,
+} from '@/lib/sellerProfile';
 import * as ImagePicker from 'expo-image-picker';
-import { Screen, Button, Input } from '@/components';
+import { Screen, Button, Input, Loader } from '@/components';
 import { LISTING_CATEGORIES, type ListingCategoryId } from '@/lib/listingCategories';
 import { shouldUseDynamicAttributesPilot } from '@/lib/vehicleDynamicPilot';
 import type {
@@ -36,7 +41,6 @@ import { getSession } from '@/services/auth';
 import {
   checkPhoneUniquenessForPublish,
   getCurrentProfile,
-  sanitizeProfileDisplayValue,
 } from '@/services/profile';
 import { supabase } from '@/lib/supabase';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -47,20 +51,6 @@ const MAX_LISTING_IMAGES = 4;
 const MAX_LISTINGS_PER_24H = 5;
 
 type PickedImage = { uri: string; base64: string | null; mimeType?: string | null };
-
-function getFirstNonEmptyProfileField(
-  profile: Record<string, unknown> | null | undefined,
-  keys: string[]
-): string {
-  if (!profile) return '';
-  for (const key of keys) {
-    const value = profile[key];
-    if (typeof value !== 'string') continue;
-    const sanitized = sanitizeProfileDisplayValue(value);
-    if (sanitized.trim()) return sanitized;
-  }
-  return '';
-}
 
 type PublishState =
   | { status: 'idle' }
@@ -105,7 +95,7 @@ function ChecklistRow({
 export default function SellScreen() {
   const router = useRouter();
   const [publishState, setPublishState] = useState<PublishState>({ status: 'idle' });
-  const [showPrequal, setShowPrequal] = useState(true);
+  const [showPrequal, setShowPrequal] = useState(false);
   const [prequalStatus, setPrequalStatus] = useState<PrequalStatus>('loading');
   const [profileAny, setProfileAny] = useState<Record<string, unknown> | null>(null);
 
@@ -143,7 +133,6 @@ export default function SellScreen() {
 
   const resetForm = () => {
     setPublishState({ status: 'idle' });
-    setShowPrequal(true);
     setPrequalStatus('loading');
     setProfileAny(null);
     setSubmitError(null);
@@ -158,22 +147,27 @@ export default function SellScreen() {
     setDynamicValues({});
     setDynamicLoading(false);
     setDynamicAttributesPilotActive(false);
+    void loadSellerPrequalProfile();
   };
 
   const loadSellerPrequalProfile = useCallback(async () => {
+    setPrequalStatus('loading');
     try {
       const session = await getSession();
       if (!session?.user) {
         setProfileAny(null);
+        setShowPrequal(true);
         setPrequalStatus('ready');
         return;
       }
       const profileRes = await getCurrentProfile();
       const any = (profileRes.data ?? null) as unknown as Record<string, unknown> | null;
       setProfileAny(any);
+      setShowPrequal(!isSellerProfileComplete(any));
       setPrequalStatus('ready');
     } catch {
       setProfileAny(null);
+      setShowPrequal(true);
       setPrequalStatus('ready');
     }
   }, []);
@@ -286,17 +280,8 @@ export default function SellScreen() {
       // Aligné web : profil vendeur obligatoire (nom/pseudo) + téléphone obligatoire
       const profileRes = await getCurrentProfile();
       const profileAnyLocal = (profileRes.data ?? null) as unknown as Record<string, unknown> | null;
-      const sellerNameValid = getFirstNonEmptyProfileField(profileAnyLocal, [
-        'display_name',
-        'username',
-        'pseudo',
-        'full_name',
-      ]);
-      const sellerPhoneValid = getFirstNonEmptyProfileField(profileAnyLocal, [
-        'whatsapp_phone',
-        'phone_number',
-        'phone',
-      ]);
+      const sellerNameValid = getSellerProfileDisplayName(profileAnyLocal);
+      const sellerPhoneValid = getSellerProfilePhone(profileAnyLocal);
       if (!sellerNameValid.trim() || !sellerPhoneValid.trim()) {
         const message =
           "Avant de publier une annonce, complète ton profil vendeur avec ton nom ou pseudo et ton numéro de téléphone.";
@@ -614,22 +599,22 @@ export default function SellScreen() {
     );
   }
 
-  const sellerNamePrequal = getFirstNonEmptyProfileField(profileAny, [
-    'display_name',
-    'username',
-    'pseudo',
-    'full_name',
-  ]);
-  const sellerPhonePrequal = getFirstNonEmptyProfileField(profileAny, [
-    'whatsapp_phone',
-    'phone_number',
-    'phone',
-  ]);
+  const sellerNamePrequal = getSellerProfileDisplayName(profileAny);
+  const sellerPhonePrequal = getSellerProfilePhone(profileAny);
   const hasProfileSellerName = !!sellerNamePrequal.trim();
   const hasPhone = !!sellerPhonePrequal.trim();
   const isAuthed = prequalStatus === 'ready' ? profileAny != null : false;
+  const sellerProfileComplete = isSellerProfileComplete(profileAny);
 
-  if (showPrequal) {
+  if (prequalStatus === 'loading') {
+    return (
+      <Screen>
+        <Loader />
+      </Screen>
+    );
+  }
+
+  if (showPrequal && !sellerProfileComplete) {
     return (
       <Screen>
         <View style={styles.content}>
