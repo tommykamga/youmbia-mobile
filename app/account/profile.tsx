@@ -1,5 +1,5 @@
 import React, { useCallback, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, Alert } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Pressable, Alert, Platform } from 'react-native';
 import { Screen, AppHeader, Button, Input, Loader, EmptyState } from '@/components';
 import {
   getCurrentProfile,
@@ -8,7 +8,7 @@ import {
   normalizePhoneForProfile,
 } from '@/services/profile';
 import { getSession } from '@/services/auth';
-import { useFocusEffect, Redirect } from 'expo-router';
+import { useFocusEffect, Redirect, useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, typography, fontWeights, radius } from '@/theme';
 import { buildAuthGateHref } from '@/lib/authGateNavigation';
@@ -18,6 +18,7 @@ import { decode } from 'base64-arraybuffer';
 import * as ImageManipulator from 'expo-image-manipulator';
 import { supabase } from '@/lib/supabase';
 import { resolveSingleAvatarUrl, AVATARS_BUCKET } from '@/lib/avatarImageUrl';
+import { getProfileReturnNext, replaceAfterProfileSave } from '@/lib/profileReturnNavigation';
 import { Image as ExpoImage } from 'expo-image';
 
 type ProfileCachePayload = {
@@ -41,6 +42,9 @@ type ProfileState =
   | { status: 'success'; incomplete: boolean };
 
 export default function AccountProfileScreen() {
+  const router = useRouter();
+  const { next: nextParam } = useLocalSearchParams<{ next?: string }>();
+  const returnNext = getProfileReturnNext(nextParam);
   const [state, setState] = useState<ProfileState>({ status: 'loading' });
   const [fullName, setFullName] = useState('');
   const [phone, setPhone] = useState('');
@@ -171,9 +175,10 @@ export default function AccountProfileScreen() {
       return;
     }
     logProfileDev('save_success', { hasData: !!result.data });
-    setSaveSuccess("Votre profil a été mis à jour avec succès.");
-    const fn = sanitizeProfileDisplayValue(result.data?.full_name);
-    const ph = sanitizeProfileDisplayValue(result.data?.phone);
+    const refreshed = await getCurrentProfile();
+    const profileRow = refreshed.data ?? result.data;
+    const fn = sanitizeProfileDisplayValue(profileRow?.full_name);
+    const ph = sanitizeProfileDisplayValue(profileRow?.phone);
     setFullName(fn);
     setPhone(ph);
     const incompleteAfter = !fn.trim() && !ph.trim();
@@ -189,7 +194,18 @@ export default function AccountProfileScreen() {
         incomplete: incompleteAfter,
       });
     }
-  }, [fullName, phone, avatarUrlRaw]);
+
+    if (returnNext) {
+      const refresh = (router as unknown as { refresh?: () => void }).refresh;
+      if (Platform.OS === 'web' && typeof refresh === 'function') {
+        refresh();
+      }
+      replaceAfterProfileSave(router, returnNext);
+      return;
+    }
+
+    setSaveSuccess("Votre profil a été mis à jour avec succès.");
+  }, [fullName, phone, avatarUrlRaw, returnNext, router]);
 
   const handlePickAvatar = useCallback(async () => {
     if (avatarUploading || saving) return;

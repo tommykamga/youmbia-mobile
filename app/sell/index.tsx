@@ -13,8 +13,9 @@ import {
   Platform,
   Pressable,
 } from 'react-native';
-import { useRouter, type Href } from 'expo-router';
+import { useRouter, useFocusEffect, type Href } from 'expo-router';
 import { buildAuthGateHref } from '@/lib/authGateNavigation';
+import { buildAccountProfileHref } from '@/lib/profileReturnNavigation';
 import * as ImagePicker from 'expo-image-picker';
 import { Screen, Button, Input } from '@/components';
 import { LISTING_CATEGORIES, type ListingCategoryId } from '@/lib/listingCategories';
@@ -159,35 +160,29 @@ export default function SellScreen() {
     setDynamicAttributesPilotActive(false);
   };
 
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const session = await getSession();
-        if (!session?.user) {
-          if (!cancelled) {
-            setProfileAny(null);
-            setPrequalStatus('ready');
-          }
-          return;
-        }
-        const profileRes = await getCurrentProfile();
-        const any = (profileRes.data ?? null) as unknown as Record<string, unknown> | null;
-        if (!cancelled) {
-          setProfileAny(any);
-          setPrequalStatus('ready');
-        }
-      } catch {
-        if (!cancelled) {
-          setProfileAny(null);
-          setPrequalStatus('ready');
-        }
+  const loadSellerPrequalProfile = useCallback(async () => {
+    try {
+      const session = await getSession();
+      if (!session?.user) {
+        setProfileAny(null);
+        setPrequalStatus('ready');
+        return;
       }
-    })();
-    return () => {
-      cancelled = true;
-    };
+      const profileRes = await getCurrentProfile();
+      const any = (profileRes.data ?? null) as unknown as Record<string, unknown> | null;
+      setProfileAny(any);
+      setPrequalStatus('ready');
+    } catch {
+      setProfileAny(null);
+      setPrequalStatus('ready');
+    }
   }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      void loadSellerPrequalProfile();
+    }, [loadSellerPrequalProfile])
+  );
 
   useEffect(() => {
     if (categoryId == null) {
@@ -308,7 +303,7 @@ export default function SellScreen() {
         setSubmitError(message);
         Alert.alert('Profil vendeur incomplet', message, [
           { text: 'Plus tard', style: 'cancel' },
-          { text: 'Compléter mon profil', onPress: () => router.push('/account/profile') },
+          { text: 'Compléter mon profil', onPress: () => router.push(buildAccountProfileHref('/sell')) },
         ]);
         return;
       }
@@ -683,7 +678,7 @@ export default function SellScreen() {
             </Button>
             <Button
               variant="secondary"
-              onPress={() => router.push('/account/profile')}
+              onPress={() => router.push(buildAccountProfileHref('/sell'))}
             >
               Compléter mon profil
             </Button>
@@ -716,7 +711,7 @@ export default function SellScreen() {
                 <Text style={styles.inlineWarningText}>
                   Téléphone manquant dans le profil: la publication sera bloquée au moment de publier.
                 </Text>
-                <Pressable onPress={() => router.push('/account/profile')} hitSlop={8}>
+                <Pressable onPress={() => router.push(buildAccountProfileHref('/sell'))} hitSlop={8}>
                   <Text style={styles.inlineWarningLink}>Compléter</Text>
                 </Pressable>
               </View>
