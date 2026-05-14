@@ -277,91 +277,91 @@ export default function SellScreen() {
   };
 
   const handleSubmit = async () => {
-    setSubmitError(null);
     if (submitLoading) return;
-
-    const session = await getSession();
-    if (!session?.user) {
-      router.replace(buildAuthGateHref('sell'));
-      return;
-    }
-
-    // Aligné web : profil vendeur obligatoire (nom/pseudo) + téléphone obligatoire
-    const profileRes = await getCurrentProfile();
-    const profileAnyLocal = (profileRes.data ?? null) as unknown as Record<string, unknown> | null;
-    const sellerNameValid = getFirstNonEmptyProfileField(profileAnyLocal, [
-      'display_name',
-      'username',
-      'pseudo',
-      'full_name',
-    ]);
-    const sellerPhoneValid = getFirstNonEmptyProfileField(profileAnyLocal, [
-      'whatsapp_phone',
-      'phone_number',
-      'phone',
-    ]);
-    if (!sellerNameValid.trim() || !sellerPhoneValid.trim()) {
-      const message =
-        "Avant de publier une annonce, complète ton profil vendeur avec ton nom ou pseudo et ton numéro de téléphone.";
-      setSubmitError(message);
-      Alert.alert('Profil vendeur incomplet', message, [
-        { text: 'Plus tard', style: 'cancel' },
-        { text: 'Compléter mon profil', onPress: () => router.push('/account/profile') },
-      ]);
-      return;
-    }
-
-    if (profileAnyLocal?.is_banned === true) {
-      const message = "Votre compte ne peut pas publier d'annonce pour le moment.";
-      setSubmitError(message);
-      Alert.alert('Publication impossible', message);
-      return;
-    }
+    setSubmitError(null);
+    setSubmitLoading(true);
 
     try {
-      const phoneCheck = await checkPhoneUniquenessForPublish(session.user.id, sellerPhoneValid);
-      if (!phoneCheck.ok) {
-        const message = 'Ce numéro de téléphone est déjà utilisé par un autre compte.';
+      const session = await getSession();
+      if (!session?.user) {
+        router.replace(buildAuthGateHref('sell'));
+        return;
+      }
+
+      // Aligné web : profil vendeur obligatoire (nom/pseudo) + téléphone obligatoire
+      const profileRes = await getCurrentProfile();
+      const profileAnyLocal = (profileRes.data ?? null) as unknown as Record<string, unknown> | null;
+      const sellerNameValid = getFirstNonEmptyProfileField(profileAnyLocal, [
+        'display_name',
+        'username',
+        'pseudo',
+        'full_name',
+      ]);
+      const sellerPhoneValid = getFirstNonEmptyProfileField(profileAnyLocal, [
+        'whatsapp_phone',
+        'phone_number',
+        'phone',
+      ]);
+      if (!sellerNameValid.trim() || !sellerPhoneValid.trim()) {
+        const message =
+          "Avant de publier une annonce, complète ton profil vendeur avec ton nom ou pseudo et ton numéro de téléphone.";
+        setSubmitError(message);
+        Alert.alert('Profil vendeur incomplet', message, [
+          { text: 'Plus tard', style: 'cancel' },
+          { text: 'Compléter mon profil', onPress: () => router.push('/account/profile') },
+        ]);
+        return;
+      }
+
+      if (profileAnyLocal?.is_banned === true) {
+        const message = "Votre compte ne peut pas publier d'annonce pour le moment.";
         setSubmitError(message);
         Alert.alert('Publication impossible', message);
         return;
       }
-    } catch (e) {
-      const message = 'Impossible de vérifier votre profil pour le moment. Réessayez.';
-      console.warn('[SellScreen] checkPhoneUniquenessForPublish', e);
-      setSubmitError(message);
-      Alert.alert('Vérification impossible', message);
-      return;
-    }
 
-    const price = priceStr.trim() ? Number(priceStr.trim().replace(',', '.')) : NaN;
-    if (!title.trim() || title.trim().length < 2) {
-      setSubmitError('Titre requis (2 caractères minimum)');
-      return;
-    }
-    if (!Number.isFinite(price) || price <= 0) {
-      setSubmitError('Prix invalide (doit être supérieur à 0)');
-      return;
-    }
-    if (!categoryId) {
-      setSubmitError('Catégorie requise');
-      return;
-    }
-    if (!description.trim()) {
-      setSubmitError('Ajoutez une description à votre annonce.');
-      return;
-    }
-    if (images.length === 0 || !images.some((img) => !!img.base64 || !!img.uri)) {
-      setSubmitError('Ajoutez au moins une photo');
-      return;
-    }
-    if (dynamicAttributesPilotActive && dynamicLoading) {
-      setSubmitError('Chargement des caractéristiques… Réessayez dans un instant.');
-      return;
-    }
+      try {
+        const phoneCheck = await checkPhoneUniquenessForPublish(session.user.id, sellerPhoneValid);
+        if (!phoneCheck.ok) {
+          const message = 'Ce numéro de téléphone est déjà utilisé par un autre compte.';
+          setSubmitError(message);
+          Alert.alert('Publication impossible', message);
+          return;
+        }
+      } catch (e) {
+        const message = 'Impossible de vérifier votre profil pour le moment. Réessayez.';
+        console.warn('[SellScreen] checkPhoneUniquenessForPublish', e);
+        setSubmitError(message);
+        Alert.alert('Vérification impossible', message);
+        return;
+      }
 
-    setSubmitLoading(true);
-    try {
+      const price = priceStr.trim() ? Number(priceStr.trim().replace(',', '.')) : NaN;
+      if (!title.trim() || title.trim().length < 2) {
+        setSubmitError('Titre requis (2 caractères minimum)');
+        return;
+      }
+      if (!Number.isFinite(price) || price <= 0) {
+        setSubmitError('Prix invalide (doit être supérieur à 0)');
+        return;
+      }
+      if (!categoryId) {
+        setSubmitError('Catégorie requise');
+        return;
+      }
+      if (!description.trim()) {
+        setSubmitError('Ajoutez une description à votre annonce.');
+        return;
+      }
+      if (images.length === 0 || !images.some((img) => !!img.base64 || !!img.uri)) {
+        setSubmitError('Ajoutez au moins une photo');
+        return;
+      }
+      if (dynamicAttributesPilotActive && dynamicLoading) {
+        setSubmitError('Chargement des caractéristiques… Réessayez dans un instant.');
+        return;
+      }
+
       // Limite publications / 24h (safe: si erreur Supabase/réseau, on bloque la publication).
       const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
       const { count, error: countError } = await supabase

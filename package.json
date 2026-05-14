@@ -15,7 +15,9 @@
     "web": "expo start --web",
     "postinstall": "node scripts/postinstall-expo-modules-core.js",
     "lint": "eslint .",
-    "lint:expo": "expo lint"
+    "lint:expo": "expo lint",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --passWithNoTests"
   },
   "dependencies": {
     "@react-native-async-storage/async-storage": "2.2.0",
@@ -52,7 +54,8 @@
     "@types/react": "~19.1.10",
     "eslint": "^9.0.0",
     "eslint-config-expo": "~10.0.0",
-    "typescript": "~5.9.2"
+    "typescript": "~5.9.2",
+    "vitest": "^3.2.4"
   },
   "overrides": {
     "expo-constants": "~18.0.13",

@@ -280,24 +280,25 @@ export default function ListingEditScreen() {
 
   const handleSave = async () => {
     if (loadState.status !== 'ready' || !id) return;
+    if (submitLoading) return;
     setSubmitError(null);
-
-    const price = priceStr.trim() ? Number(priceStr.trim().replace(',', '.')) : NaN;
-    if (!title.trim() || title.trim().length < 2) {
-      setSubmitError('Titre requis (2 caractères minimum)');
-      return;
-    }
-    if (!Number.isFinite(price) || price <= 0) {
-      setSubmitError('Prix invalide (doit être supérieur à 0)');
-      return;
-    }
-    if (dynamicAttributesPilotActive && dynamicLoading) {
-      setSubmitError('Chargement des caractéristiques… Réessayez dans un instant.');
-      return;
-    }
-
     setSubmitLoading(true);
+
     try {
+      const price = priceStr.trim() ? Number(priceStr.trim().replace(',', '.')) : NaN;
+      if (!title.trim() || title.trim().length < 2) {
+        setSubmitError('Titre requis (2 caractères minimum)');
+        return;
+      }
+      if (!Number.isFinite(price) || price <= 0) {
+        setSubmitError('Prix invalide (doit être supérieur à 0)');
+        return;
+      }
+      if (dynamicAttributesPilotActive && dynamicLoading) {
+        setSubmitError('Chargement des caractéristiques… Réessayez dans un instant.');
+        return;
+      }
+
       const up = await updateListing(id, {
         title: title.trim(),
         price: Math.round(price),
