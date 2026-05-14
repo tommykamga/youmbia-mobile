@@ -7,7 +7,8 @@
 import { supabase } from '@/lib/supabase';
 import { getSignedUrlsMap, listingStoragePathsForCardCover, mapListingCardImages } from '@/lib/listingImageUrl';
 import { normalizeListingSchemaFeatures } from '@/lib/listingSchemaFeatures';
-import { ROOT_CATEGORY_TREE } from '@/lib/listingCategories';
+import { buildRootCategoryTree } from '@/lib/marketplaceCategories';
+import { getMarketplaceCategoriesCached } from '@/services/categories';
 import type { PublicListing } from './getPublicListings';
 import { listingPublicListSelect } from './listingListSelect';
 
@@ -161,10 +162,16 @@ export async function searchListings(options: SearchOptions = {}): Promise<Searc
   if (categoryId != null && categoryId !== '') {
     const catId = typeof categoryId === 'string' ? parseInt(categoryId, 10) : categoryId;
     if (!isNaN(catId)) {
-      const tree = ROOT_CATEGORY_TREE[catId];
-      if (tree && tree.length > 0) {
-        // We use .in() to match the root category or any of its children
-        request = request.in('category_id', tree);
+      let tree: Record<number, number[]> | null = null;
+      try {
+        const categories = await getMarketplaceCategoriesCached();
+        tree = buildRootCategoryTree(categories);
+      } catch {
+        tree = null;
+      }
+      const branch = tree?.[catId];
+      if (branch && branch.length > 0) {
+        request = request.in('category_id', branch);
       } else {
         request = request.eq('category_id', catId);
       }

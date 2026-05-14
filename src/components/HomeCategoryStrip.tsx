@@ -13,8 +13,9 @@ import {
   Platform,
 } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { LISTING_CATEGORIES } from '@/lib/listingCategories';
 import type { WindowSizeBucket } from '@/lib/responsiveLayout';
+import { getRootMarketplaceCategories, getSellParentIcon } from '@/lib/marketplaceCategories';
+import { useMarketplaceCategories } from '@/hooks/useMarketplaceCategories';
 import { spacing, colors } from '@/theme';
 
 const AUTRES_LABEL = 'Autres';
@@ -36,38 +37,28 @@ const STRIP = {
 } as const;
 
 /** Libellés courts affichés (pas de troncature sur ces chaînes). */
-const STRIP_LABEL: Record<string, string> = {
-  Véhicules: 'Auto',
-  Électronique: 'Tech',
-  Maison: 'Maison',
-  Mode: 'Mode',
-  Immobilier: 'Immo',
-  Services: 'Services',
-  Informatique: 'Info',
+const STRIP_LABEL_BY_SLUG: Record<string, string> = {
+  vehicules: 'Auto',
+  electronique: 'Tech',
+  'maison-decoration': 'Maison',
+  'mode-beaute': 'Mode',
+  immobilier: 'Immo',
+  services: 'Services',
+  informatique: 'Info',
+  alimentation: 'Food',
+  'loisirs-sports': 'Sport',
 };
 
-const CATEGORY_ICON_ACTIVE: Record<string, keyof typeof Ionicons.glyphMap> = {
-  Véhicules: 'car',
-  Mode: 'shirt',
-  Maison: 'home',
-  Électronique: 'laptop',
-  Immobilier: 'business',
-  Services: 'construct',
-  Informatique: 'hardware-chip',
-};
+function stripLabel(category: { slug: string; name: string }): string {
+  return STRIP_LABEL_BY_SLUG[category.slug] ?? category.name;
+}
 
-const CATEGORY_ICON_INACTIVE: Record<string, keyof typeof Ionicons.glyphMap> = {
-  Véhicules: 'car-outline',
-  Mode: 'shirt-outline',
-  Maison: 'home-outline',
-  Électronique: 'laptop-outline',
-  Immobilier: 'business-outline',
-  Services: 'construct-outline',
-  Informatique: 'hardware-chip-outline',
-};
-
-function stripLabel(fullLabel: string): string {
-  return STRIP_LABEL[fullLabel] ?? fullLabel;
+function stripIcon(category: { slug: string }, active: boolean): keyof typeof Ionicons.glyphMap {
+  const icon = getSellParentIcon(category.slug);
+  if (!active) {
+    return icon;
+  }
+  return icon.endsWith('-outline') ? (icon.replace(/-outline$/, '') as keyof typeof Ionicons.glyphMap) : icon;
 }
 
 function targetScreenInset(bucket: WindowSizeBucket): number {
@@ -126,6 +117,8 @@ export function HomeCategoryStrip({
   parentContentPad,
   selectedCategoryId = null,
 }: HomeCategoryStripProps) {
+  const { categories } = useMarketplaceCategories();
+  const rootCategories = useMemo(() => getRootMarketplaceCategories(categories), [categories]);
   const insetTarget = targetScreenInset(bucket);
 
   const outerStyle = useMemo(() => {
@@ -155,17 +148,15 @@ export function HomeCategoryStrip({
         contentContainerStyle={styles.scrollContent}
         decelerationRate="fast"
       >
-        {LISTING_CATEGORIES.map((cat) => {
-          const isActive = selectedCategoryId != null && selectedCategoryId === cat.id;
-          const iconActive =
-            CATEGORY_ICON_ACTIVE[cat.label] ?? ('grid' as keyof typeof Ionicons.glyphMap);
-          const iconInactive =
-            CATEGORY_ICON_INACTIVE[cat.label] ?? ('grid-outline' as keyof typeof Ionicons.glyphMap);
-          const iconName = isActive ? iconActive : iconInactive;
+        {rootCategories
+          .filter((category) => category.slug !== 'autres')
+          .map((category) => {
+          const isActive = selectedCategoryId != null && selectedCategoryId === category.id;
+          const iconName = stripIcon(category, isActive);
 
           return (
             <Pressable
-              key={cat.id}
+              key={category.id}
               android_ripple={ripple}
               hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
               style={({ pressed }) => [
@@ -184,9 +175,9 @@ export function HomeCategoryStrip({
                 },
                 pressed && styles.cellPressed,
               ]}
-              onPress={() => onCategoryPress(String(cat.id), cat.label)}
+              onPress={() => onCategoryPress(String(category.id), category.name)}
               accessibilityRole="button"
-              accessibilityLabel={cat.label}
+              accessibilityLabel={category.name}
               accessibilityState={{ selected: isActive }}
             >
               <Ionicons
@@ -202,7 +193,7 @@ export function HomeCategoryStrip({
                 ]}
                 numberOfLines={1}
               >
-                {stripLabel(cat.label)}
+                {stripLabel(category)}
               </Text>
             </Pressable>
           );

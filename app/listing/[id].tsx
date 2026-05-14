@@ -25,7 +25,8 @@ import {
 } from '@/services/listings';
 import { getFavoriteIds, toggleFavorite } from '@/services/favorites';
 import { addRecentlyViewedListingId } from '@/services/recentlyViewed';
-import { LISTING_CATEGORIES } from '@/lib/listingCategories';
+import { resolveMarketplaceCategoryLabel } from '@/lib/marketplaceCategories';
+import { useMarketplaceCategories } from '@/hooks/useMarketplaceCategories';
 import { getOrCreateConversation } from '@/services/conversations';
 import { getSession } from '@/services/auth';
 import { reportListing } from '@/services/reports';
@@ -151,6 +152,7 @@ export default function ListingDetailScreen() {
   const [similarListings, setSimilarListings] = useState<PublicListing[]>([]);
   const [similarLoading, setSimilarLoading] = useState(false);
   const similarLoadStartedRef = useRef(false);
+  const { categories: marketplaceCategories } = useMarketplaceCategories();
   const scrollLayoutHeightRef = useRef(0);
   /** Évite double signalement immédiat en session (Sprint 7.1). */
   const [reportedListingId, setReportedListingId] = useState<string | null>(null);
@@ -250,7 +252,7 @@ export default function ListingDetailScreen() {
     setSimilarLoading(true);
     const listing = state.listing;
     const currentCategory = listing.category_id
-      ? LISTING_CATEGORIES.find((c) => c.id === listing.category_id)?.label
+      ? resolveMarketplaceCategoryLabel(marketplaceCategories, listing.category_id)
       : null;
     const targetListingId = listing.id;
     void (async () => {
@@ -276,7 +278,7 @@ export default function ListingDetailScreen() {
         }
       }
     })();
-  }, [state]);
+  }, [marketplaceCategories, state]);
 
   const handleDetailScroll = useCallback(
     (e: NativeSyntheticEvent<NativeScrollEvent>) => {

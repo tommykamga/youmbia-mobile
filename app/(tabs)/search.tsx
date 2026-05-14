@@ -36,7 +36,8 @@ import {
   saveSearch,
   type SavedSearch,
 } from '@/services/savedSearches';
-import { LISTING_CATEGORIES } from '@/lib/listingCategories';
+import { getRootMarketplaceCategories } from '@/lib/marketplaceCategories';
+import { useMarketplaceCategories } from '@/hooks/useMarketplaceCategories';
 import { formatPrice } from '@/lib/format';
 import type { PublicListing } from '@/services/listings';
 import { colors, spacing, typography, fontWeights, radius } from '@/theme';
@@ -73,7 +74,6 @@ function buildSearchPage1SessionKey(parts: {
   return JSON.stringify(parts);
 }
 const PRICE_INPUT_PATTERN = /^\d+$/;
-const CATEGORY_OPTIONS = ['Véhicules', 'Mode', 'Maison', 'Électronique', 'Sport', 'Loisirs', 'Autre'] as const;
 
 const SEARCH_FIELD_PLACEHOLDER = 'Rechercher';
 
@@ -115,10 +115,13 @@ function normalizeMatchText(value: string | null | undefined): string {
     .trim();
 }
 
-function getCategoryIdByLabel(label: string | null): number | null {
+function getCategoryIdByLabel(
+  label: string | null,
+  rootCategories: { id: number; name: string }[]
+): number | null {
   if (!label) return null;
   const normalized = label.trim().toLowerCase();
-  const found = LISTING_CATEGORIES.find(c => c.label.toLowerCase() === normalized);
+  const found = rootCategories.find((category) => category.name.toLowerCase() === normalized);
   return found ? found.id : null;
 }
 
@@ -209,6 +212,15 @@ export default function SearchScreen() {
   const overlaySuggestDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   /** Clic « Voir plus d’annonces » sur le feed accueil : lancer une recherche sans mot-clé ni injection UI. */
   const browseFromHomeFooterRef = useRef(false);
+  const { categories: marketplaceCategories } = useMarketplaceCategories();
+  const rootCategories = useMemo(
+    () => getRootMarketplaceCategories(marketplaceCategories),
+    [marketplaceCategories]
+  );
+  const categoryFilterOptions = useMemo(
+    () => rootCategories.map((category) => category.name),
+    [rootCategories]
+  );
 
   const clearPendingMainSearchDebounce = useCallback(() => {
     if (mainSearchDebounceRef.current) {
@@ -393,7 +405,9 @@ export default function SearchScreen() {
       : (typeof params.category === 'string' ? params.category.trim() : '');
     const nextCity = typeof params.city === 'string' ? params.city.trim() : '';
     const nextCategoryIdStr = typeof params.categoryId === 'string' ? params.categoryId.trim() : '';
-    const nextCategoryId = nextCategoryIdStr ? parseInt(nextCategoryIdStr, 10) : getCategoryIdByLabel(nextCategory);
+    const nextCategoryId = nextCategoryIdStr
+      ? parseInt(nextCategoryIdStr, 10)
+      : getCategoryIdByLabel(nextCategory, rootCategories);
 
     setQuery(nextQ);
     setPriceMin(nextMin);
@@ -447,6 +461,7 @@ export default function SearchScreen() {
     params.categoryLabel,
     params.categoryId,
     params.city,
+    rootCategories,
     clearPendingMainSearchDebounce,
   ]);
 
@@ -1140,7 +1155,7 @@ export default function SearchScreen() {
         <View style={styles.filterSection}>
           <Text style={styles.filterLabel}>Catégorie</Text>
           <View style={styles.filterOptionWrap}>
-            {CATEGORY_OPTIONS.map((option) => {
+            {categoryFilterOptions.map((option) => {
               const isSelected = category.trim() === option;
               return (
                 <Pressable
@@ -1153,7 +1168,7 @@ export default function SearchScreen() {
                   onPress={() => {
                     const newCat = category.trim() === option ? '' : option;
                     setCategory(newCat);
-                    setCategoryId(getCategoryIdByLabel(newCat));
+                    setCategoryId(getCategoryIdByLabel(newCat, rootCategories));
                   }}
                 >
                   <Text
@@ -1314,6 +1329,8 @@ export default function SearchScreen() {
     ),
     [
       category,
+      categoryFilterOptions,
+      rootCategories,
       city,
       availableCities,
       priceMin,

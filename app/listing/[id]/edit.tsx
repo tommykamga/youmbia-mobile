@@ -18,7 +18,8 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import * as ImagePicker from 'expo-image-picker';
 import { Screen, Button, Input, Loader, EmptyState, AppHeader } from '@/components';
 import { buildAuthGateHref } from '@/lib/authGateNavigation';
-import { LISTING_CATEGORIES } from '@/lib/listingCategories';
+import { resolveMarketplaceCategoryLabel } from '@/lib/marketplaceCategories';
+import { useMarketplaceCategories } from '@/hooks/useMarketplaceCategories';
 import { shouldUseDynamicAttributesPilot } from '@/lib/vehicleDynamicPilot';
 import type {
   CategoryAttributeOption,
@@ -61,6 +62,7 @@ export default function ListingEditScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
   const [loadState, setLoadState] = useState<LoadState>({ status: 'loading' });
+  const { categories: marketplaceCategories } = useMarketplaceCategories();
 
   const [title, setTitle] = useState('');
   const [priceStr, setPriceStr] = useState('');
@@ -275,7 +277,8 @@ export default function ListingEditScreen() {
 
   const categoryLabel =
     loadState.status === 'ready'
-      ? LISTING_CATEGORIES.find((c) => c.id === loadState.listing.category_id)?.label ?? 'Catégorie'
+      ? resolveMarketplaceCategoryLabel(marketplaceCategories, loadState.listing.category_id) ??
+        'Catégorie'
       : '';
 
   const handleSave = async () => {

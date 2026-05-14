@@ -3,36 +3,23 @@
  * Tap a category → search tab with that query.
  */
 
-import React from 'react';
+import React, { useMemo } from 'react';
 import { Text, StyleSheet, Pressable, ScrollView } from 'react-native';
 import { useRouter } from 'expo-router';
-import { Screen, AppHeader } from '@/components';
-import { LISTING_CATEGORIES } from '@/lib/listingCategories';
+import { Screen, AppHeader, Loader } from '@/components';
+import { useMarketplaceCategories } from '@/hooks/useMarketplaceCategories';
+import { getRootMarketplaceCategories } from '@/lib/marketplaceCategories';
 import { colors, spacing, typography, fontWeights, radius } from '@/theme';
-
-/** Full list of categories – same as home rail + optional extras. */
-const ALL_CATEGORIES = [
-  'Véhicules',
-  'Électronique',
-  'Maison',
-  'Mode',
-  'Immobilier',
-  'Services',
-  'Informatique',
-];
 
 export default function CategoriesScreen() {
   const router = useRouter();
+  const { categories, loading, error } = useMarketplaceCategories();
+  const rootCategories = useMemo(() => getRootMarketplaceCategories(categories), [categories]);
 
-  const handleCategoryPress = (label: string) => {
-    const category = LISTING_CATEGORIES.find(c => c.label === label);
-    if (category) {
-      // Navigation structurée : ID officiel + libellé pour l'affichage
-      router.push(`/(tabs)/search?categoryLabel=${encodeURIComponent(label)}&categoryId=${category.id}`);
-    } else {
-      // Fallback temporaire : recherche par texte si l'ID n'est pas encore mappé
-      router.push(`/(tabs)/search?q=${encodeURIComponent(label)}`);
-    }
+  const handleCategoryPress = (categoryId: number, label: string) => {
+    router.push(
+      `/(tabs)/search?categoryLabel=${encodeURIComponent(label)}&categoryId=${categoryId}`
+    );
   };
 
   return (
@@ -43,13 +30,15 @@ export default function CategoriesScreen() {
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
       >
-        {ALL_CATEGORIES.map((label) => (
+        {loading ? <Loader /> : null}
+        {error ? <Text style={styles.errorText}>{error}</Text> : null}
+        {rootCategories.map((category) => (
           <Pressable
-            key={label}
+            key={category.id}
             style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
-            onPress={() => handleCategoryPress(label)}
+            onPress={() => handleCategoryPress(category.id, category.name)}
           >
-            <Text style={styles.label}>{label}</Text>
+            <Text style={styles.label}>{category.name}</Text>
           </Pressable>
         ))}
       </ScrollView>
@@ -84,5 +73,10 @@ const styles = StyleSheet.create({
     ...typography.base,
     fontWeight: fontWeights.semibold,
     color: colors.text,
+  },
+  errorText: {
+    ...typography.sm,
+    color: colors.error,
+    marginBottom: spacing.sm,
   },
 });

@@ -1,4 +1,3 @@
-import { LISTING_CATEGORIES } from '@/lib/listingCategories';
 import { supabase } from '@/lib/supabase';
 import type { Tables } from '@/types/database';
 
@@ -200,10 +199,6 @@ export async function getMarketplaceAnalytics(): Promise<GetMarketplaceAnalytics
         activeSellers > 0 ? roundMetric(activeListings / activeSellers) : 0,
     };
 
-    const fallbackCategoryMap = new Map<number, string>(
-      LISTING_CATEGORIES.map((category) => [category.id, category.label])
-    );
-
     const favoriteCountMap = new Map<string, number>();
     if (listingIds.length > 0) {
       const { data: favoriteRows, error: favoritesError } = await supabase
@@ -333,7 +328,7 @@ export async function getMarketplaceAnalytics(): Promise<GetMarketplaceAnalytics
         id: categoryId != null ? String(categoryId) : 'uncategorized',
         label:
           categoryId != null
-            ? categoryNameMap.get(categoryId) ?? fallbackCategoryMap.get(categoryId) ?? `Catégorie #${categoryId}`
+            ? categoryNameMap.get(categoryId) ?? `Catégorie #${categoryId}`
             : 'Non catégorisée',
         count,
       }))

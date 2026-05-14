@@ -2,7 +2,7 @@
  * Sell / publish listing – stack screen (dedicated route).
  * Form: title, price, city, description, images. On success shows next actions.
  */
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -12,6 +12,8 @@ import {
   Alert,
   Platform,
   Pressable,
+  useWindowDimensions,
+  Keyboard,
 } from 'react-native';
 import { useRouter, useFocusEffect, type Href } from 'expo-router';
 import { buildAuthGateHref } from '@/lib/authGateNavigation';
@@ -23,7 +25,14 @@ import {
 } from '@/lib/sellerProfile';
 import * as ImagePicker from 'expo-image-picker';
 import { Screen, Button, Input, Loader } from '@/components';
-import { LISTING_CATEGORIES, type ListingCategoryId, type ListingCategorySlug } from '@/lib/listingCategories';
+import { type ListingCategoryId } from '@/lib/listingCategories';
+import {
+  categoryHasChildren,
+  getChildMarketplaceCategories,
+  getRootMarketplaceCategories,
+  getSellParentIcon,
+} from '@/lib/marketplaceCategories';
+import { useMarketplaceCategories } from '@/hooks/useMarketplaceCategories';
 import { shouldUseDynamicAttributesPilot } from '@/lib/vehicleDynamicPilot';
 import type {
   CategoryAttributeOption,
@@ -52,31 +61,28 @@ const MAX_LISTINGS_PER_24H = 5;
 const YOUMBIA_SELECTED_BG = 'rgba(22, 163, 74, 0.08)';
 const YOUMBIA_SELECTED_GLOW = 'rgba(22, 163, 74, 0.18)';
 
-const LISTING_CATEGORY_ID_BY_SLUG = Object.fromEntries(
-  LISTING_CATEGORIES.map((category) => [category.slug, category.id])
-) as Record<ListingCategorySlug, ListingCategoryId>;
+function getSellCategoryColumnCount(screenWidth: number): number {
+  if (screenWidth >= 900) return 5;
+  if (screenWidth >= 600) return 4;
+  return 3;
+}
 
-type SellCategoryCard = {
-  label: string;
-  icon: keyof typeof Ionicons.glyphMap;
-  slug: ListingCategorySlug | 'alimentaire' | 'loisirs-sports' | 'autres';
-};
+function getSellCategoryCardWidth(screenWidth: number, columns: number): number {
+  const contentMaxWidth = 520;
+  const horizontalPadding = spacing.base * 2;
+  const gridGap = 6;
+  const contentWidth = Math.min(screenWidth, contentMaxWidth) - horizontalPadding;
+  const totalGap = gridGap * Math.max(0, columns - 1);
+  return Math.max(56, Math.floor((contentWidth - totalGap) / columns));
+}
 
-const SELL_CATEGORY_CARDS: SellCategoryCard[] = [
-  { label: 'Véhicules', icon: 'car-outline', slug: 'vehicules' },
-  { label: 'Électronique', icon: 'laptop-outline', slug: 'electronique' },
-  { label: 'Maison & Jardin', icon: 'home-outline', slug: 'maison-decoration' },
-  { label: 'Mode & Accessoires', icon: 'shirt-outline', slug: 'mode-beaute' },
-  { label: 'Immobilier', icon: 'business-outline', slug: 'immobilier' },
-  { label: 'Alimentation', icon: 'nutrition-outline', slug: 'alimentaire' },
-  { label: 'Services', icon: 'construct-outline', slug: 'services' },
-  { label: 'Informatique', icon: 'hardware-chip-outline', slug: 'informatique' },
-  { label: 'Loisirs & Sports', icon: 'fitness-outline', slug: 'loisirs-sports' },
-  { label: 'Autres', icon: 'grid-outline', slug: 'autres' },
-];
-
-function resolveSellCategoryListingId(slug: SellCategoryCard['slug']): ListingCategoryId | null {
-  return LISTING_CATEGORY_ID_BY_SLUG[slug as ListingCategorySlug] ?? null;
+function getSellPhotoSlotSize(screenWidth: number): number {
+  const contentMaxWidth = 520;
+  const horizontalPadding = spacing.base * 2;
+  const gridGap = spacing.sm;
+  const contentWidth = Math.min(screenWidth, contentMaxWidth) - horizontalPadding;
+  const totalGap = gridGap * Math.max(0, MAX_LISTING_IMAGES - 1);
+  return Math.max(68, Math.floor((contentWidth - totalGap) / MAX_LISTING_IMAGES));
 }
 
 function RequiredFieldLabel({ children }: { children: string }) {
@@ -132,6 +138,19 @@ function ChecklistRow({
 
 export default function SellScreen() {
   const router = useRouter();
+  const { width: screenWidth } = useWindowDimensions();
+  const categoryColumns = useMemo(() => getSellCategoryColumnCount(screenWidth), [screenWidth]);
+  const categoryCardWidth = useMemo(
+    () => getSellCategoryCardWidth(screenWidth, categoryColumns),
+    [screenWidth, categoryColumns]
+  );
+  const photoSlotSize = useMemo(() => getSellPhotoSlotSize(screenWidth), [screenWidth]);
+  const { categories: marketplaceCategories, loading: categoriesLoading, error: categoriesError } =
+    useMarketplaceCategories();
+  const parentCategories = useMemo(
+    () => getRootMarketplaceCategories(marketplaceCategories),
+    [marketplaceCategories]
+  );
   const [publishState, setPublishState] = useState<PublishState>({ status: 'idle' });
   const [showPrequal, setShowPrequal] = useState(false);
   const [prequalStatus, setPrequalStatus] = useState<PrequalStatus>('loading');
@@ -139,7 +158,11 @@ export default function SellScreen() {
 
   const [title, setTitle] = useState('');
   const [priceStr, setPriceStr] = useState('');
-  const [categoryId, setCategoryId] = useState<ListingCategoryId | null>(null);
+  const [selectedParentCategoryId, setSelectedParentCategoryId] =
+    useState<ListingCategoryId | null>(null);
+  const [selectedChildCategoryId, setSelectedChildCategoryId] =
+    useState<ListingCategoryId | null>(null);
+  const publishCategoryId = selectedChildCategoryId ?? selectedParentCategoryId;
   const [city, setCity] = useState('');
   const [description, setDescription] = useState('');
   const [images, setImages] = useState<PickedImage[]>([]);
@@ -156,6 +179,36 @@ export default function SellScreen() {
   const [submitLoading, setSubmitLoading] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [retryUploadLoading, setRetryUploadLoading] = useState(false);
+  const [keyboardVisible, setKeyboardVisible] = useState(false);
+
+  const subcategoryOptions = useMemo(() => {
+    if (selectedParentCategoryId == null) {
+      return [];
+    }
+    return getChildMarketplaceCategories(marketplaceCategories, selectedParentCategoryId);
+  }, [selectedParentCategoryId, marketplaceCategories]);
+
+  const selectParentCategory = useCallback((parentCategoryId: ListingCategoryId) => {
+    setSelectedParentCategoryId(parentCategoryId);
+    setSelectedChildCategoryId(null);
+    setSubmitError(null);
+  }, []);
+
+  const selectChildCategory = useCallback((childCategoryId: ListingCategoryId) => {
+    setSelectedChildCategoryId(childCategoryId);
+    setSubmitError(null);
+  }, []);
+
+  useEffect(() => {
+    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+    const showSub = Keyboard.addListener(showEvent, () => setKeyboardVisible(true));
+    const hideSub = Keyboard.addListener(hideEvent, () => setKeyboardVisible(false));
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
 
   const goBackOrHome = useCallback(() => {
     const canGoBack =
@@ -176,7 +229,8 @@ export default function SellScreen() {
     setSubmitError(null);
     setTitle('');
     setPriceStr('');
-    setCategoryId(null);
+    setSelectedParentCategoryId(null);
+    setSelectedChildCategoryId(null);
     setCity('');
     setDescription('');
     setImages([]);
@@ -217,7 +271,7 @@ export default function SellScreen() {
   );
 
   useEffect(() => {
-    if (categoryId == null) {
+    if (publishCategoryId == null) {
       setDynamicAttributesPilotActive(false);
       setDynamicDefs([]);
       setDynamicOptionsByDef(new Map());
@@ -227,7 +281,7 @@ export default function SellScreen() {
     }
     let cancelled = false;
     (async () => {
-      const pilot = await shouldUseDynamicAttributesPilot(categoryId);
+      const pilot = await shouldUseDynamicAttributesPilot(publishCategoryId);
       if (cancelled) return;
       setDynamicAttributesPilotActive(pilot);
       if (!pilot) {
@@ -238,7 +292,7 @@ export default function SellScreen() {
         return;
       }
       setDynamicLoading(true);
-      const defs = await getEffectiveCategoryAttributeDefinitionsResolved(categoryId);
+      const defs = await getEffectiveCategoryAttributeDefinitionsResolved(publishCategoryId);
       if (cancelled) return;
       const selectIds = defs.filter((d) => d.type === 'select').map((d) => d.definition_id);
       const optsMap = await getCategoryAttributeOptionsByDefinitionIds(selectIds);
@@ -250,7 +304,7 @@ export default function SellScreen() {
     return () => {
       cancelled = true;
     };
-  }, [categoryId]);
+  }, [publishCategoryId]);
 
   const handleDynamicChange = useCallback((key: string, value: string) => {
     setDynamicValues((prev) => ({ ...prev, [key]: value }));
@@ -363,8 +417,15 @@ export default function SellScreen() {
         setSubmitError('Prix invalide (doit être supérieur à 0)');
         return;
       }
-      if (!categoryId) {
-        setSubmitError('Catégorie requise');
+      if (!publishCategoryId) {
+        if (
+          selectedParentCategoryId != null &&
+          categoryHasChildren(marketplaceCategories, selectedParentCategoryId)
+        ) {
+          setSubmitError('Choisissez une sous-catégorie pour continuer.');
+        } else {
+          setSubmitError('Catégorie requise');
+        }
         return;
       }
       if (!description.trim()) {
@@ -413,7 +474,7 @@ export default function SellScreen() {
       const { data, error } = await createListing({
         title: title.trim(),
         price: Math.round(price),
-        categoryId,
+        categoryId: publishCategoryId,
         city: city.trim(),
         description: description.trim() || '',
       });
@@ -716,12 +777,16 @@ export default function SellScreen() {
   }
 
   return (
-    <Screen keyboardAvoid scroll={false}>
+    <Screen scroll={false}>
       <View style={styles.formLayout}>
         <ScrollView
           style={styles.formScroll}
-          contentContainerStyle={styles.formScrollContent}
+          contentContainerStyle={[
+            styles.formScrollContent,
+            keyboardVisible ? styles.formScrollContentKeyboardOpen : null,
+          ]}
           keyboardShouldPersistTaps="handled"
+          automaticallyAdjustKeyboardInsets={Platform.OS !== 'web'}
           showsVerticalScrollIndicator={false}
         >
           <View style={styles.content}>
@@ -745,31 +810,60 @@ export default function SellScreen() {
               <Text style={styles.stepHelper}>
                 Ajoutez 1 à 4 photos. Une bonne première photo augmente les messages.
               </Text>
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.thumbsRow}
-                keyboardShouldPersistTaps="handled"
-              >
-                {images.map((img, i) => (
-                  <View key={i} style={styles.thumbWrap}>
-                    <Image source={{ uri: img.uri }} style={styles.thumb} />
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onPress={() => removeImage(i)}
-                      style={styles.removeThumb}
+              <View style={styles.photoSlotsRow}>
+                {Array.from({ length: MAX_LISTING_IMAGES }, (_, index) => {
+                  const image = images[index];
+                  const slotStyle = { width: photoSlotSize, height: photoSlotSize };
+
+                  if (image) {
+                    return (
+                      <View key={`photo-slot-${index}`} style={[styles.photoSlot, slotStyle]}>
+                        <Image source={{ uri: image.uri }} style={styles.photoSlotImage} resizeMode="cover" />
+                        <Pressable
+                          accessibilityRole="button"
+                          accessibilityLabel="Supprimer la photo"
+                          onPress={() => removeImage(index)}
+                          style={styles.photoSlotRemove}
+                          hitSlop={8}
+                        >
+                          <Ionicons name="close" size={12} color={colors.text} />
+                        </Pressable>
+                      </View>
+                    );
+                  }
+
+                  const isPrimaryAddSlot = images.length === 0 && index === 0;
+
+                  return (
+                    <Pressable
+                      key={`photo-slot-${index}`}
+                      accessibilityRole="button"
+                      accessibilityLabel={isPrimaryAddSlot ? 'Ajouter une photo' : 'Ajouter une photo'}
+                      style={({ pressed }) => [
+                        styles.photoSlot,
+                        isPrimaryAddSlot ? styles.photoSlotPrimaryAdd : styles.photoSlotEmpty,
+                        slotStyle,
+                        pressed && (isPrimaryAddSlot ? styles.photoSlotPrimaryAddPressed : styles.photoSlotEmptyPressed),
+                      ]}
+                      onPress={() => {
+                        if (images.length < MAX_LISTING_IMAGES) {
+                          void pickImages();
+                        }
+                      }}
+                      disabled={images.length >= MAX_LISTING_IMAGES}
                     >
-                      ✕
-                    </Button>
-                  </View>
-                ))}
-                {images.length < MAX_LISTING_IMAGES && (
-                  <Button variant="outline" size="md" onPress={pickImages} style={styles.addPhotoBtn}>
-                    + Photo
-                  </Button>
-                )}
-              </ScrollView>
+                      {isPrimaryAddSlot ? (
+                        <View style={styles.photoSlotPrimaryAddContent}>
+                          <Ionicons name="camera-outline" size={20} color={colors.primary} />
+                          <Text style={styles.photoSlotPrimaryAddTitle}>Ajouter une photo</Text>
+                        </View>
+                      ) : (
+                        <Ionicons name="add" size={20} color={colors.primary} />
+                      )}
+                    </Pressable>
+                  );
+                })}
+              </View>
             </View>
 
             <Input
@@ -792,56 +886,92 @@ export default function SellScreen() {
 
             <View style={styles.categorySection}>
               <RequiredFieldLabel>Catégorie</RequiredFieldLabel>
-              <View style={styles.categoryGrid}>
-                {SELL_CATEGORY_CARDS.map((category) => {
-                  const listingCategoryId = resolveSellCategoryListingId(category.slug);
-                  const isSelected = listingCategoryId != null && categoryId === listingCategoryId;
-                  return (
-                    <Pressable
-                      key={category.slug}
-                      accessibilityRole="button"
-                      accessibilityState={{ selected: isSelected }}
-                      style={({ pressed }) => [
-                        styles.categoryCard,
-                        isSelected && styles.categoryCardSelected,
-                        pressed && styles.categoryCardPressed,
-                      ]}
-                      onPress={() => {
-                        if (listingCategoryId == null) {
-                          setSubmitError(
-                            'Cette catégorie sera bientôt disponible. Choisissez une autre catégorie pour publier.'
+              {categoriesLoading ? (
+                <View style={styles.categoryLoadingSlot}>
+                  <Loader />
+                </View>
+              ) : categoriesError ? (
+                <Text style={styles.categoryLoadError}>{categoriesError}</Text>
+              ) : (
+                <>
+                  <View style={styles.categoryGrid}>
+                    {parentCategories.map((category) => {
+                      const isSelected = selectedParentCategoryId === category.id;
+                      return (
+                        <Pressable
+                          key={category.id}
+                          accessibilityRole="button"
+                          accessibilityState={{ selected: isSelected }}
+                          style={({ pressed }) => [
+                            styles.categoryCard,
+                            { width: categoryCardWidth },
+                            isSelected && styles.categoryCardSelected,
+                            pressed && styles.categoryCardPressed,
+                          ]}
+                          onPress={() => selectParentCategory(category.id)}
+                        >
+                          {isSelected ? (
+                            <View style={styles.categoryCardCheck}>
+                              <Ionicons name="checkmark-circle" size={14} color={colors.primary} />
+                            </View>
+                          ) : null}
+                          <View style={styles.categoryIconSlot}>
+                            <Ionicons
+                              name={getSellParentIcon(category.slug)}
+                              size={isSelected ? 17 : 15}
+                              color={isSelected ? colors.primary : colors.textSecondary}
+                            />
+                          </View>
+                          <Text
+                            style={[
+                              styles.categoryCardLabel,
+                              isSelected && styles.categoryCardLabelSelected,
+                            ]}
+                            numberOfLines={2}
+                            adjustsFontSizeToFit
+                            minimumFontScale={0.9}
+                          >
+                            {category.name}
+                          </Text>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                  {subcategoryOptions.length > 0 ? (
+                    <View style={styles.subcategorySection}>
+                      <Text style={styles.subcategoryLabel}>Sous-catégorie</Text>
+                      <View style={styles.subcategoryChipRow}>
+                        {subcategoryOptions.map((subcategory) => {
+                          const isSelected = selectedChildCategoryId === subcategory.id;
+                          return (
+                            <Pressable
+                              key={subcategory.id}
+                              accessibilityRole="button"
+                              accessibilityState={{ selected: isSelected }}
+                              style={({ pressed }) => [
+                                styles.subcategoryChip,
+                                isSelected && styles.subcategoryChipSelected,
+                                pressed && styles.subcategoryChipPressed,
+                              ]}
+                              onPress={() => selectChildCategory(subcategory.id)}
+                            >
+                              <Text
+                                style={[
+                                  styles.subcategoryChipText,
+                                  isSelected && styles.subcategoryChipTextSelected,
+                                ]}
+                                numberOfLines={2}
+                              >
+                                {subcategory.name}
+                              </Text>
+                            </Pressable>
                           );
-                          return;
-                        }
-                        setCategoryId(listingCategoryId);
-                        setSubmitError(null);
-                      }}
-                    >
-                      {isSelected ? (
-                        <View style={styles.categoryCardCheck}>
-                          <Ionicons name="checkmark-circle" size={16} color={colors.primary} />
-                        </View>
-                      ) : null}
-                      <View style={[styles.categoryIconWrap, isSelected && styles.categoryIconWrapSelected]}>
-                        <Ionicons
-                          name={category.icon}
-                          size={isSelected ? 24 : 22}
-                          color={isSelected ? colors.primary : colors.textSecondary}
-                        />
+                        })}
                       </View>
-                      <Text
-                        style={[
-                          styles.categoryCardLabel,
-                          isSelected && styles.categoryCardLabelSelected,
-                        ]}
-                        numberOfLines={2}
-                      >
-                        {category.label}
-                      </Text>
-                    </Pressable>
-                  );
-                })}
-              </View>
+                    </View>
+                  ) : null}
+                </>
+              )}
             </View>
 
             {dynamicAttributesPilotActive ? (
@@ -873,26 +1003,30 @@ export default function SellScreen() {
           </View>
         </ScrollView>
 
-        <View style={styles.stickyFooter}>
-          {submitError ? <Text style={styles.submitErrorSticky}>{submitError}</Text> : null}
-          <Button
-            size="lg"
-            onPress={handleSubmit}
-            loading={submitLoading}
-            disabled={submitLoading || (dynamicAttributesPilotActive && dynamicLoading)}
-            leftIcon={
-              submitLoading ? undefined : (
-                <Ionicons name="paper-plane" size={18} color={colors.surface} />
-              )
-            }
-            style={styles.publishCta}
-          >
-            {"Publier l'annonce"}
-          </Button>
-          <Button variant="ghost" onPress={goBackOrHome}>
-            Annuler
-          </Button>
-        </View>
+        {!keyboardVisible ? (
+          <View style={styles.stickyFooter}>
+            <View style={[styles.content, styles.stickyFooterActions]}>
+              {submitError ? <Text style={styles.submitErrorSticky}>{submitError}</Text> : null}
+              <Button
+                size="lg"
+                onPress={handleSubmit}
+                loading={submitLoading}
+                disabled={submitLoading || (dynamicAttributesPilotActive && dynamicLoading)}
+                leftIcon={
+                  submitLoading ? undefined : (
+                    <Ionicons name="paper-plane" size={18} color={colors.surface} />
+                  )
+                }
+                style={styles.publishCta}
+              >
+                {"Publier l'annonce"}
+              </Button>
+              <Button variant="ghost" onPress={goBackOrHome} disabled={submitLoading}>
+                Annuler
+              </Button>
+            </View>
+          </View>
+        ) : null}
       </View>
     </Screen>
   );
@@ -909,12 +1043,16 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     paddingBottom: spacing.base,
   },
+  formScrollContentKeyboardOpen: {
+    paddingBottom: spacing['2xl'],
+  },
   stickyFooter: {
-    gap: spacing.sm,
     paddingTop: spacing.sm,
-    paddingBottom: spacing.sm,
-    paddingHorizontal: spacing.base,
     backgroundColor: 'transparent',
+  },
+  stickyFooterActions: {
+    gap: spacing.sm,
+    paddingBottom: spacing.xs,
   },
   content: {
     maxWidth: 520,
@@ -1091,41 +1229,46 @@ const styles = StyleSheet.create({
   categorySection: {
     marginBottom: spacing.lg,
   },
+  categoryLoadingSlot: {
+    minHeight: 72,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  categoryLoadError: {
+    ...typography.sm,
+    color: colors.error,
+  },
   categoryGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: spacing.sm,
+    gap: 6,
   },
   categoryCard: {
-    width: '48%',
-    minHeight: 80,
-    paddingVertical: spacing.xs,
-    paddingHorizontal: spacing.sm,
-    borderRadius: radius.xl,
+    minHeight: 60,
+    paddingVertical: 0,
+    paddingHorizontal: 4,
+    borderRadius: radius.lg,
     borderWidth: 1,
     borderColor: colors.borderLight,
     backgroundColor: colors.surface,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: spacing.xs,
+    gap: 1,
     position: 'relative',
   },
   categoryCardSelected: {
-    borderWidth: 2,
+    borderWidth: 1.5,
     borderColor: colors.primary,
     backgroundColor: YOUMBIA_SELECTED_BG,
     ...Platform.select({
       ios: {
         shadowColor: colors.primary,
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.18,
-        shadowRadius: 10,
-      },
-      android: {
-        elevation: 3,
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
       },
       default: {
-        boxShadow: `0 8px 18px ${YOUMBIA_SELECTED_GLOW}`,
+        boxShadow: `0 2px 8px ${YOUMBIA_SELECTED_GLOW}`,
       },
     }),
   },
@@ -1134,29 +1277,63 @@ const styles = StyleSheet.create({
   },
   categoryCardCheck: {
     position: 'absolute',
-    top: spacing.xs,
-    right: spacing.xs,
+    top: 4,
+    right: 4,
+    zIndex: 1,
   },
-  categoryIconWrap: {
-    width: 34,
-    height: 34,
-    borderRadius: radius.lg,
+  categoryIconSlot: {
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: colors.primary + '08',
-  },
-  categoryIconWrapSelected: {
-    backgroundColor: 'rgba(22, 163, 74, 0.12)',
   },
   categoryCardLabel: {
-    ...typography.sm,
+    fontSize: 11,
+    lineHeight: 14,
     color: colors.textSecondary,
     fontWeight: fontWeights.medium,
     textAlign: 'center',
   },
   categoryCardLabelSelected: {
     color: colors.text,
-    fontWeight: fontWeights.bold,
+    fontWeight: fontWeights.semibold,
+  },
+  subcategorySection: {
+    marginTop: spacing.sm,
+    gap: spacing.xs,
+  },
+  subcategoryLabel: {
+    ...typography.sm,
+    color: colors.textSecondary,
+    fontWeight: fontWeights.medium,
+  },
+  subcategoryChipRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.xs,
+  },
+  subcategoryChip: {
+    borderRadius: radius.full,
+    borderWidth: 1,
+    borderColor: colors.borderLight,
+    backgroundColor: colors.surface,
+    paddingVertical: 8,
+    paddingHorizontal: spacing.sm,
+    maxWidth: '100%',
+  },
+  subcategoryChipSelected: {
+    borderColor: colors.primary,
+    backgroundColor: YOUMBIA_SELECTED_BG,
+  },
+  subcategoryChipPressed: {
+    opacity: 0.92,
+  },
+  subcategoryChipText: {
+    ...typography.sm,
+    color: colors.textSecondary,
+    fontWeight: fontWeights.medium,
+  },
+  subcategoryChipTextSelected: {
+    color: colors.primary,
+    fontWeight: fontWeights.semibold,
   },
   publishCta: {
     ...Platform.select({
@@ -1174,30 +1351,83 @@ const styles = StyleSheet.create({
       },
     }),
   },
-  thumbsRow: {
+  photoSlotsRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
   },
-  thumbWrap: {
+  photoSlot: {
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.borderLight,
+    backgroundColor: colors.surface,
+    overflow: 'hidden',
     position: 'relative',
   },
-  thumb: {
-    width: 80,
-    height: 80,
-    borderRadius: radius.lg,
-    backgroundColor: colors.surface,
+  photoSlotEmpty: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderStyle: 'dashed',
+    borderColor: colors.border,
+    backgroundColor: colors.surfaceSubtle,
   },
-  removeThumb: {
+  photoSlotEmptyPressed: {
+    opacity: 0.92,
+    backgroundColor: colors.primary + '08',
+  },
+  photoSlotPrimaryAdd: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderStyle: 'dashed',
+    borderColor: 'rgba(22, 163, 74, 0.28)',
+    backgroundColor: 'rgba(22, 163, 74, 0.06)',
+    paddingHorizontal: spacing.xs,
+  },
+  photoSlotPrimaryAddPressed: {
+    opacity: 0.94,
+    backgroundColor: 'rgba(22, 163, 74, 0.1)',
+  },
+  photoSlotPrimaryAddContent: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 2,
+    paddingHorizontal: 2,
+  },
+  photoSlotPrimaryAddTitle: {
+    fontSize: 11,
+    lineHeight: 14,
+    fontWeight: fontWeights.semibold,
+    color: colors.primary,
+    textAlign: 'center',
+  },
+  photoSlotImage: {
+    width: '100%',
+    height: '100%',
+  },
+  photoSlotRemove: {
     position: 'absolute',
-    top: -4,
-    right: -4,
-    minWidth: 28,
-    paddingVertical: 2,
-    paddingHorizontal: 6,
-  },
-  addPhotoBtn: {
-    alignSelf: 'center',
+    top: 4,
+    right: 4,
+    width: 22,
+    height: 22,
+    borderRadius: radius.full,
+    backgroundColor: colors.surface,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...Platform.select({
+      ios: {
+        shadowColor: colors.text,
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.12,
+        shadowRadius: 2,
+      },
+      android: {
+        elevation: 2,
+      },
+      default: {
+        boxShadow: '0 1px 4px rgba(15, 23, 42, 0.12)',
+      },
+    }),
   },
   submitErrorSticky: {
     ...typography.sm,
