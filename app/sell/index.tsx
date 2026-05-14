@@ -23,7 +23,7 @@ import {
 } from '@/lib/sellerProfile';
 import * as ImagePicker from 'expo-image-picker';
 import { Screen, Button, Input, Loader } from '@/components';
-import { LISTING_CATEGORIES, type ListingCategoryId } from '@/lib/listingCategories';
+import { LISTING_CATEGORIES, type ListingCategoryId, type ListingCategorySlug } from '@/lib/listingCategories';
 import { shouldUseDynamicAttributesPilot } from '@/lib/vehicleDynamicPilot';
 import type {
   CategoryAttributeOption,
@@ -49,6 +49,44 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 const MAX_LISTING_IMAGES = 4;
 /** Garde-fou trust (Sprint TRUST SAFE) : limite de publications / 24h. */
 const MAX_LISTINGS_PER_24H = 5;
+const YOUMBIA_SELECTED_BG = 'rgba(22, 163, 74, 0.08)';
+const YOUMBIA_SELECTED_GLOW = 'rgba(22, 163, 74, 0.18)';
+
+const LISTING_CATEGORY_ID_BY_SLUG = Object.fromEntries(
+  LISTING_CATEGORIES.map((category) => [category.slug, category.id])
+) as Record<ListingCategorySlug, ListingCategoryId>;
+
+type SellCategoryCard = {
+  label: string;
+  icon: keyof typeof Ionicons.glyphMap;
+  slug: ListingCategorySlug | 'alimentaire' | 'loisirs-sports' | 'autres';
+};
+
+const SELL_CATEGORY_CARDS: SellCategoryCard[] = [
+  { label: 'Véhicules', icon: 'car-outline', slug: 'vehicules' },
+  { label: 'Électronique', icon: 'laptop-outline', slug: 'electronique' },
+  { label: 'Maison & Jardin', icon: 'home-outline', slug: 'maison-decoration' },
+  { label: 'Mode & Accessoires', icon: 'shirt-outline', slug: 'mode-beaute' },
+  { label: 'Immobilier', icon: 'business-outline', slug: 'immobilier' },
+  { label: 'Alimentation', icon: 'nutrition-outline', slug: 'alimentaire' },
+  { label: 'Services', icon: 'construct-outline', slug: 'services' },
+  { label: 'Informatique', icon: 'hardware-chip-outline', slug: 'informatique' },
+  { label: 'Loisirs & Sports', icon: 'fitness-outline', slug: 'loisirs-sports' },
+  { label: 'Autres', icon: 'grid-outline', slug: 'autres' },
+];
+
+function resolveSellCategoryListingId(slug: SellCategoryCard['slug']): ListingCategoryId | null {
+  return LISTING_CATEGORY_ID_BY_SLUG[slug as ListingCategorySlug] ?? null;
+}
+
+function RequiredFieldLabel({ children }: { children: string }) {
+  return (
+    <Text style={styles.label}>
+      {children}
+      <Text style={styles.requiredMark}> *</Text>
+    </Text>
+  );
+}
 
 type PickedImage = { uri: string; base64: string | null; mimeType?: string | null };
 
@@ -694,7 +732,7 @@ export default function SellScreen() {
               <View style={styles.inlineWarning}>
                 <Ionicons name="warning-outline" size={18} color={colors.warning} />
                 <Text style={styles.inlineWarningText}>
-                  Téléphone manquant dans le profil: la publication sera bloquée au moment de publier.
+                  Ajoutez un numéro pour publier votre annonce.
                 </Text>
                 <Pressable onPress={() => router.push(buildAccountProfileHref('/sell'))} hitSlop={8}>
                   <Text style={styles.inlineWarningLink}>Compléter</Text>
@@ -703,7 +741,7 @@ export default function SellScreen() {
             ) : null}
 
             <View style={styles.imagesSection}>
-              <Text style={styles.label}>Photos</Text>
+              <RequiredFieldLabel>Photos</RequiredFieldLabel>
               <Text style={styles.stepHelper}>
                 Ajoutez 1 à 4 photos. Une bonne première photo augmente les messages.
               </Text>
@@ -735,7 +773,7 @@ export default function SellScreen() {
             </View>
 
             <Input
-              label="Titre"
+              label="Titre *"
               placeholder="Ex. Vélo de ville"
               value={title}
               onChangeText={setTitle}
@@ -743,7 +781,7 @@ export default function SellScreen() {
             />
 
             <Input
-              label="Description"
+              label="Description *"
               placeholder="Décrivez votre article..."
               value={description}
               onChangeText={setDescription}
@@ -753,28 +791,50 @@ export default function SellScreen() {
             />
 
             <View style={styles.categorySection}>
-              <Text style={styles.label}>Catégorie</Text>
-              <View style={styles.categoryChips}>
-                {LISTING_CATEGORIES.map((category) => {
-                  const isSelected = categoryId === category.id;
+              <RequiredFieldLabel>Catégorie</RequiredFieldLabel>
+              <View style={styles.categoryGrid}>
+                {SELL_CATEGORY_CARDS.map((category) => {
+                  const listingCategoryId = resolveSellCategoryListingId(category.slug);
+                  const isSelected = listingCategoryId != null && categoryId === listingCategoryId;
                   return (
                     <Pressable
-                      key={category.id}
+                      key={category.slug}
+                      accessibilityRole="button"
+                      accessibilityState={{ selected: isSelected }}
                       style={({ pressed }) => [
-                        styles.categoryChip,
-                        isSelected && styles.categoryChipSelected,
-                        pressed && styles.categoryChipPressed,
+                        styles.categoryCard,
+                        isSelected && styles.categoryCardSelected,
+                        pressed && styles.categoryCardPressed,
                       ]}
                       onPress={() => {
-                        setCategoryId(category.id);
+                        if (listingCategoryId == null) {
+                          setSubmitError(
+                            'Cette catégorie sera bientôt disponible. Choisissez une autre catégorie pour publier.'
+                          );
+                          return;
+                        }
+                        setCategoryId(listingCategoryId);
                         setSubmitError(null);
                       }}
                     >
+                      {isSelected ? (
+                        <View style={styles.categoryCardCheck}>
+                          <Ionicons name="checkmark-circle" size={16} color={colors.primary} />
+                        </View>
+                      ) : null}
+                      <View style={[styles.categoryIconWrap, isSelected && styles.categoryIconWrapSelected]}>
+                        <Ionicons
+                          name={category.icon}
+                          size={isSelected ? 24 : 22}
+                          color={isSelected ? colors.primary : colors.textSecondary}
+                        />
+                      </View>
                       <Text
                         style={[
-                          styles.categoryChipText,
-                          isSelected && styles.categoryChipTextSelected,
+                          styles.categoryCardLabel,
+                          isSelected && styles.categoryCardLabelSelected,
                         ]}
+                        numberOfLines={2}
                       >
                         {category.label}
                       </Text>
@@ -795,7 +855,7 @@ export default function SellScreen() {
             ) : null}
 
             <Input
-              label="Prix (FCFA)"
+              label="Prix (FCFA) *"
               placeholder="0"
               value={priceStr}
               onChangeText={setPriceStr}
@@ -808,6 +868,8 @@ export default function SellScreen() {
               value={city}
               onChangeText={setCity}
             />
+
+            <Text style={styles.requiredLegend}>* Champ obligatoire</Text>
           </View>
         </ScrollView>
 
@@ -818,6 +880,12 @@ export default function SellScreen() {
             onPress={handleSubmit}
             loading={submitLoading}
             disabled={submitLoading || (dynamicAttributesPilotActive && dynamicLoading)}
+            leftIcon={
+              submitLoading ? undefined : (
+                <Ionicons name="paper-plane" size={18} color={colors.surface} />
+              )
+            }
+            style={styles.publishCta}
           >
             {"Publier l'annonce"}
           </Button>
@@ -839,27 +907,14 @@ const styles = StyleSheet.create({
   },
   formScrollContent: {
     flexGrow: 1,
-    paddingBottom: spacing['2xl'],
+    paddingBottom: spacing.base,
   },
   stickyFooter: {
     gap: spacing.sm,
-    paddingTop: spacing.base,
+    paddingTop: spacing.sm,
     paddingBottom: spacing.sm,
     paddingHorizontal: spacing.base,
-    borderTopWidth: 1,
-    borderTopColor: colors.borderLight,
-    backgroundColor: colors.background,
-    ...Platform.select({
-      ios: {
-        shadowColor: colors.text,
-        shadowOffset: { width: 0, height: -6 },
-        shadowOpacity: 0.05,
-        shadowRadius: 10,
-      },
-      android: {
-        elevation: 10,
-      },
-    }),
+    backgroundColor: 'transparent',
   },
   content: {
     maxWidth: 520,
@@ -1020,40 +1075,104 @@ const styles = StyleSheet.create({
     color: colors.text,
     marginBottom: spacing.xs,
   },
+  requiredMark: {
+    color: colors.textSecondary,
+    fontWeight: fontWeights.semibold,
+  },
+  requiredLegend: {
+    ...typography.xs,
+    color: colors.textSecondary,
+    marginTop: spacing.sm,
+    marginBottom: spacing.xs,
+  },
   imagesSection: {
     marginBottom: spacing.lg,
   },
   categorySection: {
     marginBottom: spacing.lg,
   },
-  categoryChips: {
+  categoryGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: spacing.sm,
   },
-  categoryChip: {
-    paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.base,
-    borderRadius: radius.full,
+  categoryCard: {
+    width: '48%',
+    minHeight: 80,
+    paddingVertical: spacing.xs,
+    paddingHorizontal: spacing.sm,
+    borderRadius: radius.xl,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: colors.borderLight,
     backgroundColor: colors.surface,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.xs,
+    position: 'relative',
   },
-  categoryChipSelected: {
+  categoryCardSelected: {
+    borderWidth: 2,
     borderColor: colors.primary,
-    backgroundColor: colors.primary + '12',
+    backgroundColor: YOUMBIA_SELECTED_BG,
+    ...Platform.select({
+      ios: {
+        shadowColor: colors.primary,
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.18,
+        shadowRadius: 10,
+      },
+      android: {
+        elevation: 3,
+      },
+      default: {
+        boxShadow: `0 8px 18px ${YOUMBIA_SELECTED_GLOW}`,
+      },
+    }),
   },
-  categoryChipPressed: {
-    opacity: 0.85,
+  categoryCardPressed: {
+    opacity: 0.9,
   },
-  categoryChipText: {
+  categoryCardCheck: {
+    position: 'absolute',
+    top: spacing.xs,
+    right: spacing.xs,
+  },
+  categoryIconWrap: {
+    width: 34,
+    height: 34,
+    borderRadius: radius.lg,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.primary + '08',
+  },
+  categoryIconWrapSelected: {
+    backgroundColor: 'rgba(22, 163, 74, 0.12)',
+  },
+  categoryCardLabel: {
     ...typography.sm,
-    color: colors.text,
+    color: colors.textSecondary,
     fontWeight: fontWeights.medium,
+    textAlign: 'center',
   },
-  categoryChipTextSelected: {
-    color: colors.primary,
-    fontWeight: fontWeights.semibold,
+  categoryCardLabelSelected: {
+    color: colors.text,
+    fontWeight: fontWeights.bold,
+  },
+  publishCta: {
+    ...Platform.select({
+      ios: {
+        shadowColor: colors.primary,
+        shadowOffset: { width: 0, height: 6 },
+        shadowOpacity: 0.24,
+        shadowRadius: 12,
+      },
+      android: {
+        elevation: 5,
+      },
+      default: {
+        boxShadow: `0 10px 22px ${YOUMBIA_SELECTED_GLOW}`,
+      },
+    }),
   },
   thumbsRow: {
     flexDirection: 'row',
