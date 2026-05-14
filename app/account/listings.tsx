@@ -592,10 +592,12 @@ export default function AccountListingsScreen() {
             message="Publiez votre première annonce en quelques minutes."
             action={
               <View style={styles.emptyAction}>
-                <Button onPress={() => router.push('/sell')} style={styles.emptyCta}>
-                  <Text style={styles.emptyCtaText} numberOfLines={1} adjustsFontSizeToFit>
-                    Publier une annonce
-                  </Text>
+                <Button
+                  onPress={() => router.push('/sell')}
+                  style={styles.emptyCta}
+                  leftIcon={<Ionicons name="add" size={18} color={colors.surface} />}
+                >
+                  Publier une annonce
                 </Button>
               </View>
             }
