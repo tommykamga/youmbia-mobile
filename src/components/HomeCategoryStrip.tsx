@@ -16,7 +16,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import type { WindowSizeBucket } from '@/lib/responsiveLayout';
 import { getRootMarketplaceCategories, getSellParentIcon } from '@/lib/marketplaceCategories';
 import { useMarketplaceCategories } from '@/hooks/useMarketplaceCategories';
-import { spacing, colors } from '@/theme';
+import { colors } from '@/theme';
 
 const AUTRES_LABEL = 'Autres';
 
@@ -122,6 +122,9 @@ export function HomeCategoryStrip({
   const insetTarget = targetScreenInset(bucket);
 
   const outerStyle = useMemo(() => {
+    if (insetHorizontal != null) {
+      return { paddingHorizontal: insetHorizontal };
+    }
     if (parentContentPad != null) {
       const delta = insetTarget - parentContentPad;
       return {
@@ -129,7 +132,7 @@ export function HomeCategoryStrip({
         paddingHorizontal: Math.max(0, delta),
       };
     }
-    return { paddingHorizontal: insetHorizontal ?? insetTarget };
+    return { paddingHorizontal: insetTarget };
   }, [parentContentPad, insetHorizontal, insetTarget]);
 
   const { itemWidth, minHeight, iconSize } = stripDimensions(bucket);
@@ -241,7 +244,7 @@ export function HomeCategoryStrip({
 
 const styles = StyleSheet.create({
   wrap: {
-    marginBottom: spacing.sm,
+    marginBottom: 0,
   },
   scrollContent: {
     flexDirection: 'row',

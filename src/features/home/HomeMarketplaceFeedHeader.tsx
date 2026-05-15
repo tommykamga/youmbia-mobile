@@ -3,7 +3,7 @@
  * Réutilisé par l’onglet Chercher (accueil) et peut servir l’ancienne route Home si besoin.
  */
 
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { View, Text, StyleSheet, Pressable, Platform } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import {
@@ -21,6 +21,7 @@ import {
 import { PopularShopsSection, VerifiedShopsSection } from '@/features/shops';
 import { spacing, ui } from '@/theme';
 import type { WindowSizeBucket } from '@/lib/responsiveLayout';
+import { useHomeMarketplaceHorizontalPadding } from '@/lib/responsiveLayout';
 import { getSession, onAuthStateChange } from '@/services/auth';
 
 /** Sections connectées — aligné Home historique (désactivées pour egress). */
@@ -80,6 +81,16 @@ export function HomeMarketplaceFeedHeader({
   showCategoryStrip = true,
   showSellCta = true,
 }: HomeMarketplaceFeedHeaderProps) {
+  const gridInset = useHomeMarketplaceHorizontalPadding();
+  const sectionInsetStyle = useMemo(
+    () => ({ paddingHorizontal: gridInset }),
+    [gridInset]
+  );
+  const feedIntroStyle = useMemo(
+    () => [styles.feedIntro, sectionInsetStyle],
+    [sectionInsetStyle]
+  );
+
   return (
     <View style={styles.headerRoot}>
       <BoostedSection onVoirToutPress={onBoostedVoirTout} />
@@ -96,7 +107,7 @@ export function HomeMarketplaceFeedHeader({
       ) : null}
 
       {showSellCta ? (
-        <View style={styles.sellCtaWrap}>
+        <View style={[styles.sellCtaWrap, sectionInsetStyle]}>
           <Pressable
             style={({ pressed }) => [
               appMarketplaceSurface,
@@ -129,7 +140,7 @@ export function HomeMarketplaceFeedHeader({
         </View>
       ) : null}
 
-      <View style={styles.feedIntro}>
+      <View style={feedIntroStyle}>
         <AppSectionHeader dense title="Nouvelles annonces" subtitle="Actualisées en continu" />
       </View>
     </View>
@@ -138,14 +149,13 @@ export function HomeMarketplaceFeedHeader({
 
 const styles = StyleSheet.create({
   headerRoot: {
-    paddingTop: 2,
-    gap: 2,
+    paddingTop: spacing.sm,
+    gap: spacing.md,
   },
   connectedSections: {
     marginTop: 4,
   },
   sellCtaWrap: {
-    paddingHorizontal: 16,
     paddingTop: spacing.sm,
     paddingBottom: spacing.sm,
   },
@@ -188,8 +198,7 @@ const styles = StyleSheet.create({
     marginTop: ui.spacing.xs,
   },
   feedIntro: {
-    marginTop: ui.spacing.md,
-    marginBottom: ui.spacing.sm,
-    paddingHorizontal: 16,
+    marginTop: 0,
+    marginBottom: spacing.sm,
   },
 });

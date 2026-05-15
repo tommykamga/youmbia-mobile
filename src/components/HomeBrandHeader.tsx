@@ -10,6 +10,7 @@ import React, { useMemo } from 'react';
 import { View, Text, StyleSheet, Pressable, useWindowDimensions, Platform } from 'react-native';
 import { Image } from 'expo-image';
 import Ionicons from '@expo/vector-icons/Ionicons';
+import { getHomeMarketplaceHorizontalPadding } from '@/lib/responsiveLayout';
 import { ui, colors } from '@/theme';
 
 /** Aligné sur `viewBox="0 0 148 40"` du SVG officiel. */
@@ -62,7 +63,13 @@ export function HomeBrandHeader({
 
   const layout = useMemo(() => {
     const sideSlot = width < 380 ? 42 : width < 430 ? 46 : 48;
-    const rowHPadding = width < 380 ? 16 : width < 430 ? 18 : 20;
+    const rowHPadding = searchTabLayout
+      ? getHomeMarketplaceHorizontalPadding(width)
+      : width < 380
+        ? 16
+        : width < 430
+          ? 18
+          : 20;
     const { targetHeight, logoMaxWidth } = getHomeLogoMetrics(width);
     const { logoWidth, logoHeight } = computeLogoBox(
       width,

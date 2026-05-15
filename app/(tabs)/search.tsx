@@ -43,7 +43,11 @@ import type { PublicListing } from '@/services/listings';
 import { colors, spacing, typography, fontWeights, radius } from '@/theme';
 import { getSession } from '@/services/auth';
 import { buildAuthGateHref } from '@/lib/authGateNavigation';
-import { useResponsiveLayout, getScrollBottomReserveForTabBar } from '@/lib/responsiveLayout';
+import {
+  useResponsiveLayout,
+  getScrollBottomReserveForTabBar,
+  getHomeMarketplaceHorizontalPadding,
+} from '@/lib/responsiveLayout';
 
 const SUGGESTIONS_DEBOUNCE_MS = 300;
 /** Ne pas relancer `runSearch` si les params de navigation sont identiques sous ce délai (anti double effet / focus). */
@@ -818,6 +822,11 @@ export default function SearchScreen() {
     () => getScrollBottomReserveForTabBar(width, insets.bottom),
     [width, insets.bottom]
   );
+  const homeHorizontalPadding = useMemo(
+    () => getHomeMarketplaceHorizontalPadding(width),
+    [width]
+  );
+
   const searchChrome = useMemo(() => {
     const borderColor = 'rgba(15,23,42,0.04)';
     const searchBg = '#F4F6F8';
@@ -833,7 +842,7 @@ export default function SearchScreen() {
     });
     if (width < 380) {
       return {
-        hPad: 16,
+        hPad: homeHorizontalPadding,
         searchMinH: 47,
         searchPadV: 10,
         stripPadTop: 2,
@@ -846,7 +855,7 @@ export default function SearchScreen() {
     }
     if (width >= 430) {
       return {
-        hPad: 28,
+        hPad: homeHorizontalPadding,
         searchMinH: 53,
         searchPadV: 13,
         stripPadTop: 4,
@@ -858,7 +867,7 @@ export default function SearchScreen() {
       };
     }
     return {
-      hPad: 20,
+      hPad: homeHorizontalPadding,
       searchMinH: 50,
       searchPadV: 12,
       stripPadTop: 3,
@@ -868,7 +877,7 @@ export default function SearchScreen() {
       borderColor,
       rowShadow,
     };
-  }, [width]);
+  }, [width, homeHorizontalPadding]);
   const authState = useAuthStateForHome();
 
   const showMarketplaceHomeFeed = state.status === 'idle';
@@ -1439,7 +1448,7 @@ export default function SearchScreen() {
                   bucket={bucket}
                   onCategoryPress={handleQuickCategoryPress}
                   onAutresPress={handleCategoriesVoirTout}
-                  parentContentPad={searchChrome.hPad}
+                  insetHorizontal={homeHorizontalPadding}
                   selectedCategoryId={appliedSearchFilters.categoryId}
                 />
                 {savedSearches.length > 0 ? (
@@ -1488,6 +1497,7 @@ export default function SearchScreen() {
                     },
                   }}
                   contentPaddingHorizontal={0}
+                  homeFeedCardInset={homeHorizontalPadding}
                   listingCardFeedPresentation="home"
                   contentBottomInset={scrollBottomReserve}
                   externalScrollRef={homeFeedListRef}
@@ -1750,7 +1760,7 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.borderLight,
   },
   searchStripMarketplace: {
-    paddingBottom: spacing.sm,
+    paddingBottom: spacing.md,
   },
   feedSlot: {
     flex: 1,
@@ -1760,7 +1770,7 @@ const styles = StyleSheet.create({
   searchRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: spacing.sm,
+    marginBottom: spacing.md,
   },
   searchIcon: {
     marginRight: spacing.sm,

@@ -16,6 +16,7 @@ import { ListingCard, LISTING_CARD_RAIL_STRIDE_FEATURED } from './ListingCard';
 import type { PublicListing } from '@/services/listings';
 import { listingPublicListSelect } from '@/services/listings/listingListSelect';
 import { LIGHT_CACHE_TTL_MS } from '@/lib/lightCache';
+import { useHomeMarketplaceGridInset } from '@/lib/responsiveLayout';
 import { spacing, ui, colors } from '@/theme';
 
 const BOOSTED_FIRST_RANGE = { from: 0, to: 2 } as const;
@@ -84,6 +85,19 @@ export type BoostedSectionProps = {
 
 export function BoostedSection({ onVoirToutPress }: BoostedSectionProps) {
   const ITEM_WIDTH = LISTING_CARD_RAIL_STRIDE_FEATURED;
+  const gridInset = useHomeMarketplaceGridInset();
+  const headInsetStyle = useMemo(
+    () => ({ paddingHorizontal: gridInset }),
+    [gridInset]
+  );
+  const railContentStyle = useMemo(
+    () => [styles.scrollContent, { paddingLeft: gridInset, paddingRight: gridInset }],
+    [gridInset]
+  );
+  const inlineMoreInsetStyle = useMemo(
+    () => ({ marginLeft: gridInset }),
+    [gridInset]
+  );
   const [listings, setListings] = useState<PublicListing[]>([]);
   const [loading, setLoading] = useState(true);
   const [fullyLoaded, setFullyLoaded] = useState(false);
@@ -161,7 +175,10 @@ export function BoostedSection({ onVoirToutPress }: BoostedSectionProps) {
 
   if (loading) {
     return (
-      <View style={styles.loadingBlock} accessibilityLabel="Chargement des annonces à la une">
+      <View
+        style={[styles.loadingBlock, headInsetStyle]}
+        accessibilityLabel="Chargement des annonces à la une"
+      >
         {[0, 1, 2].map((k) => (
           <View key={k} style={styles.loadingCard} />
         ))}
@@ -175,7 +192,7 @@ export function BoostedSection({ onVoirToutPress }: BoostedSectionProps) {
 
   return (
     <View style={styles.section}>
-      <View style={styles.headRow}>
+      <View style={[styles.headRow, headInsetStyle]}>
         <Text style={styles.sectionTitle} accessibilityRole="header">
           🔥 À la une
         </Text>
@@ -189,7 +206,11 @@ export function BoostedSection({ onVoirToutPress }: BoostedSectionProps) {
         <Pressable
           onPress={() => void loadSecondBatch()}
           disabled={loadingMore}
-          style={({ pressed }) => [styles.inlineMoreBtn, pressed && styles.inlineMoreBtnPressed]}
+          style={({ pressed }) => [
+            styles.inlineMoreBtn,
+            inlineMoreInsetStyle,
+            pressed && styles.inlineMoreBtnPressed,
+          ]}
           accessibilityRole="button"
           accessibilityLabel="Afficher plus d’annonces à la une"
         >
@@ -199,7 +220,11 @@ export function BoostedSection({ onVoirToutPress }: BoostedSectionProps) {
       {showExpandLocal ? (
         <Pressable
           onPress={() => setRailExpanded(true)}
-          style={({ pressed }) => [styles.inlineMoreBtn, pressed && styles.inlineMoreBtnPressed]}
+          style={({ pressed }) => [
+            styles.inlineMoreBtn,
+            inlineMoreInsetStyle,
+            pressed && styles.inlineMoreBtnPressed,
+          ]}
           accessibilityRole="button"
           accessibilityLabel="Afficher toutes les annonces à la une"
         >
@@ -211,7 +236,7 @@ export function BoostedSection({ onVoirToutPress }: BoostedSectionProps) {
         keyExtractor={keyExtractor}
         horizontal
         showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={railContentStyle}
         style={styles.scroll}
         snapToInterval={ITEM_WIDTH}
         snapToAlignment="start"
@@ -230,7 +255,6 @@ const styles = StyleSheet.create({
   loadingBlock: {
     flexDirection: 'row',
     gap: 10,
-    paddingHorizontal: 16,
     paddingVertical: spacing.md,
     marginBottom: spacing.lg,
   },
@@ -241,19 +265,17 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surfaceMuted,
   },
   section: {
-    marginBottom: spacing.xl,
+    marginBottom: spacing.lg,
     paddingHorizontal: 0,
   },
   headRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
     marginBottom: spacing.sm,
   },
   inlineMoreBtn: {
     alignSelf: 'flex-start',
-    marginLeft: 16,
     marginBottom: spacing.sm,
     paddingVertical: spacing.xs,
     paddingHorizontal: spacing.sm,
@@ -281,8 +303,6 @@ const styles = StyleSheet.create({
     flexGrow: 0,
   },
   scrollContent: {
-    paddingLeft: 16,
-    paddingRight: 8,
     paddingBottom: spacing.xs,
   },
 });

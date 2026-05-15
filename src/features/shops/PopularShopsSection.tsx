@@ -2,17 +2,27 @@
  * Section accueil — Boutiques populaires (PRO, featured puis activité).
  */
 
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { View, StyleSheet, FlatList } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { AppSectionHeader } from '@/components';
 import { getPopularShopsCached } from '@/services/shops/popularShopsCache';
 import type { PopularShop } from '@/services/shops/getPopularShops';
+import { useHomeMarketplaceGridInset } from '@/lib/responsiveLayout';
 import { ShopCard, SHOP_CARD_RAIL_STRIDE } from './ShopCard';
 import { ShopsRailSkeleton } from './ShopsRailSkeleton';
 import { spacing, ui } from '@/theme';
 
 export function PopularShopsSection() {
+  const gridInset = useHomeMarketplaceGridInset();
+  const railContentStyle = useMemo(
+    () => [styles.scrollContent, { paddingLeft: gridInset, paddingRight: gridInset }],
+    [gridInset]
+  );
+  const headerInsetStyle = useMemo(
+    () => ({ paddingHorizontal: gridInset }),
+    [gridInset]
+  );
   const [shops, setShops] = useState<PopularShop[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -40,12 +50,14 @@ export function PopularShopsSection() {
   if (loading) {
     return (
       <View style={styles.section} accessibilityLabel="Chargement des boutiques populaires">
-        <AppSectionHeader
-          dense
-          title="Boutiques populaires"
-          subtitle="Commerçants professionnels YOUMBIA"
-        />
-        <ShopsRailSkeleton />
+        <View style={[styles.headerRow, headerInsetStyle]}>
+          <AppSectionHeader
+            dense
+            title="Boutiques populaires"
+            subtitle="Commerçants professionnels YOUMBIA"
+          />
+        </View>
+        <ShopsRailSkeleton contentInset={gridInset} />
       </View>
     );
   }
@@ -56,7 +68,7 @@ export function PopularShopsSection() {
 
   return (
     <View style={styles.section}>
-      <View style={styles.headerRow}>
+      <View style={[styles.headerRow, headerInsetStyle]}>
         <Ionicons
           name="storefront-outline"
           size={17}
@@ -76,7 +88,7 @@ export function PopularShopsSection() {
         keyExtractor={keyExtractor}
         horizontal
         showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={railContentStyle}
         style={styles.scroll}
         snapToInterval={SHOP_CARD_RAIL_STRIDE}
         snapToAlignment="start"
@@ -90,12 +102,11 @@ export function PopularShopsSection() {
 
 const styles = StyleSheet.create({
   section: {
-    marginBottom: spacing.sm,
+    marginBottom: spacing.md,
   },
   headerRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: spacing.base,
     marginBottom: spacing.xs,
   },
   headerIcon: {
@@ -106,10 +117,9 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   scroll: {
-    marginHorizontal: -spacing.base,
+    flexGrow: 0,
   },
   scrollContent: {
-    paddingHorizontal: spacing.base,
     paddingBottom: spacing.xs,
   },
 });

@@ -3,12 +3,13 @@
  * Réutilise le cache mémoire de PopularShopsSection quand disponible.
  */
 
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { View, StyleSheet, FlatList } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { AppSectionHeader } from '@/components';
 import { getPopularShopsCached } from '@/services/shops/popularShopsCache';
 import type { PopularShop } from '@/services/shops/getPopularShops';
+import { useHomeMarketplaceGridInset } from '@/lib/responsiveLayout';
 import { ShopCard } from './ShopCard';
 import { spacing, colors } from '@/theme';
 
@@ -16,6 +17,15 @@ const VERIFIED_LIMIT = 6;
 const MIN_VERIFIED_TO_SHOW = 2;
 
 export function VerifiedShopsSection() {
+  const gridInset = useHomeMarketplaceGridInset();
+  const railContentStyle = useMemo(
+    () => [styles.scrollContent, { paddingLeft: gridInset, paddingRight: gridInset }],
+    [gridInset]
+  );
+  const headerInsetStyle = useMemo(
+    () => ({ paddingHorizontal: gridInset }),
+    [gridInset]
+  );
   const [shops, setShops] = useState<PopularShop[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -42,7 +52,7 @@ export function VerifiedShopsSection() {
 
   return (
     <View style={styles.section}>
-      <View style={styles.headerRow}>
+      <View style={[styles.headerRow, headerInsetStyle]}>
         <Ionicons
           name="shield-checkmark-outline"
           size={16}
@@ -58,7 +68,7 @@ export function VerifiedShopsSection() {
         keyExtractor={(item) => item.id}
         horizontal
         showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={railContentStyle}
         style={styles.scroll}
         renderItem={({ item }) => <ShopCard shop={item} variant="compact" />}
         removeClippedSubviews
@@ -74,7 +84,6 @@ const styles = StyleSheet.create({
   headerRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: spacing.base,
     marginBottom: spacing.xs,
   },
   headerIcon: {
@@ -85,10 +94,9 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   scroll: {
-    marginHorizontal: -spacing.base,
+    flexGrow: 0,
   },
   scrollContent: {
-    paddingHorizontal: spacing.base,
     paddingBottom: spacing.xs,
   },
 });

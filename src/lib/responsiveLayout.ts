@@ -4,6 +4,7 @@
  *
  * Aligné produit : petit téléphone < 380 ; moyen [380, 430) ; grand ≥ 430.
  */
+import { useMemo } from 'react';
 import { useWindowDimensions } from 'react-native';
 
 export type WindowSizeBucket = 'compact' | 'regular' | 'large';
@@ -75,6 +76,30 @@ export function getTabBarVisualMetrics(width: number): TabBarVisualMetrics {
 export function getScrollBottomReserveForTabBar(width: number, safeAreaBottom: number): number {
   return getTabBarVisualMetrics(width).barHeight + safeAreaBottom + 12;
 }
+
+/**
+ * Grille horizontale homepage unique (recherche, catégories, rails, titres, cartes).
+ * Compact 10 · regular 12 · large 14 — respiration premium sans coller au bord.
+ */
+export function getHomeMarketplaceHorizontalPadding(width: number): number {
+  if (width < WIDTH_COMPACT_BOUND) return 10;
+  if (width >= WIDTH_REGULAR_BOUND) return 14;
+  return 12;
+}
+
+/** @deprecated Alias — préférer `getHomeMarketplaceHorizontalPadding`. */
+export const getHomeFeedListingCardInset = getHomeMarketplaceHorizontalPadding;
+
+/** @deprecated Alias — préférer `getHomeMarketplaceHorizontalPadding`. */
+export const getHomeMarketplaceGridInset = getHomeMarketplaceHorizontalPadding;
+
+export function useHomeMarketplaceHorizontalPadding(): number {
+  const { width } = useWindowDimensions();
+  return useMemo(() => getHomeMarketplaceHorizontalPadding(width), [width]);
+}
+
+/** @deprecated Alias — préférer `useHomeMarketplaceHorizontalPadding`. */
+export const useHomeMarketplaceGridInset = useHomeMarketplaceHorizontalPadding;
 
 export function useResponsiveLayout() {
   const { width, height } = useWindowDimensions();

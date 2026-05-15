@@ -1,8 +1,13 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { View, StyleSheet, FlatList } from 'react-native';
 import { SkeletonPulse } from '@/components/SkeletonPulse';
+import { useHomeMarketplaceGridInset } from '@/lib/responsiveLayout';
 import { SHOP_CARD_RAIL_WIDTH, SHOP_CARD_RAIL_MARGIN_END } from './ShopCard';
 import { spacing, radius, cardStyles, colors } from '@/theme';
+
+export type ShopsRailSkeletonProps = {
+  contentInset?: number;
+};
 
 const PLACEHOLDER_COUNT = 3;
 
@@ -20,7 +25,13 @@ function ShopCardSkeleton() {
   );
 }
 
-export function ShopsRailSkeleton() {
+export function ShopsRailSkeleton({ contentInset }: ShopsRailSkeletonProps = {}) {
+  const gridInset = useHomeMarketplaceGridInset();
+  const inset = contentInset ?? gridInset;
+  const railContentStyle = useMemo(
+    () => [styles.scrollContent, { paddingLeft: inset, paddingRight: inset }],
+    [inset]
+  );
   const data = Array.from({ length: PLACEHOLDER_COUNT }, (_, i) => i);
 
   return (
@@ -30,7 +41,7 @@ export function ShopsRailSkeleton() {
       horizontal
       showsHorizontalScrollIndicator={false}
       scrollEnabled={false}
-      contentContainerStyle={styles.scrollContent}
+      contentContainerStyle={railContentStyle}
       style={styles.scroll}
       ItemSeparatorComponent={() => <View style={{ width: 0 }} />}
       renderItem={() => <ShopCardSkeleton />}
@@ -40,10 +51,9 @@ export function ShopsRailSkeleton() {
 
 const styles = StyleSheet.create({
   scroll: {
-    marginHorizontal: -spacing.base,
+    flexGrow: 0,
   },
   scrollContent: {
-    paddingHorizontal: spacing.base,
     paddingBottom: spacing.sm,
   },
   card: {
