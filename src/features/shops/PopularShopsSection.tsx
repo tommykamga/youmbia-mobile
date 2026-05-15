@@ -57,9 +57,12 @@ export function PopularShopsSection() {
   return (
     <View style={styles.section}>
       <View style={styles.headerRow}>
-        <View style={styles.headerIconSlot}>
-          <Ionicons name="storefront-outline" size={20} color={ui.colors.primary} />
-        </View>
+        <Ionicons
+          name="storefront-outline"
+          size={17}
+          color={ui.colors.primary}
+          style={styles.headerIcon}
+        />
         <View style={styles.headerTextSlot}>
           <AppSectionHeader
             dense
@@ -87,20 +90,20 @@ export function PopularShopsSection() {
 
 const styles = StyleSheet.create({
   section: {
-    marginBottom: spacing.lg,
+    marginBottom: spacing.sm,
   },
   headerRow: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
+    alignItems: 'center',
     paddingHorizontal: spacing.base,
+    marginBottom: spacing.xs,
   },
-  headerIconSlot: {
-    paddingTop: 6,
-    marginRight: spacing.xs,
+  headerIcon: {
+    marginRight: spacing.sm,
   },
   headerTextSlot: {
     flex: 1,
-    marginLeft: -spacing.base,
+    minWidth: 0,
   },
   scroll: {
     marginHorizontal: -spacing.base,

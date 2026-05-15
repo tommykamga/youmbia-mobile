@@ -71,7 +71,7 @@ function ShopCardInner({ shop, variant = 'default' }: ShopCardProps) {
               style={({ pressed }) => [styles.voirBtn, pressed && styles.voirBtnPressed]}
             >
               <Text style={styles.voirBtnText}>Voir</Text>
-              <Ionicons name="chevron-forward" size={14} color={colors.primary} />
+              <Ionicons name="chevron-forward" size={12} color={colors.primary} />
             </Pressable>
           ) : null}
         </View>
@@ -80,7 +80,9 @@ function ShopCardInner({ shop, variant = 'default' }: ShopCardProps) {
           {shop.name}
         </Text>
 
-        <ProSellerBadge sellerType="pro" shop={shop} compact />
+        <View style={styles.badgesWrap}>
+          <ProSellerBadge sellerType="pro" shop={shop} compact />
+        </View>
 
         {shop.city?.trim() ? (
           <View style={styles.metaRow}>
@@ -109,7 +111,16 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     padding: 0,
     marginRight: SHOP_CARD_RAIL_MARGIN_END,
-    borderRadius: radius.xl,
+    borderRadius: radius.lg,
+    borderColor: colors.borderLight,
+    ...Platform.select({
+      ios: {
+        shadowOpacity: 0.04,
+        shadowRadius: 5,
+      },
+      android: { elevation: 1 },
+      default: {},
+    }),
   },
   cardCompact: {
     marginRight: spacing.sm,
@@ -119,12 +130,12 @@ const styles = StyleSheet.create({
     opacity: 0.94,
   },
   banner: {
-    height: 72,
+    height: 50,
     backgroundColor: colors.surfaceSubtle,
     overflow: 'hidden',
   },
   bannerCompact: {
-    height: 56,
+    height: 40,
   },
   bannerImage: {
     width: '100%',
@@ -132,45 +143,45 @@ const styles = StyleSheet.create({
   },
   bannerFallback: {
     flex: 1,
-    backgroundColor: 'rgba(22, 163, 74, 0.1)',
+    backgroundColor: 'rgba(22, 163, 74, 0.07)',
   },
   bannerOverlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(15, 23, 42, 0.05)',
+    backgroundColor: 'rgba(15, 23, 42, 0.035)',
   },
   body: {
     paddingHorizontal: spacing.sm,
-    paddingTop: spacing.sm,
-    paddingBottom: spacing.base,
-    gap: 4,
+    paddingTop: 4,
+    paddingBottom: 4,
+    gap: 2,
   },
   bodyCompact: {
-    paddingBottom: spacing.sm,
+    paddingBottom: 4,
   },
   logoRow: {
     flexDirection: 'row',
-    alignItems: 'flex-end',
+    alignItems: 'center',
     justifyContent: 'space-between',
-    marginTop: -22,
+    marginTop: -16,
   },
   logo: {
-    width: 44,
-    height: 44,
-    borderRadius: radius.lg,
+    width: 40,
+    height: 40,
+    borderRadius: radius.md + 2,
     borderWidth: 2,
     borderColor: colors.surface,
     backgroundColor: colors.surface,
   },
   logoCompact: {
-    width: 36,
-    height: 36,
+    width: 34,
+    height: 34,
     borderRadius: radius.md,
-    marginTop: -18,
+    marginTop: -14,
   },
   logoFallback: {
-    width: 44,
-    height: 44,
-    borderRadius: radius.lg,
+    width: 40,
+    height: 40,
+    borderRadius: radius.md + 2,
     borderWidth: 2,
     borderColor: colors.surface,
     backgroundColor: 'rgba(22, 163, 74, 0.12)',
@@ -186,19 +197,24 @@ const styles = StyleSheet.create({
     ...typography.xs,
   },
   name: {
-    ...typography.base,
+    ...typography.sm,
     fontWeight: fontWeights.bold,
     color: colors.text,
-    marginTop: 2,
+    lineHeight: 18,
   },
   nameCompact: {
     ...typography.sm,
+    lineHeight: 17,
+  },
+  badgesWrap: {
+    marginTop: 0,
+    marginBottom: 0,
   },
   metaRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    marginTop: 2,
+    marginTop: 0,
   },
   metaText: {
     flex: 1,
@@ -207,36 +223,29 @@ const styles = StyleSheet.create({
   },
   listingsCount: {
     ...typography.xs,
+    lineHeight: 14,
     color: colors.textSecondary,
     fontWeight: fontWeights.medium,
-    marginTop: 2,
+    marginTop: 0,
   },
   voirBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 2,
-    paddingVertical: 4,
-    paddingHorizontal: spacing.xs,
+    gap: 1,
+    paddingVertical: 2,
+    paddingHorizontal: 8,
     borderRadius: radius.full,
-    backgroundColor: colors.surface,
+    backgroundColor: colors.surfaceSubtle,
     borderWidth: 1,
     borderColor: colors.borderLight,
-    ...Platform.select({
-      ios: {
-        shadowColor: '#0F172A',
-        shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: 0.06,
-        shadowRadius: 3,
-      },
-      android: { elevation: 1 },
-      default: {},
-    }),
+    marginTop: 0,
   },
   voirBtnPressed: {
     opacity: 0.85,
   },
   voirBtnText: {
-    ...typography.xs,
+    fontSize: 11,
+    lineHeight: 14,
     fontWeight: fontWeights.semibold,
     color: colors.primary,
   },

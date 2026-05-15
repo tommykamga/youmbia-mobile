@@ -43,7 +43,12 @@ export function VerifiedShopsSection() {
   return (
     <View style={styles.section}>
       <View style={styles.headerRow}>
-        <Ionicons name="shield-checkmark-outline" size={18} color={colors.primary} />
+        <Ionicons
+          name="shield-checkmark-outline"
+          size={16}
+          color={colors.primary}
+          style={styles.headerIcon}
+        />
         <View style={styles.headerText}>
           <AppSectionHeader dense title="Vendeurs vérifiés" subtitle="Boutiques de confiance" />
         </View>
@@ -64,17 +69,20 @@ export function VerifiedShopsSection() {
 
 const styles = StyleSheet.create({
   section: {
-    marginBottom: spacing.lg,
+    marginBottom: spacing.sm,
   },
   headerRow: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
+    alignItems: 'center',
     paddingHorizontal: spacing.base,
-    gap: spacing.xs,
+    marginBottom: spacing.xs,
+  },
+  headerIcon: {
+    marginRight: spacing.sm,
   },
   headerText: {
     flex: 1,
-    marginLeft: -spacing.base,
+    minWidth: 0,
   },
   scroll: {
     marginHorizontal: -spacing.base,

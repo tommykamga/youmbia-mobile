@@ -188,7 +188,7 @@ const styles = StyleSheet.create({
     marginTop: ui.spacing.xs,
   },
   feedIntro: {
-    marginTop: ui.spacing.sm,
+    marginTop: ui.spacing.md,
     marginBottom: ui.spacing.sm,
     paddingHorizontal: 16,
   },

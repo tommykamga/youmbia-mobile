@@ -56,20 +56,20 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
   },
   banner: {
-    height: 72,
+    height: 54,
     width: '100%',
     borderRadius: 0,
   },
   body: {
     padding: spacing.sm,
-    paddingTop: spacing.base,
+    paddingTop: spacing.xs,
     gap: spacing.xs,
   },
   logo: {
-    width: 44,
-    height: 44,
+    width: 40,
+    height: 40,
     borderRadius: radius.lg,
-    marginTop: -22,
+    marginTop: -18,
   },
   lineLg: {
     height: 14,

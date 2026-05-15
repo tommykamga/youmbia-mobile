@@ -48,13 +48,18 @@ const VARIANT_STYLES: Record<
 type SellerBadgeProps = {
   variant: SellerBadgeVariant;
   label: string;
+  /** Variante plus compacte (cartes boutique accueil). */
+  dense?: boolean;
 };
 
-export function SellerBadge({ variant, label }: SellerBadgeProps) {
+export function SellerBadge({ variant, label, dense = false }: SellerBadgeProps) {
   const style = VARIANT_STYLES[variant];
   return (
-    <View style={[styles.badge, { backgroundColor: style.bg }]}>
-      <Text style={[styles.label, { color: style.text }]} numberOfLines={1}>
+    <View style={[styles.badge, dense && styles.badgeDense, { backgroundColor: style.bg }]}>
+      <Text
+        style={[styles.label, dense && styles.labelDense, { color: style.text }]}
+        numberOfLines={1}
+      >
         {label}
       </Text>
     </View>
@@ -68,7 +73,17 @@ const styles = StyleSheet.create({
     borderRadius: radius.sm,
     alignSelf: 'flex-start',
   },
+  badgeDense: {
+    paddingVertical: 2,
+    paddingHorizontal: 6,
+    borderRadius: radius.sm - 1,
+  },
   label: {
     ...typography.label.badge,
+  },
+  labelDense: {
+    fontSize: 9,
+    lineHeight: 12,
+    letterSpacing: 0.35,
   },
 });

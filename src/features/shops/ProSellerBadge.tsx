@@ -31,8 +31,10 @@ export function ProSellerBadge({
 
   return (
     <View style={[styles.row, compact && styles.rowCompact]}>
-      {showPro ? <SellerBadge variant="pro" label="Vendeur Pro" /> : null}
-      {showVerified ? <SellerBadge variant="verifiedShop" label="Boutique vérifiée" /> : null}
+      {showPro ? <SellerBadge variant="pro" label="Vendeur Pro" dense={compact} /> : null}
+      {showVerified ? (
+        <SellerBadge variant="verifiedShop" label="Boutique vérifiée" dense={compact} />
+      ) : null}
     </View>
   );
 }
@@ -46,5 +48,6 @@ const styles = StyleSheet.create({
   },
   rowCompact: {
     marginTop: 0,
+    gap: 4,
   },
 });
