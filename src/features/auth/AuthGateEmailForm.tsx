@@ -3,7 +3,7 @@
  * Aucune logique métier — callbacks fournis par l’écran parent.
  */
 
-import React from 'react';
+import React, { type RefObject } from 'react';
 import { View, Text, StyleSheet, Pressable } from 'react-native';
 import { Link } from 'expo-router';
 import { AppButton, AppCard, Input } from '@/components';
@@ -24,6 +24,14 @@ export type AuthGateEmailFormProps = {
   disabled: boolean;
   /** Focus champ email à l’ouverture (écran gate uniquement). */
   autoFocusEmail?: boolean;
+  /** Ancres pour scroll ciblé (gate). */
+  emailFieldRef?: RefObject<View | null>;
+  passwordFieldRef?: RefObject<View | null>;
+  /** Bouton principal — scroll pour le garder au-dessus du clavier. */
+  primaryActionRef?: RefObject<View | null>;
+  /** Scroll vers le champ quand le clavier s’ouvre (gate). */
+  onEmailFocus?: () => void;
+  onPasswordFocus?: () => void;
 };
 
 export function AuthGateEmailForm({
@@ -39,6 +47,11 @@ export function AuthGateEmailForm({
   magicLoading,
   disabled,
   autoFocusEmail = false,
+  emailFieldRef,
+  passwordFieldRef,
+  primaryActionRef,
+  onEmailFocus,
+  onPasswordFocus,
 }: AuthGateEmailFormProps) {
   const busy = disabled || passwordLoading || magicLoading;
 
@@ -49,18 +62,21 @@ export function AuthGateEmailForm({
       </Text>
       <AppCard padded>
         <View style={styles.fields}>
-          <Input
-            label="Adresse email"
-            placeholder="vous@exemple.com"
-            value={email}
-            onChangeText={onChangeEmail}
-            keyboardType="email-address"
-            autoCapitalize="none"
-            autoCorrect={false}
-            editable={!busy}
-            autoFocus={autoFocusEmail}
-          />
-          <View>
+          <View ref={emailFieldRef} collapsable={false}>
+            <Input
+              label="Adresse email"
+              placeholder="vous@exemple.com"
+              value={email}
+              onChangeText={onChangeEmail}
+              keyboardType="email-address"
+              autoCapitalize="none"
+              autoCorrect={false}
+              editable={!busy}
+              autoFocus={autoFocusEmail}
+              onFocus={onEmailFocus}
+            />
+          </View>
+          <View ref={passwordFieldRef} collapsable={false}>
             <Input
               label="Mot de passe"
               placeholder="••••••••"
@@ -68,6 +84,7 @@ export function AuthGateEmailForm({
               onChangeText={onChangePassword}
               secureTextEntry
               editable={!busy}
+              onFocus={onPasswordFocus}
             />
             <Link href={resetHrefForEmail(email) as never} asChild>
               <Pressable style={styles.forgot} hitSlop={10} accessibilityRole="link">
@@ -76,15 +93,17 @@ export function AuthGateEmailForm({
             </Link>
           </View>
 
-          <AppButton
-            onPress={onSubmitPassword}
-            loading={passwordLoading}
-            disabled={busy}
-            layout="pill52"
-            style={styles.btnPrimaryMargin}
-          >
-            Se connecter
-          </AppButton>
+          <View ref={primaryActionRef} collapsable={false}>
+            <AppButton
+              onPress={onSubmitPassword}
+              loading={passwordLoading}
+              disabled={busy}
+              layout="pill52"
+              style={styles.btnPrimaryMargin}
+            >
+              Se connecter
+            </AppButton>
+          </View>
         </View>
 
         <View style={styles.separator}>

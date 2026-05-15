@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { forwardRef } from 'react';
 import {
   View,
   StyleSheet,
@@ -8,7 +8,9 @@ import {
   Platform,
   ScrollView,
 } from 'react-native';
+import type { ScrollView as ScrollViewType } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useKeyboardInset } from '@/hooks/useKeyboardInset';
 import { colors, spacing } from '@/theme';
 
 type ScreenProps = {
@@ -27,25 +29,37 @@ type ScreenProps = {
   scrollExtraBottomPadding?: number;
   /** Keyboard avoiding (useful for auth forms). */
   keyboardAvoid?: boolean;
-  /** Keyboard vertical offset (iOS). */
+  /** Keyboard vertical offset (iOS, utilisé avec KeyboardAvoidingView). */
   keyboardVerticalOffset?: number;
+  /** Header fixe au-dessus du scroll (ex. AppHeader sur gate auth). */
+  stickyHeader?: React.ReactNode;
+  /**
+   * Insets clavier natifs du ScrollView (défaut true si keyboardAvoid + scroll).
+   * Désactiver si le parent gère le scroll manuellement (ex. gate).
+   */
+  keyboardAutoInsetAdjust?: boolean;
 };
 
 /**
  * Screen – full-height container with safe area, background, optional scroll/keyboard avoid.
  * Web: equivalent to a full-viewport page with bg-[var(--background)] and padding; mobile-native safe insets.
  */
-export function Screen({
-  children,
-  noPadding,
-  safe = true,
-  style,
-  scroll = false,
-  scrollContentContainerStyle,
-  scrollExtraBottomPadding,
-  keyboardAvoid = false,
-  keyboardVerticalOffset = 0,
-}: ScreenProps) {
+export const Screen = forwardRef<ScrollViewType, ScreenProps>(function Screen(
+  {
+    children,
+    noPadding,
+    safe = true,
+    style,
+    scroll = false,
+    scrollContentContainerStyle,
+    scrollExtraBottomPadding,
+    keyboardAvoid = false,
+    keyboardVerticalOffset = 0,
+    stickyHeader,
+    keyboardAutoInsetAdjust,
+  },
+  ref
+) {
   const insets = useSafeAreaInsets();
 
   const paddingStyle = {
@@ -55,30 +69,55 @@ export function Screen({
     paddingRight: noPadding ? 0 : spacing.base,
   };
 
+  const scrollKeyboardInsets = keyboardAvoid && scroll && Platform.OS !== 'web';
+  const autoInsetAdjust =
+    keyboardAutoInsetAdjust ?? scrollKeyboardInsets;
+  const keyboardInset = useKeyboardInset(scrollKeyboardInsets);
+
+  /** Espace scrollable sous le formulaire quand le clavier est ouvert. */
+  const keyboardScrollPadding =
+    scrollKeyboardInsets && keyboardInset > 0
+      ? keyboardInset + spacing['3xl']
+      : 0;
+
+  const extraBottom =
+    (typeof scrollExtraBottomPadding === 'number' && scrollExtraBottomPadding > 0
+      ? scrollExtraBottomPadding
+      : 0) + keyboardScrollPadding;
+
+  const scrollView = scroll ? (
+    <ScrollView
+      ref={ref}
+      style={styles.scroll}
+      contentContainerStyle={[
+        styles.scrollContent,
+        scrollKeyboardInsets ? styles.scrollContentKeyboard : null,
+        extraBottom > 0 ? { paddingBottom: extraBottom } : null,
+        scrollContentContainerStyle,
+      ]}
+      showsVerticalScrollIndicator={false}
+      keyboardShouldPersistTaps="handled"
+      keyboardDismissMode={scrollKeyboardInsets ? 'interactive' : undefined}
+      automaticallyAdjustKeyboardInsets={scrollKeyboardInsets && autoInsetAdjust}
+      contentInsetAdjustmentBehavior={
+        scrollKeyboardInsets && autoInsetAdjust ? 'automatic' : undefined
+      }
+      nestedScrollEnabled
+    >
+      {children}
+    </ScrollView>
+  ) : (
+    children
+  );
+
   const content = (
     <View style={[styles.container, paddingStyle, style]}>
-      {scroll ? (
-        <ScrollView
-          style={styles.scroll}
-          contentContainerStyle={[
-            styles.scrollContent,
-            typeof scrollExtraBottomPadding === 'number' && scrollExtraBottomPadding > 0
-              ? { paddingBottom: scrollExtraBottomPadding }
-              : null,
-            scrollContentContainerStyle,
-          ]}
-          showsVerticalScrollIndicator={false}
-          keyboardShouldPersistTaps="handled"
-        >
-          {children}
-        </ScrollView>
-      ) : (
-        children
-      )}
+      {stickyHeader}
+      {scrollView}
     </View>
   );
 
-  if (keyboardAvoid) {
+  if (keyboardAvoid && !scroll) {
     return (
       <KeyboardAvoidingView
         style={styles.keyboardView}
@@ -91,7 +130,7 @@ export function Screen({
   }
 
   return content;
-}
+});
 
 const styles = StyleSheet.create({
   container: {
@@ -103,6 +142,9 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     flexGrow: 1,
+  },
+  scrollContentKeyboard: {
+    flexGrow: 0,
   },
   keyboardView: {
     flex: 1,

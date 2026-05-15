@@ -3,7 +3,7 @@
  * redirect validé (getSafeRedirect) prime sur successHref du contexte ; sinon successHref.
  */
 
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -11,7 +11,15 @@ import {
   LayoutAnimation,
   Platform,
   UIManager,
+  Keyboard,
+  Pressable,
+  type ScrollView,
 } from 'react-native';
+import {
+  scrollFieldIntoView,
+  scrollFieldBottomAboveKeyboard,
+} from '@/lib/scrollFieldIntoView';
+import { useKeyboardInset } from '@/hooks/useKeyboardInset';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import Animated, { Easing, FadeIn, FadeInDown } from 'react-native-reanimated';
@@ -138,38 +146,126 @@ export default function AuthGateScreen() {
     setMagicLoading,
   });
 
+  const scrollRef = useRef<ScrollView>(null);
+  const scrollContentRef = useRef<View>(null);
+  const emailFieldRef = useRef<View>(null);
+  const passwordFieldRef = useRef<View>(null);
+  const primaryActionRef = useRef<View>(null);
+  const keyboardHeight = useKeyboardInset(emailExpanded && Platform.OS !== 'web');
+
+  const scrollEmailIntoView = useCallback(() => {
+    requestAnimationFrame(() => {
+      scrollFieldIntoView(
+        scrollRef,
+        scrollContentRef,
+        emailFieldRef,
+        24,
+        keyboardHeight
+      );
+    });
+  }, [keyboardHeight]);
+
+  const scrollPasswordIntoView = useCallback(() => {
+    requestAnimationFrame(() => {
+      scrollFieldIntoView(
+        scrollRef,
+        scrollContentRef,
+        passwordFieldRef,
+        24,
+        keyboardHeight
+      );
+    });
+  }, [keyboardHeight]);
+
+  const headerScrollOffset = insets.top + 56 + 72;
+
+  const revealPrimaryAction = useCallback(
+    (kbHeight: number) => {
+      requestAnimationFrame(() => {
+        scrollFieldBottomAboveKeyboard(
+          scrollRef,
+          scrollContentRef,
+          primaryActionRef,
+          kbHeight,
+          20,
+          headerScrollOffset
+        );
+      });
+    },
+    [headerScrollOffset]
+  );
+
   const openEmailSection = useCallback(() => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     setEmailExpanded(true);
     clearMessages();
   }, [clearMessages]);
 
-  return (
-    <Screen scroll keyboardAvoid safe={false} noPadding>
-      <AppHeader title={navTitle} showBack noBorder titleStyle={styles.headerNavTitle} />
+  const collapseEmailSection = useCallback(() => {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setEmailExpanded(false);
+    clearMessages();
+    Keyboard.dismiss();
+  }, [clearMessages]);
 
+  useEffect(() => {
+    if (!emailExpanded || Platform.OS === 'web') return;
+    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const sub = Keyboard.addListener(showEvent, (event) => {
+      revealPrimaryAction(event.endCoordinates.height);
+    });
+    return () => sub.remove();
+  }, [emailExpanded, revealPrimaryAction]);
+
+  const stickyHeader = (
+    <AppHeader title={navTitle} showBack noBorder titleStyle={styles.headerNavTitle} />
+  );
+
+  return (
+    <Screen
+      ref={scrollRef}
+      scroll
+      keyboardAvoid
+      safe={false}
+      noPadding
+      stickyHeader={stickyHeader}
+      keyboardAutoInsetAdjust={false}
+    >
       <View
+        ref={scrollContentRef}
         style={[
           styles.inner,
-          { paddingBottom: insets.bottom + spacing['3xl'], paddingHorizontal: spacing.lg },
+          {
+            paddingBottom:
+              keyboardHeight > 0 ? spacing.lg : insets.bottom + spacing['3xl'],
+            paddingHorizontal: spacing.lg,
+          },
         ]}
       >
-        <Animated.View entering={FadeIn.duration(380)} style={styles.hero}>
-          <View style={styles.logoHalo}>
-            <AppLogo variant="auth" style={styles.logo} />
-          </View>
-          <View style={styles.headline}>
-            <Text style={styles.title}>{gateConfig.title}</Text>
-            <Text style={styles.subtitle}>{gateConfig.subtitle}</Text>
-          </View>
-        </Animated.View>
+        {!emailExpanded ? (
+          <>
+            <Animated.View entering={FadeIn.duration(380)} style={styles.hero}>
+              <View style={styles.logoHalo}>
+                <AppLogo variant="auth" style={styles.logo} />
+              </View>
+              <View style={styles.headline}>
+                <Text style={styles.title}>{gateConfig.title}</Text>
+                <Text style={styles.subtitle}>{gateConfig.subtitle}</Text>
+              </View>
+            </Animated.View>
 
-        <View style={styles.reassurance} accessibilityRole="text">
-          <Ionicons name="shield-checkmark-outline" size={16} color={ui.colors.textMuted} />
-          <Text style={styles.reassuranceText}>
-            Connexion sécurisée • Aucun spam • Accès instantané
-          </Text>
-        </View>
+            <View style={styles.reassurance} accessibilityRole="text">
+              <Ionicons name="shield-checkmark-outline" size={16} color={ui.colors.textMuted} />
+              <Text style={styles.reassuranceText}>
+                Connexion sécurisée • Aucun spam • Accès instantané
+              </Text>
+            </View>
+          </>
+        ) : (
+          <View style={styles.emailModeHeadline}>
+            <Text style={styles.emailModeTitle}>{gateConfig.title}</Text>
+          </View>
+        )}
 
         {error ? (
           <View style={styles.alertError} accessibilityRole="alert">
@@ -189,30 +285,29 @@ export default function AuthGateScreen() {
           </View>
         ) : null}
 
-        <AppCard
-          padded
-          style={[styles.ctaSurfaceFlat, emailExpanded ? styles.ctaSurfaceWhenEmailOpen : undefined]}
-        >
-          <AppButton
-            onPress={handleGoogle}
-            loading={googleLoading}
-            disabled={anyLoading}
-            layout="pill52"
-            leftIcon={<Ionicons name="logo-google" size={22} color={ui.colors.surface} />}
-          >
-            {gateConfig.primaryCtaLabel}
-          </AppButton>
+        {!emailExpanded ? (
+          <AppCard padded style={styles.ctaSurfaceFlat}>
+            <AppButton
+              onPress={handleGoogle}
+              loading={googleLoading}
+              disabled={anyLoading}
+              layout="pill52"
+              leftIcon={<Ionicons name="logo-google" size={22} color={ui.colors.surface} />}
+            >
+              {gateConfig.primaryCtaLabel}
+            </AppButton>
 
-          <AppButton
-            variant="outline"
-            onPress={openEmailSection}
-            disabled={anyLoading}
-            layout="pillMutedOutline52"
-            leftIcon={<Ionicons name="mail-outline" size={20} color={ui.colors.primary} />}
-          >
-            {gateConfig.secondaryCtaLabel}
-          </AppButton>
-        </AppCard>
+            <AppButton
+              variant="outline"
+              onPress={openEmailSection}
+              disabled={anyLoading}
+              layout="pillMutedOutline52"
+              leftIcon={<Ionicons name="mail-outline" size={20} color={ui.colors.primary} />}
+            >
+              {gateConfig.secondaryCtaLabel}
+            </AppButton>
+          </AppCard>
+        ) : null}
 
         {emailExpanded ? (
           <Animated.View
@@ -222,9 +317,23 @@ export default function AuthGateScreen() {
             style={styles.emailPanel}
             accessibilityLabel="Connexion par email"
           >
+            <Pressable
+              onPress={collapseEmailSection}
+              hitSlop={12}
+              accessibilityRole="button"
+              accessibilityLabel="Autres options de connexion"
+              style={styles.backToOptions}
+            >
+              <Ionicons name="chevron-back" size={18} color={ui.colors.primary} />
+              <Text style={styles.backToOptionsText}>Autres options de connexion</Text>
+            </Pressable>
+
             <AuthGateEmailForm
               email={email}
               password={password}
+              emailFieldRef={emailFieldRef}
+              passwordFieldRef={passwordFieldRef}
+              primaryActionRef={primaryActionRef}
               onChangeEmail={(t) => {
                 setEmail(t);
                 clearMessages();
@@ -241,6 +350,13 @@ export default function AuthGateScreen() {
               magicLoading={magicLoading}
               disabled={googleLoading}
               autoFocusEmail
+              onEmailFocus={scrollEmailIntoView}
+              onPasswordFocus={() => {
+                scrollPasswordIntoView();
+                if (keyboardHeight > 0) {
+                  revealPrimaryAction(keyboardHeight);
+                }
+              }}
             />
           </Animated.View>
         ) : null}
@@ -319,8 +435,27 @@ const styles = StyleSheet.create({
     letterSpacing: 0.12,
     flexShrink: 1,
   },
-  ctaSurfaceWhenEmailOpen: {
-    opacity: 0.94,
+  emailModeHeadline: {
+    paddingTop: ui.spacing.xs,
+    paddingBottom: ui.spacing.xs,
+  },
+  emailModeTitle: {
+    ...ui.typography.h2,
+    textAlign: 'center',
+    letterSpacing: -0.3,
+  },
+  backToOptions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    gap: ui.spacing.xs,
+    marginBottom: ui.spacing.sm,
+    paddingVertical: ui.spacing.xs,
+  },
+  backToOptionsText: {
+    ...ui.typography.bodySmall,
+    color: ui.colors.primary,
+    fontWeight: '600',
   },
   ctaSurfaceFlat: {
     backgroundColor: 'transparent',

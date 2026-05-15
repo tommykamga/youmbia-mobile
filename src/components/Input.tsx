@@ -11,8 +11,13 @@ import {
   StyleSheet,
   TextInputProps,
   ViewStyle,
+  Platform,
 } from 'react-native';
 import { colors, spacing, radius, typography, fontWeights } from '@/theme';
+
+/** Hauteur tactile alignée sur les CTA pill52. */
+const INPUT_MIN_HEIGHT = 52;
+const INPUT_FONT_SIZE = typography.base.fontSize;
 
 type InputProps = TextInputProps & {
   label?: string;
@@ -33,15 +38,15 @@ export function Input({
       {label ? (
         <Text style={styles.label}>{label}</Text>
       ) : null}
-      <TextInput
-        placeholderTextColor={placeholderTextColor}
-        style={[
-          styles.input,
-          error ? styles.inputError : undefined,
-          style,
-        ]}
-        {...rest}
-      />
+      <View style={[styles.inputShell, error ? styles.inputShellError : undefined]}>
+        <TextInput
+          placeholderTextColor={placeholderTextColor}
+          style={[styles.input, style]}
+          textAlignVertical="center"
+          {...(Platform.OS === 'android' ? { includeFontPadding: false } : null)}
+          {...rest}
+        />
+      </View>
       {error ? (
         <Text style={styles.error}>{error}</Text>
       ) : null}
@@ -59,18 +64,28 @@ const styles = StyleSheet.create({
     color: colors.text,
     marginBottom: spacing.xs,
   },
-  input: {
+  inputShell: {
+    minHeight: INPUT_MIN_HEIGHT,
+    justifyContent: 'center',
     backgroundColor: colors.surface,
     borderWidth: 1,
     borderColor: colors.border,
     borderRadius: radius.lg,
     paddingHorizontal: spacing.base,
-    paddingVertical: spacing.md,
-    ...typography.base,
-    color: colors.text,
   },
-  inputError: {
+  inputShellError: {
     borderColor: colors.error,
+  },
+  input: {
+    width: '100%',
+    fontSize: INPUT_FONT_SIZE,
+    /** lineHeight proche de fontSize : évite le rognage bas sur iOS TextInput. */
+    lineHeight: Platform.select({ ios: 20, android: 22, default: 24 }),
+    color: colors.text,
+    paddingVertical: 0,
+    paddingHorizontal: 0,
+    margin: 0,
+    ...(Platform.OS === 'ios' ? { height: 22 } : { minHeight: 22 }),
   },
   error: {
     ...typography.sm,
