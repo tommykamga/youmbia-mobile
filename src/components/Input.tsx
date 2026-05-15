@@ -31,18 +31,28 @@ export function Input({
   containerStyle,
   placeholderTextColor = colors.textMuted,
   style,
+  multiline,
   ...rest
 }: InputProps) {
+  const isMultiline = multiline === true;
+
   return (
     <View style={[styles.container, containerStyle]}>
       {label ? (
         <Text style={styles.label}>{label}</Text>
       ) : null}
-      <View style={[styles.inputShell, error ? styles.inputShellError : undefined]}>
+      <View
+        style={[
+          styles.inputShell,
+          isMultiline && styles.inputShellMultiline,
+          error ? styles.inputShellError : undefined,
+        ]}
+      >
         <TextInput
           placeholderTextColor={placeholderTextColor}
-          style={[styles.input, style]}
-          textAlignVertical="center"
+          style={[styles.input, isMultiline && styles.inputMultiline, style]}
+          textAlignVertical={isMultiline ? 'top' : 'center'}
+          multiline={multiline}
           {...(Platform.OS === 'android' ? { includeFontPadding: false } : null)}
           {...rest}
         />
@@ -76,6 +86,13 @@ const styles = StyleSheet.create({
   inputShellError: {
     borderColor: colors.error,
   },
+  inputShellMultiline: {
+    minHeight: 96,
+    justifyContent: 'flex-start',
+    alignItems: 'stretch',
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.sm,
+  },
   input: {
     width: '100%',
     fontSize: INPUT_FONT_SIZE,
@@ -86,6 +103,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 0,
     margin: 0,
     ...(Platform.OS === 'ios' ? { height: 22 } : { minHeight: 22 }),
+  },
+  inputMultiline: {
+    minHeight: 72,
+    lineHeight: Platform.select({ ios: 20, android: 22, default: 22 }),
+    paddingTop: Platform.OS === 'ios' ? 2 : 4,
+    paddingBottom: 2,
+    ...(Platform.OS === 'ios' ? { height: undefined } : null),
   },
   error: {
     ...typography.sm,

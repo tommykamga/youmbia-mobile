@@ -1,36 +1,44 @@
 import { supabase } from '@/lib/supabase';
 import { resolveShopMediaUrls } from '@/lib/shopMediaUrl';
-import type { PublicShop } from '@/types/shops';
+import type { PublicShop, SellerType } from '@/types/shops';
 import { SHOP_PUBLIC_SELECT } from './shopSelect';
 
-export type GetSellerShopResult =
-  | { data: PublicShop; error: null }
-  | { data: null; error: null }
+export type MySellerProStatus = {
+  sellerType: SellerType;
+  shop: PublicShop | null;
+};
+
+export type GetMySellerProStatusResult =
+  | { data: MySellerProStatus; error: null }
   | { data: null; error: { message: string } };
 
-/**
- * Boutique liée à un profil vendeur (`profiles.shop_id`).
- * Retourne null sans erreur si le vendeur est particulier ou sans boutique.
- */
-export async function getSellerShop(profileId: string): Promise<GetSellerShopResult> {
-  if (!profileId?.trim()) {
-    return { data: null, error: null };
+export async function getMySellerProStatus(): Promise<GetMySellerProStatusResult> {
+  const {
+    data: { user },
+    error: userError,
+  } = await supabase.auth.getUser();
+
+  if (userError || !user) {
+    return { data: null, error: { message: 'Non connecté' } };
   }
 
   try {
     const { data: profile, error: profileError } = await supabase
       .from('profiles')
-      .select('shop_id, seller_type')
-      .eq('id', profileId)
+      .select('seller_type, shop_id')
+      .eq('id', user.id)
       .maybeSingle();
 
     if (profileError) {
       return { data: null, error: { message: profileError.message } };
     }
 
+    const sellerTypeRaw = (profile as { seller_type?: string | null } | null)?.seller_type;
+    const sellerType: SellerType = sellerTypeRaw === 'pro' ? 'pro' : 'individual';
     const shopId = (profile as { shop_id?: string | null } | null)?.shop_id ?? null;
+
     if (!shopId) {
-      return { data: null, error: null };
+      return { data: { sellerType, shop: null }, error: null };
     }
 
     const { data: shop, error: shopError } = await supabase
@@ -43,11 +51,11 @@ export async function getSellerShop(profileId: string): Promise<GetSellerShopRes
       return { data: null, error: { message: shopError.message } };
     }
     if (!shop) {
-      return { data: null, error: null };
+      return { data: { sellerType, shop: null }, error: null };
     }
 
     const resolved = await resolveShopMediaUrls(shop as PublicShop);
-    return { data: resolved, error: null };
+    return { data: { sellerType, shop: resolved }, error: null };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error ?? '');
     return { data: null, error: { message } };

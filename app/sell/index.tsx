@@ -53,6 +53,7 @@ import { buildListingDynamicAttributeRows } from '@/lib/listingDynamicAttributes
 import { DynamicCategoryAttributesFields } from '@/features/sell/DynamicCategoryAttributesFields';
 import { colors, spacing, typography, fontWeights, radius } from '@/theme';
 import { createListing, uploadListingImages, saveListingDynamicAttributeValues } from '@/services/listings';
+import { getSellerShop } from '@/services/shops';
 import { getSession } from '@/services/auth';
 import {
   checkPhoneUniquenessForPublish,
@@ -272,6 +273,8 @@ export default function SellScreen() {
       const profileRes = await getCurrentProfile();
       const any = (profileRes.data ?? null) as unknown as Record<string, unknown> | null;
       setProfileAny(any);
+      const shopRes = await getSellerShop(session.user.id);
+      setPublishShopId(shopRes.data?.id ?? null);
       setShowPrequal(!isSellerProfileComplete(any));
       setPrequalStatus('ready');
     } catch {

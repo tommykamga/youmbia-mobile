@@ -29,6 +29,7 @@ import {
   type MyListing,
 } from '@/services/listings';
 import { shareListing } from '@/lib/shareListing';
+import { ProSellerActivationCard } from '@/features/shops';
 import { spacing, colors, typography, fontWeights, radius } from '@/theme';
 
 type State =
@@ -582,6 +583,15 @@ export default function AccountListingsScreen() {
   );
   const itemSeparator = useCallback(() => <View style={styles.separator} />, []);
 
+  const listHeader = useCallback(
+    () => (
+      <View style={styles.listHeaderPro}>
+        <ProSellerActivationCard variant="listings" />
+      </View>
+    ),
+    []
+  );
+
   return (
     <Screen safe={false}>
       <AppHeader title="Mes annonces" showBack density="compact" />
@@ -633,6 +643,7 @@ export default function AccountListingsScreen() {
           data={state.data}
           keyExtractor={keyExtractor}
           renderItem={renderItem}
+          ListHeaderComponent={listHeader}
           ItemSeparatorComponent={itemSeparator}
           contentContainerStyle={styles.listContent}
           showsVerticalScrollIndicator={false}
@@ -660,6 +671,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: spacing.xl,
     transform: [{ translateY: -24 }],
+  },
+  listHeaderPro: {
+    marginBottom: spacing.sm,
   },
   listContent: {
     paddingHorizontal: spacing.base,

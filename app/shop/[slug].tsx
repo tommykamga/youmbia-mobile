@@ -10,9 +10,11 @@ import {
   ScrollView,
   Image,
   Linking,
+  Alert,
   useWindowDimensions,
   RefreshControl,
   Platform,
+  Pressable,
 } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -20,6 +22,7 @@ import { Screen, AppHeader, EmptyState, Button } from '@/components';
 import { ListingCard } from '@/features/listings';
 import { ProSellerBadge, ShopScreenSkeleton } from '@/features/shops';
 import { getShopBySlug, getShopListings } from '@/services/shops';
+import { shareShop } from '@/lib/shareShop';
 import { normalizePhoneForWhatsApp, openSellerPhoneCallRaw } from '@/lib/sellerContact';
 import { getShopInitials } from '@/lib/shopSeller';
 import type { PublicShop } from '@/types/shops';
@@ -42,6 +45,7 @@ export default function ShopScreen() {
   }, [screenWidth]);
   const [state, setState] = useState<ShopScreenState>({ status: 'loading' });
   const [refreshing, setRefreshing] = useState(false);
+  const [sharing, setSharing] = useState(false);
 
   const loadShop = useCallback(async (isRefresh = false) => {
     if (!slug?.trim()) {
@@ -106,6 +110,23 @@ export default function ShopScreen() {
     await openSellerPhoneCallRaw(state.shop.phone);
   }, [state]);
 
+  const handleShareShop = useCallback(async () => {
+    if (state.status !== 'ready' || sharing) return;
+    setSharing(true);
+    try {
+      const result = await shareShop({
+        slug: state.shop.slug,
+        name: state.shop.name,
+        city: state.shop.city,
+      });
+      if (!result.success && result.error) {
+        Alert.alert('Partage indisponible', result.error);
+      }
+    } finally {
+      setSharing(false);
+    }
+  }, [sharing, state]);
+
   if (state.status === 'loading') {
     return (
       <Screen scroll={false}>
@@ -133,7 +154,22 @@ export default function ShopScreen() {
 
   return (
     <Screen scroll={false}>
-      <AppHeader title={shop.name} showBack density="compact" />
+      <AppHeader
+        title={shop.name}
+        showBack
+        density="compact"
+        right={
+          <Pressable
+            onPress={() => void handleShareShop()}
+            disabled={sharing}
+            hitSlop={10}
+            accessibilityRole="button"
+            accessibilityLabel="Partager la boutique"
+          >
+            <Ionicons name="share-outline" size={22} color={colors.text} />
+          </Pressable>
+        }
+      />
       <ScrollView
         style={styles.scroll}
         contentContainerStyle={styles.scrollContent}

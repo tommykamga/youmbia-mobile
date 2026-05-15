@@ -4,3 +4,4 @@ export { PopularShopsSection } from './PopularShopsSection';
 export { VerifiedShopsSection } from './VerifiedShopsSection';
 export { ShopsRailSkeleton } from './ShopsRailSkeleton';
 export { ShopScreenSkeleton } from './ShopScreenSkeleton';
+export { ProSellerActivationCard } from './ProSellerActivationCard';

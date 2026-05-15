@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabase';
+import { resolveShopsMediaUrls } from '@/lib/shopMediaUrl';
 import type { PublicShop } from '@/types/shops';
 import { SHOP_PUBLIC_SELECT } from './shopSelect';
 
@@ -98,7 +99,12 @@ export async function getPopularShops(
     }
 
     const sorted = sortPopularShops([...merged.values()]).slice(0, safeLimit);
-    return { data: sorted, error: null };
+    const withMedia = await resolveShopsMediaUrls(sorted);
+    const data: PopularShop[] = withMedia.map((shop, index) => ({
+      ...shop,
+      active_listings_count: sorted[index]?.active_listings_count ?? 0,
+    }));
+    return { data, error: null };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error ?? '');
     return { data: null, error: { message } };

@@ -9,3 +9,7 @@ export type { GetFeaturedShopsResult } from './getFeaturedShops';
 export { getPopularShops } from './getPopularShops';
 export type { PopularShop, GetPopularShopsResult } from './getPopularShops';
 export { getShopSummaryById } from './getShopSummaryById';
+export { createProShop } from './createProShop';
+export type { CreateProShopPayload, CreateProShopResult } from './createProShop';
+export { getMySellerProStatus } from './getMySellerProStatus';
+export type { MySellerProStatus, GetMySellerProStatusResult } from './getMySellerProStatus';

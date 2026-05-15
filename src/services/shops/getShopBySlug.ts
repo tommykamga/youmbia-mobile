@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabase';
+import { resolveShopMediaUrls } from '@/lib/shopMediaUrl';
 import type { PublicShop } from '@/types/shops';
 import { SHOP_PUBLIC_SELECT } from './shopSelect';
 
@@ -26,7 +27,8 @@ export async function getShopBySlug(slug: string): Promise<GetShopBySlugResult> 
       return { data: null, error: { message: 'Boutique introuvable' } };
     }
 
-    return { data: data as PublicShop, error: null };
+    const resolved = await resolveShopMediaUrls(data as PublicShop);
+    return { data: resolved, error: null };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error ?? '');
     return { data: null, error: { message } };

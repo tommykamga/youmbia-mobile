@@ -11,6 +11,7 @@ import Constants from 'expo-constants';
 import { lightCacheKeys, lightCacheRead } from '@/lib/lightCache';
 import { resolveSingleAvatarUrl } from '@/lib/avatarImageUrl';
 import { Image as ExpoImage } from 'expo-image';
+import { ProSellerActivationCard } from '@/features/shops';
 
 const APP_VERSION_LABEL =
   Constants.expoConfig?.version ?? Constants.nativeAppVersion ?? '—';
@@ -211,6 +212,8 @@ export default function AccountScreen() {
             </Pressable>
           </Animated.View>
         </View>
+
+        <ProSellerActivationCard variant="account" />
 
         {/* Sections */}
         {SECTIONS.map((section, idx) => (
