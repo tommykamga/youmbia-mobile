@@ -11,12 +11,14 @@ import {
   Image,
   Linking,
   useWindowDimensions,
+  RefreshControl,
+  Platform,
 } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { Screen, AppHeader, Loader, EmptyState, Button } from '@/components';
+import { Screen, AppHeader, EmptyState, Button } from '@/components';
 import { ListingCard } from '@/features/listings';
-import { ProSellerBadge } from '@/features/shops/ProSellerBadge';
+import { ProSellerBadge, ShopScreenSkeleton } from '@/features/shops';
 import { getShopBySlug, getShopListings } from '@/services/shops';
 import { normalizePhoneForWhatsApp, openSellerPhoneCallRaw } from '@/lib/sellerContact';
 import { getShopInitials } from '@/lib/shopSeller';
@@ -39,13 +41,16 @@ export default function ShopScreen() {
     return Math.floor((screenWidth - horizontalPadding - gap) / 2);
   }, [screenWidth]);
   const [state, setState] = useState<ShopScreenState>({ status: 'loading' });
+  const [refreshing, setRefreshing] = useState(false);
 
-  const loadShop = useCallback(async () => {
+  const loadShop = useCallback(async (isRefresh = false) => {
     if (!slug?.trim()) {
       setState({ status: 'error', message: 'Boutique introuvable' });
       return;
     }
-    setState({ status: 'loading' });
+    if (!isRefresh) {
+      setState({ status: 'loading' });
+    }
     const shopResult = await getShopBySlug(slug);
     if (shopResult.error || !shopResult.data) {
       setState({
@@ -68,6 +73,15 @@ export default function ShopScreen() {
 
   useEffect(() => {
     void loadShop();
+  }, [loadShop]);
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      await loadShop(true);
+    } finally {
+      setRefreshing(false);
+    }
   }, [loadShop]);
 
   const handleWhatsApp = useCallback(async () => {
@@ -94,9 +108,9 @@ export default function ShopScreen() {
 
   if (state.status === 'loading') {
     return (
-      <Screen>
-        <AppHeader title="Boutique" showBack />
-        <Loader />
+      <Screen scroll={false}>
+        <AppHeader title="Boutique" showBack density="compact" />
+        <ShopScreenSkeleton />
       </Screen>
     );
   }
@@ -124,6 +138,13 @@ export default function ShopScreen() {
         style={styles.scroll}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={() => void onRefresh()}
+            tintColor={colors.primary}
+          />
+        }
       >
         <View style={styles.banner}>
           {shop.banner_url ? (
@@ -150,7 +171,15 @@ export default function ShopScreen() {
                 <Text style={styles.cityText}>{shop.city.trim()}</Text>
               </View>
             ) : null}
-            <ProSellerBadge sellerType="pro" shop={shop} />
+            <View style={styles.badgesRow}>
+              <ProSellerBadge sellerType="pro" shop={shop} />
+              {shop.is_featured ? (
+                <View style={styles.featuredChip}>
+                  <Ionicons name="star" size={12} color={colors.primary} />
+                  <Text style={styles.featuredChipText}>À la une</Text>
+                </View>
+              ) : null}
+            </View>
           </View>
         </View>
 
@@ -159,34 +188,40 @@ export default function ShopScreen() {
         ) : null}
 
         {(hasWhatsApp || hasPhone) && (
-          <View style={styles.contactRow}>
-            {hasWhatsApp ? (
-              <Button
-                size="md"
-                onPress={() => void handleWhatsApp()}
-                leftIcon={<Ionicons name="logo-whatsapp" size={18} color={colors.surface} />}
-                style={styles.contactBtn}
-              >
-                WhatsApp
-              </Button>
-            ) : null}
-            {hasPhone ? (
-              <Button
-                variant="outline"
-                size="md"
-                onPress={() => void handleCall()}
-                leftIcon={<Ionicons name="call-outline" size={18} color={colors.primary} />}
-                style={styles.contactBtn}
-              >
-                Appeler
-              </Button>
-            ) : null}
+          <View style={styles.contactCard}>
+            <Text style={styles.contactTitle}>Contacter la boutique</Text>
+            <View style={styles.contactRow}>
+              {hasWhatsApp ? (
+                <Button
+                  size="md"
+                  onPress={() => void handleWhatsApp()}
+                  leftIcon={<Ionicons name="logo-whatsapp" size={18} color={colors.surface} />}
+                  style={styles.contactBtn}
+                >
+                  WhatsApp
+                </Button>
+              ) : null}
+              {hasPhone ? (
+                <Button
+                  variant="outline"
+                  size="md"
+                  onPress={() => void handleCall()}
+                  leftIcon={<Ionicons name="call-outline" size={18} color={colors.primary} />}
+                  style={styles.contactBtn}
+                >
+                  Appeler
+                </Button>
+              ) : null}
+            </View>
           </View>
         )}
 
-        <Text style={styles.sectionTitle}>
-          Annonces{listings.length > 0 ? ` (${listings.length})` : ''}
-        </Text>
+        <View style={styles.listingsHeader}>
+          <Text style={styles.sectionTitle}>Annonces</Text>
+          <Text style={styles.sectionCount}>
+            {listings.length > 0 ? `${listings.length} active${listings.length > 1 ? 's' : ''}` : 'Aucune'}
+          </Text>
+        </View>
 
         {listings.length === 0 ? (
           <EmptyState
@@ -220,7 +255,7 @@ const styles = StyleSheet.create({
     paddingBottom: spacing['3xl'],
   },
   banner: {
-    height: 140,
+    height: 148,
     backgroundColor: colors.surfaceSubtle,
     overflow: 'hidden',
   },
@@ -230,30 +265,40 @@ const styles = StyleSheet.create({
   },
   bannerFallback: {
     flex: 1,
-    backgroundColor: 'rgba(22, 163, 74, 0.08)',
+    backgroundColor: 'rgba(22, 163, 74, 0.09)',
   },
   bannerOverlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(15, 23, 42, 0.06)',
+    backgroundColor: 'rgba(15, 23, 42, 0.07)',
   },
   profileRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     gap: spacing.base,
     paddingHorizontal: spacing.base,
-    marginTop: -28,
+    marginTop: -32,
   },
   logo: {
-    width: 72,
-    height: 72,
+    width: 76,
+    height: 76,
     borderRadius: radius.xl,
     borderWidth: 3,
     borderColor: colors.surface,
     backgroundColor: colors.surface,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#0F172A',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.08,
+        shadowRadius: 6,
+      },
+      android: { elevation: 3 },
+      default: {},
+    }),
   },
   logoFallback: {
-    width: 72,
-    height: 72,
+    width: 76,
+    height: 76,
     borderRadius: radius.xl,
     borderWidth: 3,
     borderColor: colors.surface,
@@ -268,13 +313,14 @@ const styles = StyleSheet.create({
   },
   profileText: {
     flex: 1,
-    paddingTop: spacing.lg + 4,
-    gap: 4,
+    paddingTop: spacing.lg + 6,
+    gap: 6,
   },
   shopName: {
     ...typography.xl,
     fontWeight: fontWeights.bold,
     color: colors.text,
+    letterSpacing: -0.3,
   },
   cityRow: {
     flexDirection: 'row',
@@ -285,6 +331,28 @@ const styles = StyleSheet.create({
     ...typography.sm,
     color: colors.textMuted,
   },
+  badgesRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    gap: spacing.xs,
+  },
+  featuredChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 4,
+    borderRadius: radius.full,
+    backgroundColor: colors.primary + '12',
+    borderWidth: 1,
+    borderColor: colors.primary + '33',
+  },
+  featuredChipText: {
+    ...typography.xs,
+    fontWeight: fontWeights.semibold,
+    color: colors.primary,
+  },
   description: {
     ...typography.base,
     color: colors.textSecondary,
@@ -292,24 +360,48 @@ const styles = StyleSheet.create({
     marginTop: spacing.base,
     lineHeight: 22,
   },
+  contactCard: {
+    marginHorizontal: spacing.base,
+    marginTop: spacing.base,
+    padding: spacing.base,
+    borderRadius: radius.xl,
+    borderWidth: 1,
+    borderColor: colors.borderLight,
+    backgroundColor: colors.surface,
+    gap: spacing.sm,
+  },
+  contactTitle: {
+    ...typography.sm,
+    fontWeight: fontWeights.semibold,
+    color: colors.text,
+  },
   contactRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: spacing.sm,
-    paddingHorizontal: spacing.base,
-    marginTop: spacing.base,
   },
   contactBtn: {
     flexGrow: 1,
     minWidth: 140,
   },
-  sectionTitle: {
-    ...typography.lg,
-    fontWeight: fontWeights.semibold,
-    color: colors.text,
+  listingsHeader: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    justifyContent: 'space-between',
     paddingHorizontal: spacing.base,
     marginTop: spacing.lg,
     marginBottom: spacing.sm,
+    gap: spacing.sm,
+  },
+  sectionTitle: {
+    ...typography.lg,
+    fontWeight: fontWeights.bold,
+    color: colors.text,
+  },
+  sectionCount: {
+    ...typography.sm,
+    color: colors.textMuted,
+    fontWeight: fontWeights.medium,
   },
   grid: {
     flexDirection: 'row',

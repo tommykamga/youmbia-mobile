@@ -1,6 +1,7 @@
 import { supabase } from '@/lib/supabase';
 import { getSignedUrlsMap, listingStoragePathsForCardCover, mapListingCardImages } from '@/lib/listingImageUrl';
 import { normalizeListingSchemaFeatures } from '@/lib/listingSchemaFeatures';
+import { parseListingShopEmbed } from '@/lib/listingShopEmbed';
 import type { PublicListing } from '@/services/listings/getPublicListings';
 import { listingPublicListSelect } from '@/services/listings/listingListSelect';
 
@@ -25,6 +26,7 @@ type ListingRow = {
   district?: string | null;
   updated_at: string;
   shop_id?: string | null;
+  shops?: { id: string; slug: string; name: string; is_verified: boolean } | { id: string; slug: string; name: string; is_verified: boolean }[] | null;
   listing_images: ListingImageRow[] | null;
 };
 
@@ -47,6 +49,7 @@ function mapRow(row: ListingRow, signedMap: Map<string, string>): PublicListing 
     seller_id: row.user_id ?? '',
     updated_at: row.updated_at,
     shop_id: row.shop_id ?? null,
+    shop: parseListingShopEmbed(row.shops),
     ...schema,
   };
 }

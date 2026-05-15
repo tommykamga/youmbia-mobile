@@ -10,6 +10,7 @@ import { normalizeListingSchemaFeatures } from '@/lib/listingSchemaFeatures';
 import { buildRootCategoryTree } from '@/lib/marketplaceCategories';
 import { getMarketplaceCategoriesCached } from '@/services/categories';
 import type { PublicListing } from './getPublicListings';
+import { parseListingShopEmbed } from '@/lib/listingShopEmbed';
 import { listingPublicListSelect } from './listingListSelect';
 
 type ListingImageRow = {
@@ -30,6 +31,7 @@ type ListingRow = {
   views_count: number | null;
   user_id: string | null;
   shop_id?: string | null;
+  shops?: { id: string; slug: string; name: string; is_verified: boolean } | { id: string; slug: string; name: string; is_verified: boolean }[] | null;
   boosted?: boolean | null;
   urgent?: boolean | null;
   district?: string | null;
@@ -57,6 +59,7 @@ function mapRow(row: ListingRow, signedMap: Map<string, string>): PublicListing 
     seller_id: row.user_id ?? '',
     updated_at: row.updated_at,
     shop_id: row.shop_id ?? null,
+    shop: parseListingShopEmbed(row.shops),
     ...schema,
   };
 }

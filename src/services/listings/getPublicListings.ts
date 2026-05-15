@@ -7,6 +7,8 @@
 import { supabase } from '@/lib/supabase';
 import { getSignedUrlsMap, listingStoragePathsForCardCover, mapListingCardImages } from '@/lib/listingImageUrl';
 import { normalizeListingSchemaFeatures } from '@/lib/listingSchemaFeatures';
+import { parseListingShopEmbed } from '@/lib/listingShopEmbed';
+import type { ShopSummary } from '@/types/shops';
 import { listingPublicListSelect } from './listingListSelect';
 
 export type PublicListing = {
@@ -32,6 +34,8 @@ export type PublicListing = {
   updated_at: string;
   /** Boutique pro liée (optionnel). */
   shop_id?: string | null;
+  /** Résumé boutique (jointure liste, badges cartes). */
+  shop?: ShopSummary | null;
 };
 
 type ListingImageRow = {
@@ -55,6 +59,7 @@ type ListingRow = {
   district?: string | null;
   updated_at: string;
   shop_id?: string | null;
+  shops?: ShopSummary | ShopSummary[] | null;
   listing_images: ListingImageRow[] | null;
 };
 
@@ -75,6 +80,7 @@ function mapRow(row: ListingRow, signedMap: Map<string, string>): PublicListing 
     seller_id: row.user_id ?? '',
     updated_at: row.updated_at,
     shop_id: row.shop_id ?? null,
+    shop: parseListingShopEmbed(row.shops),
     ...schema,
   };
 }

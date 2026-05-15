@@ -14,12 +14,16 @@ export const LISTING_LIST_IMAGES_SELECT =
 export const LISTING_PUBLIC_LIST_CORE_SELECT =
   'id, title, price, city, category_id, boosted, urgent, district, created_at, updated_at, views_count, user_id, shop_id';
 
+/** Résumé boutique pour badges cartes (jointure FK listing → shop). */
+export const LISTING_PUBLIC_LIST_SHOP_EMBED =
+  'shops!listings_shop_id_fkey(id, slug, name, is_verified)';
+
 /** Liste publique + images ; `description` uniquement si besoin (ex. scoring recherche client). */
 export function listingPublicListSelect(includeDescription: boolean): string {
   if (includeDescription) {
-    return `${LISTING_PUBLIC_LIST_CORE_SELECT}, description, ${LISTING_LIST_IMAGES_SELECT}`;
+    return `${LISTING_PUBLIC_LIST_CORE_SELECT}, ${LISTING_PUBLIC_LIST_SHOP_EMBED}, description, ${LISTING_LIST_IMAGES_SELECT}`;
   }
-  return `${LISTING_PUBLIC_LIST_CORE_SELECT}, ${LISTING_LIST_IMAGES_SELECT}`;
+  return `${LISTING_PUBLIC_LIST_CORE_SELECT}, ${LISTING_PUBLIC_LIST_SHOP_EMBED}, ${LISTING_LIST_IMAGES_SELECT}`;
 }
 
 /** Mes annonces : `description` (badge qualité) + `status`. */

@@ -18,6 +18,7 @@ import {
   UrgentSection,
   RecentlyViewedSection,
 } from '@/features/listings';
+import { PopularShopsSection, VerifiedShopsSection } from '@/features/shops';
 import { spacing, ui } from '@/theme';
 import type { WindowSizeBucket } from '@/lib/responsiveLayout';
 import { getSession, onAuthStateChange } from '@/services/auth';
@@ -83,6 +84,9 @@ export function HomeMarketplaceFeedHeader({
     <View style={styles.headerRoot}>
       <BoostedSection onVoirToutPress={onBoostedVoirTout} />
 
+      <PopularShopsSection />
+      <VerifiedShopsSection />
+
       {showCategoryStrip ? (
         <HomeCategoryStrip
           bucket={bucket}
@@ -135,6 +139,7 @@ export function HomeMarketplaceFeedHeader({
 const styles = StyleSheet.create({
   headerRoot: {
     paddingTop: 2,
+    gap: 2,
   },
   connectedSections: {
     marginTop: 4,
@@ -183,8 +188,8 @@ const styles = StyleSheet.create({
     marginTop: ui.spacing.xs,
   },
   feedIntro: {
-    marginTop: ui.spacing.xs,
-    marginBottom: ui.spacing.xs,
+    marginTop: ui.spacing.sm,
+    marginBottom: ui.spacing.sm,
     paddingHorizontal: 16,
   },
 });

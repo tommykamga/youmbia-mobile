@@ -98,6 +98,9 @@ function listingCardPropsAreEqual(prev: ListingCardProps, next: ListingCardProps
   if (Boolean(a.urgent) !== Boolean(b.urgent)) return false;
   if (Boolean(a.price_dropped) !== Boolean(b.price_dropped)) return false;
   if (listingCardCoverImageKey(a) !== listingCardCoverImageKey(b)) return false;
+  if ((a.shop_id ?? '') !== (b.shop_id ?? '')) return false;
+  if ((a.shop?.name ?? '') !== (b.shop?.name ?? '')) return false;
+  if (Boolean(a.shop?.is_verified) !== Boolean(b.shop?.is_verified)) return false;
   const ps = (a as unknown as { status?: string | null }).status ?? null;
   const ns = (b as unknown as { status?: string | null }).status ?? null;
   if (ps !== ns) return false;
@@ -331,7 +334,19 @@ function ListingCardInner({
           {listing.title}
         </Text>
         {listing.shop_id ? (
-          <ProSellerBadge listingShopId={listing.shop_id} compact />
+          <View style={styles.shopSellerRow}>
+            <ProSellerBadge
+              listingShopId={listing.shop_id}
+              sellerType="pro"
+              shop={listing.shop}
+              compact
+            />
+            {listing.shop?.name?.trim() ? (
+              <Text style={styles.shopNameLine} numberOfLines={1} ellipsizeMode="tail">
+                {listing.shop.name.trim()}
+              </Text>
+            ) : null}
+          </View>
         ) : null}
         {metaLine ? (
           <Text
@@ -641,5 +656,20 @@ const styles = StyleSheet.create({
     fontWeight: fontWeights.normal,
     color: colors.textTertiary,
     marginTop: 2,
+  },
+  shopSellerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: spacing.xs,
+    marginBottom: 2,
+    maxWidth: '100%',
+  },
+  shopNameLine: {
+    flexShrink: 1,
+    ...typography.xs,
+    color: colors.textMuted,
+    fontWeight: fontWeights.medium,
+    maxWidth: '58%',
   },
 });

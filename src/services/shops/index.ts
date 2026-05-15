@@ -6,4 +6,6 @@ export { getSellerShop } from './getSellerShop';
 export type { GetSellerShopResult } from './getSellerShop';
 export { getFeaturedShops } from './getFeaturedShops';
 export type { GetFeaturedShopsResult } from './getFeaturedShops';
+export { getPopularShops } from './getPopularShops';
+export type { PopularShop, GetPopularShopsResult } from './getPopularShops';
 export { getShopSummaryById } from './getShopSummaryById';
