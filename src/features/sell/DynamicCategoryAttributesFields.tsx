@@ -282,6 +282,11 @@ export function DynamicCategoryAttributesFields({
 const styles = StyleSheet.create({
   wrapper: {
     marginBottom: spacing.lg,
+    padding: spacing.base,
+    borderRadius: radius.xl,
+    borderWidth: 1,
+    borderColor: colors.borderLight,
+    backgroundColor: colors.background,
   },
   sectionTitle: {
     ...typography.lg,
@@ -311,6 +316,11 @@ const styles = StyleSheet.create({
   },
   fieldBlock: {
     marginBottom: spacing.base,
+    padding: spacing.sm,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.borderLight,
+    backgroundColor: colors.surface,
   },
   label: {
     ...typography.sm,

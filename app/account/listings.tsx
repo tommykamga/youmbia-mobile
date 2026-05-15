@@ -24,6 +24,7 @@ import {
   getListingStats,
   updateListingStatus,
   updateListingUrgent,
+  buildListingDuplicateDraft,
   type ListingStats,
   type MyListing,
 } from '@/services/listings';
@@ -154,7 +155,9 @@ const MyListingRowInner = memo(function MyListingRow({
   onRemoveListing: (listingId: string) => void;
 }) {
   const router = useRouter();
-  const [pendingAction, setPendingAction] = useState<null | 'status' | 'urgent' | 'bump'>(null);
+  const [pendingAction, setPendingAction] = useState<null | 'status' | 'urgent' | 'bump' | 'duplicate'>(
+    null
+  );
   const [sharing, setSharing] = useState(false);
   const isMutating = pendingAction != null;
 
@@ -226,6 +229,18 @@ const MyListingRowInner = memo(function MyListingRow({
   const handleImproveListing = useCallback(() => {
     router.push(`/listing/${listing.id}`);
   }, [listing.id, router]);
+
+  const handleDuplicateListing = useCallback(async () => {
+    if (isMutating) return;
+    setPendingAction('duplicate');
+    const result = await buildListingDuplicateDraft(listing.id);
+    setPendingAction(null);
+    if (!result.success) {
+      Alert.alert('Duplication impossible', result.error.message);
+      return;
+    }
+    router.push('/sell');
+  }, [isMutating, listing.id, router]);
 
   const handleBumpListing = useCallback(async () => {
     if (isMutating) return;
@@ -403,6 +418,15 @@ const MyListingRowInner = memo(function MyListingRow({
             disabled={isMutating}
           >
             Modifier
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onPress={() => void handleDuplicateListing()}
+            disabled={isMutating}
+            loading={pendingAction === 'duplicate'}
+          >
+            Dupliquer l&apos;annonce
           </Button>
           <Button
             variant="ghost"

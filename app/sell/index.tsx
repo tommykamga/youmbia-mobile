@@ -2,7 +2,7 @@
  * Sell / publish listing – stack screen (dedicated route).
  * Form: title, price, city, description, images. On success shows next actions.
  */
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   View,
   Text,
@@ -31,7 +31,14 @@ import {
   getChildMarketplaceCategories,
   getRootMarketplaceCategories,
   getSellParentIcon,
+  resolveSellCategorySelection,
 } from '@/lib/marketplaceCategories';
+import { consumeListingPublishDuplicateDraft } from '@/lib/listingPublishDraft';
+import {
+  readListingPublishMemory,
+  saveListingPublishMemory,
+  getAttributeHintsForCategory,
+} from '@/lib/listingPublishMemory';
 import { useMarketplaceCategories } from '@/hooks/useMarketplaceCategories';
 import { shouldUseDynamicAttributesPilot } from '@/lib/vehicleDynamicPilot';
 import type {
@@ -166,6 +173,11 @@ export default function SellScreen() {
   const [city, setCity] = useState('');
   const [description, setDescription] = useState('');
   const [images, setImages] = useState<PickedImage[]>([]);
+  const [duplicateSourceId, setDuplicateSourceId] = useState<string | null>(null);
+  const [publishShopId, setPublishShopId] = useState<string | null>(null);
+  const [pendingDuplicateCategoryId, setPendingDuplicateCategoryId] = useState<number | null>(null);
+  const pendingDuplicateDynamicRef = useRef<Record<string, string> | null>(null);
+  const publishMemoryAppliedRef = useRef(false);
 
   const [dynamicDefs, setDynamicDefs] = useState<EffectiveCategoryAttributeDefinitionResolved[]>([]);
   const [dynamicOptionsByDef, setDynamicOptionsByDef] = useState<
@@ -239,6 +251,11 @@ export default function SellScreen() {
     setDynamicValues({});
     setDynamicLoading(false);
     setDynamicAttributesPilotActive(false);
+    setDuplicateSourceId(null);
+    setPublishShopId(null);
+    setPendingDuplicateCategoryId(null);
+    pendingDuplicateDynamicRef.current = null;
+    publishMemoryAppliedRef.current = false;
     void loadSellerPrequalProfile();
   };
 
@@ -270,6 +287,63 @@ export default function SellScreen() {
     }, [loadSellerPrequalProfile])
   );
 
+  const applyDuplicateDraft = useCallback((draft: ReturnType<typeof consumeListingPublishDuplicateDraft>) => {
+    if (!draft) return;
+    setDuplicateSourceId(draft.sourceListingId);
+    setPublishShopId(draft.shopId);
+    setTitle(draft.title);
+    setPriceStr(String(draft.price));
+    setCity(draft.city);
+    setDescription(draft.description);
+    setImages([]);
+    setPendingDuplicateCategoryId(draft.publishCategoryId);
+    pendingDuplicateDynamicRef.current = draft.dynamicValues;
+    setSubmitError(null);
+  }, []);
+
+  const applyPublishMemoryDefaults = useCallback(
+    async (categories: typeof marketplaceCategories) => {
+      if (publishMemoryAppliedRef.current || categories.length === 0) return;
+      publishMemoryAppliedRef.current = true;
+      const memory = await readListingPublishMemory();
+      setCity((prev) => prev.trim() || memory.lastCity?.trim() || '');
+      if (memory.lastParentCategoryId != null) {
+        const leafId = memory.lastChildCategoryId ?? memory.lastParentCategoryId;
+        const { parentId, childId } = resolveSellCategorySelection(categories, leafId);
+        setSelectedParentCategoryId(parentId);
+        setSelectedChildCategoryId(childId);
+      }
+    },
+    []
+  );
+
+  useFocusEffect(
+    useCallback(() => {
+      const draft = consumeListingPublishDuplicateDraft();
+      if (draft) {
+        publishMemoryAppliedRef.current = true;
+        applyDuplicateDraft(draft);
+      }
+    }, [applyDuplicateDraft])
+  );
+
+  useEffect(() => {
+    if (duplicateSourceId || publishMemoryAppliedRef.current) return;
+    if (marketplaceCategories.length === 0) return;
+    void applyPublishMemoryDefaults(marketplaceCategories);
+  }, [duplicateSourceId, marketplaceCategories, applyPublishMemoryDefaults]);
+
+  useEffect(() => {
+    if (pendingDuplicateCategoryId == null || marketplaceCategories.length === 0) return;
+    const { parentId, childId } = resolveSellCategorySelection(
+      marketplaceCategories,
+      pendingDuplicateCategoryId
+    );
+    setSelectedParentCategoryId(parentId);
+    setSelectedChildCategoryId(childId);
+    setPendingDuplicateCategoryId(null);
+  }, [pendingDuplicateCategoryId, marketplaceCategories]);
+
   useEffect(() => {
     if (publishCategoryId == null) {
       setDynamicAttributesPilotActive(false);
@@ -299,12 +373,34 @@ export default function SellScreen() {
       if (cancelled) return;
       setDynamicDefs(defs);
       setDynamicOptionsByDef(optsMap);
+      const duplicateValues = pendingDuplicateDynamicRef.current;
+      if (duplicateValues && Object.keys(duplicateValues).length > 0) {
+        setDynamicValues(duplicateValues);
+        pendingDuplicateDynamicRef.current = null;
+      } else if (!duplicateSourceId) {
+        const memory = await readListingPublishMemory();
+        if (!cancelled) {
+          const hints = getAttributeHintsForCategory(memory, publishCategoryId);
+          if (Object.keys(hints).length > 0) {
+            setDynamicValues((prev) => {
+              const next = { ...prev };
+              for (const def of defs) {
+                const hint = hints[def.key];
+                if (hint && !String(prev[def.key] ?? '').trim()) {
+                  next[def.key] = hint;
+                }
+              }
+              return next;
+            });
+          }
+        }
+      }
       setDynamicLoading(false);
     })();
     return () => {
       cancelled = true;
     };
-  }, [publishCategoryId]);
+  }, [publishCategoryId, duplicateSourceId]);
 
   const handleDynamicChange = useCallback((key: string, value: string) => {
     setDynamicValues((prev) => ({ ...prev, [key]: value }));
@@ -477,6 +573,7 @@ export default function SellScreen() {
         categoryId: publishCategoryId,
         city: city.trim(),
         description: description.trim() || '',
+        shopId: publishShopId,
       });
 
       if (error) {
@@ -524,6 +621,13 @@ export default function SellScreen() {
         const totalCount = images.length;
 
         if (uploadResult.status === 'ok' && missingBase64Count === 0) {
+          void saveListingPublishMemory({
+            city: city.trim(),
+            parentCategoryId: selectedParentCategoryId,
+            childCategoryId: selectedChildCategoryId,
+            publishCategoryId,
+            dynamicValues,
+          });
           setPublishState({ status: 'success', listingId });
           return;
         }
@@ -555,6 +659,13 @@ export default function SellScreen() {
         return;
       }
 
+      void saveListingPublishMemory({
+        city: city.trim(),
+        parentCategoryId: selectedParentCategoryId,
+        childCategoryId: selectedChildCategoryId,
+        publishCategoryId,
+        dynamicValues,
+      });
       setPublishState({ status: 'success', listingId });
     } catch (e) {
       setSubmitError(e instanceof Error ? e.message : "Impossible de publier l'annonce");
@@ -793,6 +904,19 @@ export default function SellScreen() {
             <Text style={styles.title}>Vendre</Text>
             <Text style={styles.subtitle}>Publiez votre annonce en quelques minutes.</Text>
 
+            {duplicateSourceId ? (
+              <View style={styles.duplicateBanner}>
+                <Ionicons name="copy-outline" size={18} color={colors.primary} />
+                <View style={styles.duplicateBannerTextSlot}>
+                  <Text style={styles.duplicateBannerTitle}>Brouillon depuis une annonce</Text>
+                  <Text style={styles.duplicateBannerText}>
+                    Les informations sont préremplies. Ajoutez de nouvelles photos avant de publier — les
+                    images de l&apos;annonce d&apos;origine ne sont pas recopiées.
+                  </Text>
+                </View>
+              </View>
+            ) : null}
+
             {prequalStatus === 'ready' && isAuthed && !hasPhone ? (
               <View style={styles.inlineWarning}>
                 <Ionicons name="warning-outline" size={18} color={colors.warning} />
@@ -808,7 +932,9 @@ export default function SellScreen() {
             <View style={styles.imagesSection}>
               <RequiredFieldLabel>Photos</RequiredFieldLabel>
               <Text style={styles.stepHelper}>
-                Ajoutez 1 à 4 photos. Une bonne première photo augmente les messages.
+                {duplicateSourceId
+                  ? 'Photos obligatoires pour cette nouvelle annonce (non dupliquées depuis l’originale).'
+                  : 'Ajoutez 1 à 4 photos. Une bonne première photo augmente les messages.'}
               </Text>
               <View style={styles.photoSlotsRow}>
                 {Array.from({ length: MAX_LISTING_IMAGES }, (_, index) => {
@@ -1041,14 +1167,52 @@ const styles = StyleSheet.create({
   },
   formScrollContent: {
     flexGrow: 1,
-    paddingBottom: spacing.base,
+    paddingBottom: spacing['3xl'],
   },
   formScrollContentKeyboardOpen: {
     paddingBottom: spacing['2xl'],
   },
   stickyFooter: {
     paddingTop: spacing.sm,
-    backgroundColor: 'transparent',
+    paddingBottom: spacing.sm,
+    borderTopWidth: 1,
+    borderTopColor: colors.borderLight,
+    backgroundColor: colors.background,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: -2 },
+        shadowOpacity: 0.06,
+        shadowRadius: 6,
+      },
+      android: { elevation: 8 },
+      default: {},
+    }),
+  },
+  duplicateBanner: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.sm,
+    padding: spacing.base,
+    borderRadius: radius.xl,
+    borderWidth: 1,
+    borderColor: colors.primary + '33',
+    backgroundColor: colors.primary + '0D',
+    marginBottom: spacing.base,
+  },
+  duplicateBannerTextSlot: {
+    flex: 1,
+    gap: 2,
+  },
+  duplicateBannerTitle: {
+    ...typography.sm,
+    fontWeight: fontWeights.bold,
+    color: colors.text,
+  },
+  duplicateBannerText: {
+    ...typography.xs,
+    color: colors.textSecondary,
+    lineHeight: 18,
   },
   stickyFooterActions: {
     gap: spacing.sm,
@@ -1336,6 +1500,7 @@ const styles = StyleSheet.create({
     fontWeight: fontWeights.semibold,
   },
   publishCta: {
+    width: '100%',
     ...Platform.select({
       ios: {
         shadowColor: colors.primary,

@@ -13,6 +13,8 @@ export type CreateListingPayload = {
   categoryId: ListingCategoryId;
   city?: string | null;
   description?: string | null;
+  /** Boutique pro liée à l'annonce (ex. duplication vendeur pro). */
+  shopId?: string | null;
 };
 
 export type CreateListingResult =
@@ -59,6 +61,7 @@ export async function createListing(payload: CreateListingPayload): Promise<Crea
     if (!Number.isInteger(categoryId) || categoryId <= 0) {
       return { data: null, error: { message: 'Catégorie requise' } };
     }
+    const shopId = payload.shopId?.trim() || null;
     const insertPayload: TablesInsert<'listings'> = {
       title,
       price: Math.round(payload.price),
@@ -68,6 +71,7 @@ export async function createListing(payload: CreateListingPayload): Promise<Crea
       user_id: user.id,
       status: 'active',
       views_count: 0,
+      ...(shopId ? { shop_id: shopId } : {}),
     };
 
     const { data, error } = await supabase

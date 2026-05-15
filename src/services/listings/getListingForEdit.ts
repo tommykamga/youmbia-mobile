@@ -14,6 +14,7 @@ export type ListingForEdit = {
   description: string;
   category_id: number | null;
   status: string;
+  shop_id: string | null;
   images: string[];
   imageItems: { id: string; path: string; sort_order: number | null; displayUrl: string }[];
   district?: string | null;
@@ -31,6 +32,7 @@ type ListingRow = {
   description: string | null;
   category_id: number | null;
   status: string | null;
+  shop_id?: string | null;
   boosted?: boolean | null;
   district?: string | null;
   urgent?: boolean | null;
@@ -73,7 +75,7 @@ export async function getListingForEdit(id: string): Promise<GetListingForEditRe
   const { data: listingRow, error: listingError } = await supabase
     .from('listings')
     .select(
-      'id, title, price, city, description, category_id, status, boosted, urgent, district, user_id, listing_images(id, url, sort_order)'
+      'id, title, price, city, description, category_id, status, shop_id, boosted, urgent, district, user_id, listing_images(id, url, sort_order)'
     )
     .eq('id', id)
     .eq('user_id', user.id)
@@ -109,6 +111,7 @@ export async function getListingForEdit(id: string): Promise<GetListingForEditRe
     description: row.description ?? '',
     category_id: row.category_id ?? null,
     status: (row.status ?? 'active').toLowerCase(),
+    shop_id: row.shop_id ?? null,
     images: imageItems.map((item) => item.displayUrl),
     imageItems,
     district,

@@ -67,6 +67,23 @@ export function resolveMarketplaceCategoryLabel(
   return match?.name?.trim() || match?.slug?.trim() || null;
 }
 
+/**
+ * Sélection parent / enfant pour l'écran Vendre à partir d'un id catégorie (feuille ou racine).
+ */
+export function resolveSellCategorySelection(
+  categories: MarketplaceCategory[],
+  categoryId: number
+): { parentId: number; childId: number | null } {
+  const rootId = findMarketplaceRootId(categories, categoryId);
+  if (rootId == null) {
+    return { parentId: categoryId, childId: null };
+  }
+  if (categoryId === rootId) {
+    return { parentId: rootId, childId: null };
+  }
+  return { parentId: rootId, childId: categoryId };
+}
+
 export function findMarketplaceRootId(
   categories: MarketplaceCategory[],
   categoryId: number

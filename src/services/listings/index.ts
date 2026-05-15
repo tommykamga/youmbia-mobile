@@ -11,6 +11,7 @@ export { getListingsByIds } from './getListingsByIds';
 export { getSimilarListings } from './getSimilarListings';
 export { searchListings } from './searchListings';
 export { createListing } from './createListing';
+export { buildListingDuplicateDraft } from './buildListingDuplicateDraft';
 export { saveListingDynamicAttributeValues } from './saveListingDynamicAttributeValues';
 export { uploadListingImages } from './uploadListingImages';
 export { deleteListingImage } from './deleteListingImage';
