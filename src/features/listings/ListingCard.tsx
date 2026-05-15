@@ -263,7 +263,6 @@ function ListingCardInner({
             !isHomeFeed && !isFeaturedRail && styles.imageHeightFeed,
             isHomeFeed && styles.imageHome,
             isHomeFeed && { aspectRatio: homeImageAspect },
-            isHomeFeed && styles.imageHomeEdge,
             isFeaturedRail && styles.imageRailFeatured,
             !isHomeFeed && !isFeaturedRail && styles.imageRadius,
             isHomeFeed && {
@@ -293,7 +292,6 @@ function ListingCardInner({
             !isHomeFeed && !isFeaturedRail && styles.imageHeightFeed,
             isHomeFeed && styles.imageHome,
             isHomeFeed && { aspectRatio: homeImageAspect },
-            isHomeFeed && styles.imageHomeEdge,
             isFeaturedRail && styles.imageRailFeatured,
             !isHomeFeed && !isFeaturedRail && styles.imageRadius,
             isHomeFeed && {
@@ -425,10 +423,6 @@ const styles = StyleSheet.create({
   },
   imageHomeAspect: {
     aspectRatio: HOME_IMAGE_ASPECT_RATIO,
-  },
-  /** Léger débordement visuel (carte `overflow: hidden` cadre le rendu). */
-  imageHomeEdge: {
-    marginHorizontal: -6,
   },
   imageRailFeatured: {
     height: IMAGE_HEIGHT_RAIL_FEATURED,

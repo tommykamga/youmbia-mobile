@@ -40,8 +40,13 @@ type FeedState =
 export type ListingFeedProps = {
   /** Rendered at the top of the list (e.g. home header). Enables single scroll + reliable pull-to-refresh. */
   listHeaderComponent?: React.ReactElement | null;
-  /** Padding horizontal du contenu (Home compact = plus étroit). */
+  /** Padding horizontal du contenu liste (hors mode home item-inset). */
   contentPaddingHorizontal?: number;
+  /**
+   * Marge latérale des cartes home uniquement (items + tri + pied de liste).
+   * Le conteneur FlatList reste sans padding horizontal pour ne pas réduire les rails du header.
+   */
+  homeFeedCardInset?: number;
   /** Présentation carte fil d’accueil (home uniquement aujourd’hui). */
   listingCardFeedPresentation?: 'standard' | 'home';
   /**
@@ -82,6 +87,7 @@ export type ListingFeedProps = {
 export function ListingFeed({
   listHeaderComponent,
   contentPaddingHorizontal = spacing.base,
+  homeFeedCardInset,
   listingCardFeedPresentation = 'standard',
   reanimatedScrollHandler,
   extraComponent,
@@ -218,25 +224,43 @@ export function ListingFeed({
     load(0, false).finally(() => setRefreshing(false));
   }, [load]);
 
+  const isHomeCardInset =
+    listingCardFeedPresentation === 'home' && homeFeedCardInset != null;
+  const homeCardInset = homeFeedCardInset ?? spacing.base;
+  const homeInsetStyle = useMemo(
+    () => (isHomeCardInset ? { paddingHorizontal: homeCardInset } : null),
+    [isHomeCardInset, homeCardInset]
+  );
+
+  const wrapHomeFeedItem = useCallback(
+    (node: React.ReactElement) =>
+      isHomeCardInset ? (
+        <View style={[styles.homeFeedItemInset, homeInsetStyle]}>{node}</View>
+      ) : (
+        node
+      ),
+    [isHomeCardInset, homeInsetStyle]
+  );
+
   const keyExtractor = useCallback((item: any) => String(item.id ?? item), []);
   const renderItem = useCallback(
     ({ item }: { item: any }) => {
       if (typeof item === 'number') {
-        return (
+        return wrapHomeFeedItem(
           <SkeletonListingCard feedPresentation={listingCardFeedPresentation} />
         );
       }
       if (item.type === 'extra') {
         return extraComponent || null;
       }
-      return (
+      return wrapHomeFeedItem(
         <ListingCard
           listing={item as PublicListing}
           feedPresentation={listingCardFeedPresentation}
         />
       );
     },
-    [listingCardFeedPresentation, extraComponent]
+    [listingCardFeedPresentation, extraComponent, wrapHomeFeedItem]
   );
   const itemSeparator = useCallback(
     () => <View style={styles.separator} />,
@@ -283,7 +307,7 @@ export function ListingFeed({
 
   const sortHeader = useMemo(
     () => (
-      <View style={styles.sortContainer}>
+      <View style={[styles.sortContainer, homeInsetStyle]}>
         <Pressable
           style={[styles.sortOption, sortBy === 'recent' && styles.sortOptionActive]}
           onPress={() => setSortBy('recent')}
@@ -310,7 +334,7 @@ export function ListingFeed({
         </Pressable>
       </View>
     ),
-    [sortBy]
+    [sortBy, homeInsetStyle]
   );
 
   const listHeader = useMemo(
@@ -360,7 +384,7 @@ export function ListingFeed({
     // Cas spécifique : Limite atteinte (Home contrôlée)
     if (limit && dataLength >= limit) {
       return (
-        <View style={styles.limitFooter}>
+        <View style={[styles.limitFooter, homeInsetStyle]}>
           <View style={styles.limitDivider} />
           {footerAction && (
             <Button
@@ -371,7 +395,7 @@ export function ListingFeed({
               {footerAction.label}
             </Button>
           )}
-          <View style={styles.footerEndWrap}>
+          <View style={[styles.footerEndWrap, styles.footerEndWrapFlush]}>
             <Ionicons name="checkmark-circle-outline" size={18} color={colors.textTertiary} />
             <Text style={styles.footerEnd}>Vous avez vu toutes les annonces du moment</Text>
           </View>
@@ -412,17 +436,17 @@ export function ListingFeed({
       );
     }
     return null;
-  }, [state.status, feedDataLength, loadingMore, hasMore, loadMoreError, load, limit, footerAction]);
+  }, [state.status, feedDataLength, loadingMore, hasMore, loadMoreError, load, limit, footerAction, homeInsetStyle]);
 
   const listContentStyle = useMemo(
     () => [
       styles.listContent,
       {
-        paddingHorizontal: contentPaddingHorizontal,
+        paddingHorizontal: isHomeCardInset ? 0 : contentPaddingHorizontal,
         paddingBottom: spacing['3xl'] + contentBottomInset,
       },
     ],
-    [contentPaddingHorizontal, contentBottomInset]
+    [isHomeCardInset, contentPaddingHorizontal, contentBottomInset]
   );
 
   const listProps = useMemo(
@@ -494,6 +518,10 @@ const styles = StyleSheet.create({
     paddingTop: 0,
     flexGrow: 1,
   },
+  homeFeedItemInset: {
+    width: '100%',
+    alignSelf: 'center',
+  },
   separator: {
     height: ui.spacing.md,
   },
@@ -502,7 +530,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 6,
     paddingVertical: 6,
-    paddingHorizontal: 16,
+    paddingHorizontal: spacing.base,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: 'rgba(15,23,42,0.08)',
   },
@@ -560,6 +588,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: spacing.xs,
+  },
+  footerEndWrapFlush: {
+    paddingHorizontal: 0,
   },
   footerEnd: {
     ...typography.xs,
