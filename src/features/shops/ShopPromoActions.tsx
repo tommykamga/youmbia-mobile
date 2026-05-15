@@ -3,7 +3,7 @@
  */
 
 import React, { memo, useCallback } from 'react';
-import { View, Text, StyleSheet, Pressable, Alert } from 'react-native';
+import { View, Text, StyleSheet, Pressable, Alert, type StyleProp, type ViewStyle } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import * as Clipboard from 'expo-clipboard';
 import { getPublicShopUrl } from '@/lib/shareShop';
@@ -16,6 +16,7 @@ type ShopPromoActionsProps = {
   onQr: () => void;
   sharing?: boolean;
   showWhatsApp?: boolean;
+  style?: StyleProp<ViewStyle>;
 };
 
 function ShopPromoActionsInner({
@@ -25,6 +26,7 @@ function ShopPromoActionsInner({
   onQr,
   sharing = false,
   showWhatsApp = true,
+  style,
 }: ShopPromoActionsProps) {
   const publicUrl = getPublicShopUrl(slug);
   const displayUrl = publicUrl?.replace(/^https:\/\//, '') ?? '';
@@ -40,7 +42,7 @@ function ShopPromoActionsInner({
   }, [publicUrl]);
 
   return (
-    <View style={styles.wrap}>
+    <View style={[styles.wrap, style]}>
       {displayUrl ? (
         <Pressable
           onPress={() => void handleCopyUrl()}

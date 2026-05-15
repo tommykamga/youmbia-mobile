@@ -2,7 +2,7 @@
   "expo": {
     "name": "YOUMBIA",
     "slug": "youmbia-mobile",
-    "version": "4.1.0",
+    "version": "4.2.0",
     "orientation": "default",
     "icon": "./assets/images/icon.png",
     "scheme": "youmbiamobile",
@@ -23,7 +23,7 @@
     },
     "android": {
       "package": "com.youmbia.mobile",
-      "versionCode": 26,
+      "versionCode": 27,
       "splash": {
         "image": "./assets/images/splash.png",
         "resizeMode": "contain",

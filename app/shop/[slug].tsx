@@ -18,6 +18,7 @@ import {
   Modal,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { LinearGradient } from 'expo-linear-gradient';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Screen, AppHeader, EmptyState, Button } from '@/components';
 import { ListingCard } from '@/features/listings';
@@ -50,17 +51,25 @@ type ShopScreenState =
   | { status: 'error'; message: string }
   | { status: 'ready'; shop: PublicShop; listings: PublicListing[] };
 
+/** Grille de contenu unique — référence : carte Annonces (~92 % écran, max 440). */
+const CONTENT_HORIZONTAL_PADDING = spacing.base;
+const CONTENT_MAX_WIDTH = 440;
+const CONTENT_WIDTH_RATIO = 0.92;
+/** Marge interne pour éviter le clipping des ombres carte. */
+const SHOP_LISTING_CARD_SHADOW_INSET = 4;
+
 export default function ShopScreen() {
   const params = useLocalSearchParams<{ slug?: string | string[] }>();
   const slug = Array.isArray(params.slug) ? params.slug[0] : params.slug;
   const router = useRouter();
   const { width: screenWidth } = useWindowDimensions();
-  const cardWidth = useMemo(() => {
-    const horizontalPadding = spacing.base * 2;
-    const gap = spacing.sm;
-    return Math.floor((screenWidth - horizontalPadding - gap) / 2);
-  }, [screenWidth]);
   const [state, setState] = useState<ShopScreenState>({ status: 'loading' });
+  const shopContentLayout = useMemo(() => {
+    const alignedMax = screenWidth - CONTENT_HORIZONTAL_PADDING * 2;
+    const ratioWidth = Math.floor(screenWidth * CONTENT_WIDTH_RATIO);
+    const contentWidth = Math.min(ratioWidth, alignedMax, CONTENT_MAX_WIDTH);
+    return { contentWidth };
+  }, [screenWidth]);
   const [refreshing, setRefreshing] = useState(false);
   const [sharing, setSharing] = useState(false);
   const [qrModalVisible, setQrModalVisible] = useState(false);
@@ -308,151 +317,156 @@ export default function ShopScreen() {
           {shop.banner_url ? (
             <Image source={{ uri: shop.banner_url }} style={styles.bannerImage} resizeMode="cover" />
           ) : (
-            <View style={styles.bannerFallback} />
+            <ShopBannerFallback />
           )}
           <View style={styles.bannerOverlay} />
         </View>
 
-        <View style={styles.profileRow}>
-          {shop.logo_url ? (
-            <Image source={{ uri: shop.logo_url }} style={styles.logo} />
-          ) : (
-            <View style={styles.logoFallback}>
-              <Text style={styles.logoInitials}>{initials}</Text>
-            </View>
-          )}
-          <View style={styles.profileText}>
-            <Text style={styles.shopName}>{shop.name}</Text>
-            {shop.city?.trim() ? (
-              <View style={styles.cityRow}>
-                <Ionicons name="location-outline" size={14} color={colors.textMuted} />
-                <Text style={styles.cityText}>{shop.city.trim()}</Text>
+        <View style={[styles.contentColumn, { width: shopContentLayout.contentWidth }]}>
+          <View style={styles.profileRow}>
+            {shop.logo_url ? (
+              <Image source={{ uri: shop.logo_url }} style={styles.logo} />
+            ) : (
+              <View style={styles.logoFallback}>
+                <Text style={styles.logoInitials}>{initials}</Text>
               </View>
-            ) : null}
-            <View style={styles.badgesRow}>
-              <ProSellerBadge sellerType="pro" shop={shop} />
-              <NewShopBadge createdAt={shop.created_at} />
-              {visibility.isFeatured ? (
-                <View style={styles.featuredChip}>
-                  <Ionicons name="star" size={12} color={colors.primary} />
-                  <Text style={styles.featuredChipText}>À la une</Text>
+            )}
+            <View style={styles.profileText}>
+              <Text style={styles.shopName}>{shop.name}</Text>
+              {shop.city?.trim() ? (
+                <View style={styles.cityRow}>
+                  <Ionicons name="location-outline" size={14} color={colors.textMuted} />
+                  <Text style={styles.cityText}>{shop.city.trim()}</Text>
                 </View>
               ) : null}
-            </View>
-          </View>
-        </View>
-
-        {shop.description?.trim() ? (
-          <Text style={styles.description}>{shop.description.trim()}</Text>
-        ) : null}
-
-        {isOwnShop ? (
-          <>
-            <ShopPromoActions
-              slug={shop.slug}
-              onShare={() => void handleShareShop()}
-              onWhatsApp={() => void handleShareShopWhatsApp()}
-              onQr={() => setQrModalVisible(true)}
-              sharing={sharing}
-              showWhatsApp
-            />
-            <View style={styles.ownerTipsWrap}>
-              <SellerAcquisitionTips compact />
-            </View>
-          </>
-        ) : null}
-
-        {(ownerJoinDate || activeListingsCount > 0) && (
-          <View style={styles.trustMeta}>
-            {ownerJoinDate ? (
-              <Text style={styles.trustMetaText}>Membre depuis {ownerJoinDate}</Text>
-            ) : null}
-            {activeListingsCount > 0 ? (
-              <Text style={styles.trustMetaText}>
-                {activeListingsCount}{' '}
-                {activeListingsCount > 1 ? 'annonces actives' : 'annonce active'}
-              </Text>
-            ) : null}
-          </View>
-        )}
-
-        {(hasWhatsApp || hasPhone) && (
-          <View style={styles.contactCard}>
-            <Text style={styles.contactTitle}>Contacter la boutique</Text>
-            <View style={styles.contactRow}>
-              {hasWhatsApp ? (
-                <Button
-                  size="md"
-                  onPress={() => void handleWhatsApp()}
-                  leftIcon={<Ionicons name="logo-whatsapp" size={18} color={colors.surface} />}
-                  style={styles.contactBtn}
-                >
-                  WhatsApp
-                </Button>
-              ) : null}
-              {hasPhone ? (
-                <Button
-                  variant="outline"
-                  size="md"
-                  onPress={() => void handleCall()}
-                  leftIcon={<Ionicons name="call-outline" size={18} color={colors.primary} />}
-                  style={styles.contactBtn}
-                >
-                  Appeler
-                </Button>
-              ) : null}
-            </View>
-          </View>
-        )}
-
-        <View style={styles.listingsHeader}>
-          <Text style={styles.sectionTitle}>Annonces</Text>
-          <Text style={styles.sectionCount}>
-            {listings.length > 0 ? `${listings.length} active${listings.length > 1 ? 's' : ''}` : 'Aucune'}
-          </Text>
-        </View>
-
-        {listings.length === 0 ? (
-          <EmptyState
-            variant="plain"
-            title={isOwnShop ? 'Publiez vos premiers produits' : 'Aucune annonce active'}
-            message={
-              isOwnShop
-                ? 'Partagez votre boutique avec vos clients, puis publiez vos produits en quelques secondes depuis Mes annonces.'
-                : 'Cette boutique n’a pas d’annonce publiée pour le moment.'
-            }
-            action={
-              isOwnShop ? (
-                <Button onPress={() => router.push('/sell')} style={styles.emptyCta}>
-                  Publier une annonce
-                </Button>
-              ) : undefined
-            }
-          />
-        ) : (
-          <View style={styles.grid}>
-            {listings.map((listing) => (
-              <View key={listing.id} style={{ width: cardWidth }}>
-                <ListingCard
-                  listing={listing}
-                  variant="feed"
-                  feedPresentation="standard"
-                />
+              <View style={styles.badgesRow}>
+                <ProSellerBadge sellerType="pro" shop={shop} />
+                <NewShopBadge createdAt={shop.created_at} />
+                {visibility.isFeatured ? (
+                  <View style={styles.featuredChip}>
+                    <Ionicons name="star" size={12} color={colors.primary} />
+                    <Text style={styles.featuredChipText}>À la une</Text>
+                  </View>
+                ) : null}
               </View>
-            ))}
+            </View>
           </View>
-        )}
 
-        <View style={styles.trustSection}>
-          <MarketplaceTrustTips />
-          {!isOwnShop ? (
-            <Pressable
-              onPress={() => void handleReportPress()}
-              style={({ pressed }) => [styles.reportLink, pressed && styles.reportLinkPressed]}
-            >
-              <Text style={styles.reportLinkText}>Signaler cette boutique</Text>
-            </Pressable>
+          {shop.description?.trim() ? (
+            <Text style={styles.description}>{shop.description.trim()}</Text>
           ) : null}
+
+          {isOwnShop ? (
+            <>
+              <ShopPromoActions
+                slug={shop.slug}
+                onShare={() => void handleShareShop()}
+                onWhatsApp={() => void handleShareShopWhatsApp()}
+                onQr={() => setQrModalVisible(true)}
+                sharing={sharing}
+                showWhatsApp
+                style={styles.contentBlockFlush}
+              />
+              <SellerAcquisitionTips compact />
+            </>
+          ) : null}
+
+          {(ownerJoinDate || activeListingsCount > 0) && (
+            <View style={styles.trustMeta}>
+              {ownerJoinDate ? (
+                <Text style={styles.trustMetaText}>Membre depuis {ownerJoinDate}</Text>
+              ) : null}
+              {activeListingsCount > 0 ? (
+                <Text style={styles.trustMetaText}>
+                  {activeListingsCount}{' '}
+                  {activeListingsCount > 1 ? 'annonces actives' : 'annonce active'}
+                </Text>
+              ) : null}
+            </View>
+          )}
+
+          {(hasWhatsApp || hasPhone) && (
+            <View style={styles.contactCard}>
+              <Text style={styles.contactTitle}>Contacter la boutique</Text>
+              <View style={styles.contactRow}>
+                {hasWhatsApp ? (
+                  <Button
+                    size="md"
+                    onPress={() => void handleWhatsApp()}
+                    leftIcon={<Ionicons name="logo-whatsapp" size={18} color={colors.surface} />}
+                    style={styles.contactBtn}
+                  >
+                    WhatsApp
+                  </Button>
+                ) : null}
+                {hasPhone ? (
+                  <Button
+                    variant="outline"
+                    size="md"
+                    onPress={() => void handleCall()}
+                    leftIcon={<Ionicons name="call-outline" size={18} color={colors.primary} />}
+                    style={styles.contactBtn}
+                  >
+                    Appeler
+                  </Button>
+                ) : null}
+              </View>
+            </View>
+          )}
+
+          <View style={styles.listingsSection}>
+            <View style={styles.listingsHeader}>
+              <Text style={styles.sectionTitle}>Annonces</Text>
+              <Text style={styles.sectionCount}>
+                {listings.length > 0 ? `${listings.length} active${listings.length > 1 ? 's' : ''}` : 'Aucune'}
+              </Text>
+            </View>
+
+            {listings.length === 0 ? (
+              <EmptyState
+                variant="plain"
+                title={isOwnShop ? 'Publiez vos premiers produits' : 'Aucune annonce active'}
+                message={
+                  isOwnShop
+                    ? 'Partagez votre boutique avec vos clients, puis publiez vos produits en quelques secondes depuis Mes annonces.'
+                    : 'Cette boutique n’a pas d’annonce publiée pour le moment.'
+                }
+                action={
+                  isOwnShop ? (
+                    <Button onPress={() => router.push('/sell')} style={styles.emptyCta}>
+                      Publier une annonce
+                    </Button>
+                  ) : undefined
+                }
+              />
+            ) : (
+              <View style={styles.listingsList}>
+                {listings.map((listing) => (
+                  <View key={listing.id} style={styles.shopListingCardWrapper}>
+                    <View style={{ width: shopContentLayout.contentWidth }}>
+                      <ListingCard
+                        listing={listing}
+                        variant="feed"
+                        feedPresentation="standard"
+                      />
+                    </View>
+                  </View>
+                ))}
+              </View>
+            )}
+          </View>
+
+          <View style={styles.trustSection}>
+            <MarketplaceTrustTips style={styles.trustTipsEmbedded} />
+            {!isOwnShop ? (
+              <Pressable
+                onPress={() => void handleReportPress()}
+                style={({ pressed }) => [styles.reportLink, pressed && styles.reportLinkPressed]}
+              >
+                <Text style={styles.reportLinkText}>Signaler cette boutique</Text>
+              </Pressable>
+            ) : null}
+          </View>
         </View>
       </ScrollView>
 
@@ -530,8 +544,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing.sm,
   },
-  ownerTipsWrap: {
-    paddingHorizontal: spacing.base,
+  contentColumn: {
+    alignSelf: 'center',
+    overflow: 'visible',
+  },
+  contentBlockFlush: {
+    marginHorizontal: 0,
+    marginTop: spacing.sm,
+    width: '100%',
   },
   emptyCta: {
     minWidth: 200,
@@ -540,7 +560,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
-    paddingBottom: spacing['3xl'],
+    paddingBottom: spacing['3xl'] + spacing.sm,
   },
   banner: {
     height: 148,
@@ -551,10 +571,6 @@ const styles = StyleSheet.create({
     width: '100%',
     height: '100%',
   },
-  bannerFallback: {
-    flex: 1,
-    backgroundColor: 'rgba(22, 163, 74, 0.09)',
-  },
   bannerOverlay: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: 'rgba(15, 23, 42, 0.07)',
@@ -562,9 +578,8 @@ const styles = StyleSheet.create({
   profileRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    gap: spacing.base,
-    paddingHorizontal: spacing.base,
-    marginTop: -32,
+    gap: spacing.md,
+    marginTop: -24,
   },
   logo: {
     width: 76,
@@ -601,8 +616,8 @@ const styles = StyleSheet.create({
   },
   profileText: {
     flex: 1,
-    paddingTop: spacing.lg + 6,
-    gap: 6,
+    paddingTop: spacing.md,
+    gap: spacing.xs,
   },
   shopName: {
     ...typography.xl,
@@ -644,14 +659,13 @@ const styles = StyleSheet.create({
   description: {
     ...typography.base,
     color: colors.textSecondary,
-    paddingHorizontal: spacing.base,
-    marginTop: spacing.base,
+    marginTop: spacing.sm,
     lineHeight: 22,
   },
   contactCard: {
-    marginHorizontal: spacing.base,
-    marginTop: spacing.base,
+    marginTop: spacing.sm,
     padding: spacing.base,
+    width: '100%',
     borderRadius: radius.xl,
     borderWidth: 1,
     borderColor: colors.borderLight,
@@ -672,12 +686,14 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     minWidth: 140,
   },
+  listingsSection: {
+    marginTop: spacing.base,
+    width: '100%',
+  },
   listingsHeader: {
     flexDirection: 'row',
     alignItems: 'baseline',
     justifyContent: 'space-between',
-    paddingHorizontal: spacing.base,
-    marginTop: spacing.lg,
     marginBottom: spacing.sm,
     gap: spacing.sm,
   },
@@ -691,25 +707,36 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
     fontWeight: fontWeights.medium,
   },
-  grid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: spacing.sm,
-    paddingHorizontal: spacing.base,
+  listingsList: {
+    alignItems: 'center',
+    paddingTop: spacing.xs,
+    paddingBottom: spacing.sm,
+    overflow: 'visible',
+  },
+  shopListingCardWrapper: {
+    alignItems: 'center',
+    width: '100%',
+    paddingVertical: SHOP_LISTING_CARD_SHADOW_INSET,
+    marginBottom: spacing.md,
+    overflow: 'visible',
   },
   trustMeta: {
-    paddingHorizontal: spacing.base,
     marginTop: spacing.sm,
-    gap: 4,
+    gap: spacing.xs,
   },
   trustMetaText: {
     ...typography.sm,
     color: colors.textMuted,
   },
   trustSection: {
-    paddingHorizontal: spacing.base,
-    marginTop: spacing.lg,
+    marginTop: spacing.base,
     paddingBottom: spacing.sm,
+    width: '100%',
+    overflow: 'visible',
+  },
+  trustTipsEmbedded: {
+    marginTop: 0,
+    width: '100%',
   },
   reportLink: {
     alignSelf: 'flex-start',
@@ -784,5 +811,54 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
     gap: spacing.sm,
     marginTop: spacing.xl,
+  },
+});
+
+function ShopBannerFallback() {
+  return (
+    <View style={bannerFallbackStyles.root}>
+      <LinearGradient
+        colors={['#F0FDF4', '#ECFDF5', '#F8FAFC', '#F1F5F9']}
+        locations={[0, 0.35, 0.72, 1]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={StyleSheet.absoluteFill}
+      />
+      <View style={bannerFallbackStyles.orbPrimary} />
+      <View style={bannerFallbackStyles.orbSecondary} />
+      <View style={bannerFallbackStyles.iconWrap}>
+        <Ionicons name="storefront-outline" size={36} color="rgba(22, 163, 74, 0.22)" />
+      </View>
+    </View>
+  );
+}
+
+const bannerFallbackStyles = StyleSheet.create({
+  root: {
+    flex: 1,
+    overflow: 'hidden',
+  },
+  orbPrimary: {
+    position: 'absolute',
+    width: 180,
+    height: 180,
+    borderRadius: 90,
+    top: -48,
+    right: -36,
+    backgroundColor: 'rgba(22, 163, 74, 0.07)',
+  },
+  orbSecondary: {
+    position: 'absolute',
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    bottom: -28,
+    left: -20,
+    backgroundColor: 'rgba(15, 23, 42, 0.04)',
+  },
+  iconWrap: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });
