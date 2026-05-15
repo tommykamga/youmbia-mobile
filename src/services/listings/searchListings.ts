@@ -29,6 +29,7 @@ type ListingRow = {
   created_at: string;
   views_count: number | null;
   user_id: string | null;
+  shop_id?: string | null;
   boosted?: boolean | null;
   urgent?: boolean | null;
   district?: string | null;
@@ -55,6 +56,7 @@ function mapRow(row: ListingRow, signedMap: Map<string, string>): PublicListing 
     views_count: row.views_count ?? 0,
     seller_id: row.user_id ?? '',
     updated_at: row.updated_at,
+    shop_id: row.shop_id ?? null,
     ...schema,
   };
 }

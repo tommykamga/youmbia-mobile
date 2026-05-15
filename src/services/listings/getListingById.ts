@@ -7,6 +7,8 @@
 import { supabase } from '@/lib/supabase';
 import { getSignedUrlsMap, toDisplayImageUrl } from '@/lib/listingImageUrl';
 import { normalizeListingSchemaFeatures } from '@/lib/listingSchemaFeatures';
+import { getShopSummaryById } from '@/services/shops/getShopSummaryById';
+import type { SellerType, ShopSummary } from '@/types/shops';
 
 export type ListingDetail = {
   id: string;
@@ -26,6 +28,9 @@ export type ListingDetail = {
   /** Badge "Urgent". */
   urgent?: boolean;
   category_id?: number | null;
+  shop_id?: string | null;
+  seller_type?: SellerType | null;
+  shop?: ShopSummary | null;
   /** Colonnes legacy (fallback si pas d’équivalent dynamique affiché). */
   condition?: string | null;
   brand?: string | null;
@@ -70,6 +75,7 @@ type ListingRow = {
   urgent?: boolean | null;
   listing_images: ListingImageRow[] | null;
   category_id: number | null;
+  shop_id?: string | null;
 };
 
 export type GetListingByIdResult =
@@ -86,7 +92,7 @@ export async function getListingById(id: string): Promise<GetListingByIdResult> 
   const { data: listingRow, error: listingError } = await supabase
     .from('listings')
     .select(
-      'id, title, price, city, description, boosted, urgent, district, created_at, views_count, user_id, status, category_id, listing_images(url, sort_order)'
+      'id, title, price, city, description, boosted, urgent, district, created_at, views_count, user_id, status, category_id, shop_id, listing_images(url, sort_order)'
     )
     .eq('id', id)
     .maybeSingle();
@@ -121,11 +127,13 @@ export async function getListingById(id: string): Promise<GetListingByIdResult> 
   const signedMap = await getSignedUrlsMap(paths.length > 0 ? [paths[0]] : []);
 
   let seller: ListingDetail['seller'] = null;
+  let sellerType: SellerType | null = null;
+  let profileShopId: string | null = null;
   if (sellerId) {
     const { data: profile } = await supabase
       .from('profiles')
       .select(
-        'full_name, created_at, phone, phone_verified, is_verified, is_flagged, trust_score, reports_count, is_banned'
+        'full_name, created_at, phone, phone_verified, is_verified, is_flagged, trust_score, reports_count, is_banned, seller_type, shop_id'
       )
       .eq('id', sellerId)
       .maybeSingle();
@@ -141,7 +149,12 @@ export async function getListingById(id: string): Promise<GetListingByIdResult> 
         trust_score?: number | null;
         reports_count?: number | null;
         is_banned?: boolean | null;
+        seller_type?: string | null;
+        shop_id?: string | null;
       };
+      sellerType =
+        p.seller_type === 'pro' || p.seller_type === 'individual' ? p.seller_type : null;
+      profileShopId = p.shop_id ?? null;
       seller = {
         full_name: p.full_name ?? null,
         created_at: p.created_at ?? null,
@@ -154,6 +167,13 @@ export async function getListingById(id: string): Promise<GetListingByIdResult> 
         is_banned: p.is_banned ?? null,
       };
     }
+  }
+
+  const listingShopId = row.shop_id ?? null;
+  const shopIdForSummary = listingShopId ?? profileShopId;
+  let shop: ShopSummary | null = null;
+  if (shopIdForSummary) {
+    shop = await getShopSummaryById(shopIdForSummary);
   }
 
   const { boosted, district, urgent } = normalizeListingSchemaFeatures(row);
@@ -177,6 +197,9 @@ export async function getListingById(id: string): Promise<GetListingByIdResult> 
     brand: null,
     model: null,
     category_id: row.category_id ?? null,
+    shop_id: listingShopId,
+    seller_type: sellerType,
+    shop,
     seller,
   };
 

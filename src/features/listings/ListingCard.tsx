@@ -24,6 +24,7 @@ import { FavoriteButton } from '@/components/FavoriteButton';
 import { timeAgo, isListingNew } from '@/utils/timeAgo';
 import { getDisplayUrgent, getDisplayLocationLine } from '@/lib/listingSchemaFeatures';
 import type { PublicListing } from '@/services/listings';
+import { ProSellerBadge } from '@/features/shops/ProSellerBadge';
 
 /** Largeur carte en carrousel (home sections horizontales). */
 export const LISTING_CARD_RAIL_WIDTH = 220;
@@ -329,6 +330,9 @@ function ListingCardInner({
         >
           {listing.title}
         </Text>
+        {listing.shop_id ? (
+          <ProSellerBadge listingShopId={listing.shop_id} compact />
+        ) : null}
         {metaLine ? (
           <Text
             style={[styles.meta, isHomeFeed && styles.metaHome]}

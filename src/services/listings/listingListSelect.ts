@@ -12,7 +12,7 @@ export const LISTING_LIST_IMAGES_SELECT =
  * `status` omis ici quand le filtre est `.eq('status','active')` (valeur constante).
  */
 export const LISTING_PUBLIC_LIST_CORE_SELECT =
-  'id, title, price, city, category_id, boosted, urgent, district, created_at, updated_at, views_count, user_id';
+  'id, title, price, city, category_id, boosted, urgent, district, created_at, updated_at, views_count, user_id, shop_id';
 
 /** Liste publique + images ; `description` uniquement si besoin (ex. scoring recherche client). */
 export function listingPublicListSelect(includeDescription: boolean): string {

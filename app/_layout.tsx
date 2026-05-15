@@ -311,6 +311,7 @@ export default function RootLayout() {
           <Stack.Screen name="(auth)" options={{ headerShown: false }} />
           <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
           <Stack.Screen name="listing/[id]" options={{ headerShown: false }} />
+          <Stack.Screen name="shop/[slug]" options={{ headerShown: false }} />
           <Stack.Screen name="conversation/[id]" options={{ headerShown: false }} />
           <Stack.Screen name="account" options={{ headerShown: false }} />
           <Stack.Screen name="sell/index" options={{ headerShown: false }} />

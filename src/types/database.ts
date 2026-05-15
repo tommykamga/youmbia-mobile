@@ -254,6 +254,65 @@ export type Database = {
           },
         ];
       };
+      shops: {
+        Row: {
+          id: string;
+          owner_id: string;
+          name: string;
+          slug: string;
+          description: string | null;
+          logo_url: string | null;
+          banner_url: string | null;
+          whatsapp_phone: string | null;
+          phone: string | null;
+          city: string | null;
+          is_verified: boolean;
+          is_featured: boolean;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          owner_id: string;
+          name: string;
+          slug: string;
+          description?: string | null;
+          logo_url?: string | null;
+          banner_url?: string | null;
+          whatsapp_phone?: string | null;
+          phone?: string | null;
+          city?: string | null;
+          is_verified?: boolean;
+          is_featured?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          owner_id?: string;
+          name?: string;
+          slug?: string;
+          description?: string | null;
+          logo_url?: string | null;
+          banner_url?: string | null;
+          whatsapp_phone?: string | null;
+          phone?: string | null;
+          city?: string | null;
+          is_verified?: boolean;
+          is_featured?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'shops_owner_id_fkey';
+            columns: ['owner_id'];
+            isOneToOne: false;
+            referencedRelation: 'profiles';
+            referencedColumns: ['id'];
+          },
+        ];
+      };
       listings: {
         Row: {
           boosted: boolean;
@@ -268,6 +327,7 @@ export type Database = {
           id: string;
           model: string | null;
           price: number;
+          shop_id: string | null;
           status: Database['public']['Enums']['listing_status'];
           title: string;
           updated_at: string;
@@ -288,6 +348,7 @@ export type Database = {
           id?: string;
           model?: string | null;
           price: number;
+          shop_id?: string | null;
           status?: Database['public']['Enums']['listing_status'];
           title: string;
           updated_at?: string;
@@ -308,6 +369,7 @@ export type Database = {
           id?: string;
           model?: string | null;
           price?: number;
+          shop_id?: string | null;
           status?: Database['public']['Enums']['listing_status'];
           title?: string;
           updated_at?: string;
@@ -316,6 +378,13 @@ export type Database = {
           views_count?: number;
         };
         Relationships: [
+          {
+            foreignKeyName: 'listings_shop_id_fkey';
+            columns: ['shop_id'];
+            isOneToOne: false;
+            referencedRelation: 'shops';
+            referencedColumns: ['id'];
+          },
           {
             foreignKeyName: 'listings_category_id_fkey';
             columns: ['category_id'];
@@ -477,6 +546,8 @@ export type Database = {
           phone: string | null;
           phone_verified: boolean;
           reports_count: number;
+          seller_type: string;
+          shop_id: string | null;
           trust_score: number;
           updated_at: string | null;
         };
@@ -493,6 +564,8 @@ export type Database = {
           phone?: string | null;
           phone_verified?: boolean;
           reports_count?: number;
+          seller_type?: string;
+          shop_id?: string | null;
           trust_score?: number;
           updated_at?: string | null;
         };
@@ -509,10 +582,20 @@ export type Database = {
           phone?: string | null;
           phone_verified?: boolean;
           reports_count?: number;
+          seller_type?: string;
+          shop_id?: string | null;
           trust_score?: number;
           updated_at?: string | null;
         };
-        Relationships: [];
+        Relationships: [
+          {
+            foreignKeyName: 'profiles_shop_id_fkey';
+            columns: ['shop_id'];
+            isOneToOne: false;
+            referencedRelation: 'shops';
+            referencedColumns: ['id'];
+          },
+        ];
       };
       reports: {
         Row: {

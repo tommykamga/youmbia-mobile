@@ -7,7 +7,13 @@ import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { colors, spacing, typography, radius } from '@/theme';
 
-export type SellerBadgeVariant = 'verified' | 'phoneVerified' | 'reliable' | 'flagged';
+export type SellerBadgeVariant =
+  | 'verified'
+  | 'phoneVerified'
+  | 'reliable'
+  | 'flagged'
+  | 'pro'
+  | 'verifiedShop';
 
 const VARIANT_STYLES: Record<
   SellerBadgeVariant,
@@ -28,6 +34,14 @@ const VARIANT_STYLES: Record<
   flagged: {
     bg: colors.badgeWarningBg,
     text: colors.badgeWarningText,
+  },
+  pro: {
+    bg: 'rgba(22, 163, 74, 0.12)',
+    text: colors.primary,
+  },
+  verifiedShop: {
+    bg: colors.badgeVerifiedBg,
+    text: colors.badgeVerifiedText,
   },
 };
 

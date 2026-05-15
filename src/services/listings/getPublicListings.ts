@@ -30,6 +30,8 @@ export type PublicListing = {
   /** En contexte favoris : true si le prix a baissé (backend / historique). */
   price_dropped?: boolean;
   updated_at: string;
+  /** Boutique pro liée (optionnel). */
+  shop_id?: string | null;
 };
 
 type ListingImageRow = {
@@ -52,6 +54,7 @@ type ListingRow = {
   urgent?: boolean | null;
   district?: string | null;
   updated_at: string;
+  shop_id?: string | null;
   listing_images: ListingImageRow[] | null;
 };
 
@@ -71,6 +74,7 @@ function mapRow(row: ListingRow, signedMap: Map<string, string>): PublicListing 
     views_count: row.views_count ?? 0,
     seller_id: row.user_id ?? '',
     updated_at: row.updated_at,
+    shop_id: row.shop_id ?? null,
     ...schema,
   };
 }

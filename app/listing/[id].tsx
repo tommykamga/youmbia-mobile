@@ -13,6 +13,7 @@ import {
   type NativeScrollEvent,
 } from 'react-native';
 import { useLocalSearchParams, useRouter, useFocusEffect, type Href } from 'expo-router';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Screen, Button, Loader, EmptyState, AppHeader } from '@/components';
 import {
@@ -617,6 +618,17 @@ export default function ListingDetailScreen() {
             listingCount={sellerStats.listingCount}
             onPress={listing.seller_id ? () => router.push(`/user/${listing.seller_id}` as const) : undefined}
           />
+          {listing.shop?.slug ? (
+            <Button
+              variant="outline"
+              size="md"
+              onPress={() => router.push(`/shop/${listing.shop!.slug}` as Href)}
+              leftIcon={<Ionicons name="storefront-outline" size={18} color={colors.primary} />}
+              style={styles.shopLinkBtn}
+            >
+              Voir la boutique
+            </Button>
+          ) : null}
           <ListingCharacteristics
             condition={listing.condition}
             brand={listing.brand}
@@ -752,6 +764,10 @@ const styles = StyleSheet.create({
   },
   bodyCompact: {
     padding: spacing.sm,
+  },
+  shopLinkBtn: {
+    marginBottom: spacing.base,
+    alignSelf: 'flex-start',
   },
   similarSection: {
     marginTop: spacing.lg,

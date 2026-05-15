@@ -10,6 +10,7 @@ import { Button } from '@/components';
 import { colors, spacing, typography, fontWeights, radius, shadows } from '@/theme';
 import { formatJoinDate } from '@/lib/format';
 import { SellerBadge } from './SellerBadge';
+import { ProSellerBadge } from '@/features/shops/ProSellerBadge';
 import type { ListingDetail } from '@/services/listings';
 
 type ListingSellerProps = {
@@ -81,6 +82,12 @@ export function ListingSeller({ listing, memberSince, listingCount, onPress }: L
           <Text style={styles.responseHint}>{seller.response_hint.trim()}</Text>
         </View>
       )}
+
+      <ProSellerBadge
+        listingShopId={listing.shop_id}
+        sellerType={listing.seller_type}
+        shop={listing.shop}
+      />
 
       {hasAnyBadge && (
         <View style={styles.badges}>
