@@ -1,13 +1,14 @@
--- Données de test Espace Vendeur Pro (à exécuter manuellement sur un environnement de dev).
--- Remplacer :owner_email par l’email du profil cible.
+-- Données de test Espace Vendeur Pro (Supabase SQL Editor).
+-- ⚠️ Remplacez l’email ci-dessous par le compte de test, puis exécutez tout le script.
 
 -- ========== SEED ==========
--- \set owner_email 'votre@email.test'
 
 WITH target AS (
   SELECT id AS owner_id
   FROM public.profiles
-  WHERE id = (SELECT id FROM auth.users WHERE email = :'owner_email' LIMIT 1)
+  WHERE id = (
+    SELECT id FROM auth.users WHERE email = 'tom@yopmail.com' LIMIT 1
+  )
   LIMIT 1
 ),
 upsert_shop AS (
@@ -63,12 +64,19 @@ WHERE l.user_id = p.id
     LIMIT 5
   );
 
--- ========== ROLLBACK (même email) ==========
--- WITH target AS (
+-- Vérification :
+-- SELECT p.id, p.seller_type, p.shop_id, s.slug FROM public.profiles p
+-- LEFT JOIN public.shops s ON s.id = p.shop_id
+-- WHERE p.id = (SELECT id FROM auth.users WHERE email = 'tom@yopmail.com' LIMIT 1);
+
+-- ========== ROLLBACK (décommenter + même email) ==========
+-- UPDATE public.listings SET shop_id = NULL
+-- WHERE shop_id IN (
 --   SELECT shop_id FROM public.profiles
---   WHERE id = (SELECT id FROM auth.users WHERE email = :'owner_email' LIMIT 1)
--- )
--- UPDATE public.listings SET shop_id = NULL WHERE shop_id IN (SELECT shop_id FROM target WHERE shop_id IS NOT NULL);
--- UPDATE public.profiles SET seller_type = 'individual', shop_id = NULL
---   WHERE id = (SELECT id FROM auth.users WHERE email = :'owner_email' LIMIT 1);
+--   WHERE id = (SELECT id FROM auth.users WHERE email = 'tom@yopmail.com' LIMIT 1)
+--     AND shop_id IS NOT NULL
+-- );
+-- UPDATE public.profiles
+-- SET seller_type = 'individual', shop_id = NULL
+-- WHERE id = (SELECT id FROM auth.users WHERE email = 'tom@yopmail.com' LIMIT 1);
 -- DELETE FROM public.shops WHERE slug = 'boutique-test-youmbia';
