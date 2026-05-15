@@ -5,3 +5,7 @@ export { VerifiedShopsSection } from './VerifiedShopsSection';
 export { ShopsRailSkeleton } from './ShopsRailSkeleton';
 export { ShopScreenSkeleton } from './ShopScreenSkeleton';
 export { ProSellerActivationCard } from './ProSellerActivationCard';
+export { ShopShareCard } from './ShopShareCard';
+export { ShopQrModal } from './ShopQrModal';
+export { ShopPromoActions } from './ShopPromoActions';
+export { SellerAcquisitionTips } from './SellerAcquisitionTips';

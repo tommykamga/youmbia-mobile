@@ -29,7 +29,7 @@ import {
   type MyListing,
 } from '@/services/listings';
 import { shareListing } from '@/lib/shareListing';
-import { ProSellerActivationCard } from '@/features/shops';
+import { ProSellerActivationCard, SellerAcquisitionTips } from '@/features/shops';
 import { spacing, colors, typography, fontWeights, radius } from '@/theme';
 
 type State =
@@ -587,6 +587,7 @@ export default function AccountListingsScreen() {
     () => (
       <View style={styles.listHeaderPro}>
         <ProSellerActivationCard variant="listings" />
+        <SellerAcquisitionTips compact />
       </View>
     ),
     []
@@ -622,8 +623,8 @@ export default function AccountListingsScreen() {
           <EmptyState
             variant="plain"
             icon={<Ionicons name="pricetags-outline" size={24} color={colors.primary} />}
-            title="Aucune annonce publiée"
-            message="Publiez votre première annonce en quelques minutes."
+            title="Publiez vos produits en quelques secondes"
+            message="Créez votre première annonce, puis partagez votre boutique avec vos clients pour gagner en visibilité."
             action={
               <View style={styles.emptyAction}>
                 <Button

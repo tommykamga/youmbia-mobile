@@ -18,6 +18,7 @@ import { useRouter, Redirect, useFocusEffect } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import * as ImagePicker from 'expo-image-picker';
 import { Screen, AppHeader, Button, Input, Loader } from '@/components';
+import { SellerAcquisitionTips } from '@/features/shops';
 import { buildAuthGateHref } from '@/lib/authGateNavigation';
 import { getSession } from '@/services/auth';
 import { createProShop, getMySellerProStatus } from '@/services/shops';
@@ -261,6 +262,8 @@ export default function ProShopOnboardingScreen() {
         <Button variant="ghost" onPress={() => router.back()} disabled={submitting}>
           Plus tard
         </Button>
+
+        <SellerAcquisitionTips compact />
         </ScrollView>
       </KeyboardAvoidingView>
     </Screen>

@@ -21,13 +21,20 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Screen, AppHeader, EmptyState, Button } from '@/components';
 import { ListingCard } from '@/features/listings';
-import { ProSellerBadge, ShopScreenSkeleton } from '@/features/shops';
+import {
+  ProSellerBadge,
+  ShopScreenSkeleton,
+  ShopQrModal,
+  ShopPromoActions,
+  SellerAcquisitionTips,
+} from '@/features/shops';
 import { MarketplaceTrustTips, NewShopBadge } from '@/features/trust';
 import { getShopBySlug, getShopListings } from '@/services/shops';
 import { reportShop } from '@/services/reports';
 import { getSession } from '@/services/auth';
 import { getSellerStats } from '@/services/users';
-import { shareShop } from '@/lib/shareShop';
+import { shareShop, shareShopViaWhatsApp, pickShopShareTagline } from '@/lib/shareShop';
+import { resolveShopVisibilityFlags } from '@/lib/shopAcquisition';
 import { normalizePhoneForWhatsApp, openSellerPhoneCallRaw } from '@/lib/sellerContact';
 import { getShopInitials } from '@/lib/shopSeller';
 import { buildAuthGateHref } from '@/lib/authGateNavigation';
@@ -56,6 +63,7 @@ export default function ShopScreen() {
   const [state, setState] = useState<ShopScreenState>({ status: 'loading' });
   const [refreshing, setRefreshing] = useState(false);
   const [sharing, setSharing] = useState(false);
+  const [qrModalVisible, setQrModalVisible] = useState(false);
   const [ownerMemberSince, setOwnerMemberSince] = useState<string | null>(null);
   const [reportModalVisible, setReportModalVisible] = useState(false);
   const [reportLoading, setReportLoading] = useState(false);
@@ -147,12 +155,14 @@ export default function ShopScreen() {
 
   const handleShareShop = useCallback(async () => {
     if (state.status !== 'ready' || sharing) return;
+    const { shop } = state;
     setSharing(true);
     try {
       const result = await shareShop({
-        slug: state.shop.slug,
-        name: state.shop.name,
-        city: state.shop.city,
+        slug: shop.slug,
+        name: shop.name,
+        city: shop.city,
+        tagline: pickShopShareTagline({ description: shop.description, city: shop.city }),
       });
       if (!result.success && result.error) {
         Alert.alert('Partage indisponible', result.error);
@@ -161,6 +171,20 @@ export default function ShopScreen() {
       setSharing(false);
     }
   }, [sharing, state]);
+
+  const handleShareShopWhatsApp = useCallback(async () => {
+    if (state.status !== 'ready') return;
+    const { shop } = state;
+    const ok = await shareShopViaWhatsApp({
+      slug: shop.slug,
+      name: shop.name,
+      city: shop.city,
+      tagline: pickShopShareTagline({ description: shop.description, city: shop.city }),
+    });
+    if (!ok) {
+      Alert.alert('WhatsApp indisponible', 'Impossible d’ouvrir WhatsApp sur cet appareil.');
+    }
+  }, [state]);
 
   const handleReportPress = useCallback(async () => {
     if (state.status !== 'ready') return;
@@ -231,6 +255,7 @@ export default function ShopScreen() {
 
   const { shop, listings } = state;
   const isOwnShop = sessionUserId != null && shop.owner_id === sessionUserId;
+  const visibility = resolveShopVisibilityFlags(shop);
   const initials = getShopInitials(shop.name);
   const ownerJoinDate = formatJoinDate(ownerMemberSince);
   const activeListingsCount = listings.length;
@@ -246,15 +271,25 @@ export default function ShopScreen() {
         showBack
         density="compact"
         right={
-          <Pressable
-            onPress={() => void handleShareShop()}
-            disabled={sharing}
-            hitSlop={10}
-            accessibilityRole="button"
-            accessibilityLabel="Partager la boutique"
-          >
-            <Ionicons name="share-outline" size={22} color={colors.text} />
-          </Pressable>
+          <View style={styles.headerActions}>
+            <Pressable
+              onPress={() => setQrModalVisible(true)}
+              hitSlop={10}
+              accessibilityRole="button"
+              accessibilityLabel="QR Code boutique"
+            >
+              <Ionicons name="qr-code-outline" size={22} color={colors.text} />
+            </Pressable>
+            <Pressable
+              onPress={() => void handleShareShop()}
+              disabled={sharing}
+              hitSlop={10}
+              accessibilityRole="button"
+              accessibilityLabel="Partager la boutique"
+            >
+              <Ionicons name="share-outline" size={22} color={colors.text} />
+            </Pressable>
+          </View>
         }
       />
       <ScrollView
@@ -297,7 +332,7 @@ export default function ShopScreen() {
             <View style={styles.badgesRow}>
               <ProSellerBadge sellerType="pro" shop={shop} />
               <NewShopBadge createdAt={shop.created_at} />
-              {shop.is_featured ? (
+              {visibility.isFeatured ? (
                 <View style={styles.featuredChip}>
                   <Ionicons name="star" size={12} color={colors.primary} />
                   <Text style={styles.featuredChipText}>À la une</Text>
@@ -309,6 +344,22 @@ export default function ShopScreen() {
 
         {shop.description?.trim() ? (
           <Text style={styles.description}>{shop.description.trim()}</Text>
+        ) : null}
+
+        {isOwnShop ? (
+          <>
+            <ShopPromoActions
+              slug={shop.slug}
+              onShare={() => void handleShareShop()}
+              onWhatsApp={() => void handleShareShopWhatsApp()}
+              onQr={() => setQrModalVisible(true)}
+              sharing={sharing}
+              showWhatsApp
+            />
+            <View style={styles.ownerTipsWrap}>
+              <SellerAcquisitionTips compact />
+            </View>
+          </>
         ) : null}
 
         {(ownerJoinDate || activeListingsCount > 0) && (
@@ -364,8 +415,19 @@ export default function ShopScreen() {
         {listings.length === 0 ? (
           <EmptyState
             variant="plain"
-            title="Aucune annonce active"
-            message="Cette boutique n’a pas d’annonce publiée pour le moment."
+            title={isOwnShop ? 'Publiez vos premiers produits' : 'Aucune annonce active'}
+            message={
+              isOwnShop
+                ? 'Partagez votre boutique avec vos clients, puis publiez vos produits en quelques secondes depuis Mes annonces.'
+                : 'Cette boutique n’a pas d’annonce publiée pour le moment.'
+            }
+            action={
+              isOwnShop ? (
+                <Button onPress={() => router.push('/sell')} style={styles.emptyCta}>
+                  Publier une annonce
+                </Button>
+              ) : undefined
+            }
           />
         ) : (
           <View style={styles.grid}>
@@ -393,6 +455,18 @@ export default function ShopScreen() {
           ) : null}
         </View>
       </ScrollView>
+
+      <ShopQrModal
+        visible={qrModalVisible}
+        onClose={() => setQrModalVisible(false)}
+        name={shop.name}
+        slug={shop.slug}
+        logoUrl={shop.logo_url}
+        description={shop.description}
+        city={shop.city}
+        onShare={() => void handleShareShop()}
+        sharing={sharing}
+      />
 
       <Modal
         visible={reportModalVisible}
@@ -451,6 +525,17 @@ export default function ShopScreen() {
 }
 
 const styles = StyleSheet.create({
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  ownerTipsWrap: {
+    paddingHorizontal: spacing.base,
+  },
+  emptyCta: {
+    minWidth: 200,
+  },
   scroll: {
     flex: 1,
   },

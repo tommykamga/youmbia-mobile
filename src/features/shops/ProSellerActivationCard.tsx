@@ -7,6 +7,7 @@ import { View, Text, StyleSheet, Pressable, Platform } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Button } from '@/components';
+import { shareShop } from '@/lib/shareShop';
 import { getMySellerProStatus } from '@/services/shops';
 import { colors, spacing, typography, fontWeights, radius } from '@/theme';
 
@@ -21,6 +22,8 @@ export function ProSellerActivationCard({ variant = 'account' }: Props) {
   const [shopSlug, setShopSlug] = useState<string | null>(null);
   const [shopName, setShopName] = useState<string | null>(null);
   const [isVerified, setIsVerified] = useState(false);
+  const [shopCity, setShopCity] = useState<string | null>(null);
+  const [sharing, setSharing] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -34,6 +37,7 @@ export function ProSellerActivationCard({ variant = 'account' }: Props) {
       setHasShop(!!shop);
       setShopSlug(shop?.slug ?? null);
       setShopName(shop?.name ?? null);
+      setShopCity(shop?.city ?? null);
       setIsVerified(shop?.is_verified === true);
     } finally {
       setLoading(false);
@@ -45,6 +49,16 @@ export function ProSellerActivationCard({ variant = 'account' }: Props) {
       void load();
     }, [load])
   );
+
+  const handleShare = useCallback(async () => {
+    if (!shopSlug || !shopName || sharing) return;
+    setSharing(true);
+    try {
+      await shareShop({ slug: shopSlug, name: shopName, city: shopCity });
+    } finally {
+      setSharing(false);
+    }
+  }, [shopCity, shopName, shopSlug, sharing]);
 
   if (loading) {
     return null;
@@ -60,18 +74,30 @@ export function ProSellerActivationCard({ variant = 'account' }: Props) {
           <Text style={styles.title}>{shopName ?? 'Ma boutique'}</Text>
           <Text style={styles.subtitle}>
             {isVerified
-              ? 'Boutique vérifiée — visible avec le badge Pro sur vos annonces.'
-              : 'Boutique active — vos prochaines annonces y seront rattachées.'}
+              ? 'Boutique vérifiée — partagez votre lien pour attirer vos clients.'
+              : 'Partagez votre boutique avec vos clients et publiez vos produits en quelques secondes.'}
           </Text>
         </View>
-        <Button
-          size="sm"
-          variant="outline"
-          onPress={() => router.push(`/shop/${shopSlug}`)}
-          style={styles.ctaBtn}
-        >
-          Voir la boutique
-        </Button>
+        <View style={styles.shopActions}>
+          <Button
+            size="sm"
+            variant="outline"
+            onPress={() => router.push(`/shop/${shopSlug}`)}
+            style={styles.ctaBtn}
+          >
+            Voir la boutique
+          </Button>
+          <Button
+            size="sm"
+            onPress={() => void handleShare()}
+            loading={sharing}
+            disabled={sharing}
+            leftIcon={<Ionicons name="share-outline" size={16} color={colors.surface} />}
+            style={styles.ctaBtn}
+          >
+            Partager
+          </Button>
+        </View>
       </View>
     );
   }
@@ -93,9 +119,9 @@ export function ProSellerActivationCard({ variant = 'account' }: Props) {
           <Ionicons name="storefront-outline" size={20} color={colors.primary} />
         </View>
         <View style={styles.textSlot}>
-          <Text style={styles.title}>Créer ma boutique professionnelle</Text>
+          <Text style={styles.title}>Créez votre boutique et commencez à vendre</Text>
           <Text style={styles.subtitle}>
-            Boutique dédiée, badge Pro, visibilité renforcée et lien partageable — en quelques minutes.
+            Boutique dédiée, badge Pro et lien partageable — prête en quelques minutes.
           </Text>
         </View>
         <Ionicons name="chevron-forward" size={20} color={colors.textMuted} />
@@ -177,6 +203,11 @@ const styles = StyleSheet.create({
     ...typography.sm,
     color: colors.textSecondary,
     lineHeight: 20,
+  },
+  shopActions: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
   },
   ctaBtn: {
     alignSelf: 'flex-start',
