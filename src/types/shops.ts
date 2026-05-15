@@ -12,6 +12,7 @@ export type PublicShop = {
   city: string | null;
   is_verified: boolean;
   is_featured: boolean;
+  created_at: string;
 };
 
 /** Résumé boutique pour badges / liens (fiche annonce, cartes). */

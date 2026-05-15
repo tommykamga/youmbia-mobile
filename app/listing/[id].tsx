@@ -31,6 +31,9 @@ import { useMarketplaceCategories } from '@/hooks/useMarketplaceCategories';
 import { getOrCreateConversation } from '@/services/conversations';
 import { getSession } from '@/services/auth';
 import { reportListing } from '@/services/reports';
+import { REPORT_OWN_CONTENT_MESSAGE } from '@/constants/reportMessages';
+import { MARKETPLACE_REPORT_REASONS } from '@/constants/reportReasons';
+import { MarketplaceTrustTips } from '@/features/trust';
 import { getSellerStats } from '@/services/users';
 import { ListingCard } from '@/features/listings/ListingCard';
 import { SkeletonListingCard } from '@/components/SkeletonListingCard';
@@ -61,9 +64,6 @@ type State =
   | { status: 'success'; listing: ListingDetail; dynamicAttributes: ListingDynamicAttributeDisplay[] };
 
 const FOOTER_HEIGHT_ESTIMATE = 80;
-
-/** Motifs de signalement (Sprint 7.1 — obligatoire, transmis au backend). */
-const REPORT_REASONS = ['Arnaque', 'Faux produit', 'Contenu interdit', 'Autre'] as const;
 
 /**
  * Sprint 2.3 – Listing detail conversion screen.
@@ -146,6 +146,7 @@ export default function ListingDetailScreen() {
   const [favoriteLoading, setFavoriteLoading] = useState(false);
   const [messageLoading, setMessageLoading] = useState(false);
   const [sessionStatus, setSessionStatus] = useState<'loading' | 'authed' | 'guest'>('loading');
+  const [sessionUserId, setSessionUserId] = useState<string | null>(null);
   const [sellerStats, setSellerStats] = useState<{ memberSince: string | null; listingCount: number | null }>({
     memberSince: null,
     listingCount: null,
@@ -322,10 +323,12 @@ export default function ListingDetailScreen() {
         .then((s) => {
           if (!active) return;
           setSessionStatus(s?.user ? 'authed' : 'guest');
+          setSessionUserId(s?.user?.id ?? null);
         })
         .catch(() => {
           if (!active) return;
           setSessionStatus('guest');
+          setSessionUserId(null);
         });
       return () => {
         active = false;
@@ -494,13 +497,18 @@ export default function ListingDetailScreen() {
       router.replace(buildAuthGateHref('account', { redirect: `/listing/${id}` }));
       return;
     }
+    const sellerId = state.status === 'success' ? state.listing.seller_id : null;
+    if (sellerId && sellerId === session.user.id) {
+      Alert.alert('Action impossible', REPORT_OWN_CONTENT_MESSAGE);
+      return;
+    }
     if (reportedListingId === id) {
       Alert.alert('Déjà signalé', 'Vous avez déjà signalé cette annonce.');
       return;
     }
     setReportReason(null);
     setReportModalVisible(true);
-  }, [id, router, reportedListingId]);
+  }, [id, router, reportedListingId, state]);
 
   const handleReportSubmit = useCallback(() => {
     if (!id || !reportReason?.trim()) return;
@@ -513,7 +521,8 @@ export default function ListingDetailScreen() {
           text: 'Envoyer',
           onPress: async () => {
             setReportLoading(true);
-            const result = await reportListing(id, reportReason.trim());
+            const sellerId = state.status === 'success' ? state.listing.seller_id : null;
+            const result = await reportListing(id, reportReason.trim(), { sellerId });
             setReportLoading(false);
             if (result.error) {
               Alert.alert('Erreur', result.error.message);
@@ -526,7 +535,7 @@ export default function ListingDetailScreen() {
         },
       ]
     );
-  }, [id, reportReason]);
+  }, [id, reportReason, state]);
 
   if (state.status === 'loading') {
     return (
@@ -561,6 +570,8 @@ export default function ListingDetailScreen() {
   const listing = state.listing;
   const dynamicAttributes = state.dynamicAttributes;
   const isGuest = sessionStatus === 'guest';
+  const isOwnListing =
+    sessionUserId != null && listing.seller_id != null && listing.seller_id === sessionUserId;
   const maskedPhone = maskPhoneForPreview(listing.seller?.phone ?? null);
 
   const renderSimilarItem = ({ item }: { item: PublicListing }) => (
@@ -636,6 +647,7 @@ export default function ListingDetailScreen() {
             dynamicItems={dynamicAttributes}
           />
           <ListingDescription description={listing.description} />
+          <MarketplaceTrustTips compact />
 
           <SecondaryActions
             listing={listing}
@@ -665,12 +677,14 @@ export default function ListingDetailScreen() {
               />
             </View>
           ) : null}
-          <Pressable
-            onPress={handleReportPress}
-            style={({ pressed }) => [styles.reportLink, pressed && styles.reportLinkPressed]}
-          >
-            <Text style={styles.reportLinkText}>Signaler cette annonce</Text>
-          </Pressable>
+          {!isOwnListing ? (
+            <Pressable
+              onPress={handleReportPress}
+              style={({ pressed }) => [styles.reportLink, pressed && styles.reportLinkPressed]}
+            >
+              <Text style={styles.reportLinkText}>Signaler cette annonce</Text>
+            </Pressable>
+          ) : null}
         </View>
       </ScrollView>
       <Modal
@@ -686,7 +700,7 @@ export default function ListingDetailScreen() {
           <Pressable style={styles.modalCard} onPress={(e) => e.stopPropagation()}>
             <Text style={styles.modalTitle}>Signaler cette annonce</Text>
             <Text style={styles.modalSubtitle}>Choisissez un motif</Text>
-            {REPORT_REASONS.map((label) => (
+            {MARKETPLACE_REPORT_REASONS.map((label) => (
               <Pressable
                 key={label}
                 style={({ pressed }) => [

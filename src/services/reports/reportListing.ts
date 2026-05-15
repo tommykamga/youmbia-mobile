@@ -7,6 +7,7 @@
  * Ne pas migrer sans coordination backend + web — flux mobile inchangé tant que `listing_reports` est la cible validée.
  */
 
+import { REPORT_OWN_CONTENT_MESSAGE } from '@/constants/reportMessages';
 import { supabase } from '@/lib/supabase';
 
 export type ReportListingResult =
@@ -19,7 +20,8 @@ export type ReportListingResult =
  */
 export async function reportListing(
   listingId: string,
-  reason?: string | null
+  reason?: string | null,
+  options?: { sellerId?: string | null }
 ): Promise<ReportListingResult> {
   const {
     data: { user },
@@ -34,13 +36,33 @@ export async function reportListing(
     return { data: null, error: { message: 'Annonce invalide' } };
   }
 
+  const trimmedListingId = listingId.trim();
+  if (options?.sellerId?.trim() === user.id) {
+    return { data: null, error: { message: REPORT_OWN_CONTENT_MESSAGE } };
+  }
+
+  if (!options?.sellerId?.trim()) {
+    const { data: listingRow, error: listingError } = await supabase
+      .from('listings')
+      .select('user_id')
+      .eq('id', trimmedListingId)
+      .maybeSingle();
+
+    if (listingError) {
+      return { data: null, error: { message: listingError.message } };
+    }
+    if (listingRow?.user_id === user.id) {
+      return { data: null, error: { message: REPORT_OWN_CONTENT_MESSAGE } };
+    }
+  }
+
   const trimmedReason = reason?.trim() || null;
   if (!trimmedReason) {
     return { data: null, error: { message: 'Veuillez choisir un motif' } };
   }
 
   const { error } = await supabase.from('listing_reports').insert({
-    listing_id: listingId.trim(),
+    listing_id: trimmedListingId,
     user_id: user.id,
     reason: trimmedReason,
   } as never);

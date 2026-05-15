@@ -15,16 +15,25 @@ import {
   RefreshControl,
   Platform,
   Pressable,
+  Modal,
 } from 'react-native';
-import { useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Screen, AppHeader, EmptyState, Button } from '@/components';
 import { ListingCard } from '@/features/listings';
 import { ProSellerBadge, ShopScreenSkeleton } from '@/features/shops';
+import { MarketplaceTrustTips, NewShopBadge } from '@/features/trust';
 import { getShopBySlug, getShopListings } from '@/services/shops';
+import { reportShop } from '@/services/reports';
+import { getSession } from '@/services/auth';
+import { getSellerStats } from '@/services/users';
 import { shareShop } from '@/lib/shareShop';
 import { normalizePhoneForWhatsApp, openSellerPhoneCallRaw } from '@/lib/sellerContact';
 import { getShopInitials } from '@/lib/shopSeller';
+import { buildAuthGateHref } from '@/lib/authGateNavigation';
+import { formatJoinDate } from '@/lib/format';
+import { REPORT_OWN_CONTENT_MESSAGE } from '@/constants/reportMessages';
+import { MARKETPLACE_REPORT_REASONS } from '@/constants/reportReasons';
 import type { PublicShop } from '@/types/shops';
 import type { PublicListing } from '@/services/listings';
 import { colors, spacing, typography, fontWeights, radius } from '@/theme';
@@ -37,6 +46,7 @@ type ShopScreenState =
 export default function ShopScreen() {
   const params = useLocalSearchParams<{ slug?: string | string[] }>();
   const slug = Array.isArray(params.slug) ? params.slug[0] : params.slug;
+  const router = useRouter();
   const { width: screenWidth } = useWindowDimensions();
   const cardWidth = useMemo(() => {
     const horizontalPadding = spacing.base * 2;
@@ -46,6 +56,12 @@ export default function ShopScreen() {
   const [state, setState] = useState<ShopScreenState>({ status: 'loading' });
   const [refreshing, setRefreshing] = useState(false);
   const [sharing, setSharing] = useState(false);
+  const [ownerMemberSince, setOwnerMemberSince] = useState<string | null>(null);
+  const [reportModalVisible, setReportModalVisible] = useState(false);
+  const [reportLoading, setReportLoading] = useState(false);
+  const [reportReason, setReportReason] = useState<string | null>(null);
+  const [reportedShopId, setReportedShopId] = useState<string | null>(null);
+  const [sessionUserId, setSessionUserId] = useState<string | null>(null);
 
   const loadShop = useCallback(async (isRefresh = false) => {
     if (!slug?.trim()) {
@@ -68,9 +84,12 @@ export default function ShopScreen() {
       setState({ status: 'error', message: listingsResult.error.message });
       return;
     }
+    const shop = shopResult.data;
+    const statsResult = await getSellerStats(shop.owner_id);
+    setOwnerMemberSince(statsResult.error ? null : statsResult.data.memberSince);
     setState({
       status: 'ready',
-      shop: shopResult.data,
+      shop,
       listings: listingsResult.data ?? [],
     });
   }, [slug]);
@@ -78,6 +97,22 @@ export default function ShopScreen() {
   useEffect(() => {
     void loadShop();
   }, [loadShop]);
+
+  useEffect(() => {
+    let active = true;
+    getSession()
+      .then((s) => {
+        if (!active) return;
+        setSessionUserId(s?.user?.id ?? null);
+      })
+      .catch(() => {
+        if (!active) return;
+        setSessionUserId(null);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -127,6 +162,55 @@ export default function ShopScreen() {
     }
   }, [sharing, state]);
 
+  const handleReportPress = useCallback(async () => {
+    if (state.status !== 'ready') return;
+    const shop = state.shop;
+    const session = await getSession();
+    if (!session?.user) {
+      router.replace(buildAuthGateHref('account', { redirect: `/shop/${shop.slug}` }));
+      return;
+    }
+    if (shop.owner_id === session.user.id) {
+      Alert.alert('Action impossible', REPORT_OWN_CONTENT_MESSAGE);
+      return;
+    }
+    if (reportedShopId === shop.id) {
+      Alert.alert('Déjà signalé', 'Vous avez déjà signalé cette boutique.');
+      return;
+    }
+    setReportReason(null);
+    setReportModalVisible(true);
+  }, [router, reportedShopId, state]);
+
+  const handleReportSubmit = useCallback(() => {
+    if (state.status !== 'ready' || !reportReason?.trim()) return;
+    const shop = state.shop;
+    Alert.alert(
+      'Confirmer le signalement',
+      'Votre signalement sera envoyé pour modération.',
+      [
+        { text: 'Annuler', style: 'cancel' },
+        {
+          text: 'Envoyer',
+          onPress: async () => {
+            setReportLoading(true);
+            const result = await reportShop(shop.id, reportReason.trim(), {
+              ownerId: shop.owner_id,
+            });
+            setReportLoading(false);
+            if (result.error) {
+              Alert.alert('Erreur', result.error.message);
+              return;
+            }
+            setReportModalVisible(false);
+            setReportedShopId(shop.id);
+            Alert.alert('Merci', 'Votre signalement a bien été envoyé.');
+          },
+        },
+      ]
+    );
+  }, [reportReason, state]);
+
   if (state.status === 'loading') {
     return (
       <Screen scroll={false}>
@@ -146,7 +230,10 @@ export default function ShopScreen() {
   }
 
   const { shop, listings } = state;
+  const isOwnShop = sessionUserId != null && shop.owner_id === sessionUserId;
   const initials = getShopInitials(shop.name);
+  const ownerJoinDate = formatJoinDate(ownerMemberSince);
+  const activeListingsCount = listings.length;
   const hasWhatsApp =
     normalizePhoneForWhatsApp(shop.whatsapp_phone) != null ||
     normalizePhoneForWhatsApp(shop.phone) != null;
@@ -209,6 +296,7 @@ export default function ShopScreen() {
             ) : null}
             <View style={styles.badgesRow}>
               <ProSellerBadge sellerType="pro" shop={shop} />
+              <NewShopBadge createdAt={shop.created_at} />
               {shop.is_featured ? (
                 <View style={styles.featuredChip}>
                   <Ionicons name="star" size={12} color={colors.primary} />
@@ -222,6 +310,20 @@ export default function ShopScreen() {
         {shop.description?.trim() ? (
           <Text style={styles.description}>{shop.description.trim()}</Text>
         ) : null}
+
+        {(ownerJoinDate || activeListingsCount > 0) && (
+          <View style={styles.trustMeta}>
+            {ownerJoinDate ? (
+              <Text style={styles.trustMetaText}>Membre depuis {ownerJoinDate}</Text>
+            ) : null}
+            {activeListingsCount > 0 ? (
+              <Text style={styles.trustMetaText}>
+                {activeListingsCount}{' '}
+                {activeListingsCount > 1 ? 'annonces actives' : 'annonce active'}
+              </Text>
+            ) : null}
+          </View>
+        )}
 
         {(hasWhatsApp || hasPhone) && (
           <View style={styles.contactCard}>
@@ -278,7 +380,72 @@ export default function ShopScreen() {
             ))}
           </View>
         )}
+
+        <View style={styles.trustSection}>
+          <MarketplaceTrustTips />
+          {!isOwnShop ? (
+            <Pressable
+              onPress={() => void handleReportPress()}
+              style={({ pressed }) => [styles.reportLink, pressed && styles.reportLinkPressed]}
+            >
+              <Text style={styles.reportLinkText}>Signaler cette boutique</Text>
+            </Pressable>
+          ) : null}
+        </View>
       </ScrollView>
+
+      <Modal
+        visible={reportModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => !reportLoading && setReportModalVisible(false)}
+      >
+        <Pressable
+          style={styles.modalOverlay}
+          onPress={() => !reportLoading && setReportModalVisible(false)}
+        >
+          <Pressable style={styles.modalCard} onPress={(e) => e.stopPropagation()}>
+            <Text style={styles.modalTitle}>Signaler cette boutique</Text>
+            <Text style={styles.modalSubtitle}>Choisissez un motif</Text>
+            {MARKETPLACE_REPORT_REASONS.map((label) => (
+              <Pressable
+                key={label}
+                style={({ pressed }) => [
+                  styles.reasonOption,
+                  reportReason === label && styles.reasonOptionSelected,
+                  pressed && styles.reasonOptionPressed,
+                ]}
+                onPress={() => setReportReason(reportReason === label ? null : label)}
+              >
+                <Text
+                  style={[
+                    styles.reasonOptionText,
+                    reportReason === label && styles.reasonOptionTextSelected,
+                  ]}
+                >
+                  {label}
+                </Text>
+              </Pressable>
+            ))}
+            <View style={styles.modalActions}>
+              <Button
+                variant="ghost"
+                onPress={() => !reportLoading && setReportModalVisible(false)}
+                disabled={reportLoading}
+              >
+                Annuler
+              </Button>
+              <Button
+                onPress={handleReportSubmit}
+                loading={reportLoading}
+                disabled={reportLoading || !reportReason?.trim()}
+              >
+                Envoyer le signalement
+              </Button>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </Screen>
   );
 }
@@ -444,5 +611,93 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     gap: spacing.sm,
     paddingHorizontal: spacing.base,
+  },
+  trustMeta: {
+    paddingHorizontal: spacing.base,
+    marginTop: spacing.sm,
+    gap: 4,
+  },
+  trustMetaText: {
+    ...typography.sm,
+    color: colors.textMuted,
+  },
+  trustSection: {
+    paddingHorizontal: spacing.base,
+    marginTop: spacing.lg,
+    paddingBottom: spacing.sm,
+  },
+  reportLink: {
+    alignSelf: 'flex-start',
+    marginTop: spacing.base,
+    paddingVertical: spacing.sm,
+  },
+  reportLinkPressed: {
+    opacity: 0.7,
+  },
+  reportLinkText: {
+    ...typography.sm,
+    color: colors.textMuted,
+    fontWeight: fontWeights.medium,
+    textDecorationLine: 'underline',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: spacing.xl,
+  },
+  modalCard: {
+    alignSelf: 'stretch',
+    maxWidth: 360,
+    backgroundColor: colors.surface,
+    borderRadius: radius.xl,
+    padding: spacing.xl,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  modalTitle: {
+    ...typography.lg,
+    fontWeight: fontWeights.bold,
+    color: colors.text,
+    marginBottom: spacing.xs,
+  },
+  modalSubtitle: {
+    ...typography.sm,
+    color: colors.textMuted,
+    marginBottom: spacing.base,
+  },
+  reasonOption: {
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.base,
+    borderRadius: radius.lg,
+    marginBottom: spacing.xs,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.background,
+  },
+  reasonOptionPressed: {
+    opacity: 0.9,
+  },
+  reasonOptionSelected: {
+    borderColor: colors.primary,
+    backgroundColor: colors.primary + '18',
+  },
+  reasonOptionText: {
+    ...typography.base,
+    color: colors.text,
+  },
+  reasonOptionTextSelected: {
+    fontWeight: fontWeights.semibold,
+    color: colors.primary,
+  },
+  modalActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: spacing.sm,
+    marginTop: spacing.xl,
   },
 });

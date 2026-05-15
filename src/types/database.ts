@@ -254,6 +254,38 @@ export type Database = {
           },
         ];
       };
+      shop_reports: {
+        Row: {
+          created_at: string;
+          id: string;
+          reason: string;
+          shop_id: string;
+          user_id: string;
+        };
+        Insert: {
+          created_at?: string;
+          id?: string;
+          reason: string;
+          shop_id: string;
+          user_id: string;
+        };
+        Update: {
+          created_at?: string;
+          id?: string;
+          reason?: string;
+          shop_id?: string;
+          user_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'shop_reports_shop_id_fkey';
+            columns: ['shop_id'];
+            isOneToOne: false;
+            referencedRelation: 'shops';
+            referencedColumns: ['id'];
+          },
+        ];
+      };
       shops: {
         Row: {
           id: string;
