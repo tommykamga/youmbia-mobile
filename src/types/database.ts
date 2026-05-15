@@ -28,6 +28,39 @@ export type Database = {
         };
         Relationships: [];
       };
+      app_versions: {
+        Row: {
+          id: number;
+          platform: string;
+          latest_version: string;
+          min_supported_version: string;
+          store_url: string | null;
+          message: string | null;
+          is_active: boolean;
+          updated_at: string;
+        };
+        Insert: {
+          id?: number;
+          platform: string;
+          latest_version: string;
+          min_supported_version: string;
+          store_url?: string | null;
+          message?: string | null;
+          is_active?: boolean;
+          updated_at?: string;
+        };
+        Update: {
+          id?: number;
+          platform?: string;
+          latest_version?: string;
+          min_supported_version?: string;
+          store_url?: string | null;
+          message?: string | null;
+          is_active?: boolean;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
       categories: {
         Row: {
           icon: string | null;

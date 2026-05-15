@@ -20,6 +20,7 @@ import {
   isPushNotificationsAvailable,
 } from '@/services/notifications';
 import { FavoritesProvider } from '@/context/FavoritesContext';
+import { AppUpdateGate } from '@/components/AppUpdateGate';
 
 /**
  * Polling sync notifications (messages + recherches enregistrées), actif quand l’app est au premier plan.
@@ -298,7 +299,8 @@ export default function RootLayout() {
 
   return (
     <SafeAreaProvider>
-      <FavoritesProvider>
+      <AppUpdateGate>
+        <FavoritesProvider>
         <StatusBar style="dark" translucent />
         <Stack
           screenOptions={{
@@ -320,7 +322,8 @@ export default function RootLayout() {
           <Stack.Screen name="terms" options={{ headerShown: false }} />
           <Stack.Screen name="privacy" options={{ headerShown: false }} />
         </Stack>
-      </FavoritesProvider>
+        </FavoritesProvider>
+      </AppUpdateGate>
     </SafeAreaProvider>
   );
 }
