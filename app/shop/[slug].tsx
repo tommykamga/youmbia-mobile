@@ -117,7 +117,17 @@ export default function ShopScreen() {
       return;
     }
 
-    const listingsResult = await getShopListings(resolvedShop.id);
+    const listingsResult = await getShopListings({
+      shopId: resolvedShop.id,
+      ownerId: resolvedShop.owner_id,
+      shopSummary: {
+        id: resolvedShop.id,
+        slug: resolvedShop.slug,
+        name: resolvedShop.name,
+        is_verified: resolvedShop.is_verified,
+        status: resolvedShop.status,
+      },
+    });
     if (listingsResult.error) {
       setState({ status: 'error', message: listingsResult.error.message });
       return;

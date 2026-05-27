@@ -4,6 +4,7 @@ import { normalizeListingSchemaFeatures } from '@/lib/listingSchemaFeatures';
 import { parseListingShopEmbed } from '@/lib/listingShopEmbed';
 import type { PublicListing } from '@/services/listings/getPublicListings';
 import { listingPublicListSelect } from '@/services/listings/listingListSelect';
+import type { ShopSummary } from '@/types/shops';
 
 type ListingImageRow = {
   url: string;
@@ -37,9 +38,16 @@ export type GetShopListingsResult =
   | { data: PublicListing[]; error: null }
   | { data: null; error: { message: string } };
 
-function mapRow(row: ListingRow, signedMap: Map<string, string>): PublicListing {
+function mapRow(
+  row: ListingRow,
+  signedMap: Map<string, string>,
+  attach?: { shopId?: string | null; shopSummary?: ShopSummary | null }
+): PublicListing {
   const images = mapListingCardImages(row.listing_images, signedMap);
   const schema = normalizeListingSchemaFeatures(row);
+  const embedded = parseListingShopEmbed(row.shops);
+  const shopSummary = embedded ?? attach?.shopSummary ?? null;
+  const shopId = row.shop_id ?? attach?.shopId ?? null;
   return {
     id: row.id,
     title: row.title,
@@ -51,14 +59,20 @@ function mapRow(row: ListingRow, signedMap: Map<string, string>): PublicListing 
     views_count: row.views_count ?? 0,
     seller_id: row.user_id ?? '',
     updated_at: row.updated_at,
-    shop_id: row.shop_id ?? null,
-    shop: parseListingShopEmbed(row.shops),
+    shop_id: shopId,
+    shop: shopSummary,
     ...schema,
   };
 }
 
-export async function getShopListings(shopId: string): Promise<GetShopListingsResult> {
-  if (!shopId?.trim()) {
+export async function getShopListings(args: {
+  shopId: string;
+  ownerId: string;
+  shopSummary?: ShopSummary | null;
+}): Promise<GetShopListingsResult> {
+  const shopId = args.shopId?.trim();
+  const ownerId = args.ownerId?.trim();
+  if (!shopId || !ownerId) {
     return { data: [], error: null };
   }
 
@@ -66,7 +80,7 @@ export async function getShopListings(shopId: string): Promise<GetShopListingsRe
     const { data, error } = await supabase
       .from('listings')
       .select(listingPublicListSelect(false))
-      .eq('shop_id', shopId)
+      .eq('user_id', ownerId)
       .eq('status', 'active')
       .order('urgent', { ascending: false })
       .order('created_at', { ascending: false });
@@ -80,7 +94,9 @@ export async function getShopListings(shopId: string): Promise<GetShopListingsRe
     const signedMap = await getSignedUrlsMap(paths);
 
     return {
-      data: rows.map((row) => mapRow(row, signedMap)),
+      data: rows.map((row) =>
+        mapRow(row, signedMap, { shopId, shopSummary: args.shopSummary ?? null })
+      ),
       error: null,
     };
   } catch (error) {
