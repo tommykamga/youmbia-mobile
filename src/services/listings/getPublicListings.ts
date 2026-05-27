@@ -5,10 +5,16 @@
  */
 
 import { supabase } from '@/lib/supabase';
-import { getSignedUrlsMap, listingStoragePathsForCardCover, mapListingCardImages } from '@/lib/listingImageUrl';
+import {
+  getSignedUrlsMap,
+  listingStoragePathsForCardCover,
+  mapListingCardImages,
+  toDisplayImageUrl,
+} from '@/lib/listingImageUrl';
 import { normalizeListingSchemaFeatures } from '@/lib/listingSchemaFeatures';
 import { parseListingShopEmbed } from '@/lib/listingShopEmbed';
 import type { ShopSummary } from '@/types/shops';
+import { SHOP_SUMMARY_SELECT } from '@/services/shops/shopSelect';
 import { listingPublicListSelect } from './listingListSelect';
 
 export type PublicListing = {
@@ -113,7 +119,55 @@ export async function getPublicListings(
   }
 
   const list = (data ?? []) as unknown as ListingRow[];
-  const allPaths = list.flatMap((row) => listingStoragePathsForCardCover(row.listing_images));
-  const signedMap = await getSignedUrlsMap(allPaths);
-  return { data: list.map((row) => mapRow(row, signedMap)), error: null };
+  const allImagePaths = list.flatMap((row) => listingStoragePathsForCardCover(row.listing_images));
+  const imageSignedMap = await getSignedUrlsMap(allImagePaths);
+  const results = list.map((row) => mapRow(row, imageSignedMap));
+
+  // Fallback anciennes annonces (sans shop_id) : si le owner possède une boutique active, injecter un ShopSummary.
+  const missingShopOwnerIds = [
+    ...new Set(
+      list
+        .filter((row) => !row.shop_id && String(row.user_id ?? '').trim() !== '')
+        .map((row) => String(row.user_id ?? '').trim())
+    ),
+  ];
+
+  let ownerShopByOwnerId = new Map<string, ShopSummary>();
+  if (missingShopOwnerIds.length > 0) {
+    const { data: shopRows } = await supabase
+      .from('shops')
+      .select(`owner_id, ${SHOP_SUMMARY_SELECT}`)
+      .eq('status', 'active')
+      .in('owner_id', missingShopOwnerIds);
+
+    for (const row of (shopRows ?? []) as unknown as (ShopSummary & { owner_id: string })[]) {
+      const ownerId = String((row as { owner_id?: string | null }).owner_id ?? '').trim();
+      if (!ownerId || !row.id?.trim()) continue;
+      ownerShopByOwnerId.set(ownerId, row as unknown as ShopSummary);
+    }
+  }
+
+  // Résolution URL logo shop (signed URL si chemin Storage).
+  const shopLogoPaths = [
+    ...new Set([
+      ...results.map((r) => String(r.shop?.logo_url ?? '').trim()),
+      ...[...ownerShopByOwnerId.values()].map((s) => String(s.logo_url ?? '').trim()),
+    ]),
+  ].filter((p) => p !== '' && !/^https?:\/\//i.test(p));
+  const shopLogoSignedMap = await getSignedUrlsMap(shopLogoPaths);
+
+  const dataWithFallback = results.map((listing) => {
+    const fallbackShop =
+      !listing.shop_id && !listing.shop ? ownerShopByOwnerId.get(String(listing.seller_id ?? '').trim()) : undefined;
+    const rawShop = listing.shop ?? fallbackShop ?? null;
+    if (!rawShop) return listing;
+    const resolvedLogo = rawShop.logo_url ? toDisplayImageUrl(rawShop.logo_url, shopLogoSignedMap) : '';
+    const shop: ShopSummary = {
+      ...rawShop,
+      logo_url: resolvedLogo || rawShop.logo_url || null,
+    };
+    return { ...listing, shop };
+  });
+
+  return { data: dataWithFallback, error: null };
 }

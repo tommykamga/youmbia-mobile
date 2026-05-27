@@ -79,6 +79,9 @@ export default function ShopScreen() {
   const [reportReason, setReportReason] = useState<string | null>(null);
   const [reportedShopId, setReportedShopId] = useState<string | null>(null);
   const [sessionUserId, setSessionUserId] = useState<string | null>(null);
+  const [logoFailed, setLogoFailed] = useState(false);
+
+  const logoKey = state.status === 'ready' ? String(state.shop.logo_url ?? '').trim() : '';
 
   const loadShop = useCallback(async (isRefresh = false) => {
     if (!slug?.trim()) {
@@ -124,6 +127,7 @@ export default function ShopScreen() {
         id: resolvedShop.id,
         slug: resolvedShop.slug,
         name: resolvedShop.name,
+        logo_url: resolvedShop.logo_url ?? null,
         is_verified: resolvedShop.is_verified,
         status: resolvedShop.status,
       },
@@ -141,6 +145,10 @@ export default function ShopScreen() {
       listings: listingsResult.data ?? [],
     });
   }, [slug]);
+
+  useEffect(() => {
+    setLogoFailed(false);
+  }, [logoKey]);
 
   useEffect(() => {
     void loadShop();
@@ -356,8 +364,8 @@ export default function ShopScreen() {
 
         <View style={[styles.contentColumn, { width: shopContentLayout.contentWidth }]}>
           <View style={styles.profileRow}>
-            {shop.logo_url ? (
-              <Image source={{ uri: shop.logo_url }} style={styles.logo} />
+            {shop.logo_url && !logoFailed ? (
+              <Image source={{ uri: shop.logo_url }} style={styles.logo} onError={() => setLogoFailed(true)} />
             ) : (
               <View style={styles.logoFallback}>
                 <Text style={styles.logoInitials}>{initials}</Text>

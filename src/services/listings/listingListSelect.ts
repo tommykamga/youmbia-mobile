@@ -16,7 +16,7 @@ export const LISTING_PUBLIC_LIST_CORE_SELECT =
 
 /** Résumé boutique pour badges cartes (jointure FK listing → shop). */
 export const LISTING_PUBLIC_LIST_SHOP_EMBED =
-  'shops!listings_shop_id_fkey(id, slug, name, is_verified, status)';
+  'shops!listings_shop_id_fkey(id, slug, name, logo_url, is_verified, status)';
 
 /** Liste publique + images ; `description` uniquement si besoin (ex. scoring recherche client). */
 export function listingPublicListSelect(includeDescription: boolean): string {

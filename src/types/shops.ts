@@ -23,6 +23,7 @@ export type ShopSummary = {
   id: string;
   slug: string;
   name: string;
+  logo_url: string | null;
   is_verified: boolean;
   status: ShopStatus;
 };

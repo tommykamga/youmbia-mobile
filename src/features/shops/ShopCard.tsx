@@ -2,7 +2,7 @@
  * Carte boutique — rail horizontal accueil (premium, sobre).
  */
 
-import React, { memo } from 'react';
+import React, { memo, useEffect, useState } from 'react';
 import { View, Text, StyleSheet, Pressable, Image, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -24,6 +24,7 @@ function ShopCardInner({ shop, variant = 'default' }: ShopCardProps) {
   const router = useRouter();
   const initials = getShopInitials(shop.name);
   const isCompact = variant === 'compact';
+  const [logoFailed, setLogoFailed] = useState(false);
   const listingsLabel =
     shop.active_listings_count > 0
       ? `${shop.active_listings_count} annonce${shop.active_listings_count > 1 ? 's' : ''}`
@@ -33,6 +34,10 @@ function ShopCardInner({ shop, variant = 'default' }: ShopCardProps) {
     if (!shop.slug?.trim()) return;
     router.push(`/shop/${shop.slug.trim()}`);
   };
+
+  useEffect(() => {
+    setLogoFailed(false);
+  }, [shop.logo_url]);
 
   return (
     <Pressable
@@ -57,8 +62,12 @@ function ShopCardInner({ shop, variant = 'default' }: ShopCardProps) {
 
       <View style={[styles.body, isCompact && styles.bodyCompact]}>
         <View style={styles.logoRow}>
-          {shop.logo_url ? (
-            <Image source={{ uri: shop.logo_url }} style={[styles.logo, isCompact && styles.logoCompact]} />
+          {shop.logo_url && !logoFailed ? (
+            <Image
+              source={{ uri: shop.logo_url }}
+              style={[styles.logo, isCompact && styles.logoCompact]}
+              onError={() => setLogoFailed(true)}
+            />
           ) : (
             <View style={[styles.logoFallback, isCompact && styles.logoCompact]}>
               <Text style={[styles.logoInitials, isCompact && styles.logoInitialsCompact]}>{initials}</Text>

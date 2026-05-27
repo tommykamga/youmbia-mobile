@@ -4,6 +4,7 @@ type ShopEmbedRow = {
   id: string;
   slug: string;
   name: string;
+  logo_url?: string | null;
   is_verified: boolean;
   status?: string | null;
 } | null;
@@ -18,6 +19,7 @@ export function parseListingShopEmbed(
     id: raw.id,
     slug: String(raw.slug ?? '').trim(),
     name: String(raw.name ?? '').trim(),
+    logo_url: raw.logo_url != null ? String(raw.logo_url).trim() || null : null,
     is_verified: raw.is_verified === true,
     status:
       String(raw.status ?? 'active').toLowerCase() === 'hidden'

@@ -5,12 +5,19 @@
  */
 
 import { supabase } from '@/lib/supabase';
-import { getSignedUrlsMap, listingStoragePathsForCardCover, mapListingCardImages } from '@/lib/listingImageUrl';
+import {
+  getSignedUrlsMap,
+  listingStoragePathsForCardCover,
+  mapListingCardImages,
+  toDisplayImageUrl,
+} from '@/lib/listingImageUrl';
 import { normalizeListingSchemaFeatures } from '@/lib/listingSchemaFeatures';
 import { buildRootCategoryTree } from '@/lib/marketplaceCategories';
 import { getMarketplaceCategoriesCached } from '@/services/categories';
 import type { PublicListing } from './getPublicListings';
 import { parseListingShopEmbed } from '@/lib/listingShopEmbed';
+import type { ShopSummary } from '@/types/shops';
+import { SHOP_SUMMARY_SELECT } from '@/services/shops/shopSelect';
 import { listingPublicListSelect } from './listingListSelect';
 
 type ListingImageRow = {
@@ -31,7 +38,7 @@ type ListingRow = {
   views_count: number | null;
   user_id: string | null;
   shop_id?: string | null;
-  shops?: { id: string; slug: string; name: string; is_verified: boolean } | { id: string; slug: string; name: string; is_verified: boolean }[] | null;
+  shops?: ShopSummary | ShopSummary[] | null;
   boosted?: boolean | null;
   urgent?: boolean | null;
   district?: string | null;
@@ -140,6 +147,27 @@ export async function searchListings(options: SearchOptions = {}): Promise<Searc
   const trimmed = query.trim();
   const listSelect = listingPublicListSelect(trimmed.length > 3);
 
+  // Recherche boutique (name/slug) → owner_ids (requête bornée, boutiques actives uniquement).
+  let shopOwnerIds: string[] = [];
+  if (trimmed) {
+    const safe = trimmed.replace(/[%_\\]/g, '');
+    const pattern = `%${safe}%`;
+    const { data: shopRows } = await supabase
+      .from('shops')
+      .select('owner_id')
+      .eq('status', 'active')
+      .or(`name.ilike.${pattern},slug.ilike.${pattern}`)
+      .limit(30);
+
+    shopOwnerIds = [
+      ...new Set(
+        (shopRows ?? [])
+          .map((r) => String((r as { owner_id?: string | null }).owner_id ?? '').trim())
+          .filter(Boolean)
+      ),
+    ];
+  }
+
   let request = supabase
     .from('listings')
     .select(
@@ -149,18 +177,25 @@ export async function searchListings(options: SearchOptions = {}): Promise<Searc
     )
     .eq('status', 'active');
 
-  // Text search: stricter for short queries to avoid noisy substring matches (e.g. "lit" matching "qualité")
-  if (trimmed) {
-    const safe = trimmed.replace(/[%_\\]/g, '');
-    const pattern = `%${safe}%`;
-    
-    if (trimmed.length <= 3) {
-      // Short query: prioritize titles and skip descriptions to avoid common substring noise
-      request = request.or(`title.ilike.${pattern},city.ilike.${pattern}`);
-    } else {
-      // Longer query: full search across title, city, and description
-      request = request.or(`title.ilike.${pattern},city.ilike.${pattern},description.ilike.${pattern}`);
+  // Recherche texte + boutique (single .or pour éviter (OR) AND (OR)).
+  if (trimmed || shopOwnerIds.length > 0) {
+    const orParts: string[] = [];
+    if (trimmed) {
+      const safe = trimmed.replace(/[%_\\]/g, '');
+      const pattern = `%${safe}%`;
+      if (trimmed.length <= 3) {
+        // Short query: prioritize titles and skip descriptions to avoid common substring noise
+        orParts.push(`title.ilike.${pattern}`, `city.ilike.${pattern}`);
+      } else {
+        // Longer query: full search across title, city, and description
+        orParts.push(`title.ilike.${pattern}`, `city.ilike.${pattern}`, `description.ilike.${pattern}`);
+      }
     }
+    if (shopOwnerIds.length > 0) {
+      const inList = shopOwnerIds.join(',');
+      orParts.push(`user_id.in.(${inList})`);
+    }
+    request = request.or(orParts.join(','));
   }
 
   // Category filter: support for root category branches (sub-categories)
@@ -223,9 +258,55 @@ export async function searchListings(options: SearchOptions = {}): Promise<Searc
   const signedMap = await getSignedUrlsMap(allPaths);
   const results = list.map((row) => mapRow(row, signedMap));
 
+  // Fallback anciennes annonces (sans shop_id) : si owner possède une boutique active, injecter un ShopSummary.
+  const missingShopOwnerIds = [
+    ...new Set(
+      list
+        .filter((row) => !row.shop_id && String(row.user_id ?? '').trim() !== '')
+        .map((row) => String(row.user_id ?? '').trim())
+    ),
+  ];
+
+  let ownerShopByOwnerId = new Map<string, ShopSummary>();
+  if (missingShopOwnerIds.length > 0) {
+    const { data: shopRows } = await supabase
+      .from('shops')
+      .select(`owner_id, ${SHOP_SUMMARY_SELECT}`)
+      .eq('status', 'active')
+      .in('owner_id', missingShopOwnerIds);
+
+    for (const row of (shopRows ?? []) as unknown as (ShopSummary & { owner_id: string })[]) {
+      const ownerId = String((row as { owner_id?: string | null }).owner_id ?? '').trim();
+      if (!ownerId || !row.id?.trim()) continue;
+      ownerShopByOwnerId.set(ownerId, row as unknown as ShopSummary);
+    }
+  }
+
+  // Résolution URL logo shop (signed URL si chemin Storage).
+  const shopLogoPaths = [
+    ...new Set([
+      ...results.map((r) => String(r.shop?.logo_url ?? '').trim()),
+      ...[...ownerShopByOwnerId.values()].map((s) => String(s.logo_url ?? '').trim()),
+    ]),
+  ].filter((p) => p !== '' && !/^https?:\/\//i.test(p));
+  const shopLogoSignedMap = await getSignedUrlsMap(shopLogoPaths);
+
+  const resultsWithShopFallback = results.map((listing) => {
+    const fallbackShop =
+      !listing.shop_id && !listing.shop ? ownerShopByOwnerId.get(String(listing.seller_id ?? '').trim()) : undefined;
+    const rawShop = listing.shop ?? fallbackShop ?? null;
+    if (!rawShop) return listing;
+    const resolvedLogo = rawShop.logo_url ? toDisplayImageUrl(rawShop.logo_url, shopLogoSignedMap) : '';
+    const shop: ShopSummary = {
+      ...rawShop,
+      logo_url: resolvedLogo || rawShop.logo_url || null,
+    };
+    return { ...listing, shop };
+  });
+
   // Client-side reranking by relevance score if a query exists
-  if (trimmed && results.length > 0) {
-    results.sort((a, b) => {
+  if (trimmed && resultsWithShopFallback.length > 0) {
+    resultsWithShopFallback.sort((a, b) => {
       const scoreA = computeRelevanceScore(a, trimmed);
       const scoreB = computeRelevanceScore(b, trimmed);
       if (scoreB !== scoreA) return scoreB - scoreA;
@@ -234,5 +315,5 @@ export async function searchListings(options: SearchOptions = {}): Promise<Searc
     });
   }
 
-  return { data: results, total: count ?? 0, error: null };
+  return { data: resultsWithShopFallback, total: count ?? 0, error: null };
 }
