@@ -22,24 +22,24 @@ const AUTRES_LABEL = 'Autres';
 
 /** Jetons locaux au strip rapide (ne pas élargir aux autres écrans sans besoin explicite). */
 const STRIP = {
-  activeBg: 'rgba(110, 220, 95, 0.10)',
-  activeBorder: 'rgba(22, 163, 74, 0.45)',
-  activeBorderWidth: 1.35,
+  activeBg: 'rgba(22, 163, 74, 0.09)',
+  activeBorder: 'rgba(22, 163, 74, 0.34)',
+  activeBorderWidth: 1.2,
   inactiveBg: '#FFFFFF',
-  inactiveBorder: 'rgba(15, 23, 42, 0.06)',
+  inactiveBorder: 'rgba(15, 23, 42, 0.07)',
   inactiveBorderWidth: 1,
   radius: 17,
   itemGap: 16,
   iconActive: colors.primary,
-  iconInactive: 'rgba(15, 23, 42, 0.45)',
+  iconInactive: 'rgba(15, 23, 42, 0.42)',
   labelActive: colors.primary,
-  labelInactive: 'rgba(15, 23, 42, 0.70)',
+  labelInactive: 'rgba(15, 23, 42, 0.72)',
 } as const;
 
 /** Libellés courts affichés (pas de troncature sur ces chaînes). */
 const STRIP_LABEL_BY_SLUG: Record<string, string> = {
   vehicules: 'Auto',
-  electronique: 'Tech',
+  electronique: 'Téléphones',
   'maison-decoration': 'Maison',
   'mode-beaute': 'Mode',
   immobilier: 'Immo',
@@ -195,6 +195,8 @@ export function HomeCategoryStrip({
                   isActive ? styles.labelActive : styles.labelInactive,
                 ]}
                 numberOfLines={1}
+                adjustsFontSizeToFit
+                minimumFontScale={0.86}
               >
                 {stripLabel(category)}
               </Text>
@@ -233,6 +235,8 @@ export function HomeCategoryStrip({
           <Text
             style={[styles.label, styles.labelInactive]}
             numberOfLines={1}
+            adjustsFontSizeToFit
+            minimumFontScale={0.86}
           >
             {AUTRES_LABEL}
           </Text>

@@ -79,7 +79,7 @@ function buildSearchPage1SessionKey(parts: {
 }
 const PRICE_INPUT_PATTERN = /^\d+$/;
 
-const SEARCH_FIELD_PLACEHOLDER = 'Rechercher';
+const SEARCH_FIELD_PLACEHOLDER = 'Rechercher un téléphone, une voiture…';
 
 type SearchState =
   | { status: 'idle' }
@@ -828,26 +828,26 @@ export default function SearchScreen() {
   );
 
   const searchChrome = useMemo(() => {
-    const borderColor = 'rgba(15,23,42,0.04)';
-    const searchBg = '#F4F6F8';
+    const borderColor = 'rgba(15,23,42,0.08)';
+    const searchBg = colors.surface;
     const rowShadow = Platform.select({
       ios: {
         shadowColor: '#0F172A',
         shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.05,
-        shadowRadius: 10,
+        shadowOpacity: 0.06,
+        shadowRadius: 12,
       },
-      android: { elevation: 2 },
+      android: { elevation: 3 },
       default: {},
     });
     if (width < 380) {
       return {
         hPad: homeHorizontalPadding,
-        searchMinH: 47,
-        searchPadV: 10,
+        searchMinH: 48,
+        searchPadV: 11,
         stripPadTop: 2,
         searchIconSize: 21,
-        searchRadius: 20,
+        searchRadius: 22,
         searchBg,
         borderColor,
         rowShadow,
@@ -856,11 +856,11 @@ export default function SearchScreen() {
     if (width >= 430) {
       return {
         hPad: homeHorizontalPadding,
-        searchMinH: 53,
-        searchPadV: 13,
+        searchMinH: 54,
+        searchPadV: 14,
         stripPadTop: 4,
         searchIconSize: 23,
-        searchRadius: 21,
+        searchRadius: 23,
         searchBg,
         borderColor,
         rowShadow,
@@ -868,11 +868,11 @@ export default function SearchScreen() {
     }
     return {
       hPad: homeHorizontalPadding,
-      searchMinH: 50,
-      searchPadV: 12,
+      searchMinH: 52,
+      searchPadV: 13,
       stripPadTop: 3,
       searchIconSize: 22,
-      searchRadius: 20,
+      searchRadius: 22,
       searchBg,
       borderColor,
       rowShadow,
@@ -999,7 +999,7 @@ export default function SearchScreen() {
 
   const sortBar = useMemo(
     () => (
-      <View style={styles.sortRow}>
+      <View style={[styles.sortRow, { paddingHorizontal: searchChrome.hPad }]}>
         <View style={styles.sortContainerInline}>
           <Pressable
             style={[styles.sortOption, sortBy === 'recent' && styles.sortOptionActive]}
@@ -1053,6 +1053,7 @@ export default function SearchScreen() {
       openFilters,
       hasAppliedPriceFilter,
       hasAppliedSearchFilter,
+      searchChrome.hPad,
     ]
   );
 
@@ -1104,14 +1105,14 @@ export default function SearchScreen() {
     return (
       <View style={styles.resultsHeaderWrap}>
         {isExploreMode ? (
-          <View style={styles.exploreHeader}>
+          <View style={[styles.exploreHeader, { paddingHorizontal: searchChrome.hPad }]}>
             <Text style={styles.exploreTitle}>
               {isFromHome ? 'Toutes les annonces' : 'Explorez les annonces disponibles'}
             </Text>
             <Text style={styles.exploreSubtitle}>Découvrez les dernières opportunités publiées</Text>
           </View>
         ) : (
-          <View style={styles.exploreHeader}>
+          <View style={[styles.exploreHeader, { paddingHorizontal: searchChrome.hPad }]}>
             <Text style={styles.exploreTitle}>Résultats de recherche</Text>
             <Text style={styles.exploreSubtitle}>
               {state.status === 'success' ? state.total : filteredListings.length}{' '}
@@ -1125,7 +1126,7 @@ export default function SearchScreen() {
         {sortBar}
 
         {resultsChipsDisplay.length > 0 ? (
-          <View style={styles.activeChipsRow}>
+          <View style={[styles.activeChipsRow, { paddingHorizontal: searchChrome.hPad }]}>
             {resultsChipsDisplay.slice(0, 4).map((chip) => (
               <View key={chip} style={styles.filterChip}>
                 <Text style={styles.filterChipText}>{chip}</Text>
@@ -1149,6 +1150,7 @@ export default function SearchScreen() {
     state,
     params.from,
     resultsChipsDisplay,
+      searchChrome.hPad,
   ]);
 
   const filtersSheetContent = useMemo(
@@ -1554,7 +1556,11 @@ export default function SearchScreen() {
                       }
                       contentContainerStyle={[
                         styles.listContent,
-                        { paddingBottom: spacing['3xl'] + scrollBottomReserve },
+                        {
+                          paddingTop: spacing.base,
+                          paddingHorizontal: homeHorizontalPadding,
+                          paddingBottom: spacing['3xl'] + scrollBottomReserve,
+                        },
                       ]}
                       showsVerticalScrollIndicator={false}
                       keyboardShouldPersistTaps="handled"
@@ -1770,7 +1776,7 @@ const styles = StyleSheet.create({
   searchRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: spacing.md,
+    marginBottom: spacing.sm,
   },
   searchIcon: {
     marginRight: spacing.sm,
@@ -1779,12 +1785,13 @@ const styles = StyleSheet.create({
     flex: 1,
     minWidth: 0,
     justifyContent: 'center',
-    paddingVertical: spacing.xs,
+    paddingVertical: 0,
   },
   searchFieldText: {
     ...typography.base,
     color: colors.text,
     fontWeight: fontWeights.medium,
+    lineHeight: 20,
   },
   searchFieldPlaceholder: {
     color: colors.textTertiary,
@@ -1999,7 +2006,6 @@ const styles = StyleSheet.create({
     maxWidth: 760,
     width: '100%',
     alignSelf: 'center',
-    padding: spacing.base,
     flexGrow: 1,
   },
   separator: {
@@ -2011,7 +2017,6 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     gap: spacing.sm,
     paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.base,
   },
   sortFiltersIconBtn: {
     width: 40,
@@ -2038,12 +2043,16 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   sortOption: {
-    paddingVertical: spacing.xs,
-    paddingHorizontal: spacing.sm,
-    borderRadius: radius.lg,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: radius.full,
+    borderWidth: 1,
+    borderColor: 'rgba(15,23,42,0.07)',
+    backgroundColor: colors.surface,
   },
   sortOptionActive: {
-    backgroundColor: colors.primary + '20',
+    backgroundColor: colors.primary + '10',
+    borderColor: colors.primary + '26',
   },
   sortOptionText: {
     ...typography.sm,
@@ -2084,7 +2093,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: spacing.xs,
-    paddingHorizontal: spacing.base,
     paddingBottom: spacing.sm,
   },
   moreChip: {
@@ -2362,7 +2370,6 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.xs,
   },
   exploreHeader: {
-    paddingHorizontal: spacing.base,
     paddingTop: spacing.sm,
     paddingBottom: spacing.md,
   },

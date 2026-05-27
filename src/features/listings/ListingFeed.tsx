@@ -535,12 +535,16 @@ const styles = StyleSheet.create({
     borderBottomColor: 'rgba(15,23,42,0.08)',
   },
   sortOption: {
-    paddingVertical: 5,
+    paddingVertical: 6,
     paddingHorizontal: 10,
-    borderRadius: radius.lg,
+    borderRadius: radius.full,
+    borderWidth: 1,
+    borderColor: 'rgba(15,23,42,0.07)',
+    backgroundColor: colors.surface,
   },
   sortOptionActive: {
-    backgroundColor: colors.primary + '20',
+    backgroundColor: colors.primary + '10',
+    borderColor: colors.primary + '26',
   },
   sortOptionText: {
     ...typography.sm,

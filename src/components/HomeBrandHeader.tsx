@@ -78,11 +78,12 @@ export function HomeBrandHeader({
       sideSlot,
       rowHPadding
     );
-    const rowExtra = width < 380 ? 6 : 10;
+    // Compact (search tab) : moins de vide vertical tout en restant safe sous la status bar (SafeAreaView).
+    const rowExtra = searchTabLayout ? (width < 380 ? 4 : 6) : width < 380 ? 6 : 10;
     /** Réf. recette : 34–36 px, icône 17–19 (onglet Chercher uniquement). */
     const notifIcon = searchTabLayout ? 18 : width < 380 ? 18 : width < 430 ? 19 : 20;
     const btnSize = searchTabLayout ? 35 : width < 380 ? 40 : width < 430 ? 40 : 42;
-    const rowPadV = searchTabLayout ? (width < 380 ? 4 : 5) : width < 380 ? 2 : width < 430 ? 4 : 5;
+    const rowPadV = searchTabLayout ? (width < 380 ? 3 : 4) : width < 380 ? 2 : width < 430 ? 4 : 5;
     return {
       logoWidth,
       logoHeight,
@@ -157,7 +158,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
   },
   rowSearchTab: {
-    marginBottom: 10,
+    marginBottom: 6,
   },
   sideSlot: {
     minHeight: 40,

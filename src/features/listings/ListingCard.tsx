@@ -232,6 +232,13 @@ function ListingCardInner({
           />
         </View>
       </View>
+      {priceLabel && isHomeFeed ? (
+        <View style={styles.priceOverlayHome} pointerEvents="none">
+          <Text style={styles.priceOverlayHomeText} numberOfLines={1} ellipsizeMode="tail">
+            {priceLabel}
+          </Text>
+        </View>
+      ) : null}
       {priceLabel && !isHomeFeed && !isFeaturedRail ? (
         <View style={styles.priceOverlay}>
           <Text style={styles.priceText}>{priceLabel}</Text>
@@ -310,15 +317,6 @@ function ListingCardInner({
       )}
 
       <View style={[styles.info, isHomeFeed && styles.infoHome, isFeaturedRail && styles.infoRailFeatured]}>
-        {isHomeFeed && priceLabel ? (
-          <Text
-            style={styles.priceHomeLead}
-            numberOfLines={1}
-            ellipsizeMode="tail"
-          >
-            {priceLabel}
-          </Text>
-        ) : null}
         {isFeaturedRail && priceLabel ? (
           <Text style={styles.priceRailFeatured} numberOfLines={1} ellipsizeMode="tail">
             {priceLabel}
@@ -449,9 +447,22 @@ const styles = StyleSheet.create({
   },
   heartSlotHome: {
     marginLeft: 'auto',
-    backgroundColor: 'transparent',
     padding: 0,
     overflow: 'visible',
+    borderRadius: 999,
+    backgroundColor: 'rgba(255,255,255,0.92)',
+    borderWidth: 1,
+    borderColor: 'rgba(15,23,42,0.08)',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#0F172A',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.08,
+        shadowRadius: 6,
+      },
+      android: { elevation: 2 },
+      default: {},
+    }),
   },
   imagePlaceholder: {
     position: 'relative',
@@ -550,28 +561,37 @@ const styles = StyleSheet.create({
     color: colors.surface,
   },
   badgeNew: {
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: radius.md,
-    backgroundColor: colors.surface,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: radius.full,
+    backgroundColor: 'rgba(255,255,255,0.92)',
     borderWidth: 1,
-    borderColor: 'rgba(15,23,42,0.08)',
-    ...Platform.select({
-      ios: {
-        shadowColor: '#0F172A',
-        shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: 0.04,
-        shadowRadius: 3,
-      },
-      android: { elevation: 1 },
-    }),
+    borderColor: 'rgba(15,23,42,0.07)',
   },
   badgeNewText: {
-    fontSize: 11,
-    lineHeight: 14,
-    fontWeight: '600',
+    fontSize: 10,
+    lineHeight: 13,
+    fontWeight: '700',
     color: colors.textSecondary,
     letterSpacing: 0.15,
+  },
+  priceOverlayHome: {
+    position: 'absolute',
+    bottom: 10,
+    left: 10,
+    maxWidth: '86%',
+    backgroundColor: 'rgba(15,23,42,0.72)',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 11,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.16)',
+  },
+  priceOverlayHomeText: {
+    color: '#fff',
+    fontWeight: '800',
+    fontSize: 14,
+    letterSpacing: -0.2,
   },
   priceOverlay: {
     position: 'absolute',
@@ -624,24 +644,16 @@ const styles = StyleSheet.create({
   },
   infoHome: {
     paddingHorizontal: ui.spacing.md,
-    paddingTop: spacing.base,
-    paddingBottom: ui.spacing.lg,
+    paddingTop: spacing.sm,
+    paddingBottom: ui.spacing.md,
     gap: 0,
-  },
-  priceHomeLead: {
-    fontSize: 18,
-    lineHeight: 22,
-    fontWeight: '700',
-    color: colors.primaryDark,
-    letterSpacing: -0.4,
-    marginBottom: ui.spacing.sm,
   },
   titleHome: {
     fontSize: 14,
     lineHeight: 19,
     fontWeight: fontWeights.semibold,
     color: ui.colors.textPrimary,
-    marginBottom: spacing.sm,
+    marginBottom: spacing.xs,
     letterSpacing: -0.08,
   },
   metaHome: {

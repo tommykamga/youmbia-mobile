@@ -9,14 +9,17 @@ import { AppSectionHeader } from '@/components';
 import { getPopularShopsCached } from '@/services/shops/popularShopsCache';
 import type { PopularShop } from '@/services/shops/getPopularShops';
 import { useHomeMarketplaceGridInset } from '@/lib/responsiveLayout';
-import { ShopCard, SHOP_CARD_RAIL_STRIDE } from './ShopCard';
+import { ShopCard, SHOP_CARD_RAIL_MARGIN_END, SHOP_CARD_RAIL_STRIDE } from './ShopCard';
 import { ShopsRailSkeleton } from './ShopsRailSkeleton';
 import { spacing, ui } from '@/theme';
 
 export function PopularShopsSection() {
   const gridInset = useHomeMarketplaceGridInset();
   const railContentStyle = useMemo(
-    () => [styles.scrollContent, { paddingLeft: gridInset, paddingRight: gridInset }],
+    () => [
+      styles.scrollContent,
+      { paddingLeft: gridInset, paddingRight: gridInset + SHOP_CARD_RAIL_MARGIN_END },
+    ],
     [gridInset]
   );
   const headerInsetStyle = useMemo(
@@ -102,12 +105,12 @@ export function PopularShopsSection() {
 
 const styles = StyleSheet.create({
   section: {
-    marginBottom: spacing.md,
+    marginBottom: spacing.sm,
   },
   headerRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: spacing.xs,
+    marginBottom: 2,
   },
   headerIcon: {
     marginRight: spacing.sm,
@@ -120,6 +123,6 @@ const styles = StyleSheet.create({
     flexGrow: 0,
   },
   scrollContent: {
-    paddingBottom: spacing.xs,
+    paddingBottom: 2,
   },
 });

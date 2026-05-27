@@ -149,8 +149,8 @@ export function HomeMarketplaceFeedHeader({
 
 const styles = StyleSheet.create({
   headerRoot: {
-    paddingTop: spacing.sm,
-    gap: spacing.md,
+    paddingTop: 0,
+    gap: spacing.sm,
   },
   connectedSections: {
     marginTop: 4,

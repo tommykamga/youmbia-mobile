@@ -130,7 +130,7 @@ const styles = StyleSheet.create({
     opacity: 0.94,
   },
   banner: {
-    height: 50,
+    height: 44,
     backgroundColor: colors.surfaceSubtle,
     overflow: 'hidden',
   },
@@ -151,8 +151,8 @@ const styles = StyleSheet.create({
   },
   body: {
     paddingHorizontal: spacing.sm,
-    paddingTop: 4,
-    paddingBottom: 4,
+    paddingTop: 6,
+    paddingBottom: 6,
     gap: 2,
   },
   bodyCompact: {
@@ -162,11 +162,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginTop: -16,
+    marginTop: -14,
   },
   logo: {
-    width: 40,
-    height: 40,
+    width: 38,
+    height: 38,
     borderRadius: radius.md + 2,
     borderWidth: 2,
     borderColor: colors.surface,
@@ -179,8 +179,8 @@ const styles = StyleSheet.create({
     marginTop: -14,
   },
   logoFallback: {
-    width: 40,
-    height: 40,
+    width: 38,
+    height: 38,
     borderRadius: radius.md + 2,
     borderWidth: 2,
     borderColor: colors.surface,
@@ -207,7 +207,7 @@ const styles = StyleSheet.create({
     lineHeight: 17,
   },
   badgesWrap: {
-    marginTop: 0,
+    marginTop: 1,
     marginBottom: 0,
   },
   metaRow: {
@@ -232,12 +232,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 1,
-    paddingVertical: 2,
-    paddingHorizontal: 8,
+    paddingVertical: 3,
+    paddingHorizontal: 9,
     borderRadius: radius.full,
-    backgroundColor: colors.surfaceSubtle,
+    backgroundColor: '#FFFFFF',
     borderWidth: 1,
-    borderColor: colors.borderLight,
+    borderColor: 'rgba(15,23,42,0.08)',
     marginTop: 0,
   },
   voirBtnPressed: {
