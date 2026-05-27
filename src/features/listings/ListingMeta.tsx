@@ -42,6 +42,9 @@ export function ListingMeta({
   const showUrgentBadge = getDisplayUrgent({ urgent });
   const showBoostedBadge = boosted === true;
   const timeLabel = timeAgo(created_at);
+  const locationLabel = (locationLine || city || '').trim();
+  const viewsLabel = views_count > 0 ? `${views_count} vues` : '';
+  const metaLine = [locationLabel, viewsLabel, timeLabel].filter(Boolean).join(' · ');
 
   return (
     <View style={styles.block}>
@@ -83,26 +86,11 @@ export function ListingMeta({
       </View>
 
       <View style={styles.essentialInfo}>
-        <View style={styles.infoRow}>
-          <View style={styles.infoItem}>
-            <Ionicons name="location-outline" size={14} color={colors.textTertiary} />
-            <Text style={styles.infoText}>{locationLine || city}</Text>
-          </View>
-
-          {views_count > 0 && (
-            <View style={styles.infoItem}>
-              <Ionicons name="eye-outline" size={14} color={colors.textTertiary} />
-              <Text style={styles.infoText}>{views_count} vues</Text>
-            </View>
-          )}
-
-          {timeLabel && (
-            <View style={styles.infoItem}>
-              <Ionicons name="time-outline" size={14} color={colors.textTertiary} />
-              <Text style={styles.infoText}>{timeLabel}</Text>
-            </View>
-          )}
-        </View>
+        {metaLine ? (
+          <Text style={styles.metaLine} numberOfLines={1} ellipsizeMode="tail">
+            {metaLine}
+          </Text>
+        ) : null}
       </View>
     </View>
   );
@@ -110,21 +98,21 @@ export function ListingMeta({
 
 const styles = StyleSheet.create({
   block: {
-    marginBottom: spacing.base,
+    marginBottom: spacing.sm,
   },
   titleRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     justifyContent: 'space-between',
     gap: spacing.sm,
-    marginBottom: spacing.sm,
+    marginBottom: 6,
   },
   title: {
     flex: 1,
     ...typography.lg,
     fontWeight: fontWeights.semibold,
     color: colors.text,
-    lineHeight: 28,
+    lineHeight: 26,
   },
   heartButton: {
     padding: spacing.xs,
@@ -136,14 +124,14 @@ const styles = StyleSheet.create({
     ...typography['2xl'],
     fontWeight: fontWeights.bold,
     color: colors.primary,
-    marginBottom: spacing.lg,
+    marginBottom: spacing.sm,
   },
   badgesRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
     flexWrap: 'wrap',
-    marginBottom: spacing.base,
+    marginBottom: spacing.sm,
   },
   badge: {
     flexDirection: 'row',
@@ -167,23 +155,12 @@ const styles = StyleSheet.create({
     color: colors.surface,
   },
   essentialInfo: {
-    marginTop: spacing.xs,
+    marginTop: 0,
   },
-  infoRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flexWrap: 'wrap',
-    columnGap: spacing.lg,
-    rowGap: spacing.xs,
-  },
-  infoItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.xs,
-  },
-  infoText: {
+  metaLine: {
     ...typography.sm,
     color: colors.textMuted,
     fontWeight: fontWeights.medium,
+    letterSpacing: -0.1,
   },
 });

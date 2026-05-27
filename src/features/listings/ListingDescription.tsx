@@ -23,19 +23,19 @@ export function ListingDescription({ description }: ListingDescriptionProps) {
 
 const styles = StyleSheet.create({
   block: {
-    marginBottom: spacing.xl,
+    marginBottom: spacing.lg,
   },
   label: {
     ...typography.sm,
     fontWeight: fontWeights.bold,
     color: colors.textSecondary,
-    marginBottom: spacing.md,
+    marginBottom: spacing.sm,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
   text: {
     ...typography.base,
     color: colors.text,
-    lineHeight: 26,
+    lineHeight: 24,
   },
 });

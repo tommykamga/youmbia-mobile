@@ -39,8 +39,8 @@ export const LISTING_CARD_RAIL_STRIDE_FEATURED =
 
 /** Zone image home : ratio largeur/hauteur ≈ 1 / 1.2 (image plus haute). */
 const HOME_IMAGE_ASPECT_RATIO = 1 / 1.2;
-/** Variante plus dense (home feed) : image légèrement moins haute. */
-const HOME_IMAGE_ASPECT_RATIO_DENSE = 1 / 1.12;
+/** Home feed : ratio premium constant (image moins haute, densité). */
+const HOME_FEED_IMAGE_ASPECT_RATIO = 1 / 1.1;
 
 const IMAGE_HEIGHT = 160;
 /** Fils rail standard (hauteur fixe). */
@@ -210,10 +210,8 @@ function ListingCardInner({
 
   const homeImageAspect = useMemo(() => {
     if (!isHomeFeed) return HOME_IMAGE_ASPECT_RATIO;
-    if (winW < 380) return 1 / 1.28;
-    if (winW >= 430) return HOME_IMAGE_ASPECT_RATIO_DENSE;
-    return 1 / 1.18;
-  }, [isHomeFeed, winW]);
+    return HOME_FEED_IMAGE_ASPECT_RATIO;
+  }, [isHomeFeed]);
 
   const homeRadius = useMemo(() => {
     if (!isHomeFeed) return CARD_RADIUS_HOME;
@@ -451,20 +449,6 @@ const styles = StyleSheet.create({
     marginLeft: 'auto',
     padding: 0,
     overflow: 'visible',
-    borderRadius: 999,
-    backgroundColor: 'rgba(255,255,255,0.92)',
-    borderWidth: 1,
-    borderColor: 'rgba(15,23,42,0.08)',
-    ...Platform.select({
-      ios: {
-        shadowColor: '#0F172A',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.08,
-        shadowRadius: 6,
-      },
-      android: { elevation: 2 },
-      default: {},
-    }),
   },
   imagePlaceholder: {
     position: 'relative',
@@ -563,8 +547,8 @@ const styles = StyleSheet.create({
     color: colors.surface,
   },
   badgeNew: {
-    paddingHorizontal: 7,
-    paddingVertical: 2,
+    paddingHorizontal: 6,
+    paddingVertical: 1,
     borderRadius: radius.full,
     backgroundColor: 'rgba(255,255,255,0.92)',
     borderWidth: 1,
@@ -572,8 +556,8 @@ const styles = StyleSheet.create({
   },
   badgeNewText: {
     fontSize: 10,
-    lineHeight: 13,
-    fontWeight: '700',
+    lineHeight: 12,
+    fontWeight: '600',
     color: colors.textSecondary,
     letterSpacing: 0.15,
   },
@@ -582,7 +566,7 @@ const styles = StyleSheet.create({
     bottom: 10,
     left: 10,
     maxWidth: '86%',
-    backgroundColor: 'rgba(15,23,42,0.72)',
+    backgroundColor: 'rgba(15,23,42,0.78)',
     paddingHorizontal: 10,
     paddingVertical: 5,
     borderRadius: 11,
@@ -594,6 +578,9 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     fontSize: 14,
     letterSpacing: -0.2,
+    textShadowColor: 'rgba(0,0,0,0.22)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
   },
   priceOverlay: {
     position: 'absolute',
@@ -662,7 +649,7 @@ const styles = StyleSheet.create({
     fontSize: 11,
     lineHeight: 15,
     fontWeight: fontWeights.normal,
-    color: colors.textTertiary,
+    color: 'rgba(15,23,42,0.55)',
     marginTop: 2,
   },
   shopSellerRow: {

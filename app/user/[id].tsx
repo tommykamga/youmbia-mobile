@@ -249,10 +249,14 @@ export default function UserProfileScreen() {
         {(showTrustScore || showReportsCount) && (
           <View style={styles.trustRow}>
             {showTrustScore && (
-              <Text style={styles.trustText}>Score confiance : {trustScore}</Text>
+              <View style={styles.trustPill}>
+                <Text style={styles.trustPillText}>Score confiance {trustScore}</Text>
+              </View>
             )}
             {showReportsCount && (
-              <Text style={styles.trustText}>Signalements : {reportsCount}</Text>
+              <View style={styles.trustPillMuted}>
+                <Text style={styles.trustPillTextMuted}>Signalements {reportsCount}</Text>
+              </View>
             )}
           </View>
         )}
@@ -382,12 +386,13 @@ const styles = StyleSheet.create({
     maxWidth: 900,
     width: '100%',
     alignSelf: 'center',
-    padding: spacing.base,
-    paddingBottom: spacing.lg,
+    paddingHorizontal: spacing.base,
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.base,
   },
   heroCard: {
-    padding: spacing.lg,
-    marginBottom: spacing.base,
+    padding: spacing.base,
+    marginBottom: spacing.sm,
   },
   titleRow: {
     flexDirection: 'row',
@@ -397,14 +402,14 @@ const styles = StyleSheet.create({
     marginBottom: spacing.xs,
   },
   name: {
-    ...typography['2xl'],
+    ...typography.xl,
     fontWeight: fontWeights.bold,
     color: colors.text,
   },
   city: {
     ...typography.base,
     color: colors.textSecondary,
-    marginBottom: spacing.sm,
+    marginBottom: 6,
   },
   metaRow: {
     flexDirection: 'row',
@@ -429,16 +434,38 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm,
   },
   headerActions: {
-    marginTop: spacing.sm,
+    marginTop: 2,
     alignItems: 'flex-start',
   },
-  trustText: {
-    ...typography.sm,
-    color: colors.textSecondary,
+  trustPill: {
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: colors.primaryLight + '33',
+    borderWidth: 1,
+    borderColor: colors.primary + '22',
+  },
+  trustPillText: {
+    ...typography.xs,
+    color: colors.primary,
+    fontWeight: fontWeights.semibold,
+  },
+  trustPillMuted: {
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: colors.surfaceSubtle,
+    borderWidth: 1,
+    borderColor: colors.borderLight,
+  },
+  trustPillTextMuted: {
+    ...typography.xs,
+    color: colors.textMuted,
+    fontWeight: fontWeights.medium,
   },
   bioCard: {
-    padding: spacing.lg,
-    marginBottom: spacing.base,
+    padding: spacing.base,
+    marginBottom: spacing.sm,
   },
   bioTitle: {
     ...typography.sm,
@@ -446,12 +473,12 @@ const styles = StyleSheet.create({
     color: colors.text,
     textTransform: 'uppercase',
     letterSpacing: 0.4,
-    marginBottom: spacing.sm,
+    marginBottom: spacing.xs,
   },
   bioText: {
     ...typography.base,
     color: colors.textSecondary,
-    lineHeight: 22,
+    lineHeight: 21,
   },
   sectionRow: {
     flexDirection: 'row',
@@ -472,9 +499,9 @@ const styles = StyleSheet.create({
   },
   reportLink: {
     alignSelf: 'flex-start',
-    paddingVertical: spacing.sm,
+    paddingVertical: spacing.xs,
     paddingHorizontal: 0,
-    marginTop: spacing.sm,
+    marginTop: spacing.xs,
   },
   reportLinkPressed: {
     opacity: 0.7,
@@ -549,16 +576,17 @@ const styles = StyleSheet.create({
     maxWidth: 900,
     width: '100%',
     alignSelf: 'center',
-    padding: spacing.base,
+    paddingHorizontal: spacing.base,
+    paddingTop: spacing.xs,
     paddingBottom: spacing['3xl'],
     flexGrow: 1,
   },
   cardWrap: {
-    flex: 1,
+    width: '48.5%',
     minWidth: 0,
   },
   gridRow: {
-    gap: spacing.base,
+    justifyContent: 'space-between',
     marginBottom: spacing.base,
   },
   emptyWrap: {

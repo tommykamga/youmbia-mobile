@@ -76,14 +76,14 @@ export function ListingCharacteristics({ condition, brand, model, dynamicItems }
 
 const styles = StyleSheet.create({
   wrapper: {
-    marginBottom: spacing.xl,
+    marginBottom: spacing.lg,
   },
   card: {
     backgroundColor: colors.surface,
     borderRadius: radius['2xl'],
     borderWidth: 1,
     borderColor: colors.border,
-    padding: spacing.xl,
+    padding: spacing.base,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.06,
@@ -94,19 +94,18 @@ const styles = StyleSheet.create({
     marginTop: spacing.lg,
   },
   sectionTitle: {
-    ...typography.lg,
+    ...typography.sm,
     fontWeight: fontWeights.bold,
-    color: colors.text,
-    marginBottom: spacing.lg,
-    paddingBottom: spacing.base,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
+    color: colors.textSecondary,
+    marginBottom: spacing.base,
+    textTransform: 'uppercase',
+    letterSpacing: 0.6,
   },
   grid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     columnGap: spacing['2xl'],
-    rowGap: spacing.xl,
+    rowGap: spacing.base,
   },
   cell: {
     width: '47%',

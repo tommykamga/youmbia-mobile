@@ -50,7 +50,9 @@ export function ListingSeller({ listing, memberSince, listingCount, onPress }: L
           <Text style={styles.avatarText}>{avatarInitial}</Text>
         </View>
         <View style={styles.headerInfo}>
-          <Text style={styles.name}>{name}</Text>
+          <Text style={styles.name} numberOfLines={1} ellipsizeMode="tail">
+            {name}
+          </Text>
           {joinDate ? (
             <Text style={styles.joinDate}>Membre depuis {joinDate}</Text>
           ) : null}
@@ -83,11 +85,13 @@ export function ListingSeller({ listing, memberSince, listingCount, onPress }: L
         </View>
       )}
 
-      <ProSellerBadge
-        listingShopId={listing.shop_id}
-        sellerType={listing.seller_type}
-        shop={listing.shop}
-      />
+      <View style={styles.proBadgeWrap}>
+        <ProSellerBadge
+          listingShopId={listing.shop_id}
+          sellerType={listing.seller_type}
+          shop={listing.shop}
+        />
+      </View>
 
       {hasAnyBadge && (
         <View style={styles.badges}>
@@ -128,8 +132,8 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
     padding: spacing.base,
     borderRadius: radius.xl,
-    marginTop: spacing.lg,
-    marginBottom: spacing.xl,
+    marginTop: spacing.base,
+    marginBottom: spacing.lg,
     borderWidth: 1,
     borderColor: colors.borderLight,
     ...shadows.sm,
@@ -137,20 +141,20 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: spacing.base,
+    marginBottom: spacing.sm,
   },
   avatar: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: colors.primaryLight,
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: colors.primaryLight + '66',
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: spacing.md,
   },
   avatarText: {
-    ...typography.lg,
-    fontWeight: fontWeights.bold,
+    ...typography.base,
+    fontWeight: fontWeights.semibold,
     color: colors.primary,
   },
   headerInfo: {
@@ -170,7 +174,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.lg,
-    marginBottom: spacing.base,
+    marginBottom: spacing.sm,
   },
   statItem: {
     flexDirection: 'row',
@@ -190,7 +194,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.sm,
     paddingVertical: spacing.xs,
     borderRadius: radius.sm,
-    marginBottom: spacing.base,
+    marginBottom: spacing.sm,
     alignSelf: 'flex-start',
   },
   responseHint: {
@@ -202,13 +206,16 @@ const styles = StyleSheet.create({
     ...typography.sm,
     color: colors.error,
     fontStyle: 'italic',
-    marginBottom: spacing.base,
+    marginBottom: spacing.sm,
+  },
+  proBadgeWrap: {
+    marginBottom: spacing.sm,
   },
   badges: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: spacing.sm,
-    marginBottom: spacing.base,
+    marginBottom: spacing.sm,
   },
   ctaButton: {
     alignSelf: 'stretch',
