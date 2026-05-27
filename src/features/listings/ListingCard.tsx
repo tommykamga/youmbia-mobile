@@ -39,6 +39,8 @@ export const LISTING_CARD_RAIL_STRIDE_FEATURED =
 
 /** Zone image home : ratio largeur/hauteur ≈ 1 / 1.2 (image plus haute). */
 const HOME_IMAGE_ASPECT_RATIO = 1 / 1.2;
+/** Variante plus dense (home feed) : image légèrement moins haute. */
+const HOME_IMAGE_ASPECT_RATIO_DENSE = 1 / 1.12;
 
 const IMAGE_HEIGHT = 160;
 /** Fils rail standard (hauteur fixe). */
@@ -208,9 +210,9 @@ function ListingCardInner({
 
   const homeImageAspect = useMemo(() => {
     if (!isHomeFeed) return HOME_IMAGE_ASPECT_RATIO;
-    if (winW < 380) return 1 / 1.36;
-    if (winW >= 430) return 1 / 1.14;
-    return HOME_IMAGE_ASPECT_RATIO;
+    if (winW < 380) return 1 / 1.28;
+    if (winW >= 430) return HOME_IMAGE_ASPECT_RATIO_DENSE;
+    return 1 / 1.18;
   }, [isHomeFeed, winW]);
 
   const homeRadius = useMemo(() => {
@@ -644,16 +646,16 @@ const styles = StyleSheet.create({
   },
   infoHome: {
     paddingHorizontal: ui.spacing.md,
-    paddingTop: spacing.sm,
-    paddingBottom: ui.spacing.md,
+    paddingTop: spacing.xs,
+    paddingBottom: spacing.sm,
     gap: 0,
   },
   titleHome: {
-    fontSize: 14,
-    lineHeight: 19,
-    fontWeight: fontWeights.semibold,
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: fontWeights.medium,
     color: ui.colors.textPrimary,
-    marginBottom: spacing.xs,
+    marginBottom: 3,
     letterSpacing: -0.08,
   },
   metaHome: {

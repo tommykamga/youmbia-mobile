@@ -18,7 +18,7 @@ import {
   UrgentSection,
   RecentlyViewedSection,
 } from '@/features/listings';
-import { PopularShopsSection, VerifiedShopsSection } from '@/features/shops';
+import { VerifiedShopsSection } from '@/features/shops';
 import { spacing, ui } from '@/theme';
 import type { WindowSizeBucket } from '@/lib/responsiveLayout';
 import { useHomeMarketplaceHorizontalPadding } from '@/lib/responsiveLayout';
@@ -95,7 +95,6 @@ export function HomeMarketplaceFeedHeader({
     <View style={styles.headerRoot}>
       <BoostedSection onVoirToutPress={onBoostedVoirTout} />
 
-      <PopularShopsSection />
       <VerifiedShopsSection />
 
       {showCategoryStrip ? (

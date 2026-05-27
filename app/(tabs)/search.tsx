@@ -26,6 +26,7 @@ import {
   HomeMarketplaceFeedHeader,
   useAuthStateForHome,
 } from '@/features/home/HomeMarketplaceFeedHeader';
+import { PopularShopsSection } from '@/features/shops';
 import { searchListings } from '@/services/listings';
 import { getSearchSuggestions } from '@/services/searchSuggestions';
 import { getFavoriteIds as getFavIds } from '@/services/favorites';
@@ -1476,6 +1477,8 @@ export default function SearchScreen() {
               {showMarketplaceHomeFeed ? (
                 <ListingFeed
                   listHeaderComponent={marketplaceListHeader}
+                  extraComponent={<PopularShopsSection />}
+                  extraComponentIndex={HOME_FEED_PAGE_SIZE}
                   limit={HOME_FEED_PAGE_SIZE}
                   fetchPageSize={HOME_FEED_PAGE_SIZE}
                   skipNetworkRevalidateWithinMs={HOME_LISTING_FEED_NETWORK_COOLDOWN_MS}
