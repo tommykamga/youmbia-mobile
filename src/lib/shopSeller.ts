@@ -19,6 +19,12 @@ export function shouldShowVerifiedShopBadge(shop?: Pick<ShopSummary, 'is_verifie
   return shop?.is_verified === true;
 }
 
+export function isShopPubliclyActive(
+  shop?: Pick<ShopSummary, 'status'> | null
+): boolean {
+  return (shop?.status ?? 'active') === 'active';
+}
+
 export function getShopInitials(name: string): string {
   const parts = name.trim().split(/\s+/).filter(Boolean);
   if (parts.length === 0) {

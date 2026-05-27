@@ -37,6 +37,7 @@ import { MarketplaceTrustTips } from '@/features/trust';
 import { getSellerStats } from '@/services/users';
 import { ListingCard } from '@/features/listings/ListingCard';
 import { SkeletonListingCard } from '@/components/SkeletonListingCard';
+import { isShopPubliclyActive } from '@/lib/shopSeller';
 import {
   ListingGallery,
   ListingMeta,
@@ -629,7 +630,7 @@ export default function ListingDetailScreen() {
             listingCount={sellerStats.listingCount}
             onPress={listing.seller_id ? () => router.push(`/user/${listing.seller_id}` as const) : undefined}
           />
-          {listing.shop?.slug ? (
+          {listing.shop?.slug && isShopPubliclyActive(listing.shop) ? (
             <Button
               variant="outline"
               size="md"

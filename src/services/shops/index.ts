@@ -1,5 +1,7 @@
 export { getShopBySlug } from './getShopBySlug';
 export type { GetShopBySlugResult } from './getShopBySlug';
+export { getShopBySlugAnyStatus } from './getShopBySlugAnyStatus';
+export type { GetShopBySlugAnyStatusResult } from './getShopBySlugAnyStatus';
 export { getShopListings } from './getShopListings';
 export type { GetShopListingsResult } from './getShopListings';
 export { getSellerShop } from './getSellerShop';
@@ -13,3 +15,5 @@ export { createProShop } from './createProShop';
 export type { CreateProShopPayload, CreateProShopResult } from './createProShop';
 export { getMySellerProStatus } from './getMySellerProStatus';
 export type { MySellerProStatus, GetMySellerProStatusResult } from './getMySellerProStatus';
+export { updateShopStatus } from './updateShopStatus';
+export type { UpdateShopStatusResult } from './updateShopStatus';

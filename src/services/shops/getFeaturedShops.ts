@@ -13,6 +13,7 @@ export async function getFeaturedShops(): Promise<GetFeaturedShopsResult> {
     const { data, error } = await supabase
       .from('shops')
       .select(SHOP_PUBLIC_SELECT)
+      .eq('status', 'active')
       .eq('is_featured', true)
       .order('updated_at', { ascending: false })
       .limit(FEATURED_SHOPS_LIMIT);

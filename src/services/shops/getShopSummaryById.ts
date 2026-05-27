@@ -12,6 +12,7 @@ export async function getShopSummaryById(shopId: string): Promise<ShopSummary | 
       .from('shops')
       .select(SHOP_SUMMARY_SELECT)
       .eq('id', shopId)
+      .eq('status', 'active')
       .maybeSingle();
 
     if (error || !data) {

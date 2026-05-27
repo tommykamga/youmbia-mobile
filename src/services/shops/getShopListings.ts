@@ -26,7 +26,10 @@ type ListingRow = {
   district?: string | null;
   updated_at: string;
   shop_id?: string | null;
-  shops?: { id: string; slug: string; name: string; is_verified: boolean } | { id: string; slug: string; name: string; is_verified: boolean }[] | null;
+  shops?:
+    | { id: string; slug: string; name: string; is_verified: boolean; status?: string | null }
+    | { id: string; slug: string; name: string; is_verified: boolean; status?: string | null }[]
+    | null;
   listing_images: ListingImageRow[] | null;
 };
 

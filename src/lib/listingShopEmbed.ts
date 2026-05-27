@@ -5,6 +5,7 @@ type ShopEmbedRow = {
   slug: string;
   name: string;
   is_verified: boolean;
+  status?: string | null;
 } | null;
 
 /** Parse la jointure PostgREST `shops!listings_shop_id_fkey` sur une ligne listing. */
@@ -18,5 +19,11 @@ export function parseListingShopEmbed(
     slug: String(raw.slug ?? '').trim(),
     name: String(raw.name ?? '').trim(),
     is_verified: raw.is_verified === true,
+    status:
+      String(raw.status ?? 'active').toLowerCase() === 'hidden'
+        ? 'hidden'
+        : String(raw.status ?? 'active').toLowerCase() === 'suspended'
+          ? 'suspended'
+          : 'active',
   };
 }

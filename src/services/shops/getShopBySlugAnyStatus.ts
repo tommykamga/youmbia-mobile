@@ -3,11 +3,15 @@ import { resolveShopMediaUrls } from '@/lib/shopMediaUrl';
 import type { PublicShop } from '@/types/shops';
 import { SHOP_PUBLIC_SELECT } from './shopSelect';
 
-export type GetShopBySlugResult =
+export type GetShopBySlugAnyStatusResult =
   | { data: PublicShop; error: null }
   | { data: null; error: { message: string } | null };
 
-export async function getShopBySlug(slug: string): Promise<GetShopBySlugResult> {
+/**
+ * Lecture boutique par slug sans filtre de statut.
+ * À utiliser uniquement côté propriétaire (pour afficher hidden/suspended).
+ */
+export async function getShopBySlugAnyStatus(slug: string): Promise<GetShopBySlugAnyStatusResult> {
   const normalized = slug.trim().toLowerCase();
   if (!normalized) {
     return { data: null, error: { message: 'Boutique introuvable' } };
@@ -18,7 +22,6 @@ export async function getShopBySlug(slug: string): Promise<GetShopBySlugResult> 
       .from('shops')
       .select(SHOP_PUBLIC_SELECT)
       .eq('slug', normalized)
-      .eq('status', 'active')
       .maybeSingle();
 
     if (error) {
@@ -35,3 +38,4 @@ export async function getShopBySlug(slug: string): Promise<GetShopBySlugResult> 
     return { data: null, error: { message } };
   }
 }
+

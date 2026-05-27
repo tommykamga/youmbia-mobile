@@ -30,7 +30,7 @@ import {
   SellerAcquisitionTips,
 } from '@/features/shops';
 import { MarketplaceTrustTips, NewShopBadge } from '@/features/trust';
-import { getShopBySlug, getShopListings } from '@/services/shops';
+import { getShopBySlug, getShopBySlugAnyStatus, getShopListings, updateShopStatus } from '@/services/shops';
 import { reportShop } from '@/services/reports';
 import { getSession } from '@/services/auth';
 import { getSellerStats } from '@/services/users';
@@ -88,21 +88,42 @@ export default function ShopScreen() {
     if (!isRefresh) {
       setState({ status: 'loading' });
     }
+    const session = await getSession().catch(() => null);
+    const currentUserId = session?.user?.id ?? null;
+    setSessionUserId(currentUserId);
+
+    // 1) Lecture publique (active uniquement) – rapide, cache-friendly
     const shopResult = await getShopBySlug(slug);
-    if (shopResult.error || !shopResult.data) {
+    // 2) Si non trouvé et connecté: tenter lecture owner (hidden/suspended)
+    const shouldTryOwnerFallback = !shopResult.data && currentUserId != null;
+    const ownerFallbackResult = shouldTryOwnerFallback ? await getShopBySlugAnyStatus(slug) : null;
+
+    const resolvedShop = (shopResult.data ?? ownerFallbackResult?.data) as PublicShop | null;
+    if (!resolvedShop) {
       setState({
         status: 'error',
-        message: shopResult.error?.message ?? 'Boutique introuvable',
+        message: shopResult.error?.message ?? ownerFallbackResult?.error?.message ?? 'Boutique introuvable',
       });
       return;
     }
-    const listingsResult = await getShopListings(shopResult.data.id);
+
+    const isOwn = currentUserId != null && resolvedShop.owner_id === currentUserId;
+    const shopStatus = (resolvedShop.status ?? 'active') as string;
+    if (!isOwn && (shopStatus === 'hidden' || shopStatus === 'suspended')) {
+      setState({
+        status: 'error',
+        message: 'Cette boutique n’est pas disponible pour le moment.',
+      });
+      return;
+    }
+
+    const listingsResult = await getShopListings(resolvedShop.id);
     if (listingsResult.error) {
       setState({ status: 'error', message: listingsResult.error.message });
       return;
     }
-    const shop = shopResult.data;
-    const statsResult = await getSellerStats(shop.owner_id);
+    const shop = resolvedShop;
+    const statsResult = await getSellerStats(resolvedShop.owner_id);
     setOwnerMemberSince(statsResult.error ? null : statsResult.data.memberSince);
     setState({
       status: 'ready',
@@ -115,21 +136,7 @@ export default function ShopScreen() {
     void loadShop();
   }, [loadShop]);
 
-  useEffect(() => {
-    let active = true;
-    getSession()
-      .then((s) => {
-        if (!active) return;
-        setSessionUserId(s?.user?.id ?? null);
-      })
-      .catch(() => {
-        if (!active) return;
-        setSessionUserId(null);
-      });
-    return () => {
-      active = false;
-    };
-  }, []);
+  // sessionUserId est désormais alimenté par `loadShop()` pour éviter un flicker owner/non-owner.
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -194,6 +201,20 @@ export default function ShopScreen() {
       Alert.alert('WhatsApp indisponible', 'Impossible d’ouvrir WhatsApp sur cet appareil.');
     }
   }, [state]);
+
+  const handleOwnerToggleHidden = useCallback(
+    async (next: 'active' | 'hidden') => {
+      if (state.status !== 'ready') return;
+      const shopId = state.shop.id;
+      const result = await updateShopStatus(shopId, next);
+      if (result.error) {
+        Alert.alert('Erreur', result.error.message);
+        return;
+      }
+      await loadShop(true);
+    },
+    [loadShop, state]
+  );
 
   const handleReportPress = useCallback(async () => {
     if (state.status !== 'ready') return;
@@ -264,6 +285,7 @@ export default function ShopScreen() {
 
   const { shop, listings } = state;
   const isOwnShop = sessionUserId != null && shop.owner_id === sessionUserId;
+  const shopStatus = (shop.status ?? 'active') as string;
   const visibility = resolveShopVisibilityFlags(shop);
   const initials = getShopInitials(shop.name);
   const ownerJoinDate = formatJoinDate(ownerMemberSince);
@@ -332,7 +354,21 @@ export default function ShopScreen() {
               </View>
             )}
             <View style={styles.profileText}>
-              <Text style={styles.shopName}>{shop.name}</Text>
+              <View style={styles.shopTitleRow}>
+                <Text style={styles.shopName}>{shop.name}</Text>
+                {isOwnShop && shopStatus === 'hidden' ? (
+                  <View style={styles.ownerStatusChipHidden}>
+                    <Ionicons name="eye-off-outline" size={12} color={colors.textSecondary} />
+                    <Text style={styles.ownerStatusChipText}>Boutique masquée</Text>
+                  </View>
+                ) : null}
+                {isOwnShop && shopStatus === 'suspended' ? (
+                  <View style={styles.ownerStatusChipSuspended}>
+                    <Ionicons name="alert-circle-outline" size={12} color={colors.error} />
+                    <Text style={styles.ownerStatusChipTextSuspended}>Boutique suspendue</Text>
+                  </View>
+                ) : null}
+              </View>
               {shop.city?.trim() ? (
                 <View style={styles.cityRow}>
                   <Ionicons name="location-outline" size={14} color={colors.textMuted} />
@@ -358,6 +394,52 @@ export default function ShopScreen() {
 
           {isOwnShop ? (
             <>
+              {shopStatus === 'active' ? (
+                <Button
+                  variant="outline"
+                  onPress={() => {
+                    Alert.alert(
+                      'Masquer ma boutique',
+                      'Votre boutique ne sera plus visible publiquement. Vos annonces restent actives.',
+                      [
+                        { text: 'Annuler', style: 'cancel' },
+                        {
+                          text: 'Masquer',
+                          style: 'destructive',
+                          onPress: () => {
+                            void handleOwnerToggleHidden('hidden');
+                          },
+                        },
+                      ]
+                    );
+                  }}
+                  style={styles.ownerStatusAction}
+                >
+                  Masquer ma boutique
+                </Button>
+              ) : null}
+              {shopStatus === 'hidden' ? (
+                <Button
+                  onPress={() => {
+                    Alert.alert(
+                      'Remettre en ligne',
+                      'Votre boutique redevient visible publiquement.',
+                      [
+                        { text: 'Annuler', style: 'cancel' },
+                        {
+                          text: 'Remettre en ligne',
+                          onPress: () => {
+                            void handleOwnerToggleHidden('active');
+                          },
+                        },
+                      ]
+                    );
+                  }}
+                  style={styles.ownerStatusAction}
+                >
+                  Remettre en ligne
+                </Button>
+              ) : null}
               <ShopPromoActions
                 slug={shop.slug}
                 onShare={() => void handleShareShop()}
@@ -539,6 +621,12 @@ export default function ShopScreen() {
 }
 
 const styles = StyleSheet.create({
+  shopTitleRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    gap: spacing.xs,
+  },
   headerActions: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -624,6 +712,42 @@ const styles = StyleSheet.create({
     fontWeight: fontWeights.bold,
     color: colors.text,
     letterSpacing: -0.3,
+  },
+  ownerStatusChipHidden: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 4,
+    borderRadius: radius.full,
+    backgroundColor: colors.surfaceSubtle,
+    borderWidth: 1,
+    borderColor: colors.borderLight,
+  },
+  ownerStatusChipSuspended: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 4,
+    borderRadius: radius.full,
+    backgroundColor: colors.error + '10',
+    borderWidth: 1,
+    borderColor: colors.error + '22',
+  },
+  ownerStatusChipText: {
+    ...typography.xs,
+    fontWeight: fontWeights.semibold,
+    color: colors.textSecondary,
+  },
+  ownerStatusChipTextSuspended: {
+    ...typography.xs,
+    fontWeight: fontWeights.semibold,
+    color: colors.error,
+  },
+  ownerStatusAction: {
+    marginTop: spacing.sm,
+    alignSelf: 'flex-start',
   },
   cityRow: {
     flexDirection: 'row',

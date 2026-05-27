@@ -6,13 +6,13 @@ import React from 'react';
 import { View, StyleSheet } from 'react-native';
 import { SellerBadge } from '@/features/listings/SellerBadge';
 import { spacing } from '@/theme';
-import { shouldShowProSellerBadge, shouldShowVerifiedShopBadge } from '@/lib/shopSeller';
+import { isShopPubliclyActive, shouldShowProSellerBadge, shouldShowVerifiedShopBadge } from '@/lib/shopSeller';
 import type { ShopSummary } from '@/types/shops';
 
 type ProSellerBadgeProps = {
   listingShopId?: string | null;
   sellerType?: string | null;
-  shop?: Pick<ShopSummary, 'is_verified'> | null;
+  shop?: Pick<ShopSummary, 'is_verified' | 'status'> | null;
   compact?: boolean;
 };
 
@@ -23,7 +23,7 @@ export function ProSellerBadge({
   compact = false,
 }: ProSellerBadgeProps) {
   const showPro = shouldShowProSellerBadge({ listingShopId, sellerType });
-  const showVerified = shouldShowVerifiedShopBadge(shop);
+  const showVerified = shouldShowVerifiedShopBadge(shop) && isShopPubliclyActive(shop);
 
   if (!showPro && !showVerified) {
     return null;

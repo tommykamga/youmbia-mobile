@@ -39,6 +39,7 @@ export async function getPopularShops(
         supabase
           .from('shops')
           .select(SHOP_PUBLIC_SELECT)
+          .eq('status', 'active')
           .eq('is_featured', true)
           .order('updated_at', { ascending: false })
           .limit(safeLimit),
@@ -74,6 +75,7 @@ export async function getPopularShops(
       const { data: shopRows, error: shopsError } = await supabase
         .from('shops')
         .select(SHOP_PUBLIC_SELECT)
+        .eq('status', 'active')
         .in('id', topIdsByActivity);
 
       if (shopsError) {
