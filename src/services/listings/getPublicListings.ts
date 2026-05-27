@@ -105,7 +105,6 @@ export async function getPublicListings(
     .from('listings')
     .select(listingPublicListSelect(false))
     .eq('status', 'active')
-    .order('urgent', { ascending: false })
     .order('created_at', { ascending: false })
     .range(from, to);
 

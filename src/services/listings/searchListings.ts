@@ -203,8 +203,8 @@ export async function searchListings(options: SearchOptions = {}): Promise<Searc
   } else if (sortBy === 'price_desc') {
     request = request.order('price', { ascending: false });
   } else {
-    // Default: Urgent first, then most recent
-    request = request.order('urgent', { ascending: false }).order('created_at', { ascending: false });
+    // Recent: most recent first (avoid old urgent listings monopolizing the top)
+    request = request.order('created_at', { ascending: false });
   }
 
   // Pagination

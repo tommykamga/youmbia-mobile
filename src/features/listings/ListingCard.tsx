@@ -40,9 +40,9 @@ export const LISTING_CARD_RAIL_STRIDE_FEATURED =
 /** Zone image home : ratio largeur/hauteur ≈ 1 / 1.2 (image plus haute). */
 const HOME_IMAGE_ASPECT_RATIO = 1 / 1.2;
 /** Home feed : ratio premium constant (image moins haute, densité). */
-const HOME_FEED_IMAGE_ASPECT_RATIO = 1 / 1.1;
+const HOME_FEED_IMAGE_ASPECT_RATIO = 1 / 1.0;
 
-const IMAGE_HEIGHT = 160;
+const IMAGE_HEIGHT = 146;
 /** Fils rail standard (hauteur fixe). */
 const IMAGE_HEIGHT_RAIL_FEATURED = Math.round(LISTING_CARD_RAIL_WIDTH_FEATURED / HOME_IMAGE_ASPECT_RATIO);
 const IMAGE_RADIUS = 16;
@@ -367,6 +367,18 @@ const styles = StyleSheet.create({
     padding: 0,
     width: '100%',
     borderRadius: IMAGE_RADIUS,
+    borderWidth: 1,
+    borderColor: 'rgba(15,23,42,0.06)',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#0F172A',
+        shadowOffset: { width: 0, height: 3 },
+        shadowOpacity: 0.05,
+        shadowRadius: 10,
+      },
+      android: { elevation: 1 },
+      default: {},
+    }),
   },
   cardRail: {
     width: LISTING_CARD_RAIL_WIDTH,
@@ -399,7 +411,7 @@ const styles = StyleSheet.create({
       ios: {
         shadowColor: '#0F172A',
         shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.055,
+        shadowOpacity: 0.06,
         shadowRadius: 10,
       },
       android: { elevation: 2 },

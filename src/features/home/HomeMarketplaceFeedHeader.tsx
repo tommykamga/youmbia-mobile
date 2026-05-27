@@ -140,7 +140,11 @@ export function HomeMarketplaceFeedHeader({
       ) : null}
 
       <View style={feedIntroStyle}>
-        <AppSectionHeader dense title="Nouvelles annonces" subtitle="Actualisées en continu" />
+        <AppSectionHeader
+          dense
+          title="Explorez les annonces disponibles"
+          subtitle="Découvrez les dernières opportunités publiées"
+        />
       </View>
     </View>
   );

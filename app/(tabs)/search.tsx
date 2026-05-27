@@ -55,6 +55,8 @@ const SUGGESTIONS_DEBOUNCE_MS = 300;
 const SEARCH_NAV_PARAMS_RUN_COOLDOWN_MS = 2 * 60 * 1000;
 /** Première page recherche — le reste au bouton « Voir plus » (egress). */
 const SEARCH_INITIAL_PAGE_SIZE = 6;
+/** Depuis la Home : afficher plus qu’un seul lot (évite “1er clic = rien”). */
+const HOME_EXPLORE_INITIAL_PAGE_SIZE = 12;
 const HOME_LISTING_FEED_NETWORK_COOLDOWN_MS = 2 * 60 * 1000;
 const HOME_FEED_PAGE_SIZE = 6;
 /** Apostrophe typographique (’). Constante JS : évite le rendu littéral « \\u2019 » si mis en JSX texte brut. */
@@ -75,6 +77,7 @@ function buildSearchPage1SessionKey(parts: {
   city: string | null;
   min: number | null;
   max: number | null;
+  pageSize: number;
 }): string {
   return JSON.stringify(parts);
 }
@@ -94,6 +97,7 @@ type SearchState =
       total: number;
       page: number;
       hasMore: boolean;
+      pageSize?: number;
     };
 
 type AppliedPriceFilters = {
@@ -297,6 +301,8 @@ export default function SearchScreen() {
       browseFromHomeFooterRef.current = false;
     }
 
+    const pageSize = browseFromHome ? HOME_EXPLORE_INITIAL_PAGE_SIZE : SEARCH_INITIAL_PAGE_SIZE;
+
     const searchCategoryId = filters?.categoryId !== undefined ? filters.categoryId : appliedSearchFilters.categoryId;
     const searchCity = filters?.city !== undefined ? filters.city : appliedSearchFilters.city;
     const searchMinPrice = filters?.min !== undefined ? filters.min : appliedPriceFilters.min;
@@ -324,6 +330,7 @@ export default function SearchScreen() {
       city: searchCity,
       min: searchMinPrice,
       max: searchMaxPrice,
+      pageSize,
     });
 
     if (page1Key === lastDisplayedPage1KeyRef.current) {
@@ -344,7 +351,8 @@ export default function SearchScreen() {
           query: trimmed,
           total: cached.total,
           page: 1,
-          hasMore: cached.data.length === SEARCH_INITIAL_PAGE_SIZE,
+          hasMore: cached.data.length === pageSize,
+          pageSize,
         });
       }
       return;
@@ -362,7 +370,7 @@ export default function SearchScreen() {
       maxPrice: searchMaxPrice,
       sortBy: sortBy,
       page: 1,
-      pageSize: SEARCH_INITIAL_PAGE_SIZE,
+      pageSize,
     });
 
     if (seq !== searchSeqRef.current) return;
@@ -392,7 +400,8 @@ export default function SearchScreen() {
             query: trimmed,
             total,
             page: 1,
-            hasMore: list.length === SEARCH_INITIAL_PAGE_SIZE,
+            hasMore: list.length === pageSize,
+            pageSize,
           }
     );
   }, [appliedSearchFilters, appliedPriceFilters, sortBy]);
@@ -483,7 +492,7 @@ export default function SearchScreen() {
         maxPrice: appliedPriceFilters.max,
         sortBy,
         page: nextPage,
-        pageSize: SEARCH_INITIAL_PAGE_SIZE,
+        pageSize: state.pageSize ?? SEARCH_INITIAL_PAGE_SIZE,
       });
       if (result.error) {
         return;
@@ -500,7 +509,8 @@ export default function SearchScreen() {
           query: prev.query,
           total: nextTotal > 0 ? nextTotal : prev.total,
           page: nextPage,
-          hasMore: batch.length === SEARCH_INITIAL_PAGE_SIZE,
+          hasMore: batch.length === (prev.pageSize ?? SEARCH_INITIAL_PAGE_SIZE),
+          pageSize: prev.pageSize,
         };
       });
     } finally {
@@ -2022,9 +2032,10 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm,
   },
   sortFiltersIconBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: radius.lg,
+    minHeight: 32,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: radius.full,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
