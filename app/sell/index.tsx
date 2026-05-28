@@ -64,8 +64,8 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 
 /** Aligné web : maximum 4 photos par annonce. */
 const MAX_LISTING_IMAGES = 4;
-/** Garde-fou trust (Sprint TRUST SAFE) : limite de publications / 24h. */
-const MAX_LISTINGS_PER_24H = 5;
+/** Garde-fou trust : limite haute de publications / 24h, conservée pour éviter le spam massif. */
+const MAX_LISTINGS_PER_24H = 100;
 const YOUMBIA_SELECTED_BG = 'rgba(22, 163, 74, 0.08)';
 const YOUMBIA_SELECTED_GLOW = 'rgba(22, 163, 74, 0.18)';
 
