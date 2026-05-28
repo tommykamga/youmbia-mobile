@@ -60,6 +60,17 @@ import {
   getCurrentProfile,
 } from '@/services/profile';
 import { supabase } from '@/lib/supabase';
+import {
+  LISTING_DESCRIPTION_MAX,
+  LISTING_TITLE_MAX,
+  parseListingPrice,
+  sanitizeListingPriceDigits,
+  shouldShowListingFieldError,
+  validateListingCity,
+  validateListingDescription,
+  validateListingPrice,
+  validateListingTitle,
+} from '@/lib/listingPublishFormValidation';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
 /** Aligné web : maximum 4 photos par annonce. */
@@ -99,6 +110,28 @@ function RequiredFieldLabel({ children }: { children: string }) {
       {children}
       <Text style={styles.requiredMark}> *</Text>
     </Text>
+  );
+}
+
+function SellFieldMeta({
+  hint,
+  counter,
+  max,
+}: {
+  hint: string;
+  counter: number;
+  max: number;
+}) {
+  const atLimit = counter >= max;
+  return (
+    <View style={styles.fieldMetaRow}>
+      <Text style={styles.fieldHint} numberOfLines={2}>
+        {hint}
+      </Text>
+      <Text style={[styles.charCounter, atLimit ? styles.charCounterAtLimit : null]}>
+        {counter} / {max}
+      </Text>
+    </View>
   );
 }
 
@@ -191,6 +224,7 @@ export default function SellScreen() {
 
   const [submitLoading, setSubmitLoading] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [validationAttempted, setValidationAttempted] = useState(false);
   const [retryUploadLoading, setRetryUploadLoading] = useState(false);
   const [keyboardVisible, setKeyboardVisible] = useState(false);
 
@@ -209,6 +243,40 @@ export default function SellScreen() {
 
   const selectChildCategory = useCallback((childCategoryId: ListingCategoryId) => {
     setSelectedChildCategoryId(childCategoryId);
+    setSubmitError(null);
+  }, []);
+
+  const titleError = useMemo(() => validateListingTitle(title), [title]);
+  const descriptionError = useMemo(() => validateListingDescription(description), [description]);
+  const priceError = useMemo(() => validateListingPrice(priceStr), [priceStr]);
+  const cityError = useMemo(() => validateListingCity(city), [city]);
+
+  const showTitleError = shouldShowListingFieldError(title, titleError, validationAttempted);
+  const showDescriptionError = shouldShowListingFieldError(
+    description,
+    descriptionError,
+    validationAttempted
+  );
+  const showPriceError = shouldShowListingFieldError(priceStr, priceError, validationAttempted);
+  const showCityError = shouldShowListingFieldError(city, cityError, validationAttempted);
+
+  const handleTitleChange = useCallback((text: string) => {
+    setTitle(text);
+    setSubmitError(null);
+  }, []);
+
+  const handleDescriptionChange = useCallback((text: string) => {
+    setDescription(text);
+    setSubmitError(null);
+  }, []);
+
+  const handlePriceChange = useCallback((text: string) => {
+    setPriceStr(sanitizeListingPriceDigits(text));
+    setSubmitError(null);
+  }, []);
+
+  const handleCityChange = useCallback((text: string) => {
+    setCity(text);
     setSubmitError(null);
   }, []);
 
@@ -240,6 +308,7 @@ export default function SellScreen() {
     setPrequalStatus('loading');
     setProfileAny(null);
     setSubmitError(null);
+    setValidationAttempted(false);
     setTitle('');
     setPriceStr('');
     setSelectedParentCategoryId(null);
@@ -507,15 +576,24 @@ export default function SellScreen() {
         return;
       }
 
-      const price = priceStr.trim() ? Number(priceStr.trim().replace(',', '.')) : NaN;
-      if (!title.trim() || title.trim().length < 2) {
-        setSubmitError('Titre requis (2 caractères minimum)');
+      setValidationAttempted(true);
+
+      const titleValidationError = validateListingTitle(title);
+      if (titleValidationError) {
+        setSubmitError(titleValidationError);
         return;
       }
-      if (!Number.isFinite(price) || price <= 0) {
-        setSubmitError('Prix invalide (doit être supérieur à 0)');
+      const descriptionValidationError = validateListingDescription(description);
+      if (descriptionValidationError) {
+        setSubmitError(descriptionValidationError);
         return;
       }
+      const priceValidationError = validateListingPrice(priceStr);
+      if (priceValidationError) {
+        setSubmitError(priceValidationError);
+        return;
+      }
+      const price = parseListingPrice(priceStr);
       if (!publishCategoryId) {
         if (
           selectedParentCategoryId != null &&
@@ -527,16 +605,17 @@ export default function SellScreen() {
         }
         return;
       }
-      if (!description.trim()) {
-        setSubmitError('Ajoutez une description à votre annonce.');
-        return;
-      }
       if (images.length === 0 || !images.some((img) => !!img.base64 || !!img.uri)) {
         setSubmitError('Ajoutez au moins une photo');
         return;
       }
       if (dynamicAttributesPilotActive && dynamicLoading) {
         setSubmitError('Chargement des caractéristiques… Réessayez dans un instant.');
+        return;
+      }
+      const cityValidationError = validateListingCity(city);
+      if (cityValidationError) {
+        setSubmitError(cityValidationError);
         return;
       }
 
@@ -995,23 +1074,42 @@ export default function SellScreen() {
               </View>
             </View>
 
-            <Input
-              label="Titre *"
-              placeholder="Ex. Vélo de ville"
-              value={title}
-              onChangeText={setTitle}
-              maxLength={200}
-            />
+            <View style={styles.validatedField}>
+              <Input
+                label="Titre *"
+                placeholder="Ex. iPhone 13 Pro Max 256 Go"
+                value={title}
+                onChangeText={handleTitleChange}
+                maxLength={LISTING_TITLE_MAX}
+                error={showTitleError ? (titleError ?? undefined) : undefined}
+                containerStyle={styles.validatedFieldInput}
+              />
+              <SellFieldMeta
+                hint="Exemple : iPhone 13 Pro Max 256 Go"
+                counter={title.length}
+                max={LISTING_TITLE_MAX}
+              />
+            </View>
 
-            <Input
-              label="Description *"
-              placeholder="Décrivez votre article..."
-              value={description}
-              onChangeText={setDescription}
-              multiline
-              numberOfLines={4}
-              style={styles.descriptionInput}
-            />
+            <View style={styles.validatedField}>
+              <Input
+                label="Description *"
+                placeholder="État, caractéristiques, accessoires…"
+                value={description}
+                onChangeText={handleDescriptionChange}
+                multiline
+                numberOfLines={4}
+                style={styles.descriptionInput}
+                maxLength={LISTING_DESCRIPTION_MAX}
+                error={showDescriptionError ? (descriptionError ?? undefined) : undefined}
+                containerStyle={styles.validatedFieldInput}
+              />
+              <SellFieldMeta
+                hint="Décrivez l’état, les caractéristiques et les accessoires inclus"
+                counter={description.length}
+                max={LISTING_DESCRIPTION_MAX}
+              />
+            </View>
 
             <View style={styles.categorySection}>
               <RequiredFieldLabel>Catégorie</RequiredFieldLabel>
@@ -1115,17 +1213,20 @@ export default function SellScreen() {
 
             <Input
               label="Prix (FCFA) *"
-              placeholder="0"
+              placeholder="50000"
               value={priceStr}
-              onChangeText={setPriceStr}
-              keyboardType={Platform.OS === 'web' ? 'numeric' : 'decimal-pad'}
+              onChangeText={handlePriceChange}
+              keyboardType={Platform.OS === 'web' ? 'numeric' : 'number-pad'}
+              error={showPriceError ? (priceError ?? undefined) : undefined}
             />
 
             <Input
               label="Ville (optionnel)"
               placeholder="Ex. Douala"
               value={city}
-              onChangeText={setCity}
+              onChangeText={handleCityChange}
+              maxLength={20}
+              error={showCityError ? (cityError ?? undefined) : undefined}
             />
 
             <Text style={styles.requiredLegend}>* Champ obligatoire</Text>
@@ -1326,6 +1427,35 @@ const styles = StyleSheet.create({
     ...typography.xs,
     color: colors.textMuted,
     marginBottom: spacing.sm,
+  },
+  validatedField: {
+    marginBottom: 0,
+  },
+  validatedFieldInput: {
+    marginBottom: spacing.xs,
+  },
+  fieldMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: spacing.sm,
+    marginBottom: spacing.base,
+    marginTop: -spacing.xs,
+  },
+  fieldHint: {
+    flex: 1,
+    ...typography.xs,
+    color: colors.textMuted,
+    lineHeight: 16,
+  },
+  charCounter: {
+    ...typography.xs,
+    color: colors.textMuted,
+    fontVariant: ['tabular-nums'],
+  },
+  charCounterAtLimit: {
+    color: colors.textSecondary,
+    fontWeight: fontWeights.semibold,
   },
   successBlock: {
     paddingTop: spacing['3xl'],
