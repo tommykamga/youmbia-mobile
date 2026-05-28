@@ -3,15 +3,15 @@
  * Non connecté : Redirect vers /(auth)/gate?context=favorites (tab bar intercepte aussi).
  */
 
-import React, { useCallback, useEffect, useState, useMemo } from 'react';
+import React, { useCallback, useEffect, useState, useMemo, useRef } from 'react';
 import { FlatList, View, StyleSheet, RefreshControl, Platform, Text } from 'react-native';
-import { useRouter, Redirect } from 'expo-router';
+import { useRouter, Redirect, useFocusEffect } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Screen, Loader, EmptyState, Button, AppHeader } from '@/components';
 import { getFavorites } from '@/services/favorites';
 import { getSession } from '@/services/auth';
 import { ListingCard } from '@/features/listings';
-import type { PublicListing } from '@/services/listings';
+import { getListingsByIds, type PublicListing } from '@/services/listings';
 import { spacing, colors, typography, fontWeights } from '@/theme';
 import { useFavorites } from '@/context/FavoritesContext';
 import { buildAuthGateHref } from '@/lib/authGateNavigation';
@@ -53,9 +53,55 @@ export default function FavoritesScreen() {
     }
   }, [favoritesLoading]);
 
+  useFocusEffect(
+    useCallback(() => {
+      void load();
+    }, [load])
+  );
+
+  const stateRef = useRef(state);
+  stateRef.current = state;
+
+  // Sync liste avec le Set global : ajouts (fetch ciblé) et retrait complet → empty.
   useEffect(() => {
-    load().then(() => setRefreshing(false));
-  }, [load]);
+    if (favoritesLoading) return;
+
+    if (favorites.size === 0) {
+      const current = stateRef.current;
+      if (current.status === 'success') {
+        setState({ status: 'empty' });
+      }
+      return;
+    }
+
+    const current = stateRef.current;
+    if (current.status === 'empty') {
+      void load();
+      return;
+    }
+    if (current.status !== 'success') return;
+
+    const knownIds = new Set(current.data.map((item) => item.id));
+    const missingIds = [...favorites].filter((id) => !knownIds.has(id));
+    if (missingIds.length === 0) return;
+
+    let cancelled = false;
+    void (async () => {
+      const result = await getListingsByIds(missingIds);
+      if (cancelled || result.error || !result.data?.length) return;
+      setState((prev) => {
+        if (prev.status !== 'success') return prev;
+        const known = new Set(prev.data.map((item) => item.id));
+        const newItems = result.data!.filter((item) => !known.has(item.id));
+        if (!newItems.length) return prev;
+        return { status: 'success', data: [...newItems, ...prev.data] };
+      });
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [favorites, favoritesLoading, load]);
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
