@@ -606,7 +606,7 @@ export default function SellScreen() {
         return;
       }
       if (images.length === 0 || !images.some((img) => !!img.base64 || !!img.uri)) {
-        setSubmitError('Ajoutez au moins une photo');
+        setSubmitError('Ajoutez au moins une photo pour publier.');
         return;
       }
       if (dynamicAttributesPilotActive && dynamicLoading) {
@@ -1015,9 +1015,15 @@ export default function SellScreen() {
               <RequiredFieldLabel>Photos</RequiredFieldLabel>
               <Text style={styles.stepHelper}>
                 {duplicateSourceId
-                  ? 'Photos obligatoires pour cette nouvelle annonce (non dupliquées depuis l’originale).'
-                  : 'Ajoutez 1 à 4 photos. Une bonne première photo augmente les messages.'}
+                  ? 'Photos obligatoires pour cette nouvelle annonce (non dupliquées depuis l’originale). Ajoutez jusqu’à 4 photos — la première sera affichée en couverture.'
+                  : 'Ajoutez jusqu’à 4 photos. La première sera affichée en couverture.'}
               </Text>
+              <Text style={styles.photoCounter}>
+                {images.length} / {MAX_LISTING_IMAGES} photos
+              </Text>
+              {images.length === 0 ? (
+                <Text style={styles.photoZeroHint}>Ajoutez au moins une photo pour publier.</Text>
+              ) : null}
               <View style={styles.photoSlotsRow}>
                 {Array.from({ length: MAX_LISTING_IMAGES }, (_, index) => {
                   const image = images[index];
@@ -1027,6 +1033,11 @@ export default function SellScreen() {
                     return (
                       <View key={`photo-slot-${index}`} style={[styles.photoSlot, slotStyle]}>
                         <Image source={{ uri: image.uri }} style={styles.photoSlotImage} resizeMode="cover" />
+                        {index === 0 ? (
+                          <View style={styles.photoCoverBadge} pointerEvents="none">
+                            <Text style={styles.photoCoverBadgeText}>Couverture</Text>
+                          </View>
+                        ) : null}
                         <Pressable
                           accessibilityRole="button"
                           accessibilityLabel="Supprimer la photo"
@@ -1072,6 +1083,9 @@ export default function SellScreen() {
                   );
                 })}
               </View>
+              <Text style={styles.photoQualityTip}>
+                Conseil : utilisez des photos nettes, bien éclairées, sans montage.
+              </Text>
             </View>
 
             <View style={styles.validatedField}>
@@ -1426,7 +1440,40 @@ const styles = StyleSheet.create({
   stepHelper: {
     ...typography.xs,
     color: colors.textMuted,
+    marginBottom: spacing.xs,
+  },
+  photoCounter: {
+    ...typography.xs,
+    color: colors.textSecondary,
+    fontWeight: fontWeights.semibold,
+    fontVariant: ['tabular-nums'],
+    marginBottom: spacing.xs,
+  },
+  photoZeroHint: {
+    ...typography.xs,
+    color: colors.textMuted,
     marginBottom: spacing.sm,
+  },
+  photoQualityTip: {
+    ...typography.xs,
+    color: colors.textMuted,
+    marginTop: spacing.sm,
+    lineHeight: 16,
+  },
+  photoCoverBadge: {
+    position: 'absolute',
+    left: 4,
+    bottom: 4,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: radius.sm,
+    backgroundColor: 'rgba(15, 23, 42, 0.62)',
+  },
+  photoCoverBadgeText: {
+    fontSize: 10,
+    lineHeight: 12,
+    fontWeight: fontWeights.semibold,
+    color: colors.surface,
   },
   validatedField: {
     marginBottom: 0,
