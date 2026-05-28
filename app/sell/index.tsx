@@ -1268,29 +1268,34 @@ export default function SellScreen() {
 
             <Text style={styles.requiredLegend}>* Champ obligatoire</Text>
 
-            <View style={styles.qualityCard}>
-              <Text style={styles.qualityCardHeading}>Qualité de l&apos;annonce</Text>
-              <Text style={styles.qualityCardSubtitle}>{listingQuality.subtitle}</Text>
-              <View
-                style={styles.qualityProgressTrack}
-                accessibilityRole="progressbar"
-                accessibilityValue={{
-                  min: 0,
-                  max: 100,
-                  now: listingQuality.score,
-                  text: `${listingQuality.score} sur 100`,
-                }}
-              >
+            {submitError ? <Text style={styles.submitErrorForm}>{submitError}</Text> : null}
+
+            <View
+              style={styles.qualityCardCompact}
+              accessibilityRole="progressbar"
+              accessibilityLabel={`Qualité de l'annonce : ${listingQuality.score} sur 100. ${listingQuality.label}`}
+              accessibilityValue={{
+                min: 0,
+                max: 100,
+                now: listingQuality.score,
+                text: `${listingQuality.score} sur 100`,
+              }}
+            >
+              <View style={styles.qualityCardCompactHeader}>
+                <Text style={styles.qualityCardCompactTitle}>Qualité de l&apos;annonce</Text>
+                <Text style={styles.qualityCardCompactScore}>{listingQuality.score}/100</Text>
+              </View>
+              <Text style={styles.qualityCardCompactAdvice} numberOfLines={2}>
+                {listingQuality.priorityTip ?? listingQuality.label}
+              </Text>
+              <View style={styles.qualityCardCompactTrack}>
                 <View
                   style={[
-                    styles.qualityProgressFill,
+                    styles.qualityCardCompactFill,
                     { width: `${listingQuality.progressRatio * 100}%` },
                   ]}
                 />
               </View>
-              {listingQuality.priorityTip ? (
-                <Text style={styles.qualityCardTip}>{listingQuality.priorityTip}</Text>
-              ) : null}
             </View>
           </View>
         </ScrollView>
@@ -1298,24 +1303,33 @@ export default function SellScreen() {
         {!keyboardVisible ? (
           <View style={styles.stickyFooter}>
             <View style={[styles.content, styles.stickyFooterActions]}>
-              {submitError ? <Text style={styles.submitErrorSticky}>{submitError}</Text> : null}
               <Button
-                size="lg"
+                size="sm"
                 onPress={handleSubmit}
                 loading={submitLoading}
                 disabled={submitLoading || (dynamicAttributesPilotActive && dynamicLoading)}
                 leftIcon={
                   submitLoading ? undefined : (
-                    <Ionicons name="paper-plane" size={18} color={colors.surface} />
+                    <Ionicons name="paper-plane" size={15} color={colors.surface} />
                   )
                 }
                 style={styles.publishCta}
               >
                 {"Publier l'annonce"}
               </Button>
-              <Button variant="ghost" onPress={goBackOrHome} disabled={submitLoading}>
-                Annuler
-              </Button>
+              <Pressable
+                accessibilityRole="button"
+                onPress={goBackOrHome}
+                disabled={submitLoading}
+                hitSlop={{ top: 8, bottom: 8, left: 12, right: 12 }}
+                style={({ pressed }) => [
+                  styles.footerCancelPressable,
+                  pressed && !submitLoading ? styles.footerCancelPressed : null,
+                  submitLoading ? styles.footerCancelDisabled : null,
+                ]}
+              >
+                <Text style={styles.footerCancelText}>Annuler</Text>
+              </Pressable>
             </View>
           </View>
         ) : null}
@@ -1333,26 +1347,31 @@ const styles = StyleSheet.create({
   },
   formScrollContent: {
     flexGrow: 1,
-    paddingBottom: spacing['3xl'],
+    paddingBottom: spacing.lg,
   },
   formScrollContentKeyboardOpen: {
     paddingBottom: spacing['2xl'],
   },
   stickyFooter: {
-    paddingTop: spacing.sm,
-    paddingBottom: spacing.sm,
-    borderTopWidth: 1,
-    borderTopColor: colors.borderLight,
-    backgroundColor: colors.background,
+    paddingTop: 2,
     ...Platform.select({
       ios: {
+        borderTopWidth: StyleSheet.hairlineWidth,
+        borderTopColor: colors.borderLight,
+        backgroundColor: colors.background,
         shadowColor: '#000',
-        shadowOffset: { width: 0, height: -2 },
-        shadowOpacity: 0.06,
-        shadowRadius: 6,
+        shadowOffset: { width: 0, height: -1 },
+        shadowOpacity: 0.04,
+        shadowRadius: 3,
       },
-      android: { elevation: 8 },
-      default: {},
+      android: {
+        backgroundColor: 'transparent',
+        borderTopWidth: 0,
+        elevation: 0,
+      },
+      default: {
+        backgroundColor: colors.background,
+      },
     }),
   },
   duplicateBanner: {
@@ -1381,8 +1400,72 @@ const styles = StyleSheet.create({
     lineHeight: 18,
   },
   stickyFooterActions: {
+    gap: 2,
+    paddingBottom: 0,
+  },
+  qualityCardCompact: {
+    marginTop: spacing.sm,
+    paddingVertical: spacing.xs,
+    paddingHorizontal: spacing.sm,
+    borderRadius: radius.md,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.borderLight,
+    backgroundColor: colors.surface,
+    gap: 3,
+  },
+  qualityCardCompactHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     gap: spacing.sm,
-    paddingBottom: spacing.xs,
+  },
+  qualityCardCompactTitle: {
+    ...typography.xs,
+    fontWeight: fontWeights.semibold,
+    color: colors.textSecondary,
+    flex: 1,
+  },
+  qualityCardCompactScore: {
+    ...typography.xs,
+    fontWeight: fontWeights.semibold,
+    color: colors.text,
+    fontVariant: ['tabular-nums'],
+  },
+  qualityCardCompactAdvice: {
+    ...typography.xs,
+    color: colors.textMuted,
+    lineHeight: 15,
+  },
+  qualityCardCompactTrack: {
+    height: 2,
+    borderRadius: radius.full,
+    backgroundColor: colors.borderLight,
+    overflow: 'hidden',
+  },
+  qualityCardCompactFill: {
+    height: '100%',
+    borderRadius: radius.full,
+    backgroundColor: colors.primary,
+    minWidth: 0,
+  },
+  footerCancelPressable: {
+    alignSelf: 'center',
+    paddingVertical: 2,
+    minHeight: 28,
+    justifyContent: 'center',
+  },
+  footerCancelPressed: {
+    opacity: 0.65,
+  },
+  footerCancelDisabled: {
+    opacity: 0.4,
+  },
+  footerCancelText: {
+    ...typography.xs,
+    color: colors.textMuted,
+    fontWeight: fontWeights.medium,
+    textDecorationLine: 'underline',
+    textDecorationColor: colors.border,
   },
   content: {
     maxWidth: 520,
@@ -1621,48 +1704,6 @@ const styles = StyleSheet.create({
     marginTop: spacing.sm,
     marginBottom: spacing.xs,
   },
-  qualityCard: {
-    marginTop: spacing.base,
-    paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.base,
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    borderColor: colors.borderLight,
-    backgroundColor: colors.surface,
-    gap: spacing.xs,
-  },
-  qualityCardHeading: {
-    ...typography.xs,
-    fontWeight: fontWeights.semibold,
-    color: colors.textSecondary,
-    textTransform: 'uppercase',
-    letterSpacing: 0.3,
-  },
-  qualityCardSubtitle: {
-    ...typography.sm,
-    color: colors.text,
-    fontWeight: fontWeights.medium,
-    lineHeight: 20,
-  },
-  qualityProgressTrack: {
-    height: 4,
-    borderRadius: radius.full,
-    backgroundColor: colors.borderLight,
-    overflow: 'hidden',
-    marginTop: 2,
-  },
-  qualityProgressFill: {
-    height: '100%',
-    borderRadius: radius.full,
-    backgroundColor: colors.primary,
-    minWidth: 0,
-  },
-  qualityCardTip: {
-    ...typography.xs,
-    color: colors.textMuted,
-    lineHeight: 16,
-    marginTop: 2,
-  },
   imagesSection: {
     marginBottom: spacing.lg,
   },
@@ -1777,18 +1818,20 @@ const styles = StyleSheet.create({
   },
   publishCta: {
     width: '100%',
+    minHeight: 40,
+    paddingVertical: spacing.xs,
     ...Platform.select({
       ios: {
         shadowColor: colors.primary,
-        shadowOffset: { width: 0, height: 6 },
-        shadowOpacity: 0.24,
-        shadowRadius: 12,
+        shadowOffset: { width: 0, height: 3 },
+        shadowOpacity: 0.18,
+        shadowRadius: 6,
       },
       android: {
-        elevation: 5,
+        elevation: 3,
       },
       default: {
-        boxShadow: `0 10px 22px ${YOUMBIA_SELECTED_GLOW}`,
+        boxShadow: `0 6px 14px ${YOUMBIA_SELECTED_GLOW}`,
       },
     }),
   },
@@ -1870,9 +1913,10 @@ const styles = StyleSheet.create({
       },
     }),
   },
-  submitErrorSticky: {
-    ...typography.sm,
+  submitErrorForm: {
+    ...typography.xs,
     color: colors.error,
-    marginBottom: spacing.xs,
+    lineHeight: 16,
+    marginTop: spacing.sm,
   },
 });
