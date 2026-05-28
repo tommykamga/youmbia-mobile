@@ -72,6 +72,7 @@ import {
   validateListingPrice,
   validateListingTitle,
 } from '@/lib/listingPublishFormValidation';
+import { computeListingQualityScore } from '@/lib/listingQualityScore';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
 /** Aligné web : maximum 4 photos par annonce. */
@@ -266,6 +267,18 @@ export default function SellScreen() {
   );
   const showPriceError = shouldShowListingFieldError(priceStr, priceError, validationAttempted);
   const showCityError = shouldShowListingFieldError(city, cityError, validationAttempted);
+
+  const listingQuality = useMemo(
+    () =>
+      computeListingQualityScore({
+        title,
+        description,
+        priceStr,
+        city,
+        imageCount: images.length,
+      }),
+    [title, description, priceStr, city, images.length]
+  );
 
   const handleTitleChange = useCallback((text: string) => {
     setTitle(text);
@@ -1254,6 +1267,31 @@ export default function SellScreen() {
             />
 
             <Text style={styles.requiredLegend}>* Champ obligatoire</Text>
+
+            <View style={styles.qualityCard}>
+              <Text style={styles.qualityCardHeading}>Qualité de l&apos;annonce</Text>
+              <Text style={styles.qualityCardSubtitle}>{listingQuality.subtitle}</Text>
+              <View
+                style={styles.qualityProgressTrack}
+                accessibilityRole="progressbar"
+                accessibilityValue={{
+                  min: 0,
+                  max: 100,
+                  now: listingQuality.score,
+                  text: `${listingQuality.score} sur 100`,
+                }}
+              >
+                <View
+                  style={[
+                    styles.qualityProgressFill,
+                    { width: `${listingQuality.progressRatio * 100}%` },
+                  ]}
+                />
+              </View>
+              {listingQuality.priorityTip ? (
+                <Text style={styles.qualityCardTip}>{listingQuality.priorityTip}</Text>
+              ) : null}
+            </View>
           </View>
         </ScrollView>
 
@@ -1582,6 +1620,48 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     marginTop: spacing.sm,
     marginBottom: spacing.xs,
+  },
+  qualityCard: {
+    marginTop: spacing.base,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.base,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.borderLight,
+    backgroundColor: colors.surface,
+    gap: spacing.xs,
+  },
+  qualityCardHeading: {
+    ...typography.xs,
+    fontWeight: fontWeights.semibold,
+    color: colors.textSecondary,
+    textTransform: 'uppercase',
+    letterSpacing: 0.3,
+  },
+  qualityCardSubtitle: {
+    ...typography.sm,
+    color: colors.text,
+    fontWeight: fontWeights.medium,
+    lineHeight: 20,
+  },
+  qualityProgressTrack: {
+    height: 4,
+    borderRadius: radius.full,
+    backgroundColor: colors.borderLight,
+    overflow: 'hidden',
+    marginTop: 2,
+  },
+  qualityProgressFill: {
+    height: '100%',
+    borderRadius: radius.full,
+    backgroundColor: colors.primary,
+    minWidth: 0,
+  },
+  qualityCardTip: {
+    ...typography.xs,
+    color: colors.textMuted,
+    lineHeight: 16,
+    marginTop: 2,
   },
   imagesSection: {
     marginBottom: spacing.lg,
