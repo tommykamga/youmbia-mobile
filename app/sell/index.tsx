@@ -60,6 +60,7 @@ import {
   getCurrentProfile,
 } from '@/services/profile';
 import { supabase } from '@/lib/supabase';
+import { getSellCategoryGuidanceForCategoryId } from '@/lib/sellCategoryGuidance';
 import {
   LISTING_DESCRIPTION_MAX,
   LISTING_TITLE_MAX,
@@ -204,6 +205,12 @@ export default function SellScreen() {
   const [selectedChildCategoryId, setSelectedChildCategoryId] =
     useState<ListingCategoryId | null>(null);
   const publishCategoryId = selectedChildCategoryId ?? selectedParentCategoryId;
+  /** Catégorie pour les aides titre/description (parent seul si sous-catégorie pas encore choisie). */
+  const guidanceCategoryId = publishCategoryId ?? selectedParentCategoryId;
+  const sellGuidance = useMemo(
+    () => getSellCategoryGuidanceForCategoryId(marketplaceCategories, guidanceCategoryId),
+    [marketplaceCategories, guidanceCategoryId]
+  );
   const [city, setCity] = useState('');
   const [description, setDescription] = useState('');
   const [images, setImages] = useState<PickedImage[]>([]);
@@ -985,6 +992,9 @@ export default function SellScreen() {
           <View style={styles.content}>
             <Text style={styles.title}>Vendre</Text>
             <Text style={styles.subtitle}>Publiez votre annonce en quelques minutes.</Text>
+            <Text style={styles.publishQualityTip}>
+              Quelques détails de plus augmentent vos chances de vendre rapidement.
+            </Text>
 
             {duplicateSourceId ? (
               <View style={styles.duplicateBanner}>
@@ -1091,7 +1101,7 @@ export default function SellScreen() {
             <View style={styles.validatedField}>
               <Input
                 label="Titre *"
-                placeholder="Ex. iPhone 13 Pro Max 256 Go"
+                placeholder={sellGuidance.titlePlaceholder}
                 value={title}
                 onChangeText={handleTitleChange}
                 maxLength={LISTING_TITLE_MAX}
@@ -1099,7 +1109,7 @@ export default function SellScreen() {
                 containerStyle={styles.validatedFieldInput}
               />
               <SellFieldMeta
-                hint="Exemple : iPhone 13 Pro Max 256 Go"
+                hint={sellGuidance.titleHint}
                 counter={title.length}
                 max={LISTING_TITLE_MAX}
               />
@@ -1108,7 +1118,7 @@ export default function SellScreen() {
             <View style={styles.validatedField}>
               <Input
                 label="Description *"
-                placeholder="État, caractéristiques, accessoires…"
+                placeholder={sellGuidance.descriptionPlaceholder}
                 value={description}
                 onChangeText={handleDescriptionChange}
                 multiline
@@ -1119,7 +1129,7 @@ export default function SellScreen() {
                 containerStyle={styles.validatedFieldInput}
               />
               <SellFieldMeta
-                hint="Décrivez l’état, les caractéristiques et les accessoires inclus"
+                hint={sellGuidance.descriptionHint}
                 counter={description.length}
                 max={LISTING_DESCRIPTION_MAX}
               />
@@ -1545,6 +1555,12 @@ const styles = StyleSheet.create({
   subtitle: {
     fontSize: typography.base.fontSize,
     color: colors.textSecondary,
+    marginBottom: spacing.sm,
+  },
+  publishQualityTip: {
+    ...typography.xs,
+    color: colors.textMuted,
+    lineHeight: 18,
     marginBottom: spacing.xl,
   },
   descriptionInput: {
