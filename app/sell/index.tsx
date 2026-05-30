@@ -14,6 +14,7 @@ import {
   Pressable,
   useWindowDimensions,
   Keyboard,
+  KeyboardAvoidingView,
 } from 'react-native';
 import { useRouter, useFocusEffect, type Href } from 'expo-router';
 import { buildAuthGateHref } from '@/lib/authGateNavigation';
@@ -991,7 +992,10 @@ export default function SellScreen() {
 
   return (
     <Screen scroll={false}>
-      <View style={styles.formLayout}>
+      <KeyboardAvoidingView
+        style={styles.formLayout}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      >
         <ScrollView
           style={styles.formScroll}
           contentContainerStyle={[
@@ -999,7 +1003,6 @@ export default function SellScreen() {
             keyboardVisible ? styles.formScrollContentKeyboardOpen : null,
           ]}
           keyboardShouldPersistTaps="handled"
-          automaticallyAdjustKeyboardInsets={Platform.OS !== 'web'}
           showsVerticalScrollIndicator={false}
         >
           <View style={styles.content}>
@@ -1300,40 +1303,38 @@ export default function SellScreen() {
           </View>
         </ScrollView>
 
-        {!keyboardVisible ? (
-          <View style={styles.stickyFooter}>
-            <View style={[styles.content, styles.stickyFooterActions]}>
-              <Button
-                size="sm"
-                onPress={handleSubmit}
-                loading={submitLoading}
-                disabled={submitLoading || (dynamicAttributesPilotActive && dynamicLoading)}
-                leftIcon={
-                  submitLoading ? undefined : (
-                    <Ionicons name="paper-plane" size={15} color={colors.surface} />
-                  )
-                }
-                style={styles.publishCta}
-              >
-                {"Publier l'annonce"}
-              </Button>
-              <Pressable
-                accessibilityRole="button"
-                onPress={goBackOrHome}
-                disabled={submitLoading}
-                hitSlop={{ top: 8, bottom: 8, left: 12, right: 12 }}
-                style={({ pressed }) => [
-                  styles.footerCancelPressable,
-                  pressed && !submitLoading ? styles.footerCancelPressed : null,
-                  submitLoading ? styles.footerCancelDisabled : null,
-                ]}
-              >
-                <Text style={styles.footerCancelText}>Annuler</Text>
-              </Pressable>
-            </View>
+        <View style={styles.stickyFooter}>
+          <View style={[styles.content, styles.stickyFooterActions]}>
+            <Button
+              size="sm"
+              onPress={handleSubmit}
+              loading={submitLoading}
+              disabled={submitLoading || (dynamicAttributesPilotActive && dynamicLoading)}
+              leftIcon={
+                submitLoading ? undefined : (
+                  <Ionicons name="paper-plane" size={15} color={colors.surface} />
+                )
+              }
+              style={styles.publishCta}
+            >
+              {"Publier l'annonce"}
+            </Button>
+            <Pressable
+              accessibilityRole="button"
+              onPress={goBackOrHome}
+              disabled={submitLoading}
+              hitSlop={{ top: 8, bottom: 8, left: 12, right: 12 }}
+              style={({ pressed }) => [
+                styles.footerCancelPressable,
+                pressed && !submitLoading ? styles.footerCancelPressed : null,
+                submitLoading ? styles.footerCancelDisabled : null,
+              ]}
+            >
+              <Text style={styles.footerCancelText}>Annuler</Text>
+            </Pressable>
           </View>
-        ) : null}
-      </View>
+        </View>
+      </KeyboardAvoidingView>
     </Screen>
   );
 }

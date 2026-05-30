@@ -14,6 +14,7 @@ import {
   Pressable,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import * as ImagePicker from 'expo-image-picker';
 import { Screen, Button, Input, Loader, EmptyState, AppHeader } from '@/components';
@@ -60,6 +61,7 @@ type PickedImage = { uri: string; base64: string | null; mimeType?: string | nul
 
 export default function ListingEditScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { id } = useLocalSearchParams<{ id: string }>();
   const [loadState, setLoadState] = useState<LoadState>({ status: 'loading' });
   const { categories: marketplaceCategories } = useMarketplaceCategories();
@@ -393,7 +395,12 @@ export default function ListingEditScreen() {
   }
 
   return (
-    <Screen scroll keyboardAvoid safe={false}>
+    <Screen
+      scroll
+      keyboardAvoid
+      safe={false}
+      scrollExtraBottomPadding={insets.bottom + spacing.lg}
+    >
       <AppHeader title="Modifier l’annonce" showBack density="compact" />
       <Text style={styles.subtitle}>Catégorie : {categoryLabel}</Text>
 
