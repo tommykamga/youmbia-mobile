@@ -14,9 +14,7 @@
         "buildType": "apk"
       },
       "env": {
-        "APP_ENV": "development",
-        "EXPO_PUBLIC_SUPABASE_URL": "TON_URL_SUPABASE",
-        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "TA_CLE_ANON_SUPABASE"
+        "APP_ENV": "development"
       }
     },
     "preview": {
@@ -28,9 +26,7 @@
         "buildType": "apk"
       },
       "env": {
-        "APP_ENV": "preview",
-        "EXPO_PUBLIC_SUPABASE_URL": "TON_URL_SUPABASE",
-        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "TA_CLE_ANON_SUPABASE"
+        "APP_ENV": "preview"
       }
     },
     "production": {
