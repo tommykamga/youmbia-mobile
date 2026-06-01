@@ -1,4 +1,5 @@
 export * from './getConversations';
+export * from './getConversationById';
 export * from './getMessages';
 export * from './getOrCreateConversation';
 export * from './markConversationRead';

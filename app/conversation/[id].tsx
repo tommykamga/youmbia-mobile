@@ -18,6 +18,7 @@ import {
   sendMessage,
   markConversationRead,
   getConversations,
+  getConversationById,
 } from '@/services/conversations';
 import { getSession } from '@/services/auth';
 import { buildAuthGateHref } from '@/lib/authGateNavigation';
@@ -97,20 +98,30 @@ export default function ConversationThreadScreen() {
         return;
       }
       setUserId(session.user.id);
-      const [convResult, messagesResult] = await Promise.all([
+      const [convResult, convListResult, messagesResult] = await Promise.all([
+        getConversationById(id),
         getConversations(),
         getMessages(id),
       ]);
-      if (convResult.error || messagesResult.error) {
-        const error = convResult.error || messagesResult.error;
+      // Vraie erreur Supabase / session invalide lors de l'accès à la conversation.
+      if (convResult.error) {
         setStatus('error');
-        setErrorMessage(getThreadErrorMessage(error!.message, 'Nous n\'arrivons pas à charger cette discussion.'));
+        setErrorMessage(getThreadErrorMessage(convResult.error.message, 'Nous n\'arrivons pas à charger cette discussion.'));
         return;
       }
-      const conv = convResult.data?.find((c) => c.id === id);
-      setTitle(conv?.listing_title ?? conv?.other_party_name ?? 'Conversation');
+      // Conversation absente ou non autorisée (RLS masque la ligne) → introuvable.
+      if (!convResult.data) {
+        setStatus('error');
+        setErrorMessage('Cette conversation est introuvable.');
+        return;
+      }
+      const conv = convResult.data;
+      setTitle(conv.listing_title ?? conv.other_party_name ?? 'Conversation');
+      // Une conversation valide sans message n'est PAS une erreur : on affiche le fil
+      // (état vide + champ de saisie actif). Un échec non bloquant du chargement des
+      // messages dégrade comme le web : fil vide plutôt qu'écran d'erreur.
       setMessages(messagesResult.data ?? []);
-      void syncMessageNotificationSnapshot(convResult.data ?? []);
+      void syncMessageNotificationSnapshot(convListResult.data ?? []);
       setStatus('success');
     } catch {
       setStatus('error');
