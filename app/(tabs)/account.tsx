@@ -8,8 +8,9 @@ import { spacing, colors, typography, fontWeights, radius } from '@/theme';
 import Animated, { useSharedValue, useAnimatedStyle, withTiming, Easing, withSpring } from 'react-native-reanimated';
 import { buildAuthGateHref } from '@/lib/authGateNavigation';
 import Constants from 'expo-constants';
-import { lightCacheKeys, lightCacheRead } from '@/lib/lightCache';
+import { lightCacheKeys, lightCacheRead, lightCacheWrite } from '@/lib/lightCache';
 import { resolveSingleAvatarUrl } from '@/lib/avatarImageUrl';
+import { getCurrentProfile, getAvatarVersion } from '@/services/profile';
 import { Image as ExpoImage } from 'expo-image';
 import { ProSellerActivationCard } from '@/features/shops';
 
@@ -119,24 +120,59 @@ export default function AccountScreen() {
   const fetchSession = useCallback(async () => {
     try {
       const session = await getSession();
-      if (session?.user) {
-        setEmail(session.user.email ?? 'Utilisateur YOUMBIA');
-        setAvatarDisplayUrl('');
-        const cached = await lightCacheRead<{ userId: string; avatarUrl: string }>(
-          lightCacheKeys.profile(session.user.id)
-        );
-        const raw = String(cached?.payload?.avatarUrl ?? '').trim();
-        if (raw) {
-          try {
-            const resolved = await resolveSingleAvatarUrl(raw);
-            if (resolved) setAvatarDisplayUrl(resolved);
-          } catch {
-            // ignore
-          }
-        }
-        setStatus('authenticated');
-      } else {
+      if (!session?.user) {
         setStatus('unauthenticated');
+        return;
+      }
+      const userId = session.user.id;
+      setEmail(session.user.email ?? 'Utilisateur YOUMBIA');
+
+      // 1) Instant paint from local cache (NOT the source of truth — just for fast UI).
+      const cached = await lightCacheRead<{
+        userId: string;
+        avatarUrl: string;
+        avatarVersion?: string;
+        fullName?: string;
+        phone?: string;
+        incomplete?: boolean;
+      }>(lightCacheKeys.profile(userId));
+      const cachedRaw = String(cached?.payload?.avatarUrl ?? '').trim();
+      if (cachedRaw) {
+        try {
+          const resolved = await resolveSingleAvatarUrl(cachedRaw, cached?.payload?.avatarVersion);
+          if (resolved) setAvatarDisplayUrl(resolved);
+        } catch {
+          // ignore
+        }
+      } else {
+        setAvatarDisplayUrl('');
+      }
+      setStatus('authenticated');
+
+      // 2) Revalidate against profiles (single source of truth). Refresh avatar if it changed
+      //    on another device. Version (updated_at) busts the image cache cross-device.
+      try {
+        const result = await getCurrentProfile();
+        if (!result.error) {
+          const raw = String(result.data?.avatar_url ?? '').trim();
+          const version = getAvatarVersion(result.data);
+          if (raw) {
+            const resolved = await resolveSingleAvatarUrl(raw, version);
+            setAvatarDisplayUrl(resolved || '');
+          } else {
+            setAvatarDisplayUrl('');
+          }
+          await lightCacheWrite(lightCacheKeys.profile(userId), {
+            userId,
+            fullName: cached?.payload?.fullName ?? '',
+            phone: cached?.payload?.phone ?? '',
+            avatarUrl: raw,
+            avatarVersion: version,
+            incomplete: cached?.payload?.incomplete ?? false,
+          });
+        }
+      } catch {
+        // Offline / transient: keep the cached avatar already shown.
       }
     } catch {
       setStatus('unauthenticated');

@@ -84,11 +84,55 @@ export async function getSignedAvatarUrlsMap(paths: string[]): Promise<Map<strin
   return map;
 }
 
-export async function resolveSingleAvatarUrl(urlOrPath: string): Promise<string> {
+/** Appends a cache-busting `v` query param to a display URL (no-op if version empty). */
+export function appendAvatarVersion(displayUrl: string, version?: string | number | null): string {
+  const url = String(displayUrl ?? '').trim();
+  if (!url) return '';
+  const v = String(version ?? '').trim();
+  if (!v) return url;
+  const sep = url.includes('?') ? '&' : '?';
+  return `${url}${sep}v=${encodeURIComponent(v)}`;
+}
+
+/**
+ * Resolves a display URL for an avatar path/url.
+ * `version` (e.g. derived from profiles.updated_at) is appended as `?v=` so that, when the
+ * underlying image changes at a stable Storage path, every device gets a fresh URI and reloads.
+ */
+export async function resolveSingleAvatarUrl(
+  urlOrPath: string,
+  version?: string | number | null
+): Promise<string> {
   const s = String(urlOrPath ?? '').trim();
   if (!s) return '';
-  if (/^https?:\/\//i.test(s)) return s;
+  if (/^https?:\/\//i.test(s)) return appendAvatarVersion(s, version);
   const map = await getSignedAvatarUrlsMap([s]);
-  return toDisplayAvatarUrl(s, map);
+  const display = toDisplayAvatarUrl(s, map);
+  return appendAvatarVersion(display, version);
+}
+
+/**
+ * Invalidates the in-memory signed-URL cache for a given Storage path/url.
+ * Used after replacing an avatar at a stable path so the next resolve fetches fresh.
+ */
+export function invalidateAvatarCache(urlOrPath: string): void {
+  const key = cacheKeyForPathOrUrl(urlOrPath);
+  if (key) signedUrlMemoryCache.delete(key);
+}
+
+/**
+ * Resolves a fresh display URL for an avatar that was just (re)uploaded at a stable path.
+ * Busts the memory cache and appends a version (DB `updated_at` when available, else a local
+ * timestamp) so `expo-image` reloads the new bytes instead of serving the cached image.
+ */
+export async function resolveFreshAvatarUrl(
+  urlOrPath: string,
+  version?: string | number | null
+): Promise<string> {
+  const s = String(urlOrPath ?? '').trim();
+  if (!s) return '';
+  invalidateAvatarCache(s);
+  const v = String(version ?? '').trim() || String(Date.now());
+  return resolveSingleAvatarUrl(s, v);
 }
 

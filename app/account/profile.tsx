@@ -1,11 +1,13 @@
-import React, { useCallback, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, Alert, Platform } from 'react-native';
+import React, { useCallback, useRef, useState } from 'react';
+import { View, Text, StyleSheet, ScrollView, Pressable, Alert, Platform, Modal, ActivityIndicator } from 'react-native';
+import * as Haptics from 'expo-haptics';
 import { Screen, AppHeader, Button, Input, Loader, EmptyState } from '@/components';
 import {
   getCurrentProfile,
   updateProfile,
   sanitizeProfileDisplayValue,
   normalizePhoneForProfile,
+  getAvatarVersion,
 } from '@/services/profile';
 import { getSession } from '@/services/auth';
 import { useFocusEffect, Redirect, useLocalSearchParams, useRouter } from 'expo-router';
@@ -17,7 +19,12 @@ import * as ImagePicker from 'expo-image-picker';
 import { decode } from 'base64-arraybuffer';
 import * as ImageManipulator from 'expo-image-manipulator';
 import { supabase } from '@/lib/supabase';
-import { resolveSingleAvatarUrl, AVATARS_BUCKET } from '@/lib/avatarImageUrl';
+import {
+  resolveSingleAvatarUrl,
+  resolveFreshAvatarUrl,
+  invalidateAvatarCache,
+  AVATARS_BUCKET,
+} from '@/lib/avatarImageUrl';
 import { getProfileReturnNext, replaceAfterProfileSave } from '@/lib/profileReturnNavigation';
 import { Image as ExpoImage } from 'expo-image';
 
@@ -26,6 +33,7 @@ type ProfileCachePayload = {
   fullName: string;
   phone: string;
   avatarUrl: string;
+  avatarVersion: string;
   incomplete: boolean;
 };
 
@@ -50,8 +58,14 @@ export default function AccountProfileScreen() {
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
   const [avatarUrlRaw, setAvatarUrlRaw] = useState<string>('');
+  const [avatarVersion, setAvatarVersion] = useState<string>('');
   const [avatarDisplayUrl, setAvatarDisplayUrl] = useState<string>('');
   const [avatarUploading, setAvatarUploading] = useState(false);
+  const [avatarBusyLabel, setAvatarBusyLabel] = useState<string | null>(null);
+  const [sheetVisible, setSheetVisible] = useState(false);
+  // iOS ne peut pas présenter le sélecteur tant que l'action sheet (Modal) se ferme.
+  // On diffère l'action jusqu'à `onDismiss` (iOS) ; sur Android on l'exécute directement.
+  const pendingSheetActionRef = useRef<null | (() => void)>(null);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saveSuccess, setSaveSuccess] = useState<string | null>(null);
@@ -80,8 +94,9 @@ export default function AccountProfileScreen() {
         setFullName(cached.payload.fullName);
         setPhone(cached.payload.phone);
         setAvatarUrlRaw(cached.payload.avatarUrl);
+        setAvatarVersion(cached.payload.avatarVersion ?? '');
         // Lazy resolve (may fail if bucket not available) — safe fallback is initial.
-        void resolveSingleAvatarUrl(cached.payload.avatarUrl).then((u) => {
+        void resolveSingleAvatarUrl(cached.payload.avatarUrl, cached.payload.avatarVersion).then((u) => {
           if (u) setAvatarDisplayUrl(u);
         });
         setState({
@@ -118,9 +133,11 @@ export default function AccountProfileScreen() {
       setFullName(name);
       setPhone(phoneVal);
       const rawAvatar = String(result.data?.avatar_url ?? '').trim();
+      const version = getAvatarVersion(result.data);
       setAvatarUrlRaw(rawAvatar);
+      setAvatarVersion(version);
       try {
-        const resolved = await resolveSingleAvatarUrl(rawAvatar);
+        const resolved = await resolveSingleAvatarUrl(rawAvatar, version);
         setAvatarDisplayUrl(resolved);
       } catch {
         setAvatarDisplayUrl('');
@@ -132,6 +149,7 @@ export default function AccountProfileScreen() {
         fullName: name,
         phone: phoneVal,
         avatarUrl: rawAvatar,
+        avatarVersion: version,
         incomplete,
       });
       logProfileDev('fetch_end', { outcome: 'success', incomplete });
@@ -191,6 +209,7 @@ export default function AccountProfileScreen() {
         fullName: fn,
         phone: ph,
         avatarUrl: avatarUrlRaw,
+        avatarVersion,
         incomplete: incompleteAfter,
       });
     }
@@ -205,19 +224,162 @@ export default function AccountProfileScreen() {
     }
 
     setSaveSuccess("Votre profil a été mis à jour avec succès.");
-  }, [fullName, phone, avatarUrlRaw, returnNext, router]);
+  }, [fullName, phone, avatarUrlRaw, avatarVersion, returnNext, router]);
 
-  const handlePickAvatar = useCallback(async () => {
-    if (avatarUploading || saving) return;
+  const hasAvatar = !!avatarUrlRaw.trim();
+  const avatarBusy = avatarUploading;
+
+  const openAvatarSheet = useCallback(() => {
+    if (avatarBusy || saving) return;
     setSaveError(null);
     setSaveSuccess(null);
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setSheetVisible(true);
+  }, [avatarBusy, saving]);
 
-    const session = await getSession();
-    const userId = session?.user?.id;
-    if (!userId) {
-      setSaveError('Connexion requise.');
-      return;
+  /**
+   * Ferme l'action sheet puis lance l'action.
+   * iOS : on attend `onDismiss` (sinon le sélecteur ne se présente jamais).
+   * Android : pas de conflit de présentation → on exécute directement.
+   */
+  const runAfterSheet = useCallback((action: () => void) => {
+    if (Platform.OS === 'ios') {
+      pendingSheetActionRef.current = action;
+      setSheetVisible(false);
+    } else {
+      setSheetVisible(false);
+      action();
     }
+  }, []);
+
+  /** Resize + compress to a square-friendly avatar, enforce ~1 Mo max, then upload + persist. */
+  const processAndUpload = useCallback(
+    async (uri: string) => {
+      const session = await getSession();
+      const userId = session?.user?.id;
+      if (!userId) {
+        setSaveError('Connexion requise.');
+        return;
+      }
+
+      setAvatarBusyLabel('Mise à jour…');
+      setAvatarUploading(true);
+      try {
+        // Target ~512px JPEG. Loop down quality if the result is still above ~1 Mo.
+        const MAX_BYTES = 1_000_000;
+        let compress = 0.82;
+        let manipulated = await ImageManipulator.manipulateAsync(
+          uri,
+          [{ resize: { width: 512 } }],
+          { compress, format: ImageManipulator.SaveFormat.JPEG, base64: true }
+        );
+        let preparedBase64 = (manipulated.base64 ?? '').replace(/^data:image\/\w+;base64,/, '');
+        const approxBytes = (b64: string) => Math.floor((b64.length * 3) / 4);
+        while (preparedBase64 && approxBytes(preparedBase64) > MAX_BYTES && compress > 0.4) {
+          compress = Math.max(0.4, compress - 0.2);
+          manipulated = await ImageManipulator.manipulateAsync(
+            uri,
+            [{ resize: { width: 512 } }],
+            { compress, format: ImageManipulator.SaveFormat.JPEG, base64: true }
+          );
+          preparedBase64 = (manipulated.base64 ?? '').replace(/^data:image\/\w+;base64,/, '');
+        }
+
+        if (!preparedBase64) {
+          setSaveError("Impossible de préparer l'image. Réessayez.");
+          return;
+        }
+
+        // Unique filename per change: avatar_url itself changes on every replacement,
+        // which makes the new photo propagate to all devices (DB = source of truth) and
+        // busts the image cache without relying on any timestamp column.
+        const previousPath = avatarUrlRaw.trim();
+        const path = `${userId}/avatar_${Date.now()}.jpg`;
+        const uploadOnce = async (bucket: string) => {
+          return await supabase.storage.from(bucket).upload(path, decode(preparedBase64), {
+            contentType: 'image/jpeg',
+            upsert: true,
+          });
+        };
+
+        // Try configured bucket; if it doesn't exist, fall back to known existing bucket.
+        let usedBucket = AVATARS_BUCKET;
+        let upload = await uploadOnce(AVATARS_BUCKET);
+        if (upload.error) {
+          const msg = String(upload.error.message ?? '').toLowerCase();
+          const bucketMissing =
+            msg.includes('bucket') || msg.includes('not found') || msg.includes('does not exist');
+          if (bucketMissing && AVATARS_BUCKET !== 'listing-images') {
+            usedBucket = 'listing-images';
+            upload = await uploadOnce('listing-images');
+          }
+        }
+
+        if (upload.error) {
+          logProfileDev('avatar_upload_error', { message: upload.error.message });
+          setSaveError("Impossible de mettre à jour la photo.");
+          return;
+        }
+
+        const updateRes = await updateProfile({ avatar_url: path });
+        if (updateRes.error) {
+          logProfileDev('avatar_db_error', { message: updateRes.error.message });
+          setSaveError("Impossible de mettre à jour la photo.");
+          return;
+        }
+
+        // Best-effort cleanup of the previous file (never block on failure).
+        const prevIsPath = previousPath !== '' && previousPath !== path && !/^https?:\/\//i.test(previousPath);
+        if (prevIsPath) {
+          try {
+            await supabase.storage.from(usedBucket).remove([previousPath]);
+          } catch (e) {
+            logProfileDev('avatar_prev_remove_failed', {
+              error: e instanceof Error ? e.message : String(e),
+            });
+          }
+          invalidateAvatarCache(previousPath);
+        }
+
+        // Version derived from avatar_url → consistent cache-bust across devices.
+        const version = getAvatarVersion(updateRes.data);
+        setAvatarUrlRaw(path);
+        setAvatarVersion(version);
+        try {
+          // Fresh URL (cache-busted) so the new bytes replace the previously cached image.
+          const resolved = await resolveFreshAvatarUrl(path, version);
+          setAvatarDisplayUrl(resolved);
+        } catch {
+          setAvatarDisplayUrl('');
+        }
+
+        // Update cache so Account tab can refresh without extra fetch.
+        await lightCacheWrite<ProfileCachePayload>(lightCacheKeys.profile(userId), {
+          userId,
+          fullName,
+          phone,
+          avatarUrl: path,
+          avatarVersion: version,
+          incomplete: state.status === 'success' ? state.incomplete : false,
+        });
+
+        void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        setSaveSuccess('Photo de profil mise à jour');
+      } catch (e) {
+        logProfileDev('avatar_exception', { error: e instanceof Error ? e.message : String(e) });
+        setSaveError("Impossible de mettre à jour la photo.");
+      } finally {
+        setAvatarUploading(false);
+        setAvatarBusyLabel(null);
+      }
+    },
+    [fullName, phone, state, avatarUrlRaw]
+  );
+
+  const handlePickFromLibrary = useCallback(async () => {
+    if (avatarBusy || saving) return;
+    setSaveError(null);
+    setSaveSuccess(null);
 
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') {
@@ -231,90 +393,122 @@ export default function AccountProfileScreen() {
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ['images'],
       allowsMultipleSelection: false,
-      quality: 1,
-      base64: true,
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.9,
     });
 
     if (result.canceled || !result.assets?.length) return;
     const asset = result.assets[0]!;
-    const originalBase64 = (asset.base64 ?? '').replace(/^data:image\/\w+;base64,/, '');
-    if (!originalBase64) {
+    const mime = String(asset.mimeType ?? '').toLowerCase();
+    if (mime && !mime.startsWith('image/')) {
+      setSaveError("Format non pris en charge. Choisissez une image.");
+      return;
+    }
+    if (!asset.uri) {
       setSaveError("Impossible de préparer l'image. Réessayez.");
       return;
     }
+    await processAndUpload(asset.uri);
+  }, [avatarBusy, saving, processAndUpload]);
 
-    setAvatarUploading(true);
+  const handleTakePhoto = useCallback(async () => {
+    if (avatarBusy || saving) return;
+    setSaveError(null);
+    setSaveSuccess(null);
+
+    const { status } = await ImagePicker.requestCameraPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert(
+        'Permission requise',
+        "Autorisez l'accès à la caméra pour prendre une photo de profil."
+      );
+      return;
+    }
+
     try {
-      // Resize/compress client-side (safe default): 512px max width, JPEG.
-      const manipulated = await ImageManipulator.manipulateAsync(
-        asset.uri,
-        [{ resize: { width: 512 } }],
-        { compress: 0.82, format: ImageManipulator.SaveFormat.JPEG, base64: true }
-      );
-      const preparedBase64 = (manipulated.base64 ?? originalBase64).replace(
-        /^data:image\/\w+;base64,/,
-        ''
-      );
-      if (!preparedBase64) {
+      const result = await ImagePicker.launchCameraAsync({
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.9,
+      });
+      if (result.canceled || !result.assets?.length) return;
+      const asset = result.assets[0]!;
+      if (!asset.uri) {
         setSaveError("Impossible de préparer l'image. Réessayez.");
         return;
       }
+      await processAndUpload(asset.uri);
+    } catch (e) {
+      logProfileDev('camera_error', { error: e instanceof Error ? e.message : String(e) });
+      setSaveError("Caméra indisponible. Réessayez.");
+    }
+  }, [avatarBusy, saving, processAndUpload]);
 
-      // Storage path: stable overwrite for "replace avatar" UX.
-      const path = `${userId}/avatar.jpg`;
-      const uploadOnce = async (bucket: string) => {
-        return await supabase.storage.from(bucket).upload(path, decode(preparedBase64), {
-          contentType: 'image/jpeg',
-          upsert: true,
-        });
-      };
+  const handleRemoveAvatar = useCallback(async () => {
+    if (avatarBusy || saving) return;
+    setSaveError(null);
+    setSaveSuccess(null);
 
-      // Try configured bucket; if it doesn't exist, fall back to known existing bucket.
-      let upload = await uploadOnce(AVATARS_BUCKET);
-      if (upload.error) {
-        const msg = String(upload.error.message ?? '').toLowerCase();
-        const bucketMissing =
-          msg.includes('bucket') || msg.includes('not found') || msg.includes('does not exist');
-        if (bucketMissing && AVATARS_BUCKET !== 'listing-images') {
-          upload = await uploadOnce('listing-images');
-        }
-      }
+    const session = await getSession();
+    const userId = session?.user?.id;
+    if (!userId) {
+      setSaveError('Connexion requise.');
+      return;
+    }
 
-      if (upload.error) {
-        setSaveError("Impossible d'envoyer la photo. Réessayez.");
-        return;
-      }
-
-      const updateRes = await updateProfile({ avatar_url: path });
+    const currentRaw = avatarUrlRaw.trim();
+    setAvatarBusyLabel('Suppression…');
+    setAvatarUploading(true);
+    try {
+      // 1) Persist removal first — this is the source of truth.
+      const updateRes = await updateProfile({ avatar_url: null });
       if (updateRes.error) {
-        setSaveError("Photo envoyée, mais impossible d'enregistrer le profil. Réessayez.");
+        logProfileDev('avatar_remove_db_error', { message: updateRes.error.message });
+        setSaveError("Impossible de mettre à jour la photo.");
         return;
       }
 
-      setAvatarUrlRaw(path);
-      try {
-        const resolved = await resolveSingleAvatarUrl(path);
-        setAvatarDisplayUrl(resolved);
-      } catch {
-        setAvatarDisplayUrl('');
+      // 2) Best-effort Storage cleanup (path only; never block on failure).
+      const isPath = currentRaw !== '' && !/^https?:\/\//i.test(currentRaw);
+      if (isPath) {
+        try {
+          let rm = await supabase.storage.from(AVATARS_BUCKET).remove([currentRaw]);
+          if (rm.error && AVATARS_BUCKET !== 'listing-images') {
+            rm = await supabase.storage.from('listing-images').remove([currentRaw]);
+          }
+          if (rm.error) logProfileDev('avatar_storage_remove_failed', { message: rm.error.message });
+        } catch (e) {
+          logProfileDev('avatar_storage_remove_exception', {
+            error: e instanceof Error ? e.message : String(e),
+          });
+        }
+        invalidateAvatarCache(currentRaw);
       }
 
-      // Update cache so Account tab can refresh without extra fetch.
+      const version = getAvatarVersion(updateRes.data);
+      setAvatarUrlRaw('');
+      setAvatarVersion(version);
+      setAvatarDisplayUrl('');
       await lightCacheWrite<ProfileCachePayload>(lightCacheKeys.profile(userId), {
         userId,
         fullName,
         phone,
-        avatarUrl: path,
+        avatarUrl: '',
+        avatarVersion: version,
         incomplete: state.status === 'success' ? state.incomplete : false,
       });
 
-      setSaveSuccess('Photo de profil mise à jour.');
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      setSaveSuccess('Photo de profil supprimée');
     } catch (e) {
-      setSaveError(e instanceof Error ? e.message : "Impossible de mettre à jour la photo.");
+      logProfileDev('avatar_remove_exception', { error: e instanceof Error ? e.message : String(e) });
+      setSaveError("Impossible de mettre à jour la photo.");
     } finally {
       setAvatarUploading(false);
+      setAvatarBusyLabel(null);
     }
-  }, [avatarUploading, saving, fullName, phone, state]);
+  }, [avatarBusy, saving, avatarUrlRaw, fullName, phone, state]);
 
   if (state.status === 'loading') {
     return (
@@ -364,12 +558,12 @@ export default function AccountProfileScreen() {
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Changer la photo de profil"
-            onPress={handlePickAvatar}
-            disabled={avatarUploading || saving}
+            onPress={openAvatarSheet}
+            disabled={avatarBusy || saving}
             style={({ pressed }) => [
               styles.avatarWrap,
               pressed && { opacity: 0.92 },
-              (avatarUploading || saving) && { opacity: 0.7 },
+              (avatarBusy || saving) && { opacity: 0.7 },
             ]}
           >
             <View style={styles.avatar}>
@@ -378,14 +572,19 @@ export default function AccountProfileScreen() {
               ) : (
                 <Text style={styles.avatarText}>{initial}</Text>
               )}
+              {avatarBusy ? (
+                <View style={styles.avatarBusyOverlay}>
+                  <ActivityIndicator size="small" color={colors.surface} />
+                </View>
+              ) : null}
             </View>
             <View style={styles.cameraBadge}>
-              <Ionicons name={avatarUploading ? 'cloud-upload' : 'camera'} size={14} color={colors.surface} />
+              <Ionicons name={avatarBusy ? 'cloud-upload' : 'camera'} size={14} color={colors.surface} />
             </View>
           </Pressable>
           <Text style={styles.emailText}>{email}</Text>
           <Text style={styles.avatarHint}>
-            {avatarUploading ? 'Mise à jour…' : 'Touchez pour changer la photo'}
+            {avatarBusy ? (avatarBusyLabel ?? 'Mise à jour…') : 'Touchez pour changer la photo'}
           </Text>
         </View>
 
@@ -448,6 +647,58 @@ export default function AccountProfileScreen() {
 
         </View>
       </ScrollView>
+
+      <Modal
+        visible={sheetVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setSheetVisible(false)}
+        onDismiss={() => {
+          const fn = pendingSheetActionRef.current;
+          pendingSheetActionRef.current = null;
+          fn?.();
+        }}
+      >
+        <Pressable style={styles.sheetOverlay} onPress={() => setSheetVisible(false)}>
+          <Pressable style={styles.sheet} onPress={(e) => e.stopPropagation()}>
+            <View style={styles.sheetHandle} />
+            <Text style={styles.sheetTitle}>Photo de profil</Text>
+
+            <Pressable
+              style={({ pressed }) => [styles.sheetRow, pressed && styles.sheetRowPressed]}
+              onPress={() => runAfterSheet(() => void handlePickFromLibrary())}
+            >
+              <Ionicons name="image-outline" size={22} color={colors.primary} />
+              <Text style={styles.sheetRowLabel}>Choisir une photo</Text>
+            </Pressable>
+
+            <Pressable
+              style={({ pressed }) => [styles.sheetRow, pressed && styles.sheetRowPressed]}
+              onPress={() => runAfterSheet(() => void handleTakePhoto())}
+            >
+              <Ionicons name="camera-outline" size={22} color={colors.primary} />
+              <Text style={styles.sheetRowLabel}>Prendre une photo</Text>
+            </Pressable>
+
+            {hasAvatar ? (
+              <Pressable
+                style={({ pressed }) => [styles.sheetRow, pressed && styles.sheetRowPressed]}
+                onPress={() => runAfterSheet(() => void handleRemoveAvatar())}
+              >
+                <Ionicons name="trash-outline" size={22} color={colors.error} />
+                <Text style={[styles.sheetRowLabel, { color: colors.error }]}>Supprimer la photo</Text>
+              </Pressable>
+            ) : null}
+
+            <Pressable
+              style={({ pressed }) => [styles.sheetCancel, pressed && styles.sheetRowPressed]}
+              onPress={() => setSheetVisible(false)}
+            >
+              <Text style={styles.sheetCancelLabel}>Annuler</Text>
+            </Pressable>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </Screen>
   );
 }
@@ -497,6 +748,12 @@ const styles = StyleSheet.create({
   avatarImg: {
     width: 80,
     height: 80,
+  },
+  avatarBusyOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.35)',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   avatarText: {
     ...typography['3xl'],
@@ -596,5 +853,63 @@ const styles = StyleSheet.create({
     color: '#15803D',
     fontSize: typography.sm.fontSize,
     fontWeight: fontWeights.medium,
+  },
+  sheetOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    justifyContent: 'flex-end',
+  },
+  sheet: {
+    backgroundColor: colors.surface,
+    borderTopLeftRadius: radius['2xl'],
+    borderTopRightRadius: radius['2xl'],
+    paddingHorizontal: spacing.base,
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.xl,
+  },
+  sheetHandle: {
+    alignSelf: 'center',
+    width: 40,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: colors.borderLight,
+    marginBottom: spacing.sm,
+  },
+  sheetTitle: {
+    ...typography.sm,
+    textTransform: 'uppercase',
+    color: colors.textTertiary,
+    fontWeight: fontWeights.bold,
+    letterSpacing: 0.5,
+    marginLeft: spacing.xs,
+    marginBottom: spacing.xs,
+  },
+  sheetRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.base,
+    paddingVertical: spacing.base,
+    paddingHorizontal: spacing.xs,
+  },
+  sheetRowPressed: {
+    backgroundColor: colors.surfaceSubtle,
+    borderRadius: radius.md,
+  },
+  sheetRowLabel: {
+    ...typography.base,
+    color: colors.text,
+    fontWeight: fontWeights.semibold,
+  },
+  sheetCancel: {
+    marginTop: spacing.sm,
+    paddingVertical: spacing.base,
+    alignItems: 'center',
+    borderRadius: radius.md,
+    backgroundColor: colors.surfaceSubtle,
+  },
+  sheetCancelLabel: {
+    ...typography.base,
+    color: colors.textSecondary,
+    fontWeight: fontWeights.bold,
   },
 });

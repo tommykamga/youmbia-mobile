@@ -77,7 +77,7 @@
         "expo-image-picker",
         {
           "photosPermission": "YOUMBIA accède à vos photos pour ajouter des images à vos annonces et à votre profil.",
-          "cameraPermission": false,
+          "cameraPermission": "YOUMBIA accède à votre caméra pour prendre une photo de profil.",
           "microphonePermission": false
         }
       ]

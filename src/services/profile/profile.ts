@@ -30,6 +30,34 @@ export interface ProfileRow {
   [key: string]: unknown;
 }
 
+/**
+ * Derives a compact, cross-device cache-busting version for the avatar.
+ *
+ * The DB is the single source of truth. We do NOT depend on any timestamp column
+ * (the project's `profiles` table has none): avatars are uploaded under a unique
+ * filename per change (`avatar_<ts>.jpg`), so `avatar_url` itself changes on every
+ * replacement. We derive the version from it, with an optional `avatar_updated_at`
+ * column taking precedence if it ever exists.
+ */
+export function getAvatarVersion(
+  row: { avatar_url?: string | null; avatar_updated_at?: string | null } | null | undefined
+): string {
+  const ts = String(row?.avatar_updated_at ?? '').trim();
+  if (ts) {
+    const ms = Date.parse(ts);
+    return Number.isFinite(ms) ? String(ms) : encodeURIComponent(ts);
+  }
+  const url = String(row?.avatar_url ?? '').trim();
+  if (!url) return '';
+  // Timestamp embedded in the unique filename, e.g. ".../avatar_1717280000000.jpg".
+  const m = url.match(/(\d{8,})/);
+  if (m) return m[1];
+  // Stable short hash fallback (changes when the path changes).
+  let h = 0;
+  for (let i = 0; i < url.length; i++) h = (h * 31 + url.charCodeAt(i)) | 0;
+  return String(h >>> 0);
+}
+
 /** Returns empty string if value is a known fake/placeholder, otherwise trimmed value. */
 export function sanitizeProfileDisplayValue(value: string | null | undefined): string {
   if (value == null || typeof value !== 'string') return '';
