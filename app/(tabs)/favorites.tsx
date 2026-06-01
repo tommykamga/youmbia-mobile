@@ -19,9 +19,10 @@ import { buildAuthGateHref } from '@/lib/authGateNavigation';
 type FavoritesState =
   | { status: 'loading' }
   | { status: 'unauthenticated' }
-  | { status: 'empty' }
   | { status: 'error'; message: string }
-  | { status: 'success'; data: PublicListing[] };
+  // `ready` = pool d'annonces chargées (peut être vide). L'affichage réel est
+  // dérivé du Set global de favoris → voir `displayData`.
+  | { status: 'ready'; data: PublicListing[] };
 
 export default function FavoritesScreen() {
   const { favorites, loading: favoritesLoading } = useFavorites();
@@ -42,12 +43,8 @@ export default function FavoritesScreen() {
         setState({ status: 'error', message: 'Impossible de charger' });
         return;
       }
-      const list = result.data ?? [];
-      setState(
-        list.length === 0
-          ? { status: 'empty' }
-          : { status: 'success', data: list }
-      );
+      // `getFavorites` renvoie déjà les annonces triées par favori le plus récent.
+      setState({ status: 'ready', data: result.data ?? [] });
     } catch {
       setState({ status: 'error', message: 'Impossible de charger' });
     }
@@ -62,27 +59,25 @@ export default function FavoritesScreen() {
   const stateRef = useRef(state);
   stateRef.current = state;
 
-  // Sync liste avec le Set global : ajouts (fetch ciblé) et retrait complet → empty.
+  // Synchronisation incrémentale : le Set global est la source de vérité.
+  // - Ajout d'un favori absent du pool → fetch ciblé de l'annonce manquante.
+  // - Retrait → géré sans fetch par le filtre `displayData` (pas de reset/flicker).
   useEffect(() => {
     if (favoritesLoading) return;
-
-    if (favorites.size === 0) {
-      const current = stateRef.current;
-      if (current.status === 'success') {
-        setState({ status: 'empty' });
-      }
-      return;
-    }
-
     const current = stateRef.current;
-    if (current.status === 'empty') {
-      void load();
-      return;
-    }
-    if (current.status !== 'success') return;
+    if (current.status !== 'ready') return;
+    if (favorites.size === 0) return;
 
     const knownIds = new Set(current.data.map((item) => item.id));
     const missingIds = [...favorites].filter((id) => !knownIds.has(id));
+
+    if (__DEV__) {
+      console.log(
+        '[Favorites] sync — favorites:', favorites.size,
+        '| missingIds:', missingIds.length ? missingIds : '∅'
+      );
+    }
+
     if (missingIds.length === 0) return;
 
     let cancelled = false;
@@ -90,29 +85,45 @@ export default function FavoritesScreen() {
       const result = await getListingsByIds(missingIds);
       if (cancelled || result.error || !result.data?.length) return;
       setState((prev) => {
-        if (prev.status !== 'success') return prev;
+        if (prev.status !== 'ready') return prev;
         const known = new Set(prev.data.map((item) => item.id));
         const newItems = result.data!.filter((item) => !known.has(item.id));
         if (!newItems.length) return prev;
-        return { status: 'success', data: [...newItems, ...prev.data] };
+        // Annonces fraîchement ajoutées en tête (favori le plus récent).
+        return { status: 'ready', data: [...newItems, ...prev.data] };
       });
     })();
 
     return () => {
       cancelled = true;
     };
-  }, [favorites, favoritesLoading, load]);
+  }, [favorites, favoritesLoading]);
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
     load().finally(() => setRefreshing(false));
   }, [load]);
 
-  // Sync state data with global favorites Set (for immediate removal from list)
+  // Affichage dérivé du Set global : filtré + dédupliqué, ordre du pool conservé
+  // (récents en tête). Retraits reflétés immédiatement, sans toucher au pool.
   const displayData = useMemo(() => {
-    if (state.status !== 'success') return [];
-    return state.data.filter(item => favorites.has(item.id));
+    if (state.status !== 'ready') return [];
+    const seen = new Set<string>();
+    const out: PublicListing[] = [];
+    for (const item of state.data) {
+      if (favorites.has(item.id) && !seen.has(item.id)) {
+        seen.add(item.id);
+        out.push(item);
+      }
+    }
+    return out;
   }, [state, favorites]);
+
+  useEffect(() => {
+    if (__DEV__ && state.status === 'ready') {
+      console.log('[Favorites] affichées:', displayData.length, '/', favorites.size);
+    }
+  }, [displayData.length, favorites.size, state.status]);
 
   const keyExtractor = useCallback((item: PublicListing) => item.id, []);
   const renderItem = useCallback(
@@ -142,7 +153,7 @@ export default function FavoritesScreen() {
     );
   }
 
-  if (state.status === 'empty') {
+  if (state.status === 'ready' && displayData.length === 0) {
     return (
       <Screen noPadding safe={false}>
         <AppHeader title="Favoris" noBorder density="compact" />
