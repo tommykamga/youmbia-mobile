@@ -67,6 +67,44 @@ export function sanitizeProfileDisplayValue(value: string | null | undefined): s
   return t;
 }
 
+/** Domaine des emails masqués Apple ("Masquer mon email" / Hide My Email). */
+const APPLE_PRIVATE_RELAY_DOMAIN = '@privaterelay.appleid.com';
+
+/** Libellé affiché à la place du préfixe technique d'une adresse Apple Private Relay. */
+export const APPLE_PRIVATE_RELAY_DISPLAY_NAME = 'Utilisateur Apple';
+
+/**
+ * Vrai si la valeur est une adresse email Apple Private Relay
+ * (ex. `krdzwhgh5m@privaterelay.appleid.com`).
+ */
+export function isApplePrivateRelayEmail(value: string | null | undefined): boolean {
+  if (typeof value !== 'string') return false;
+  return value.trim().toLowerCase().endsWith(APPLE_PRIVATE_RELAY_DOMAIN);
+}
+
+/**
+ * Nom d'affichage utilisateur, robuste aux comptes Apple "Masquer mon email".
+ *
+ * Règles :
+ *  1. `full_name` renseigné (et non relay) → on l'affiche.
+ *  2. sinon, si `email`/`full_name` est une adresse `@privaterelay.appleid.com`
+ *     → "Utilisateur Apple" (on n'affiche JAMAIS le préfixe technique).
+ *  3. sinon → `fallback` (libellé générique propre au contexte).
+ *
+ * On ne dérive jamais le nom à partir de la partie locale de l'email.
+ */
+export function getUserDisplayName(
+  input: { full_name?: string | null; email?: string | null } | null | undefined,
+  fallback = 'Utilisateur'
+): string {
+  const fullName = sanitizeProfileDisplayValue(input?.full_name);
+  if (fullName && !isApplePrivateRelayEmail(fullName)) return fullName;
+  if (isApplePrivateRelayEmail(input?.email) || isApplePrivateRelayEmail(input?.full_name)) {
+    return APPLE_PRIVATE_RELAY_DISPLAY_NAME;
+  }
+  return fallback;
+}
+
 /**
  * Normalize phone for profile save: trim, remove spaces, accept +237.
  * Returns null for empty. Returns error message if manifestly invalid (< 9 digits).

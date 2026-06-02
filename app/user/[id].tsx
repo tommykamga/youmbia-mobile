@@ -8,6 +8,7 @@ import { View, Text, StyleSheet, FlatList, Modal, Pressable, Alert, Platform } f
 import { useLocalSearchParams } from 'expo-router';
 import { Screen, AppHeader, Loader, EmptyState, Button } from '@/components';
 import { getSellerStats, getUserProfile } from '@/services/users';
+import { getUserDisplayName } from '@/services/profile';
 import { reportUser } from '@/services/reports';
 import { getSession } from '@/services/auth';
 import { ListingCard, SellerBadge } from '@/features/listings';
@@ -160,7 +161,7 @@ export default function UserProfileScreen() {
     try {
       const result = await shareSellerProfile({
         id,
-        name: state.profile.full_name ?? null,
+        name: getUserDisplayName({ full_name: state.profile.full_name }, 'Vendeur'),
         city: state.profile.city ?? null,
       });
       if (!result.success && result.error) {
@@ -207,7 +208,7 @@ export default function UserProfileScreen() {
     );
   }
 
-  const name = state.profile.full_name?.trim() || 'Vendeur';
+  const name = getUserDisplayName({ full_name: state.profile.full_name }, 'Vendeur');
   const city = state.profile.city?.trim() || null;
   const bio = state.profile.bio?.trim() || null;
   const joinDate = formatJoinDate(state.stats.memberSince ?? state.profile.created_at);

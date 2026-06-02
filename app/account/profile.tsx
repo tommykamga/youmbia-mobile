@@ -8,6 +8,7 @@ import {
   sanitizeProfileDisplayValue,
   normalizePhoneForProfile,
   getAvatarVersion,
+  getUserDisplayName,
 } from '@/services/profile';
 import { getSession } from '@/services/auth';
 import { useFocusEffect, Redirect, useLocalSearchParams, useRouter } from 'expo-router';
@@ -544,7 +545,7 @@ export default function AccountProfileScreen() {
     );
   }
 
-  const initial = email?.charAt(0).toUpperCase() || '?';
+  const initial = getUserDisplayName({ full_name: fullName, email }, email ?? '').charAt(0).toUpperCase() || '?';
   const showIncomplete = state.status === 'success' && state.incomplete;
 
   return (

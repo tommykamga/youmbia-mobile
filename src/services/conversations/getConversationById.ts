@@ -10,6 +10,7 @@
  */
 
 import { supabase } from '@/lib/supabase';
+import { getUserDisplayName } from '@/services/profile';
 import type { Conversation } from './types';
 
 export type GetConversationByIdResult =
@@ -65,7 +66,10 @@ export async function getConversationById(conversationId: string): Promise<GetCo
     created_at: conv.created_at,
     updated_at: conv.created_at,
     listing_title: (listing as { title?: string } | null)?.title,
-    other_party_name: (otherProfile as { full_name?: string | null } | null)?.full_name ?? 'Utilisateur',
+    other_party_name: getUserDisplayName(
+      { full_name: (otherProfile as { full_name?: string | null } | null)?.full_name },
+      'Utilisateur'
+    ),
     last_message_at: null,
     last_message_preview: null,
     unread_count: 0,

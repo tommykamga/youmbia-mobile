@@ -11,6 +11,7 @@
  */
 
 import { supabase } from '@/lib/supabase';
+import { getUserDisplayName } from '@/services/profile';
 import type { Conversation } from './types';
 
 export type GetConversationsResult =
@@ -104,7 +105,10 @@ export async function getConversations(): Promise<GetConversationsResult> {
       return fallbackEmptyList(`profiles: ${profilesError.message}`);
     }
     const profileMap = new Map(
-      (profiles ?? []).map((p: { id: string; full_name: string | null }) => [p.id, p.full_name ?? 'Utilisateur'])
+      (profiles ?? []).map((p: { id: string; full_name: string | null }) => [
+        p.id,
+        getUserDisplayName({ full_name: p.full_name }, 'Utilisateur'),
+      ])
     );
 
     const convIds = list.map((c) => c.id);

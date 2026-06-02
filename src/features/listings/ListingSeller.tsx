@@ -9,6 +9,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { Button } from '@/components';
 import { colors, spacing, typography, fontWeights, radius, shadows } from '@/theme';
 import { formatJoinDate } from '@/lib/format';
+import { getUserDisplayName } from '@/services/profile';
 import { SellerBadge } from './SellerBadge';
 import { ProSellerBadge } from '@/features/shops/ProSellerBadge';
 import type { ListingDetail } from '@/services/listings';
@@ -25,7 +26,7 @@ const TRUST_SCORE_HIGH_THRESHOLD = 70;
 
 export function ListingSeller({ listing, memberSince, listingCount, onPress }: ListingSellerProps) {
   const seller = listing.seller;
-  const name = seller?.full_name?.trim() || 'Vendeur';
+  const name = getUserDisplayName({ full_name: seller?.full_name }, 'Vendeur');
   const joinDate = formatJoinDate(memberSince ?? seller?.created_at ?? null);
   const isVerified = seller?.is_verified === true;
   const isPhoneVerified = seller?.phone_verified === true;

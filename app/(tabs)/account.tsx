@@ -10,7 +10,7 @@ import { buildAuthGateHref } from '@/lib/authGateNavigation';
 import Constants from 'expo-constants';
 import { lightCacheKeys, lightCacheRead, lightCacheWrite } from '@/lib/lightCache';
 import { resolveSingleAvatarUrl } from '@/lib/avatarImageUrl';
-import { getCurrentProfile, getAvatarVersion } from '@/services/profile';
+import { getCurrentProfile, getAvatarVersion, getUserDisplayName } from '@/services/profile';
 import { Image as ExpoImage } from 'expo-image';
 import { ProSellerActivationCard } from '@/features/shops';
 
@@ -107,6 +107,7 @@ const AccountRow = memo(function AccountRow({
 export default function AccountScreen() {
   const router = useRouter();
   const [email, setEmail] = useState<string | null>(null);
+  const [fullName, setFullName] = useState<string | null>(null);
   const [status, setStatus] = useState<'loading' | 'unauthenticated' | 'authenticated'>('loading');
   const [signingOut, setSigningOut] = useState(false);
   const [avatarDisplayUrl, setAvatarDisplayUrl] = useState<string>('');
@@ -142,6 +143,8 @@ export default function AccountScreen() {
         phone?: string;
         incomplete?: boolean;
       }>(lightCacheKeys.profile(userId));
+      const cachedFullName = String(cached?.payload?.fullName ?? '').trim();
+      if (cachedFullName) setFullName(cachedFullName);
       const cachedRaw = String(cached?.payload?.avatarUrl ?? '').trim();
       if (cachedRaw) {
         try {
@@ -162,6 +165,8 @@ export default function AccountScreen() {
         if (!result.error) {
           const raw = String(result.data?.avatar_url ?? '').trim();
           const version = getAvatarVersion(result.data);
+          const freshFullName = result.data?.full_name ?? null;
+          setFullName(freshFullName);
           if (raw) {
             const resolved = await resolveSingleAvatarUrl(raw, version);
             setAvatarDisplayUrl(resolved || '');
@@ -170,7 +175,7 @@ export default function AccountScreen() {
           }
           await lightCacheWrite(lightCacheKeys.profile(userId), {
             userId,
-            fullName: cached?.payload?.fullName ?? '',
+            fullName: freshFullName ?? cached?.payload?.fullName ?? '',
             phone: cached?.payload?.phone ?? '',
             avatarUrl: raw,
             avatarVersion: version,
@@ -219,6 +224,11 @@ export default function AccountScreen() {
     return <Redirect href={buildAuthGateHref('account')} />;
   }
 
+  // Fallback "actuel" conservé pour les emails non-Apple : le helper renvoie
+  // "Utilisateur Apple" pour une adresse @privaterelay.appleid.com avant d'atteindre ce fallback.
+  const displayName = getUserDisplayName({ full_name: fullName, email }, email?.split('@')[0] || 'Mon Compte');
+  const avatarInitial = displayName.charAt(0).toUpperCase() || '?';
+
   return (
     <Screen noPadding safe={false}>
       <AppHeader title="Compte" noBorder density="compact" />
@@ -231,13 +241,13 @@ export default function AccountScreen() {
               <ExpoImage source={{ uri: avatarDisplayUrl }} style={styles.avatarImg} contentFit="cover" />
             ) : (
               <Text style={styles.avatarText}>
-                {email?.charAt(0).toUpperCase() || '?'}
+                {avatarInitial}
               </Text>
             )}
           </View>
           <View style={styles.userInfo}>
             <Text style={styles.userName} numberOfLines={1}>
-              {email?.split('@')[0] || 'Mon Compte'}
+              {displayName}
             </Text>
             <Text style={styles.userEmail} numberOfLines={1}>
               {email}
