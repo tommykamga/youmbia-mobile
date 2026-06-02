@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, Pressable } from 'react-native';
+import { View, Text, StyleSheet, Pressable, Platform } from 'react-native';
 import { Link, useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Screen, AppButton, Input, AppLogo } from '@/components';
@@ -11,6 +11,8 @@ import { replaceAfterSuccessfulAuth } from '@/lib/authPostNavigation';
 import { buildMagicLinkOtpPath } from '@/lib/authOtpRedirectPath';
 import { mapAuthErrorMessage } from '@/lib/mapAuthErrorMessage';
 import { runGoogleOAuth, formatGoogleSignInUserMessage } from '@/lib/googleSignInMobile';
+import { runAppleOAuth, formatAppleSignInUserMessage } from '@/lib/appleSignInMobile';
+import { AppleSignInButton } from '@/features/auth/AppleSignInButton';
 
 export default function LoginScreen() {
   const router = useRouter();
@@ -21,12 +23,13 @@ export default function LoginScreen() {
 
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
+  const [appleLoading, setAppleLoading] = useState(false);
   const [magicLoading, setMagicLoading] = useState(false);
 
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
-  const isAnyLoading = loading || googleLoading || magicLoading;
+  const isAnyLoading = loading || googleLoading || appleLoading || magicLoading;
   const isContactContext =
     (typeof params.contact === 'string' && params.contact.trim().length > 0) ||
     (typeof params.redirect === 'string' && params.redirect.trim().startsWith('/listing/'));
@@ -113,6 +116,24 @@ export default function LoginScreen() {
     }
   };
 
+  const handleAppleSignIn = async () => {
+    setError(null);
+    setSuccess(null);
+    setAppleLoading(true);
+    try {
+      const result = await runAppleOAuth();
+      if (result.ok) {
+        replaceAfterSuccessfulAuth(router, params.redirect, params.contact);
+      } else if (result.error.message !== 'Connexion annulée') {
+        setError(formatAppleSignInUserMessage(undefined, result));
+      }
+    } catch (e) {
+      setError(formatAppleSignInUserMessage(e));
+    } finally {
+      setAppleLoading(false);
+    }
+  };
+
   return (
     <Screen scroll keyboardAvoid>
       <View style={styles.content}>
@@ -154,6 +175,14 @@ export default function LoginScreen() {
         ) : null}
 
         <View style={styles.form}>
+          {Platform.OS === 'ios' ? (
+            <AppleSignInButton
+              onPress={handleAppleSignIn}
+              loading={appleLoading}
+              disabled={isAnyLoading}
+            />
+          ) : null}
+
           <AppButton
             onPress={handleGoogleSignIn}
             loading={googleLoading}

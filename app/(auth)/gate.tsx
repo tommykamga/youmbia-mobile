@@ -34,6 +34,8 @@ import {
 import { buildSignupHref, getSafeRedirect } from '@/lib/authRedirect';
 import { replaceAfterSuccessfulAuth } from '@/lib/authPostNavigation';
 import { runGoogleOAuth, formatGoogleSignInUserMessage } from '@/lib/googleSignInMobile';
+import { runAppleOAuth, formatAppleSignInUserMessage } from '@/lib/appleSignInMobile';
+import { AppleSignInButton } from '@/features/auth/AppleSignInButton';
 import { getSession } from '@/services/auth';
 import { useAuthGateEmailAuth } from '@/features/auth/useAuthGateEmailAuth';
 import { colors, spacing, ui } from '@/theme';
@@ -93,13 +95,14 @@ export default function AuthGateScreen() {
   const [password, setPassword] = useState('');
 
   const [googleLoading, setGoogleLoading] = useState(false);
+  const [appleLoading, setAppleLoading] = useState(false);
   const [passwordLoading, setPasswordLoading] = useState(false);
   const [magicLoading, setMagicLoading] = useState(false);
 
   const [error, setError] = useState<string | null>(null);
   const [magicSuccess, setMagicSuccess] = useState<string | null>(null);
 
-  const anyLoading = googleLoading || passwordLoading || magicLoading;
+  const anyLoading = googleLoading || appleLoading || passwordLoading || magicLoading;
 
   useEffect(() => {
     let mounted = true;
@@ -131,6 +134,23 @@ export default function AuthGateScreen() {
       setError(formatGoogleSignInUserMessage(e));
     } finally {
       setGoogleLoading(false);
+    }
+  }, [clearMessages, redirectParam, contactParam, router]);
+
+  const handleApple = useCallback(async () => {
+    clearMessages();
+    setAppleLoading(true);
+    try {
+      const result = await runAppleOAuth();
+      if (result.ok) {
+        replaceAfterSuccessfulAuth(router, redirectParam, contactParam);
+      } else if (result.error.message !== 'Connexion annulée') {
+        setError(formatAppleSignInUserMessage(undefined, result));
+      }
+    } catch (e) {
+      setError(formatAppleSignInUserMessage(e));
+    } finally {
+      setAppleLoading(false);
     }
   }, [clearMessages, redirectParam, contactParam, router]);
 
@@ -287,6 +307,14 @@ export default function AuthGateScreen() {
 
         {!emailExpanded ? (
           <AppCard padded style={styles.ctaSurfaceFlat}>
+            {Platform.OS === 'ios' ? (
+              <AppleSignInButton
+                onPress={handleApple}
+                loading={appleLoading}
+                disabled={anyLoading}
+              />
+            ) : null}
+
             <AppButton
               onPress={handleGoogle}
               loading={googleLoading}

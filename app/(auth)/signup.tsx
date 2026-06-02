@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, Pressable } from 'react-native';
+import { View, Text, StyleSheet, Pressable, Platform } from 'react-native';
 import { Link, useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Screen, AppButton, Input, AppLogo } from '@/components';
@@ -8,6 +8,8 @@ import { colors, spacing, ui } from '@/theme';
 import { buildLoginHref } from '@/lib/authRedirect';
 import { replaceAfterSuccessfulAuth } from '@/lib/authPostNavigation';
 import { runGoogleOAuth, formatGoogleSignInUserMessage } from '@/lib/googleSignInMobile';
+import { runAppleOAuth, formatAppleSignInUserMessage } from '@/lib/appleSignInMobile';
+import { AppleSignInButton } from '@/features/auth/AppleSignInButton';
 
 function getErrorMessage(error: { message: string }): string {
   const msg = error.message.toLowerCase();
@@ -28,11 +30,12 @@ export default function SignupScreen() {
   
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
+  const [appleLoading, setAppleLoading] = useState(false);
   
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
-  const isAnyLoading = loading || googleLoading;
+  const isAnyLoading = loading || googleLoading || appleLoading;
 
   useEffect(() => {
     let mounted = true;
@@ -95,6 +98,24 @@ export default function SignupScreen() {
       setError(formatGoogleSignInUserMessage(e));
     } finally {
       setGoogleLoading(false);
+    }
+  };
+
+  const handleAppleSignIn = async () => {
+    setError(null);
+    setSuccessMessage(null);
+    setAppleLoading(true);
+    try {
+      const result = await runAppleOAuth();
+      if (result.ok) {
+        replaceAfterSuccessfulAuth(router, params.redirect, params.contact);
+      } else if (result.error.message !== 'Connexion annulée') {
+        setError(formatAppleSignInUserMessage(undefined, result));
+      }
+    } catch (e) {
+      setError(formatAppleSignInUserMessage(e));
+    } finally {
+      setAppleLoading(false);
     }
   };
 
@@ -172,6 +193,14 @@ export default function SignupScreen() {
         </View>
 
         <View style={styles.socialActions}>
+          {Platform.OS === 'ios' ? (
+            <AppleSignInButton
+              onPress={handleAppleSignIn}
+              loading={appleLoading}
+              disabled={isAnyLoading}
+            />
+          ) : null}
+
           <AppButton
             variant="outline"
             onPress={handleGoogleSignIn}
