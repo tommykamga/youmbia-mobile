@@ -44,6 +44,35 @@ export function getAppVersionPlatform(): AppVersionPlatform | null {
   return null;
 }
 
+/**
+ * Domaines de boutique autorisés par plateforme. Garantit qu'une URL mal
+ * configurée côté serveur (ex. lien Google Play) n'est JAMAIS ouverte sur iOS,
+ * et inversement — conformité App Store (aucune référence à une boutique tierce).
+ */
+const ALLOWED_STORE_HOST_FRAGMENTS: Record<AppVersionPlatform, string[]> = {
+  ios: ['apps.apple.com', 'itunes.apple.com'],
+  android: ['play.google.com', 'market://', 'galaxystore.samsung.com', 'appgallery'],
+};
+
+function sanitizeStoreUrl(
+  platform: AppVersionPlatform,
+  rawUrl: string | null | undefined
+): string | null {
+  const url = rawUrl?.trim();
+  if (!url) return null;
+  const lower = url.toLowerCase();
+  const isAllowed = ALLOWED_STORE_HOST_FRAGMENTS[platform].some((fragment) =>
+    lower.includes(fragment)
+  );
+  if (!isAllowed) {
+    devLog(
+      `store_url ignorée car incohérente avec la plateforme "${platform}": ${url}`
+    );
+    return null;
+  }
+  return url;
+}
+
 function resolveStatus(
   currentVersion: string,
   minSupportedVersion: string,
@@ -116,7 +145,7 @@ export async function checkAppVersion(): Promise<AppVersionCheckResult> {
         currentVersion,
         latestVersion,
         minSupportedVersion,
-        storeUrl: data.store_url?.trim() || null,
+        storeUrl: sanitizeStoreUrl(platform, data.store_url),
         message: data.message?.trim() || null,
       },
     };
