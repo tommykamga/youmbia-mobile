@@ -10,7 +10,7 @@ import { buildAuthGateHref } from '@/lib/authGateNavigation';
 import Constants from 'expo-constants';
 import { lightCacheKeys, lightCacheRead, lightCacheWrite } from '@/lib/lightCache';
 import { resolveSingleAvatarUrl } from '@/lib/avatarImageUrl';
-import { getCurrentProfile, getAvatarVersion, getUserDisplayName } from '@/services/profile';
+import { getCurrentProfile, getAvatarVersion, getUserDisplayName, isApplePrivateRelayEmail } from '@/services/profile';
 import { Image as ExpoImage } from 'expo-image';
 import { ProSellerActivationCard } from '@/features/shops';
 
@@ -108,6 +108,8 @@ export default function AccountScreen() {
   const router = useRouter();
   const [email, setEmail] = useState<string | null>(null);
   const [fullName, setFullName] = useState<string | null>(null);
+  // Nom transmis par Apple au 1er consentement (stocké dans user_metadata, pas dans profiles).
+  const [appleName, setAppleName] = useState<string | null>(null);
   const [status, setStatus] = useState<'loading' | 'unauthenticated' | 'authenticated'>('loading');
   const [signingOut, setSigningOut] = useState(false);
   const [avatarDisplayUrl, setAvatarDisplayUrl] = useState<string>('');
@@ -133,6 +135,14 @@ export default function AccountScreen() {
       }
       const userId = session.user.id;
       setEmail(session.user.email ?? 'Utilisateur YOUMBIA');
+
+      // Vrai nom Apple (ex. "Tommy KAMGA") récupéré au 1er login Apple et conservé
+      // dans les métadonnées d'authentification — utilisé si profiles.full_name est vide.
+      const metaFullName =
+        typeof session.user.user_metadata?.full_name === 'string'
+          ? session.user.user_metadata.full_name.trim()
+          : '';
+      setAppleName(metaFullName || null);
 
       // 1) Instant paint from local cache (NOT the source of truth — just for fast UI).
       const cached = await lightCacheRead<{
@@ -224,10 +234,15 @@ export default function AccountScreen() {
     return <Redirect href={buildAuthGateHref('account')} />;
   }
 
-  // Fallback "actuel" conservé pour les emails non-Apple : le helper renvoie
-  // "Utilisateur Apple" pour une adresse @privaterelay.appleid.com avant d'atteindre ce fallback.
-  const displayName = getUserDisplayName({ full_name: fullName, email }, email?.split('@')[0] || 'Mon Compte');
+  // Priorité : profiles.full_name → vrai nom Apple (user_metadata) → fallback.
+  // Le helper renvoie "Utilisateur Apple" pour une adresse @privaterelay.appleid.com
+  // seulement si aucun nom réel n'est disponible.
+  const resolvedFullName = fullName || appleName;
+  const displayName = getUserDisplayName({ full_name: resolvedFullName, email }, email?.split('@')[0] || 'Mon Compte');
   const avatarInitial = displayName.charAt(0).toUpperCase() || '?';
+
+  // L'email réel reste en base : on masque uniquement son affichage pour les comptes Apple.
+  const emailLabel = isApplePrivateRelayEmail(email) ? 'Adresse masquée par Apple' : email;
 
   return (
     <Screen noPadding safe={false}>
@@ -250,7 +265,7 @@ export default function AccountScreen() {
               {displayName}
             </Text>
             <Text style={styles.userEmail} numberOfLines={1}>
-              {email}
+              {emailLabel}
             </Text>
           </View>
           <Animated.View style={editAnimatedStyle}>
