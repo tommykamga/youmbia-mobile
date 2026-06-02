@@ -29,15 +29,27 @@ export default function AccountSettingsScreen() {
     <Screen scroll={false} safe={false}>
       <AppHeader title="Paramètres" showBack density="compact" />
       <View style={styles.content}>
-        <Button
-          variant="secondary"
-          onPress={handleLogout}
-          loading={signingOut}
-          disabled={signingOut}
-          style={styles.logoutBtn}
-        >
-          Se déconnecter
-        </Button>
+        <View style={styles.actions}>
+          <Button
+            variant="secondary"
+            onPress={handleLogout}
+            loading={signingOut}
+            disabled={signingOut}
+            style={styles.logoutBtn}
+          >
+            Se déconnecter
+          </Button>
+
+          <Button
+            variant="ghost"
+            onPress={() => router.push('/account/delete-account')}
+            disabled={signingOut}
+            style={styles.deleteBtn}
+            textStyle={styles.deleteBtnText}
+          >
+            Supprimer mon compte
+          </Button>
+        </View>
 
         <View style={styles.appInfo}>
           <Text style={styles.appName}>{appName}</Text>
@@ -54,8 +66,19 @@ const styles = StyleSheet.create({
     padding: spacing.base,
     justifyContent: 'space-between',
   },
+  actions: {
+    gap: spacing.sm,
+    alignItems: 'flex-start',
+  },
   logoutBtn: {
     alignSelf: 'flex-start',
+  },
+  deleteBtn: {
+    alignSelf: 'flex-start',
+    paddingHorizontal: 0,
+  },
+  deleteBtnText: {
+    color: colors.error,
   },
   appInfo: {
     alignItems: 'center',

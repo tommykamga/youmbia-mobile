@@ -7,3 +7,5 @@ export { getSession, onAuthStateChange } from './session';
 export { getCurrentUser } from './user';
 export { signIn, signUp, signOut, signInWithOtp, resetPasswordForEmail } from './signInOut';
 export type { SignInResult, SignUpResult } from './signInOut';
+export { deleteAccount } from './deleteAccount';
+export type { DeleteAccountResult } from './deleteAccount';

@@ -50,6 +50,12 @@ const SECTIONS = [
       { icon: 'document-text-outline', label: 'Conditions d\'utilisation', route: '/terms' },
     ] as RouteItem[],
   },
+  {
+    title: 'Compte',
+    items: [
+      { icon: 'trash-outline', label: 'Supprimer mon compte', route: '/account/delete-account', isDestructive: true },
+    ] as RouteItem[],
+  },
 ];
 
 const AccountRow = memo(function AccountRow({

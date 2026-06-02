@@ -730,6 +730,10 @@ export type Database = {
     };
     Views: Record<string, never>;
     Functions: {
+      delete_my_account: {
+        Args: Record<PropertyKey, never>;
+        Returns: undefined;
+      };
       create_system_report_for_listing: {
         Args: {
           p_listing_id: string;
