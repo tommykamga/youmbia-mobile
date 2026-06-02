@@ -2,7 +2,7 @@
   "expo": {
     "name": "YOUMBIA",
     "slug": "youmbia-mobile",
-    "version": "4.3.2",
+    "version": "4.3.3",
     "orientation": "default",
     "icon": "./assets/images/icon.png",
     "scheme": "youmbiamobile",
@@ -10,6 +10,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.youmbia.mobile",
+      "usesAppleSignIn": true,
       "splash": {
         "image": "./assets/images/splash.png",
         "resizeMode": "contain",
@@ -26,7 +27,7 @@
     },
     "android": {
       "package": "com.youmbia.mobile",
-      "versionCode": 30,
+      "versionCode": 31,
       "splash": {
         "image": "./assets/images/splash.png",
         "resizeMode": "contain",
@@ -73,6 +74,7 @@
       "expo-router",
       "expo-sqlite",
       "expo-notifications",
+      "expo-apple-authentication",
       [
         "expo-image-picker",
         {
