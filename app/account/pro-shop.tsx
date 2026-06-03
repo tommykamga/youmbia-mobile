@@ -11,13 +11,12 @@ import {
   Image,
   Pressable,
   Alert,
-  KeyboardAvoidingView,
   Platform,
 } from 'react-native';
 import { useRouter, Redirect, useFocusEffect } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import * as ImagePicker from 'expo-image-picker';
-import { Screen, AppHeader, Button, Input, Loader } from '@/components';
+import { Screen, AppHeader, Button, Input, Loader, KeyboardSafeView } from '@/components';
 import { SellerAcquisitionTips } from '@/features/shops';
 import { buildAuthGateHref } from '@/lib/authGateNavigation';
 import { getSession } from '@/services/auth';
@@ -166,9 +165,8 @@ export default function ProShopOnboardingScreen() {
         style={styles.onboardingHeader}
         titleStyle={styles.onboardingHeaderTitle}
       />
-      <KeyboardAvoidingView
+      <KeyboardSafeView
         style={styles.keyboardAvoid}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         keyboardVerticalOffset={Platform.OS === 'ios' ? 8 : 0}
       >
         <ScrollView
@@ -265,7 +263,7 @@ export default function ProShopOnboardingScreen() {
 
         <SellerAcquisitionTips compact />
         </ScrollView>
-      </KeyboardAvoidingView>
+      </KeyboardSafeView>
     </Screen>
   );
 }

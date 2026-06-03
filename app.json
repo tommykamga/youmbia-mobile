@@ -28,6 +28,7 @@
     "android": {
       "package": "com.youmbia.mobile",
       "versionCode": 33,
+      "softwareKeyboardLayoutMode": "resize",
       "splash": {
         "image": "./assets/images/splash.png",
         "resizeMode": "contain",

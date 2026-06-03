@@ -4,13 +4,13 @@ import {
   StyleSheet,
   StyleProp,
   ViewStyle,
-  KeyboardAvoidingView,
   Platform,
   ScrollView,
 } from 'react-native';
 import type { ScrollView as ScrollViewType } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useKeyboardInset } from '@/hooks/useKeyboardInset';
+import { KeyboardSafeView } from './KeyboardSafeView';
 import { colors, spacing } from '@/theme';
 
 type ScreenProps = {
@@ -119,13 +119,12 @@ export const Screen = forwardRef<ScrollViewType, ScreenProps>(function Screen(
 
   if (keyboardAvoid && !scroll) {
     return (
-      <KeyboardAvoidingView
+      <KeyboardSafeView
         style={styles.keyboardView}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         keyboardVerticalOffset={keyboardVerticalOffset}
       >
         {content}
-      </KeyboardAvoidingView>
+      </KeyboardSafeView>
     );
   }
 

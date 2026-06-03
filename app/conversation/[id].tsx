@@ -6,13 +6,13 @@ import {
   FlatList,
   TextInput,
   Pressable,
-  KeyboardAvoidingView,
   Platform,
   Alert,
 } from 'react-native';
 import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Screen, AppHeader, EmptyState } from '@/components';
+import { Screen, AppHeader, EmptyState, KeyboardSafeView } from '@/components';
+import { useKeyboardInset } from '@/hooks/useKeyboardInset';
 import {
   getMessages,
   sendMessage,
@@ -83,6 +83,7 @@ export default function ConversationThreadScreen() {
   const [sending, setSending] = useState(false);
   const listRef = useRef<FlatList>(null);
   const [userId, setUserId] = useState<string | null>(null);
+  const keyboardInset = useKeyboardInset(Platform.OS !== 'web');
 
   const load = useCallback(async () => {
     try {
@@ -275,7 +276,8 @@ export default function ConversationThreadScreen() {
     );
   }
 
-  const inputPaddingBottom = insets.bottom > 0 ? insets.bottom : spacing.base;
+  const inputPaddingBottom =
+    keyboardInset > 0 ? 0 : insets.bottom > 0 ? insets.bottom : spacing.base;
 
   return (
     <Screen scroll={false} noPadding safe={false}>
@@ -284,11 +286,7 @@ export default function ConversationThreadScreen() {
       {status === 'loading' && <MessagesSkeleton />}
 
       {status === 'success' && (
-        <KeyboardAvoidingView
-          style={styles.keyboard}
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-          keyboardVerticalOffset={0}
-        >
+        <KeyboardSafeView style={styles.keyboard}>
           <FlatList
             ref={listRef}
             data={messages}
@@ -327,7 +325,7 @@ export default function ConversationThreadScreen() {
               </Pressable>
             </View>
           </View>
-        </KeyboardAvoidingView>
+        </KeyboardSafeView>
       )}
     </Screen>
   );

@@ -12,7 +12,6 @@ import {
   Keyboard,
   TextInput,
   Pressable,
-  KeyboardAvoidingView,
   Platform,
   Modal,
   ScrollView,
@@ -20,7 +19,7 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect, useLocalSearchParams, useRouter, type Href } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { Screen, Loader, EmptyState, Button, HomeBrandHeader, HomeCategoryStrip } from '@/components';
+import { Screen, Loader, EmptyState, Button, HomeBrandHeader, HomeCategoryStrip, KeyboardSafeView } from '@/components';
 import { ListingCard, ListingFeed } from '@/features/listings';
 import {
   HomeMarketplaceFeedHeader,
@@ -1375,11 +1374,7 @@ export default function SearchScreen() {
 
   return (
     <Screen noPadding safe={false}>
-      <KeyboardAvoidingView
-        style={styles.keyboard}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
-      >
+      <KeyboardSafeView style={styles.keyboard}>
         <SafeAreaView style={styles.safeMarketplace} edges={['top', 'left', 'right']}>
           <View style={styles.marketplaceColumn}>
             <View style={styles.topStackMarketplace}>
@@ -1617,10 +1612,7 @@ export default function SearchScreen() {
         >
           <Pressable style={styles.sheetOverlay} onPress={closeSearchOverlay}>
             <Pressable style={[styles.sheet, styles.searchOverlaySheet]} onPress={(e) => e.stopPropagation()}>
-              <KeyboardAvoidingView
-                behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-                style={styles.searchOverlayKeyboardInner}
-              >
+              <KeyboardSafeView style={styles.searchOverlayKeyboardInner} androidInsetPadding>
                 <SafeAreaView edges={['top', 'bottom']} style={styles.searchOverlaySheetInner}>
                   <View style={styles.searchOverlayTopBar}>
                     <Pressable
@@ -1710,7 +1702,7 @@ export default function SearchScreen() {
                     ) : null}
                   </ScrollView>
                 </SafeAreaView>
-              </KeyboardAvoidingView>
+              </KeyboardSafeView>
             </Pressable>
           </Pressable>
         </Modal>
@@ -1752,7 +1744,7 @@ export default function SearchScreen() {
             </Pressable>
           </Pressable>
         </Modal>
-      </KeyboardAvoidingView>
+      </KeyboardSafeView>
     </Screen>
   );
 }

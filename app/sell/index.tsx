@@ -14,7 +14,6 @@ import {
   Pressable,
   useWindowDimensions,
   Keyboard,
-  KeyboardAvoidingView,
 } from 'react-native';
 import { useRouter, useFocusEffect, type Href } from 'expo-router';
 import { buildAuthGateHref } from '@/lib/authGateNavigation';
@@ -25,7 +24,7 @@ import {
   isSellerProfileComplete,
 } from '@/lib/sellerProfile';
 import * as ImagePicker from 'expo-image-picker';
-import { Screen, Button, Input, Loader } from '@/components';
+import { Screen, Button, Input, Loader, KeyboardSafeView } from '@/components';
 import { type ListingCategoryId } from '@/lib/listingCategories';
 import {
   categoryHasChildren,
@@ -992,10 +991,7 @@ export default function SellScreen() {
 
   return (
     <Screen scroll={false}>
-      <KeyboardAvoidingView
-        style={styles.formLayout}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      >
+      <KeyboardSafeView style={styles.formLayout}>
         <ScrollView
           style={styles.formScroll}
           contentContainerStyle={[
@@ -1334,7 +1330,7 @@ export default function SellScreen() {
             </Pressable>
           </View>
         </View>
-      </KeyboardAvoidingView>
+      </KeyboardSafeView>
     </Screen>
   );
 }
