@@ -13,6 +13,7 @@ export { CategoryRail } from './CategoryRail';
 export { HomeBrandHeader } from './HomeBrandHeader';
 export { HomeCategoryStrip } from './HomeCategoryStrip';
 export { NotificationsPromptCard } from './NotificationsPromptCard';
+export { NotificationsActivationCard } from './NotificationsActivationCard';
 export { SkeletonListingCard } from './SkeletonListingCard';
 export * from './HeroMarketplaceGrid';
 export { WebPageScreen, isAllowedYoumbiaWebUrl } from './WebPageScreen';

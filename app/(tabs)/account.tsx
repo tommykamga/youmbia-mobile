@@ -2,7 +2,7 @@ import React, { useCallback, useState, memo } from 'react';
 import { ScrollView, View, Text, StyleSheet, Pressable, Alert, ActivityIndicator } from 'react-native';
 import { useRouter, useFocusEffect, Redirect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { Screen, Loader, AppHeader } from '@/components';
+import { Screen, Loader, AppHeader, NotificationsActivationCard } from '@/components';
 import { getSession, signOut } from '@/services/auth';
 import { spacing, colors, typography, fontWeights, radius } from '@/theme';
 import Animated, { useSharedValue, useAnimatedStyle, withTiming, Easing, withSpring } from 'react-native-reanimated';
@@ -281,6 +281,8 @@ export default function AccountScreen() {
         </View>
 
         <ProSellerActivationCard variant="account" />
+
+        <NotificationsActivationCard />
 
         {/* Sections */}
         {SECTIONS.map((section, idx) => (

@@ -223,6 +223,29 @@ export function shouldShowPushPrompt(): boolean {
   return readStorage(PUSH_PROMPT_DISMISSED_KEY) !== 'true';
 }
 
+export type DetailedPushPermission = 'granted' | 'denied' | 'undetermined' | 'unavailable';
+
+/**
+ * Statut détaillé (3 états réels + unavailable), nécessaire pour l'UI d'activation :
+ * - 'granted'      : permission accordée
+ * - 'denied'       : refusée (proposer l'ouverture des réglages système)
+ * - 'undetermined' : jamais demandée (proposer le bouton d'activation)
+ * - 'unavailable'  : Expo Go / non disponible (ne rien afficher)
+ */
+export async function getDetailedPushPermissionStatus(): Promise<DetailedPushPermission> {
+  if (!isPushNotificationsAvailable()) return 'unavailable';
+  try {
+    const Notifications = await loadNotificationsModule();
+    if (!Notifications) return 'unavailable';
+    const settings = await Notifications.getPermissionsAsync();
+    if (settings.status === 'granted') return 'granted';
+    if (settings.status === 'undetermined') return 'undetermined';
+    return 'denied';
+  } catch {
+    return 'unavailable';
+  }
+}
+
 export async function getPushPermissionStatus(): Promise<'granted' | 'denied'> {
   if (!isPushNotificationsAvailable()) {
     return 'denied';
