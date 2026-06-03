@@ -17,6 +17,7 @@ import {
   ScrollView,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useAppUpdateBannerInset } from '@/context/AppUpdateBannerInsetContext';
 import { useFocusEffect, useLocalSearchParams, useRouter, type Href } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Screen, Loader, EmptyState, Button, HomeBrandHeader, HomeCategoryStrip, KeyboardSafeView } from '@/components';
@@ -828,6 +829,12 @@ export default function SearchScreen() {
 
   const { width, bucket } = useResponsiveLayout();
   const insets = useSafeAreaInsets();
+  const appUpdateBannerInset = useAppUpdateBannerInset();
+  const marketplaceSafeEdges = useMemo(
+    (): ('top' | 'left' | 'right')[] =>
+      appUpdateBannerInset > 0 ? ['left', 'right'] : ['top', 'left', 'right'],
+    [appUpdateBannerInset]
+  );
   const scrollBottomReserve = useMemo(
     () => getScrollBottomReserveForTabBar(width, insets.bottom),
     [width, insets.bottom]
@@ -1375,7 +1382,7 @@ export default function SearchScreen() {
   return (
     <Screen noPadding safe={false}>
       <KeyboardSafeView style={styles.keyboard}>
-        <SafeAreaView style={styles.safeMarketplace} edges={['top', 'left', 'right']}>
+        <SafeAreaView style={styles.safeMarketplace} edges={marketplaceSafeEdges}>
           <View style={styles.marketplaceColumn}>
             <View style={styles.topStackMarketplace}>
               <HomeBrandHeader

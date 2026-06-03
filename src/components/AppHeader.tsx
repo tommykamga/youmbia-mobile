@@ -9,6 +9,7 @@ import { View, Text, StyleSheet, ViewStyle, TextStyle, Pressable, Platform } fro
 import { useRouter, type Href } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Ionicons from '@expo/vector-icons/Ionicons';
+import { useAppUpdateBannerInset } from '@/context/AppUpdateBannerInsetContext';
 import { colors, spacing, typography, fontWeights } from '@/theme';
 import { BrandSymbol } from './BrandSymbol';
 
@@ -43,13 +44,21 @@ export function AppHeader({
   style,
 }: AppHeaderProps) {
   const insets = useSafeAreaInsets();
+  const appUpdateBannerInset = useAppUpdateBannerInset();
   const router = useRouter();
   const fallbackHref: Href = '/(tabs)/home';
 
+  const topInset =
+    appUpdateBannerInset > 0
+      ? spacing.xs
+      : density === 'compact'
+        ? insets.top + 2
+        : insets.top + spacing.xs;
+
   const densityStyles =
     density === 'compact'
-      ? { paddingTop: insets.top + 2, paddingBottom: 6, rowMinHeight: 40 }
-      : { paddingTop: insets.top + spacing.xs, paddingBottom: spacing.xs, rowMinHeight: 44 };
+      ? { paddingTop: topInset, paddingBottom: 6, rowMinHeight: 40 }
+      : { paddingTop: topInset, paddingBottom: spacing.xs, rowMinHeight: 44 };
 
   return (
     <View

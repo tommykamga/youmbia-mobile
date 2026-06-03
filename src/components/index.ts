@@ -20,4 +20,5 @@ export * from './HeroMarketplaceGrid';
 export { WebPageScreen, isAllowedYoumbiaWebUrl } from './WebPageScreen';
 export { UserAvatar } from './UserAvatar';
 export { AvatarCropModal } from './AvatarCropModal';
+export { AppUpdateBanner } from './AppUpdateBanner';
 export * from './ui';
