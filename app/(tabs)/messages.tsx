@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { FlatList, View, Text, StyleSheet, Pressable, RefreshControl, useWindowDimensions } from 'react-native';
 import { useRouter, useFocusEffect, Redirect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { Screen, EmptyState, Button, AppHeader } from '@/components';
+import { Screen, EmptyState, Button, AppHeader, UserAvatar } from '@/components';
 import { getSession } from '@/services/auth';
 import { getConversations } from '@/services/conversations';
 import type { Conversation, Message } from '@/services/conversations/types';
@@ -58,11 +58,14 @@ function MessageItem({ item }: { item: Conversation }) {
         onPressOut={onPressOut}
         onPress={() => router.push(`/conversation/${item.id}`)}
       >
-        <View style={styles.avatar}>
-          <Text style={styles.avatarText}>
-            {item.other_party_name?.charAt(0).toUpperCase() || '?'}
-          </Text>
-        </View>
+        <UserAvatar
+          name={item.other_party_name}
+          avatarUrl={item.other_party_avatar_url}
+          avatarVersion={item.other_party_avatar_version}
+          displayUrl={item.other_party_avatar_display_url}
+          size={48}
+          style={styles.avatar}
+        />
         <View style={styles.body}>
           <View style={styles.header}>
             <Text style={styles.participant} numberOfLines={1}>

@@ -11,7 +11,8 @@
  */
 
 import { supabase } from '@/lib/supabase';
-import { getUserDisplayName } from '@/services/profile';
+import { getUserDisplayName, getAvatarVersion } from '@/services/profile';
+import { resolveAvatarDisplayUrls } from '@/lib/avatarImageUrl';
 import type { Conversation } from './types';
 
 export type GetConversationsResult =
@@ -98,18 +99,32 @@ export async function getConversations(): Promise<GetConversationsResult> {
     const otherIds = list.map((c) => (c.buyer_id === userId ? c.seller_id : c.buyer_id));
     const { data: profiles, error: profilesError } = await supabase
       .from('profiles')
-      .select('id, full_name')
+      .select('id, full_name, avatar_url')
       .in('id', otherIds);
     if (profilesError) {
       logSupabaseErrorDev('profiles.select', profilesError);
       return fallbackEmptyList(`profiles: ${profilesError.message}`);
     }
+    type ProfileRow = { id: string; full_name: string | null; avatar_url: string | null };
+    const profileRows = (profiles ?? []) as ProfileRow[];
     const profileMap = new Map(
-      (profiles ?? []).map((p: { id: string; full_name: string | null }) => [
+      profileRows.map((p) => [
         p.id,
-        getUserDisplayName({ full_name: p.full_name }, 'Utilisateur'),
+        {
+          name: getUserDisplayName({ full_name: p.full_name }, 'Utilisateur'),
+          avatarUrl: String(p.avatar_url ?? '').trim() || null,
+          avatarVersion: getAvatarVersion(p),
+        },
       ])
     );
+
+    const avatarEntries = profileRows
+      .filter((p) => String(p.avatar_url ?? '').trim())
+      .map((p) => ({
+        path: String(p.avatar_url ?? '').trim(),
+        version: getAvatarVersion(p),
+      }));
+    const avatarDisplayMap = await resolveAvatarDisplayUrls(avatarEntries);
 
     const convIds = list.map((c) => c.id);
     const { data: lastMessages, error: lastMessagesError } = await supabase
@@ -153,6 +168,8 @@ export async function getConversations(): Promise<GetConversationsResult> {
     const data: Conversation[] = list.map((c) => {
       const listing = listingMap.get(c.listing_id);
       const otherId = c.buyer_id === userId ? c.seller_id : c.buyer_id;
+      const peer = profileMap.get(otherId);
+      const avatarPath = peer?.avatarUrl ?? null;
       const last = lastByConv.get(c.id);
       const preview =
         last?.body != null
@@ -168,7 +185,13 @@ export async function getConversations(): Promise<GetConversationsResult> {
         created_at: c.created_at,
         updated_at: c.created_at, // Fallback to created_at
         listing_title: listing?.title,
-        other_party_name: profileMap.get(otherId),
+        other_party_id: otherId,
+        other_party_name: peer?.name,
+        other_party_avatar_url: avatarPath,
+        other_party_avatar_version: peer?.avatarVersion,
+        other_party_avatar_display_url: avatarPath
+          ? avatarDisplayMap.get(avatarPath) ?? null
+          : null,
         last_message_at: last?.created_at ?? null,
         last_message_preview: preview ?? null,
         unread_count: unreadByConv.get(c.id) ?? 0,

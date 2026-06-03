@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Screen, AppHeader, EmptyState, KeyboardSafeView } from '@/components';
+import { Screen, AppHeader, EmptyState, KeyboardSafeView, UserAvatar } from '@/components';
 import { useKeyboardInset } from '@/hooks/useKeyboardInset';
 import {
   getMessages,
@@ -82,6 +82,10 @@ export default function ConversationThreadScreen() {
   const insets = useSafeAreaInsets();
   const [messages, setMessages] = useState<Message[]>([]);
   const [title, setTitle] = useState<string>('Conversation');
+  const [peerName, setPeerName] = useState<string>('Conversation');
+  const [peerAvatarUrl, setPeerAvatarUrl] = useState<string | null>(null);
+  const [peerAvatarVersion, setPeerAvatarVersion] = useState<string>('');
+  const [peerAvatarDisplayUrl, setPeerAvatarDisplayUrl] = useState<string | null>(null);
   const [status, setStatus] = useState<'loading' | 'error' | 'success'>('loading');
   const [errorMessage, setErrorMessage] = useState<string>('');
   const [inputText, setInputText] = useState('');
@@ -123,7 +127,12 @@ export default function ConversationThreadScreen() {
         return;
       }
       const conv = convResult.data;
-      setTitle(conv.listing_title ?? conv.other_party_name ?? 'Conversation');
+      const displayTitle = conv.listing_title ?? conv.other_party_name ?? 'Conversation';
+      setTitle(displayTitle);
+      setPeerName(conv.other_party_name ?? 'Utilisateur');
+      setPeerAvatarUrl(conv.other_party_avatar_url ?? null);
+      setPeerAvatarVersion(conv.other_party_avatar_version ?? '');
+      setPeerAvatarDisplayUrl(conv.other_party_avatar_display_url ?? null);
       // Une conversation valide sans message n'est PAS une erreur : on affiche le fil
       // (état vide + champ de saisie actif). Un échec non bloquant du chargement des
       // messages dégrade comme le web : fil vide plutôt qu'écran d'erreur.
@@ -304,7 +313,26 @@ export default function ConversationThreadScreen() {
 
   return (
     <Screen scroll={false} noPadding safe={false}>
-      <AppHeader title={title} showBack noBorder density="compact" />
+      <AppHeader
+        title={title}
+        titleNode={
+          <View style={styles.headerTitleRow}>
+            <UserAvatar
+              name={peerName}
+              avatarUrl={peerAvatarUrl}
+              avatarVersion={peerAvatarVersion}
+              displayUrl={peerAvatarDisplayUrl}
+              size={28}
+            />
+            <Text style={styles.headerTitleText} numberOfLines={1}>
+              {title}
+            </Text>
+          </View>
+        }
+        showBack
+        noBorder
+        density="compact"
+      />
       
       {status === 'loading' && <MessagesSkeleton />}
 
@@ -355,6 +383,20 @@ export default function ConversationThreadScreen() {
 }
 
 const styles = StyleSheet.create({
+  headerTitleRow: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+    paddingHorizontal: spacing.xs,
+  },
+  headerTitleText: {
+    flexShrink: 1,
+    ...typography.lg,
+    fontWeight: fontWeights.bold,
+    color: colors.text,
+  },
   keyboard: { flex: 1, backgroundColor: colors.background },
   listContent: {
     maxWidth: 760,

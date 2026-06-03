@@ -1,14 +1,13 @@
-import React, { useCallback, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable, Alert, Platform, Modal, ActivityIndicator } from 'react-native';
 import * as Haptics from 'expo-haptics';
-import { Screen, AppHeader, Button, Input, Loader, EmptyState } from '@/components';
+import { Screen, AppHeader, Button, Input, Loader, EmptyState, AvatarCropModal, UserAvatar } from '@/components';
 import {
   getCurrentProfile,
   updateProfile,
   sanitizeProfileDisplayValue,
   normalizePhoneForProfile,
   getAvatarVersion,
-  getUserDisplayName,
 } from '@/services/profile';
 import { getSession } from '@/services/auth';
 import { useFocusEffect, Redirect, useLocalSearchParams, useRouter } from 'expo-router';
@@ -17,17 +16,19 @@ import { colors, spacing, typography, fontWeights, radius } from '@/theme';
 import { buildAuthGateHref } from '@/lib/authGateNavigation';
 import { lightCacheKeys, lightCacheRead, lightCacheWrite } from '@/lib/lightCache';
 import * as ImagePicker from 'expo-image-picker';
-import { decode } from 'base64-arraybuffer';
-import * as ImageManipulator from 'expo-image-manipulator';
-import { supabase } from '@/lib/supabase';
 import {
   resolveSingleAvatarUrl,
   resolveFreshAvatarUrl,
   invalidateAvatarCache,
-  AVATARS_BUCKET,
 } from '@/lib/avatarImageUrl';
+import {
+  compressAvatarForStorageUpload,
+  isSupportedAvatarMime,
+  validateAvatarUploadSize,
+} from '@/lib/avatarPhotoUploadCompression';
+import { uploadAvatarToStorage, removeAvatarFromStorage } from '@/services/profile/avatarStorage';
+import { emitLocalAvatarUpdated, subscribeProfileEvents } from '@/lib/profileRealtime';
 import { getProfileReturnNext, replaceAfterProfileSave } from '@/lib/profileReturnNavigation';
-import { Image as ExpoImage } from 'expo-image';
 
 type ProfileCachePayload = {
   userId: string;
@@ -64,6 +65,8 @@ export default function AccountProfileScreen() {
   const [avatarUploading, setAvatarUploading] = useState(false);
   const [avatarBusyLabel, setAvatarBusyLabel] = useState<string | null>(null);
   const [sheetVisible, setSheetVisible] = useState(false);
+  const [cropVisible, setCropVisible] = useState(false);
+  const [cropSource, setCropSource] = useState<{ uri: string; width: number; height: number } | null>(null);
   // iOS ne peut pas présenter le sélecteur tant que l'action sheet (Modal) se ferme.
   // On diffère l'action jusqu'à `onDismiss` (iOS) ; sur Android on l'exécute directement.
   const pendingSheetActionRef = useRef<null | (() => void)>(null);
@@ -170,6 +173,44 @@ export default function AccountProfileScreen() {
     }, [load])
   );
 
+  const applyAvatarFromRemote = useCallback(
+    async (rawAvatar: string, version: string) => {
+      setAvatarUrlRaw(rawAvatar);
+      setAvatarVersion(version);
+      if (rawAvatar) {
+        try {
+          invalidateAvatarCache(rawAvatar);
+          const resolved = await resolveSingleAvatarUrl(rawAvatar, version);
+          setAvatarDisplayUrl(resolved);
+        } catch {
+          setAvatarDisplayUrl('');
+        }
+      } else {
+        setAvatarDisplayUrl('');
+      }
+    },
+    []
+  );
+
+  useEffect(() => {
+    return subscribeProfileEvents((event) => {
+      if (event.type !== 'avatar_updated') return;
+      void applyAvatarFromRemote(String(event.avatarUrl ?? ''), event.avatarVersion);
+      void getSession().then((session) => {
+        const uid = session?.user?.id;
+        if (!uid) return;
+        void lightCacheWrite<ProfileCachePayload>(lightCacheKeys.profile(uid), {
+          userId: uid,
+          fullName,
+          phone,
+          avatarUrl: String(event.avatarUrl ?? ''),
+          avatarVersion: event.avatarVersion,
+          incomplete: state.status === 'success' ? state.incomplete : false,
+        });
+      });
+    });
+  }, [applyAvatarFromRemote, fullName, phone, state]);
+
   const handleSave = useCallback(async () => {
     setSaveError(null);
     setSaveSuccess(null);
@@ -253,7 +294,7 @@ export default function AccountProfileScreen() {
     }
   }, []);
 
-  /** Resize + compress to a square-friendly avatar, enforce ~1 Mo max, then upload + persist. */
+  /** Compression + upload + persistance DB après recadrage. */
   const processAndUpload = useCallback(
     async (uri: string) => {
       const session = await getSession();
@@ -266,104 +307,47 @@ export default function AccountProfileScreen() {
       setAvatarBusyLabel('Mise à jour…');
       setAvatarUploading(true);
       try {
-        // Target ~512px JPEG. Loop down quality if the result is still above ~1 Mo.
-        const MAX_BYTES = 1_000_000;
-        let compress = 0.82;
-        let manipulated = await ImageManipulator.manipulateAsync(
-          uri,
-          [{ resize: { width: 512 } }],
-          { compress, format: ImageManipulator.SaveFormat.JPEG, base64: true }
-        );
-        let preparedBase64 = (manipulated.base64 ?? '').replace(/^data:image\/\w+;base64,/, '');
-        const approxBytes = (b64: string) => Math.floor((b64.length * 3) / 4);
-        while (preparedBase64 && approxBytes(preparedBase64) > MAX_BYTES && compress > 0.4) {
-          compress = Math.max(0.4, compress - 0.2);
-          manipulated = await ImageManipulator.manipulateAsync(
-            uri,
-            [{ resize: { width: 512 } }],
-            { compress, format: ImageManipulator.SaveFormat.JPEG, base64: true }
-          );
-          preparedBase64 = (manipulated.base64 ?? '').replace(/^data:image\/\w+;base64,/, '');
-        }
-
-        if (!preparedBase64) {
-          setSaveError("Impossible de préparer l'image. Réessayez.");
+        const compressed = await compressAvatarForStorageUpload(uri);
+        if (!compressed.ok) {
+          setSaveError(compressed.error);
           return;
         }
 
-        // Unique filename per change: avatar_url itself changes on every replacement,
-        // which makes the new photo propagate to all devices (DB = source of truth) and
-        // busts the image cache without relying on any timestamp column.
         const previousPath = avatarUrlRaw.trim();
-        const path = `${userId}/avatar_${Date.now()}.jpg`;
-        const uploadOnce = async (bucket: string) => {
-          return await supabase.storage.from(bucket).upload(path, decode(preparedBase64), {
-            contentType: 'image/jpeg',
-            upsert: true,
-          });
-        };
-
-        // Try configured bucket; if it doesn't exist, fall back to known existing bucket.
-        let usedBucket = AVATARS_BUCKET;
-        let upload = await uploadOnce(AVATARS_BUCKET);
-        if (upload.error) {
-          const msg = String(upload.error.message ?? '').toLowerCase();
-          const bucketMissing =
-            msg.includes('bucket') || msg.includes('not found') || msg.includes('does not exist');
-          if (bucketMissing && AVATARS_BUCKET !== 'listing-images') {
-            usedBucket = 'listing-images';
-            upload = await uploadOnce('listing-images');
-          }
-        }
-
-        if (upload.error) {
-          logProfileDev('avatar_upload_error', { message: upload.error.message });
+        const upload = await uploadAvatarToStorage(userId, compressed.base64, previousPath);
+        if (!upload.ok) {
+          logProfileDev('avatar_upload_error', { message: upload.error });
           setSaveError("Impossible de mettre à jour la photo.");
           return;
         }
 
-        const updateRes = await updateProfile({ avatar_url: path });
+        const updateRes = await updateProfile({ avatar_url: upload.path });
         if (updateRes.error) {
           logProfileDev('avatar_db_error', { message: updateRes.error.message });
           setSaveError("Impossible de mettre à jour la photo.");
           return;
         }
 
-        // Best-effort cleanup of the previous file (never block on failure).
-        const prevIsPath = previousPath !== '' && previousPath !== path && !/^https?:\/\//i.test(previousPath);
-        if (prevIsPath) {
-          try {
-            await supabase.storage.from(usedBucket).remove([previousPath]);
-          } catch (e) {
-            logProfileDev('avatar_prev_remove_failed', {
-              error: e instanceof Error ? e.message : String(e),
-            });
-          }
-          invalidateAvatarCache(previousPath);
-        }
-
-        // Version derived from avatar_url → consistent cache-bust across devices.
         const version = getAvatarVersion(updateRes.data);
-        setAvatarUrlRaw(path);
+        setAvatarUrlRaw(upload.path);
         setAvatarVersion(version);
         try {
-          // Fresh URL (cache-busted) so the new bytes replace the previously cached image.
-          const resolved = await resolveFreshAvatarUrl(path, version);
+          const resolved = await resolveFreshAvatarUrl(upload.path, version);
           setAvatarDisplayUrl(resolved);
         } catch {
           setAvatarDisplayUrl('');
         }
 
-        // Update cache so Account tab can refresh without extra fetch.
         await lightCacheWrite<ProfileCachePayload>(lightCacheKeys.profile(userId), {
           userId,
           fullName,
           phone,
-          avatarUrl: path,
+          avatarUrl: upload.path,
           avatarVersion: version,
           incomplete: state.status === 'success' ? state.incomplete : false,
         });
 
+        emitLocalAvatarUpdated(upload.path, version);
         void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         setSaveSuccess('Photo de profil mise à jour');
       } catch (e) {
@@ -376,6 +360,31 @@ export default function AccountProfileScreen() {
     },
     [fullName, phone, state, avatarUrlRaw]
   );
+
+  const openCropForAsset = useCallback((asset: ImagePicker.ImagePickerAsset) => {
+    const mime = String(asset.mimeType ?? '').toLowerCase();
+    if (mime && !isSupportedAvatarMime(mime)) {
+      setSaveError('Format non pris en charge. Utilisez JPG, PNG ou WebP.');
+      return;
+    }
+    const sizeError = validateAvatarUploadSize(asset.fileSize ?? null);
+    if (sizeError) {
+      setSaveError(sizeError);
+      return;
+    }
+    if (!asset.uri) {
+      setSaveError("Impossible de préparer l'image. Réessayez.");
+      return;
+    }
+    const w = asset.width ?? 0;
+    const h = asset.height ?? 0;
+    if (w < 1 || h < 1) {
+      setSaveError("Impossible de préparer l'image. Réessayez.");
+      return;
+    }
+    setCropSource({ uri: asset.uri, width: w, height: h });
+    setCropVisible(true);
+  }, []);
 
   const handlePickFromLibrary = useCallback(async () => {
     if (avatarBusy || saving) return;
@@ -394,24 +403,13 @@ export default function AccountProfileScreen() {
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ['images'],
       allowsMultipleSelection: false,
-      allowsEditing: true,
-      aspect: [1, 1],
-      quality: 0.9,
+      allowsEditing: false,
+      quality: 1,
     });
 
     if (result.canceled || !result.assets?.length) return;
-    const asset = result.assets[0]!;
-    const mime = String(asset.mimeType ?? '').toLowerCase();
-    if (mime && !mime.startsWith('image/')) {
-      setSaveError("Format non pris en charge. Choisissez une image.");
-      return;
-    }
-    if (!asset.uri) {
-      setSaveError("Impossible de préparer l'image. Réessayez.");
-      return;
-    }
-    await processAndUpload(asset.uri);
-  }, [avatarBusy, saving, processAndUpload]);
+    openCropForAsset(result.assets[0]!);
+  }, [avatarBusy, saving, openCropForAsset]);
 
   const handleTakePhoto = useCallback(async () => {
     if (avatarBusy || saving) return;
@@ -429,22 +427,16 @@ export default function AccountProfileScreen() {
 
     try {
       const result = await ImagePicker.launchCameraAsync({
-        allowsEditing: true,
-        aspect: [1, 1],
-        quality: 0.9,
+        allowsEditing: false,
+        quality: 1,
       });
       if (result.canceled || !result.assets?.length) return;
-      const asset = result.assets[0]!;
-      if (!asset.uri) {
-        setSaveError("Impossible de préparer l'image. Réessayez.");
-        return;
-      }
-      await processAndUpload(asset.uri);
+      openCropForAsset(result.assets[0]!);
     } catch (e) {
       logProfileDev('camera_error', { error: e instanceof Error ? e.message : String(e) });
       setSaveError("Caméra indisponible. Réessayez.");
     }
-  }, [avatarBusy, saving, processAndUpload]);
+  }, [avatarBusy, saving, openCropForAsset]);
 
   const handleRemoveAvatar = useCallback(async () => {
     if (avatarBusy || saving) return;
@@ -473,18 +465,7 @@ export default function AccountProfileScreen() {
       // 2) Best-effort Storage cleanup (path only; never block on failure).
       const isPath = currentRaw !== '' && !/^https?:\/\//i.test(currentRaw);
       if (isPath) {
-        try {
-          let rm = await supabase.storage.from(AVATARS_BUCKET).remove([currentRaw]);
-          if (rm.error && AVATARS_BUCKET !== 'listing-images') {
-            rm = await supabase.storage.from('listing-images').remove([currentRaw]);
-          }
-          if (rm.error) logProfileDev('avatar_storage_remove_failed', { message: rm.error.message });
-        } catch (e) {
-          logProfileDev('avatar_storage_remove_exception', {
-            error: e instanceof Error ? e.message : String(e),
-          });
-        }
-        invalidateAvatarCache(currentRaw);
+        await removeAvatarFromStorage(currentRaw);
       }
 
       const version = getAvatarVersion(updateRes.data);
@@ -500,6 +481,7 @@ export default function AccountProfileScreen() {
         incomplete: state.status === 'success' ? state.incomplete : false,
       });
 
+      emitLocalAvatarUpdated(null, version);
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       setSaveSuccess('Photo de profil supprimée');
     } catch (e) {
@@ -545,7 +527,6 @@ export default function AccountProfileScreen() {
     );
   }
 
-  const initial = getUserDisplayName({ full_name: fullName, email }, email ?? '').charAt(0).toUpperCase() || '?';
   const showIncomplete = state.status === 'success' && state.incomplete;
 
   return (
@@ -568,11 +549,13 @@ export default function AccountProfileScreen() {
             ]}
           >
             <View style={styles.avatar}>
-              {avatarDisplayUrl ? (
-                <ExpoImage source={{ uri: avatarDisplayUrl }} style={styles.avatarImg} contentFit="cover" />
-              ) : (
-                <Text style={styles.avatarText}>{initial}</Text>
-              )}
+              <UserAvatar
+                name={fullName || email}
+                avatarUrl={avatarUrlRaw}
+                avatarVersion={avatarVersion}
+                displayUrl={avatarDisplayUrl}
+                size={80}
+              />
               {avatarBusy ? (
                 <View style={styles.avatarBusyOverlay}>
                   <ActivityIndicator size="small" color={colors.surface} />
@@ -700,6 +683,24 @@ export default function AccountProfileScreen() {
           </Pressable>
         </Pressable>
       </Modal>
+
+      {cropSource ? (
+        <AvatarCropModal
+          visible={cropVisible}
+          imageUri={cropSource.uri}
+          imageWidth={cropSource.width}
+          imageHeight={cropSource.height}
+          onCancel={() => {
+            setCropVisible(false);
+            setCropSource(null);
+          }}
+          onConfirm={(croppedUri) => {
+            setCropVisible(false);
+            setCropSource(null);
+            void processAndUpload(croppedUri);
+          }}
+        />
+      ) : null}
     </Screen>
   );
 }

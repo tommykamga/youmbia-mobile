@@ -5,6 +5,8 @@
 
 import { supabase } from '@/lib/supabase';
 import { getSignedUrlsMap, listingStoragePathsForCardCover, mapListingCardImages } from '@/lib/listingImageUrl';
+import { resolveSingleAvatarUrl } from '@/lib/avatarImageUrl';
+import { getAvatarVersion } from '@/services/profile';
 import { normalizeListingSchemaFeatures } from '@/lib/listingSchemaFeatures';
 import type { Tables } from '@/types/database';
 import type { PublicListing } from '@/services/listings';
@@ -13,6 +15,9 @@ import { listingPublicListSelect } from '@/services/listings/listingListSelect';
 export type UserProfile = {
   id: string;
   full_name: string | null;
+  avatar_url?: string | null;
+  avatar_version?: string;
+  avatar_display_url?: string | null;
   city?: string | null;
   bio?: string | null;
   created_at: string | null;
@@ -28,6 +33,7 @@ type UserProfileRow = Pick<
   Tables<'profiles'>,
   | 'id'
   | 'full_name'
+  | 'avatar_url'
   | 'city'
   | 'bio'
   | 'created_at'
@@ -94,7 +100,7 @@ export async function getUserProfile(userId: string): Promise<GetUserProfileResu
   const { data: profileRow, error: profileError } = await supabase
     .from('profiles')
     .select(
-      'id, full_name, city, bio, created_at, is_verified, phone_verified, trust_score, reports_count, is_banned, is_flagged'
+      'id, full_name, avatar_url, city, bio, created_at, is_verified, phone_verified, trust_score, reports_count, is_banned, is_flagged'
     )
     .eq('id', id)
     .maybeSingle();
@@ -108,9 +114,18 @@ export async function getUserProfile(userId: string): Promise<GetUserProfileResu
   }
 
   const safeProfileRow = profileRow as UserProfileRow;
+  const avatarPath = String(safeProfileRow.avatar_url ?? '').trim() || null;
+  const avatarVersion = getAvatarVersion(safeProfileRow);
+  const avatarDisplayUrl = avatarPath
+    ? await resolveSingleAvatarUrl(avatarPath, avatarVersion)
+    : null;
+
   const profile: UserProfile = {
     id: safeProfileRow.id,
     full_name: safeProfileRow.full_name ?? null,
+    avatar_url: avatarPath,
+    avatar_version: avatarVersion,
+    avatar_display_url: avatarDisplayUrl,
     city: safeProfileRow.city ?? null,
     bio: safeProfileRow.bio ?? null,
     created_at: safeProfileRow.created_at ?? null,

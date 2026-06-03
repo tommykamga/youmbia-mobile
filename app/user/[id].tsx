@@ -6,7 +6,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { View, Text, StyleSheet, FlatList, Modal, Pressable, Alert, Platform } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
-import { Screen, AppHeader, Loader, EmptyState, Button } from '@/components';
+import { Screen, AppHeader, Loader, EmptyState, Button, UserAvatar } from '@/components';
 import { getSellerStats, getUserProfile } from '@/services/users';
 import { getUserDisplayName } from '@/services/profile';
 import { reportUser } from '@/services/reports';
@@ -26,6 +26,9 @@ type State =
       status: 'success';
       profile: {
         full_name: string | null;
+        avatar_url?: string | null;
+        avatar_version?: string;
+        avatar_display_url?: string | null;
         city: string | null;
         bio: string | null;
         created_at: string | null;
@@ -84,6 +87,9 @@ export default function UserProfileScreen() {
         status: 'success',
         profile: {
           full_name: profile.full_name,
+          avatar_url: profile.avatar_url ?? null,
+          avatar_version: profile.avatar_version,
+          avatar_display_url: profile.avatar_display_url ?? null,
           city: profile.city ?? null,
           bio: profile.bio ?? null,
           created_at: profile.created_at,
@@ -225,8 +231,17 @@ export default function UserProfileScreen() {
   const renderHeader = (
     <View style={styles.header}>
       <View style={[cardStyles.default, styles.heroCard]}>
-        <View style={styles.titleRow}>
-          <Text style={styles.name}>{name}</Text>
+        <View style={styles.heroTopRow}>
+          <UserAvatar
+            name={name}
+            avatarUrl={state.profile.avatar_url}
+            avatarVersion={state.profile.avatar_version}
+            displayUrl={state.profile.avatar_display_url}
+            size={72}
+          />
+          <View style={styles.heroInfo}>
+            <View style={styles.titleRow}>
+              <Text style={styles.name}>{name}</Text>
           {state.profile.is_verified === true && (
             <SellerBadge variant="verified" label="Vérifié" />
           )}
@@ -236,10 +251,12 @@ export default function UserProfileScreen() {
           {isFlagged && (
             <SellerBadge variant="flagged" label="Profil signalé" />
           )}
+            </View>
+            {city ? (
+              <Text style={styles.city}>{city}</Text>
+            ) : null}
+          </View>
         </View>
-        {city ? (
-          <Text style={styles.city}>{city}</Text>
-        ) : null}
         <View style={styles.metaRow}>
           {joinDate ? <Text style={styles.meta}>Membre depuis {joinDate}</Text> : null}
           <Text style={styles.meta}>{listingCountLabel}</Text>
@@ -394,6 +411,15 @@ const styles = StyleSheet.create({
   heroCard: {
     padding: spacing.base,
     marginBottom: spacing.sm,
+  },
+  heroTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.base,
+    marginBottom: spacing.sm,
+  },
+  heroInfo: {
+    flex: 1,
   },
   titleRow: {
     flexDirection: 'row',

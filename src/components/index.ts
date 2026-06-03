@@ -18,4 +18,6 @@ export { NotificationsActivationCard } from './NotificationsActivationCard';
 export { SkeletonListingCard } from './SkeletonListingCard';
 export * from './HeroMarketplaceGrid';
 export { WebPageScreen, isAllowedYoumbiaWebUrl } from './WebPageScreen';
+export { UserAvatar } from './UserAvatar';
+export { AvatarCropModal } from './AvatarCropModal';
 export * from './ui';

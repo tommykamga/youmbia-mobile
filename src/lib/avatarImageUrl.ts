@@ -112,6 +112,31 @@ export async function resolveSingleAvatarUrl(
 }
 
 /**
+ * Résout plusieurs avatars en batch (inbox, listes vendeurs).
+ * Clé = chemin Storage brut ; valeur = URL affichable avec cache-bust.
+ */
+export async function resolveAvatarDisplayUrls(
+  entries: Array<{ path: string; version?: string | number | null }>
+): Promise<Map<string, string>> {
+  const paths = entries
+    .map((e) => String(e.path ?? '').trim())
+    .filter((p) => p !== '' && !/^https?:\/\//i.test(p));
+  const signedMap = await getSignedAvatarUrlsMap(paths);
+  const out = new Map<string, string>();
+  for (const { path, version } of entries) {
+    const key = String(path ?? '').trim();
+    if (!key) continue;
+    if (/^https?:\/\//i.test(key)) {
+      out.set(key, appendAvatarVersion(key, version));
+      continue;
+    }
+    const display = toDisplayAvatarUrl(key, signedMap);
+    if (display) out.set(key, appendAvatarVersion(display, version));
+  }
+  return out;
+}
+
+/**
  * Invalidates the in-memory signed-URL cache for a given Storage path/url.
  * Used after replacing an avatar at a stable path so the next resolve fetches fresh.
  */

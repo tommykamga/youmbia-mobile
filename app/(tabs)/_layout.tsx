@@ -5,6 +5,7 @@
 
 import React, { useMemo } from 'react';
 import { useMessagingRealtime } from '@/hooks/useMessagingRealtime';
+import { useProfileRealtime } from '@/hooks/useProfileRealtime';
 import { useUnreadConversationsCount } from '@/hooks/useUnreadConversationsCount';
 import { View, Text, StyleSheet, Platform, useWindowDimensions } from 'react-native';
 import { Tabs, useRouter, type Href } from 'expo-router';
@@ -128,6 +129,7 @@ export default function TabLayout() {
   const { width } = useWindowDimensions();
 
   useMessagingRealtime();
+  useProfileRealtime();
   const { count: unreadConversationsCount } = useUnreadConversationsCount();
 
   const messagesTabBadge =

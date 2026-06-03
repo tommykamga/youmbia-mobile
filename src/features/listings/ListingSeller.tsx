@@ -6,7 +6,7 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { Button } from '@/components';
+import { Button, UserAvatar } from '@/components';
 import { colors, spacing, typography, fontWeights, radius, shadows } from '@/theme';
 import { formatJoinDate } from '@/lib/format';
 import { getUserDisplayName } from '@/services/profile';
@@ -42,14 +42,18 @@ export function ListingSeller({ listing, memberSince, listingCount, onPress }: L
   const listingCountLabel =
     safeListingCount == null ? null : `${safeListingCount} annonce${safeListingCount > 1 ? 's' : ''}`;
 
-  const avatarInitial = name.charAt(0).toUpperCase();
 
   const content = (
     <>
       <View style={styles.header}>
-        <View style={styles.avatar}>
-          <Text style={styles.avatarText}>{avatarInitial}</Text>
-        </View>
+        <UserAvatar
+          name={name}
+          avatarUrl={seller?.avatar_url}
+          avatarVersion={seller?.avatar_version}
+          displayUrl={seller?.avatar_display_url}
+          size={42}
+          style={styles.avatar}
+        />
         <View style={styles.headerInfo}>
           <Text style={styles.name} numberOfLines={1} ellipsizeMode="tail">
             {name}
@@ -145,18 +149,7 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm,
   },
   avatar: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
-    backgroundColor: colors.primaryLight + '66',
-    alignItems: 'center',
-    justifyContent: 'center',
     marginRight: spacing.md,
-  },
-  avatarText: {
-    ...typography.base,
-    fontWeight: fontWeights.semibold,
-    color: colors.primary,
   },
   headerInfo: {
     flex: 1,

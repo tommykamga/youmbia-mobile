@@ -12,8 +12,9 @@
 --   Pour un bucket dédié, créez le bucket `avatars` ci-dessous PUIS définissez
 --   la variable d'env Expo : EXPO_PUBLIC_AVATARS_BUCKET=avatars
 --
--- Convention de chemin utilisée par l'app : `{userId}/avatar.jpg`
+-- Convention de chemin utilisée par l'app : `{userId}/avatar_{timestamp}.jpg`
 --   → la 1re partie du chemin (storage.foldername(name)[1]) = auth.uid()
+--   → voir aussi avatars_cross_user_read.sql pour la lecture des avatars d'autres utilisateurs
 -- ============================================================================
 
 -- 1) Création du bucket (privé : l'app lit via signed URLs).

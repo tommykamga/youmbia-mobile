@@ -11,7 +11,12 @@ export type Conversation = {
   created_at: string;
   updated_at: string;
   listing_title?: string;
+  other_party_id?: string;
   other_party_name?: string;
+  other_party_avatar_url?: string | null;
+  other_party_avatar_version?: string;
+  /** URL signée pré-résolue (optionnel, pour affichage immédiat). */
+  other_party_avatar_display_url?: string | null;
   last_message_at?: string | null;
   last_message_preview?: string | null;
   unread_count?: number;

@@ -6,6 +6,8 @@
 
 import { supabase } from '@/lib/supabase';
 import { getSignedUrlsMap, toDisplayImageUrl } from '@/lib/listingImageUrl';
+import { resolveSingleAvatarUrl } from '@/lib/avatarImageUrl';
+import { getAvatarVersion } from '@/services/profile';
 import { normalizeListingSchemaFeatures } from '@/lib/listingSchemaFeatures';
 import { getShopSummaryById } from '@/services/shops/getShopSummaryById';
 import type { SellerType, ShopSummary } from '@/types/shops';
@@ -37,6 +39,9 @@ export type ListingDetail = {
   model?: string | null;
   seller: {
     full_name: string | null;
+    avatar_url?: string | null;
+    avatar_version?: string;
+    avatar_display_url?: string | null;
     created_at: string | null;
     /** Optional: used for WhatsApp deep link and phone CTA. If profiles.phone does not exist, remove from select. */
     phone?: string | null;
@@ -133,7 +138,7 @@ export async function getListingById(id: string): Promise<GetListingByIdResult> 
     const { data: profile } = await supabase
       .from('profiles')
       .select(
-        'full_name, created_at, phone, phone_verified, is_verified, is_flagged, trust_score, reports_count, is_banned, seller_type, shop_id'
+        'full_name, avatar_url, created_at, phone, phone_verified, is_verified, is_flagged, trust_score, reports_count, is_banned, seller_type, shop_id'
       )
       .eq('id', sellerId)
       .maybeSingle();
@@ -141,6 +146,7 @@ export async function getListingById(id: string): Promise<GetListingByIdResult> 
     if (profile) {
       const p = profile as {
         full_name: string | null;
+        avatar_url?: string | null;
         created_at: string | null;
         phone?: string | null;
         phone_verified?: boolean | null;
@@ -155,8 +161,16 @@ export async function getListingById(id: string): Promise<GetListingByIdResult> 
       sellerType =
         p.seller_type === 'pro' || p.seller_type === 'individual' ? p.seller_type : null;
       profileShopId = p.shop_id ?? null;
+      const avatarPath = String(p.avatar_url ?? '').trim() || null;
+      const avatarVersion = getAvatarVersion(p);
+      const avatarDisplayUrl = avatarPath
+        ? await resolveSingleAvatarUrl(avatarPath, avatarVersion)
+        : null;
       seller = {
         full_name: p.full_name ?? null,
+        avatar_url: avatarPath,
+        avatar_version: avatarVersion,
+        avatar_display_url: avatarDisplayUrl,
         created_at: p.created_at ?? null,
         phone: p.phone ?? null,
         phone_verified: p.phone_verified ?? null,

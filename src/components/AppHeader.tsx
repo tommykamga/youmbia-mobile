@@ -26,6 +26,8 @@ type AppHeaderProps = {
   noBorder?: boolean;
   /** Optional override for title typography (e.g. subtler nav label). */
   titleStyle?: TextStyle;
+  /** Contenu centré personnalisé (ex. titre + avatar). Remplace `title` si défini. */
+  titleNode?: React.ReactNode;
   style?: ViewStyle;
 };
 
@@ -37,6 +39,7 @@ export function AppHeader({
   right,
   noBorder,
   titleStyle,
+  titleNode,
   style,
 }: AppHeaderProps) {
   const insets = useSafeAreaInsets();
@@ -88,9 +91,11 @@ export function AppHeader({
         ) : (
           <View style={styles.backPlaceholder} />
         )}
-        <Text style={[styles.title, titleStyle]} numberOfLines={1}>
-          {title}
-        </Text>
+        {titleNode ?? (
+          <Text style={[styles.title, titleStyle]} numberOfLines={1}>
+            {title}
+          </Text>
+        )}
         {right ? <View style={styles.right}>{right}</View> : <View style={styles.backPlaceholder} />}
       </View>
     </View>

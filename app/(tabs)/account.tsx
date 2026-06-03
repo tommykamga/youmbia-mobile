@@ -1,17 +1,17 @@
-import React, { useCallback, useState, memo } from 'react';
+import React, { useCallback, useEffect, useState, memo } from 'react';
 import { ScrollView, View, Text, StyleSheet, Pressable, Alert, ActivityIndicator } from 'react-native';
 import { useRouter, useFocusEffect, Redirect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { Screen, Loader, AppHeader, NotificationsActivationCard } from '@/components';
+import { Screen, Loader, AppHeader, NotificationsActivationCard, UserAvatar } from '@/components';
 import { getSession, signOut } from '@/services/auth';
 import { spacing, colors, typography, fontWeights, radius } from '@/theme';
 import Animated, { useSharedValue, useAnimatedStyle, withTiming, Easing, withSpring } from 'react-native-reanimated';
 import { buildAuthGateHref } from '@/lib/authGateNavigation';
 import Constants from 'expo-constants';
 import { lightCacheKeys, lightCacheRead, lightCacheWrite } from '@/lib/lightCache';
-import { resolveSingleAvatarUrl } from '@/lib/avatarImageUrl';
+import { resolveSingleAvatarUrl, invalidateAvatarCache } from '@/lib/avatarImageUrl';
+import { subscribeProfileEvents } from '@/lib/profileRealtime';
 import { getCurrentProfile, getAvatarVersion, getUserDisplayName, isApplePrivateRelayEmail } from '@/services/profile';
-import { Image as ExpoImage } from 'expo-image';
 import { ProSellerActivationCard } from '@/features/shops';
 
 const APP_VERSION_LABEL =
@@ -113,6 +113,8 @@ export default function AccountScreen() {
   const [status, setStatus] = useState<'loading' | 'unauthenticated' | 'authenticated'>('loading');
   const [signingOut, setSigningOut] = useState(false);
   const [avatarDisplayUrl, setAvatarDisplayUrl] = useState<string>('');
+  const [avatarUrlRaw, setAvatarUrlRaw] = useState<string>('');
+  const [avatarVersion, setAvatarVersion] = useState<string>('');
 
   const editScale = useSharedValue(1);
   const editAnimatedStyle = useAnimatedStyle(() => ({
@@ -156,6 +158,8 @@ export default function AccountScreen() {
       const cachedFullName = String(cached?.payload?.fullName ?? '').trim();
       if (cachedFullName) setFullName(cachedFullName);
       const cachedRaw = String(cached?.payload?.avatarUrl ?? '').trim();
+      setAvatarUrlRaw(cachedRaw);
+      setAvatarVersion(String(cached?.payload?.avatarVersion ?? ''));
       if (cachedRaw) {
         try {
           const resolved = await resolveSingleAvatarUrl(cachedRaw, cached?.payload?.avatarVersion);
@@ -177,6 +181,8 @@ export default function AccountScreen() {
           const version = getAvatarVersion(result.data);
           const freshFullName = result.data?.full_name ?? null;
           setFullName(freshFullName);
+          setAvatarUrlRaw(raw);
+          setAvatarVersion(version);
           if (raw) {
             const resolved = await resolveSingleAvatarUrl(raw, version);
             setAvatarDisplayUrl(resolved || '');
@@ -205,6 +211,44 @@ export default function AccountScreen() {
       fetchSession();
     }, [fetchSession])
   );
+
+  useEffect(() => {
+    return subscribeProfileEvents((event) => {
+      if (event.type !== 'avatar_updated') return;
+      const raw = String(event.avatarUrl ?? '').trim();
+      setAvatarUrlRaw(raw);
+      setAvatarVersion(event.avatarVersion);
+      if (raw) {
+        invalidateAvatarCache(raw);
+        void resolveSingleAvatarUrl(raw, event.avatarVersion).then((url) => {
+          setAvatarDisplayUrl(url || '');
+        });
+      } else {
+        setAvatarDisplayUrl('');
+      }
+      void getSession().then((session) => {
+        const uid = session?.user?.id;
+        if (!uid) return;
+        void lightCacheRead<{
+          userId: string;
+          fullName?: string;
+          phone?: string;
+          avatarUrl?: string;
+          avatarVersion?: string;
+          incomplete?: boolean;
+        }>(lightCacheKeys.profile(uid)).then((cached) => {
+          void lightCacheWrite(lightCacheKeys.profile(uid), {
+            userId: uid,
+            fullName: cached?.payload?.fullName ?? fullName ?? '',
+            phone: cached?.payload?.phone ?? '',
+            avatarUrl: raw,
+            avatarVersion: event.avatarVersion,
+            incomplete: cached?.payload?.incomplete ?? false,
+          });
+        });
+      });
+    });
+  }, [fullName]);
 
   const handleSignOut = async () => {
     Alert.alert('Déconnexion', 'Êtes-vous sûr de vouloir vous déconnecter ?', [
@@ -239,7 +283,6 @@ export default function AccountScreen() {
   // seulement si aucun nom réel n'est disponible.
   const resolvedFullName = fullName || appleName;
   const displayName = getUserDisplayName({ full_name: resolvedFullName, email }, email?.split('@')[0] || 'Mon Compte');
-  const avatarInitial = displayName.charAt(0).toUpperCase() || '?';
 
   // L'email réel reste en base : on masque uniquement son affichage pour les comptes Apple.
   const emailLabel = isApplePrivateRelayEmail(email) ? 'Adresse masquée par Apple' : email;
@@ -251,15 +294,14 @@ export default function AccountScreen() {
 
         {/* User Profile Header Card */}
         <View style={styles.headerCard}>
-          <View style={styles.avatar}>
-            {avatarDisplayUrl ? (
-              <ExpoImage source={{ uri: avatarDisplayUrl }} style={styles.avatarImg} contentFit="cover" />
-            ) : (
-              <Text style={styles.avatarText}>
-                {avatarInitial}
-              </Text>
-            )}
-          </View>
+          <UserAvatar
+            name={displayName}
+            avatarUrl={avatarUrlRaw}
+            avatarVersion={avatarVersion}
+            displayUrl={avatarDisplayUrl}
+            size={56}
+            style={styles.avatar}
+          />
           <View style={styles.userInfo}>
             <Text style={styles.userName} numberOfLines={1}>
               {displayName}
