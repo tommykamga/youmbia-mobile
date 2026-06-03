@@ -765,6 +765,12 @@ export type Database = {
         Args: Record<PropertyKey, never>;
         Returns: boolean;
       };
+      mark_conversation_read: {
+        Args: {
+          p_conversation_id: string;
+        };
+        Returns: undefined;
+      };
       rls_auto_enable: {
         Args: Record<PropertyKey, never>;
         Returns: Json;

@@ -19,17 +19,17 @@ export async function markConversationRead(conversationId: string): Promise<Mark
     return { data: null, error: { message: 'Non connecté' } };
   }
 
-  const now = new Date().toISOString();
+  // 1. Mark received messages as read via the secured RPC (SECURITY DEFINER).
+  //    La RPC ne modifie que read_at, uniquement sur les messages reçus non lus,
+  //    et uniquement si l'appelant est participant — aucune policy UPDATE directe.
+  const { error: rpcError } = await supabase.rpc('mark_conversation_read', {
+    p_conversation_id: conversationId,
+  });
 
-  // 1. Mark actual messages as read
-  const { error: msgError } = await supabase
-    .from('messages')
-    .update({ read_at: now } as never)
-    .eq('conversation_id', conversationId)
-    .neq('sender_id', user.id)
-    .is('read_at', null);
-
-  if (msgError) return { data: null, error: { message: msgError.message } };
+  if (rpcError) {
+    if (__DEV__) console.warn('[markConversationRead] RPC mark_conversation_read failed:', rpcError.message);
+    return { data: null, error: { message: rpcError.message } };
+  }
 
   // 2. Reset conversation unread counter based on user role
   try {
