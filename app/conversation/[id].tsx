@@ -152,16 +152,18 @@ export default function ConversationThreadScreen() {
       const result = await sendMessage(id, trimmed);
       if (result.error) {
         setInputText(trimmed);
-        Alert.alert('Erreur', getThreadErrorMessage(result.error.message, "Impossible d'envoyer le message."));
+        if (__DEV__) console.error('[MESSAGING ERROR] sendMessage result.error', result.error);
+        Alert.alert('Erreur', 'Votre message n\'a pas pu être envoyé. Veuillez réessayer.');
         return;
       }
       if (result.data) {
         setMessages((prev) => [...prev, result.data!]);
         setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 100);
       }
-    } catch {
+    } catch (error) {
       setInputText(trimmed);
-      Alert.alert('Erreur', 'Impossible d\'envoyer le message.');
+      if (__DEV__) console.error('[MESSAGING ERROR]', error);
+      Alert.alert('Erreur', 'Votre message n\'a pas pu être envoyé. Veuillez réessayer.');
     } finally {
       setSending(false);
     }
