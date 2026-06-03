@@ -6,6 +6,7 @@
 
 import { colors } from './colors';
 import { typography } from './typography';
+import { platformShadow } from './shadows';
 
 // ─── Spacing (web: scale Tailwind 1 = 4px, 2 = 8px, 3 = 12px, 4 = 16px, …) ───
 /** Échelle d’espacement (base 4px). Web: p-4 → spacing.base, gap-2 → spacing.sm, etc. */
@@ -14,6 +15,8 @@ export const spacing = {
   sm: 8,    // 2 (gap-2, p-2, mt-2)
   md: 12,   // 3 (p-3, gap-3)
   base: 16, // 4 (p-4, px-4, web: padding cards/inputs)
+  /** Gouttière horizontale des écrans (Accueil, Recherche, Compte, fiches…). Source unique — ne pas dériver en 10/12/14. */
+  screenHorizontal: 16,
   lg: 20,   // 5 (p-5)
   xl: 24,   // 6 (p-6, gap-6)
   '2xl': 32,  // 8 (gap-8)
@@ -59,7 +62,7 @@ export const shadows = {
     shadowRadius: 6,
     elevation: 4,
   },
-  /** Cartes grille / listes — ombre douce type marketplace (Airbnb-like) */
+  /** @deprecated Préférer `platformShadow.card` / `getShadowStyle('card')`. */
   card: {
     shadowColor: colors.text,
     shadowOffset: { width: 0, height: 2 },
@@ -122,7 +125,7 @@ export const cardStyles = {
     borderWidth: 1,
     borderColor: colors.borderLight,
     borderRadius: radius.xl,
-    ...shadows.card,
+    ...platformShadow.card,
   },
   /** Carte élevée: border-slate-200 shadow-soft (détail annonce) */
   elevated: {

@@ -2,7 +2,7 @@
  * Boutique publique vendeur pro — `/shop/[slug]`
  */
 
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -11,7 +11,6 @@ import {
   Image,
   Linking,
   Alert,
-  useWindowDimensions,
   RefreshControl,
   Platform,
   Pressable,
@@ -51,25 +50,16 @@ type ShopScreenState =
   | { status: 'error'; message: string }
   | { status: 'ready'; shop: PublicShop; listings: PublicListing[] };
 
-/** Grille de contenu unique — référence : carte Annonces (~92 % écran, max 440). */
-const CONTENT_HORIZONTAL_PADDING = spacing.base;
-const CONTENT_MAX_WIDTH = 440;
-const CONTENT_WIDTH_RATIO = 0.92;
 /** Marge interne pour éviter le clipping des ombres carte. */
 const SHOP_LISTING_CARD_SHADOW_INSET = 4;
+/** Largeur max colonne contenu — aligné profil vendeur / marketplace. */
+const SHOP_CONTENT_MAX_WIDTH = 900;
 
 export default function ShopScreen() {
   const params = useLocalSearchParams<{ slug?: string | string[] }>();
   const slug = Array.isArray(params.slug) ? params.slug[0] : params.slug;
   const router = useRouter();
-  const { width: screenWidth } = useWindowDimensions();
   const [state, setState] = useState<ShopScreenState>({ status: 'loading' });
-  const shopContentLayout = useMemo(() => {
-    const alignedMax = screenWidth - CONTENT_HORIZONTAL_PADDING * 2;
-    const ratioWidth = Math.floor(screenWidth * CONTENT_WIDTH_RATIO);
-    const contentWidth = Math.min(ratioWidth, alignedMax, CONTENT_MAX_WIDTH);
-    return { contentWidth };
-  }, [screenWidth]);
   const [refreshing, setRefreshing] = useState(false);
   const [sharing, setSharing] = useState(false);
   const [qrModalVisible, setQrModalVisible] = useState(false);
@@ -285,7 +275,7 @@ export default function ShopScreen() {
 
   if (state.status === 'loading') {
     return (
-      <Screen scroll={false}>
+      <Screen scroll={false} noPadding safe={false}>
         <AppHeader title="Boutique" showBack density="compact" />
         <ShopScreenSkeleton />
       </Screen>
@@ -294,7 +284,7 @@ export default function ShopScreen() {
 
   if (state.status === 'error') {
     return (
-      <Screen>
+      <Screen noPadding safe={false}>
         <AppHeader title="Boutique" showBack />
         <EmptyState title="Boutique indisponible" message={state.message} />
       </Screen>
@@ -314,7 +304,7 @@ export default function ShopScreen() {
   const hasPhone = !!shop.phone?.trim();
 
   return (
-    <Screen scroll={false}>
+    <Screen scroll={false} noPadding safe={false}>
       <AppHeader
         title={shop.name}
         showBack
@@ -362,7 +352,7 @@ export default function ShopScreen() {
           <View style={styles.bannerOverlay} />
         </View>
 
-        <View style={[styles.contentColumn, { width: shopContentLayout.contentWidth }]}>
+        <View style={styles.contentColumn}>
           <View style={styles.profileRow}>
             {shop.logo_url && !logoFailed ? (
               <Image source={{ uri: shop.logo_url }} style={styles.logo} onError={() => setLogoFailed(true)} />
@@ -543,7 +533,7 @@ export default function ShopScreen() {
               <View style={styles.listingsList}>
                 {listings.map((listing) => (
                   <View key={listing.id} style={styles.shopListingCardWrapper}>
-                    <View style={{ width: shopContentLayout.contentWidth }}>
+                    <View style={styles.shopListingCardInner}>
                       <ListingCard
                         listing={listing}
                         variant="feed"
@@ -651,7 +641,10 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   contentColumn: {
+    width: '100%',
+    maxWidth: SHOP_CONTENT_MAX_WIDTH,
     alignSelf: 'center',
+    paddingHorizontal: spacing.screenHorizontal,
     overflow: 'visible',
   },
   contentBlockFlush: {
@@ -856,11 +849,14 @@ const styles = StyleSheet.create({
     overflow: 'visible',
   },
   shopListingCardWrapper: {
-    alignItems: 'center',
+    alignItems: 'stretch',
     width: '100%',
     paddingVertical: SHOP_LISTING_CARD_SHADOW_INSET,
     marginBottom: spacing.md,
     overflow: 'visible',
+  },
+  shopListingCardInner: {
+    width: '100%',
   },
   trustMeta: {
     marginTop: spacing.sm,
@@ -926,7 +922,7 @@ const styles = StyleSheet.create({
   },
   reasonOption: {
     paddingVertical: spacing.md,
-    paddingHorizontal: spacing.base,
+    paddingHorizontal: spacing.screenHorizontal,
     borderRadius: radius.lg,
     marginBottom: spacing.xs,
     borderWidth: 1,

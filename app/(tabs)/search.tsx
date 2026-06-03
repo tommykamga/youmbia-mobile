@@ -44,11 +44,7 @@ import type { PublicListing } from '@/services/listings';
 import { colors, spacing, typography, fontWeights, radius } from '@/theme';
 import { getSession } from '@/services/auth';
 import { buildAuthGateHref } from '@/lib/authGateNavigation';
-import {
-  useResponsiveLayout,
-  getScrollBottomReserveForTabBar,
-  getHomeMarketplaceHorizontalPadding,
-} from '@/lib/responsiveLayout';
+import { useResponsiveLayout, getScrollBottomReserveForTabBar } from '@/lib/responsiveLayout';
 
 const SUGGESTIONS_DEBOUNCE_MS = 300;
 /** Ne pas relancer `runSearch` si les params de navigation sont identiques sous ce délai (anti double effet / focus). */
@@ -839,10 +835,7 @@ export default function SearchScreen() {
     () => getScrollBottomReserveForTabBar(width, insets.bottom),
     [width, insets.bottom]
   );
-  const homeHorizontalPadding = useMemo(
-    () => getHomeMarketplaceHorizontalPadding(width),
-    [width]
-  );
+  const screenHorizontal = spacing.screenHorizontal;
 
   const searchChrome = useMemo(() => {
     const borderColor = 'rgba(15,23,42,0.08)';
@@ -859,7 +852,7 @@ export default function SearchScreen() {
     });
     if (width < 380) {
       return {
-        hPad: homeHorizontalPadding,
+        hPad: screenHorizontal,
         searchMinH: 48,
         searchPadV: 11,
         stripPadTop: 2,
@@ -872,7 +865,7 @@ export default function SearchScreen() {
     }
     if (width >= 430) {
       return {
-        hPad: homeHorizontalPadding,
+        hPad: screenHorizontal,
         searchMinH: 54,
         searchPadV: 14,
         stripPadTop: 4,
@@ -884,7 +877,7 @@ export default function SearchScreen() {
       };
     }
     return {
-      hPad: homeHorizontalPadding,
+      hPad: screenHorizontal,
       searchMinH: 52,
       searchPadV: 13,
       stripPadTop: 3,
@@ -894,7 +887,7 @@ export default function SearchScreen() {
       borderColor,
       rowShadow,
     };
-  }, [width, homeHorizontalPadding]);
+  }, [width, screenHorizontal]);
   const authState = useAuthStateForHome();
 
   const showMarketplaceHomeFeed = state.status === 'idle';
@@ -1463,7 +1456,7 @@ export default function SearchScreen() {
                   bucket={bucket}
                   onCategoryPress={handleQuickCategoryPress}
                   onAutresPress={handleCategoriesVoirTout}
-                  insetHorizontal={homeHorizontalPadding}
+                  insetHorizontal={screenHorizontal}
                   selectedCategoryId={appliedSearchFilters.categoryId}
                 />
                 {savedSearches.length > 0 ? (
@@ -1514,7 +1507,7 @@ export default function SearchScreen() {
                     },
                   }}
                   contentPaddingHorizontal={0}
-                  homeFeedCardInset={homeHorizontalPadding}
+                  homeFeedCardInset={screenHorizontal}
                   listingCardFeedPresentation="home"
                   contentBottomInset={scrollBottomReserve}
                   externalScrollRef={homeFeedListRef}
@@ -1573,7 +1566,7 @@ export default function SearchScreen() {
                         styles.listContent,
                         {
                           paddingTop: spacing.base,
-                          paddingHorizontal: homeHorizontalPadding,
+                          paddingHorizontal: screenHorizontal,
                           paddingBottom: spacing['3xl'] + scrollBottomReserve,
                         },
                       ]}
@@ -1759,7 +1752,7 @@ export default function SearchScreen() {
 const styles = StyleSheet.create({
   searchLoadMoreFooter: {
     paddingVertical: spacing.lg,
-    paddingHorizontal: spacing.base,
+    paddingHorizontal: spacing.screenHorizontal,
     alignItems: 'center',
   },
   keyboard: {
@@ -1858,7 +1851,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
-    paddingHorizontal: spacing.base,
+    paddingHorizontal: spacing.screenHorizontal,
     paddingTop: spacing.sm,
     paddingBottom: spacing.sm,
     borderBottomWidth: StyleSheet.hairlineWidth,
@@ -1901,7 +1894,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingVertical: spacing.base,
-    paddingHorizontal: spacing.base,
+    paddingHorizontal: spacing.screenHorizontal,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: colors.borderLight,
   },
@@ -1914,7 +1907,7 @@ const styles = StyleSheet.create({
     fontWeight: fontWeights.semibold,
   },
   searchOverlayScrollContentBelow: {
-    paddingHorizontal: spacing.base,
+    paddingHorizontal: spacing.screenHorizontal,
     paddingTop: spacing.sm,
     paddingBottom: spacing['2xl'],
   },
@@ -1945,7 +1938,7 @@ const styles = StyleSheet.create({
   },
   placeholderWrap: {
     flex: 1,
-    paddingHorizontal: spacing.base,
+    paddingHorizontal: spacing.screenHorizontal,
     paddingTop: spacing.xl,
   },
   placeholder: {
@@ -1953,7 +1946,7 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
   },
   savedSection: {
-    paddingHorizontal: spacing.base,
+    paddingHorizontal: spacing.screenHorizontal,
     paddingTop: spacing.base,
     gap: spacing.sm,
   },
@@ -1973,7 +1966,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.base,
+    paddingHorizontal: spacing.screenHorizontal,
     borderWidth: 1,
     borderColor: colors.borderLight,
     borderRadius: radius.xl,
@@ -2008,7 +2001,7 @@ const styles = StyleSheet.create({
   },
   centerEdge: {
     flex: 1,
-    paddingHorizontal: spacing.base,
+    paddingHorizontal: spacing.screenHorizontal,
   },
   listEmpty: {
     marginHorizontal: 0,
@@ -2134,7 +2127,7 @@ const styles = StyleSheet.create({
     maxHeight: '84%',
   },
   sheetCard: {
-    paddingHorizontal: spacing.base,
+    paddingHorizontal: spacing.screenHorizontal,
     paddingTop: spacing.base,
     gap: spacing.sm,
   },
@@ -2165,7 +2158,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing.xs,
     paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.base,
+    paddingHorizontal: spacing.screenHorizontal,
     borderRadius: radius.lg,
     backgroundColor: colors.surfaceSubtle,
     borderWidth: 1,
@@ -2325,7 +2318,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderRadius: radius.lg,
     backgroundColor: colors.primary,
-    paddingHorizontal: spacing.base,
+    paddingHorizontal: spacing.screenHorizontal,
   },
   filterActionPrimaryPressed: {
     opacity: 0.92,
@@ -2344,7 +2337,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surfaceSubtle,
     borderWidth: 1,
     borderColor: colors.borderLight,
-    paddingHorizontal: spacing.base,
+    paddingHorizontal: spacing.screenHorizontal,
   },
   filterActionSecondaryPressed: {
     opacity: 0.85,
@@ -2362,7 +2355,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     alignSelf: 'flex-start',
     paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.base,
+    paddingHorizontal: spacing.screenHorizontal,
     marginBottom: spacing.sm,
   },
   saveSearchBtnPressed: {

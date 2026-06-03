@@ -114,7 +114,7 @@ export function AppHeader({
 const styles = StyleSheet.create({
   wrapper: {
     backgroundColor: colors.surface,
-    paddingHorizontal: spacing.base,
+    paddingHorizontal: spacing.screenHorizontal,
   },
   border: {
     borderBottomWidth: 1,

@@ -775,7 +775,7 @@ const styles = StyleSheet.create({
     maxWidth: 900,
     width: '100%',
     alignSelf: 'center',
-    paddingHorizontal: spacing.base,
+    paddingHorizontal: spacing.screenHorizontal,
     paddingTop: spacing.sm,
     paddingBottom: spacing.base,
   },
@@ -799,7 +799,7 @@ const styles = StyleSheet.create({
     marginBottom: spacing.base,
   },
   similarListContent: {
-    paddingHorizontal: spacing.base,
+    paddingHorizontal: spacing.screenHorizontal,
   },
   similarSeparator: {
     width: spacing.base,
@@ -850,7 +850,7 @@ const styles = StyleSheet.create({
   },
   reasonOption: {
     paddingVertical: spacing.md,
-    paddingHorizontal: spacing.base,
+    paddingHorizontal: spacing.screenHorizontal,
     borderRadius: radius.lg,
     marginBottom: spacing.xs,
     borderWidth: 1,

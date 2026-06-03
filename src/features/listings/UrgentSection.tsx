@@ -129,10 +129,10 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scroll: {
-    marginHorizontal: -spacing.base,
+    marginHorizontal: -spacing.screenHorizontal,
   },
   scrollContent: {
-    paddingHorizontal: spacing.base,
+    paddingHorizontal: spacing.screenHorizontal,
     paddingBottom: spacing.sm,
   },
 });

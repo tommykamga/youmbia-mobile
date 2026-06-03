@@ -219,7 +219,7 @@ const styles = StyleSheet.create({
     maxWidth: 760,
     width: '100%',
     alignSelf: 'center',
-    paddingHorizontal: spacing.base,
+    paddingHorizontal: spacing.screenHorizontal,
     paddingTop: spacing.xs,
     paddingBottom: spacing['3xl'],
     flexGrow: 1,

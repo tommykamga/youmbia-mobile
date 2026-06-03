@@ -12,6 +12,13 @@ export {
   cardStyles,
   tokens,
 } from './tokens';
+export {
+  getShadowStyle,
+  platformShadow,
+  ANDROID_ELEVATION,
+  SHADOW_COLOR_SLATE,
+} from './shadows';
+export type { ShadowLevel, ShadowStyleOptions } from './shadows';
 export type { Theme } from './tokens';
 
 export { ui, uiColors, uiSpacing, uiRadius, uiTypography, uiShadow } from './ui';

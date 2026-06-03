@@ -12,7 +12,7 @@ import Animated, {
   useSharedValue, 
   withSpring
 } from 'react-native-reanimated';
-import { colors, spacing, radius, typography, fontWeights, shadows } from '@/theme';
+import { colors, spacing, radius, typography, fontWeights, getShadowStyle } from '@/theme';
 import { normalizePhoneForWhatsApp, openWhatsAppForListing } from '@/lib/sellerContact';
 import type { ListingDetail } from '@/services/listings';
 
@@ -194,11 +194,11 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     backgroundColor: colors.surface,
-    paddingHorizontal: spacing.base,
+    paddingHorizontal: spacing.screenHorizontal,
     paddingTop: spacing.base,
     borderTopWidth: 1,
     borderTopColor: colors.borderLight,
-    ...shadows.soft,
+    ...getShadowStyle('sticky'),
   },
   authHint: {
     paddingHorizontal: spacing.sm,

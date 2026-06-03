@@ -139,6 +139,7 @@ export default function RootLayout() {
     let pollInterval: ReturnType<typeof setInterval> | null = null;
     let startupDelayTimer: ReturnType<typeof setTimeout> | null = null;
     let cancelled = false;
+    let previousAppState = AppState.currentState;
 
     const runSync = async () => {
       if (cancelled) return;
@@ -154,6 +155,21 @@ export default function RootLayout() {
         void syncSavedSearchNotifications(routeKeyRef.current);
       } catch {
         // Prochain intervalle ou prochain focus actif retentera le chargement des modules.
+      }
+    };
+
+    const runForegroundSnapshotResync = async () => {
+      if (cancelled) return;
+      try {
+        const session = await getSession();
+        if (!session?.user) return;
+        const { refreshMessageNotificationSnapshotSilently } = await import(
+          '@/services/messageNotifications'
+        );
+        if (cancelled) return;
+        await refreshMessageNotificationSnapshotSilently();
+      } catch {
+        // Le prochain poll message reprendra avec un snapshot à jour si possible.
       }
     };
 
@@ -177,17 +193,29 @@ export default function RootLayout() {
       }
     };
 
+    const handleAppStateChange = (nextState: typeof AppState.currentState) => {
+      if (nextState === 'active') {
+        const resumingFromBackground = previousAppState !== 'active';
+        previousAppState = nextState;
+        if (resumingFromBackground) {
+          void (async () => {
+            await runForegroundSnapshotResync();
+            if (!cancelled) startPolling();
+          })();
+        } else {
+          startPolling();
+        }
+        return;
+      }
+      previousAppState = nextState;
+      stopPolling();
+    };
+
     if (AppState.currentState === 'active') {
       startPolling();
     }
 
-    const subscription = AppState.addEventListener('change', (nextState) => {
-      if (nextState === 'active') {
-        startPolling();
-        return;
-      }
-      stopPolling();
-    });
+    const subscription = AppState.addEventListener('change', handleAppStateChange);
 
     return () => {
       cancelled = true;

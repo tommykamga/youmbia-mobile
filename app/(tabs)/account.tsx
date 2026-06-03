@@ -385,7 +385,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: spacing.md,
-    paddingHorizontal: spacing.base,
+    paddingHorizontal: spacing.screenHorizontal,
     backgroundColor: colors.surface,
     borderBottomWidth: 1,
     borderBottomColor: colors.borderLight,
@@ -444,7 +444,7 @@ const styles = StyleSheet.create({
   },
   section: {
     marginTop: spacing.sm,
-    paddingHorizontal: spacing.base,
+    paddingHorizontal: spacing.screenHorizontal,
     maxWidth: 760,
     width: '100%',
     alignSelf: 'center',

@@ -184,10 +184,10 @@ const styles = StyleSheet.create({
     fontWeight: fontWeights.semibold,
   },
   scroll: {
-    marginHorizontal: -spacing.base,
+    marginHorizontal: -spacing.screenHorizontal,
   },
   scrollContent: {
-    paddingHorizontal: spacing.base,
+    paddingHorizontal: spacing.screenHorizontal,
     paddingBottom: spacing.sm,
   },
 });

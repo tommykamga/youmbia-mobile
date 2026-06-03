@@ -262,10 +262,10 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm,
   },
   scroll: {
-    marginHorizontal: -spacing.base,
+    marginHorizontal: -spacing.screenHorizontal,
   },
   scrollContent: {
-    paddingHorizontal: spacing.base,
+    paddingHorizontal: spacing.screenHorizontal,
     paddingBottom: spacing.sm,
   },
 });

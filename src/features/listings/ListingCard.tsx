@@ -4,7 +4,6 @@ import {
   Text,
   StyleSheet,
   Pressable,
-  Platform,
   ImageBackground,
   useWindowDimensions,
 } from 'react-native';
@@ -18,7 +17,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { useRouter } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { cardStyles, colors, spacing, typography, fontWeights, radius, ui } from '@/theme';
+import { cardStyles, colors, spacing, typography, fontWeights, radius, ui, getShadowStyle } from '@/theme';
 import { formatPrice } from '@/lib/format';
 import { FavoriteButton } from '@/components/FavoriteButton';
 import { timeAgo, isListingNew } from '@/utils/timeAgo';
@@ -369,16 +368,7 @@ const styles = StyleSheet.create({
     borderRadius: IMAGE_RADIUS,
     borderWidth: 1,
     borderColor: 'rgba(15,23,42,0.06)',
-    ...Platform.select({
-      ios: {
-        shadowColor: '#0F172A',
-        shadowOffset: { width: 0, height: 3 },
-        shadowOpacity: 0.05,
-        shadowRadius: 10,
-      },
-      android: { elevation: 1 },
-      default: {},
-    }),
+    ...getShadowStyle('card'),
   },
   cardRail: {
     width: LISTING_CARD_RAIL_WIDTH,
@@ -389,14 +379,14 @@ const styles = StyleSheet.create({
     marginRight: LISTING_CARD_RAIL_MARGIN_END_FEATURED,
     borderWidth: 1,
     borderColor: 'rgba(255, 184, 0, 0.35)',
-    ...Platform.select({
+    ...getShadowStyle('floating', {
+      shadowColor: '#FFB800',
       ios: {
-        shadowColor: '#FFB800',
         shadowOffset: { width: 0, height: 6 },
         shadowOpacity: 0.22,
         shadowRadius: 14,
       },
-      android: { elevation: 6 },
+      androidElevation: 4,
     }),
   },
   cardHome: {
@@ -407,16 +397,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     padding: 0,
     width: '100%',
-    ...Platform.select({
-      ios: {
-        shadowColor: '#0F172A',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.06,
-        shadowRadius: 10,
-      },
-      android: { elevation: 2 },
-      default: {},
-    }),
+    ...getShadowStyle('floating'),
   },
   /** Pleine largeur du conteneur (pas d’inset type « carte dans une boîte »). */
   cardHomeBleed: {
@@ -532,14 +513,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.sm,
     paddingVertical: 5,
     borderRadius: radius.sm,
-    ...Platform.select({
+    ...getShadowStyle('subtle', {
+      shadowColor: '#FFB800',
       ios: {
-        shadowColor: '#FFB800',
         shadowOffset: { width: 0, height: 2 },
         shadowOpacity: 0.3,
         shadowRadius: 4,
       },
-      android: { elevation: 3 },
+      androidElevation: 2,
     }),
   },
   boostedBadgeText: {

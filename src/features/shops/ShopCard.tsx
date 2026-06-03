@@ -3,13 +3,13 @@
  */
 
 import React, { memo, useEffect, useState } from 'react';
-import { View, Text, StyleSheet, Pressable, Image, Platform } from 'react-native';
+import { View, Text, StyleSheet, Pressable, Image } from 'react-native';
 import { useRouter } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { ProSellerBadge } from './ProSellerBadge';
 import { getShopInitials } from '@/lib/shopSeller';
 import type { PopularShop } from '@/services/shops/getPopularShops';
-import { colors, spacing, typography, fontWeights, radius, cardStyles } from '@/theme';
+import { colors, spacing, typography, fontWeights, radius, cardStyles, getShadowStyle } from '@/theme';
 
 export const SHOP_CARD_RAIL_WIDTH = 248;
 export const SHOP_CARD_RAIL_MARGIN_END = 12;
@@ -122,13 +122,8 @@ const styles = StyleSheet.create({
     marginRight: SHOP_CARD_RAIL_MARGIN_END,
     borderRadius: radius.lg,
     borderColor: colors.borderLight,
-    ...Platform.select({
-      ios: {
-        shadowOpacity: 0.04,
-        shadowRadius: 5,
-      },
-      android: { elevation: 1 },
-      default: {},
+    ...getShadowStyle('card', {
+      ios: { shadowOpacity: 0.04, shadowRadius: 5 },
     }),
   },
   cardCompact: {

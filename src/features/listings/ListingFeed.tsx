@@ -86,7 +86,7 @@ export type ListingFeedProps = {
 
 export function ListingFeed({
   listHeaderComponent,
-  contentPaddingHorizontal = spacing.base,
+  contentPaddingHorizontal = spacing.screenHorizontal,
   homeFeedCardInset,
   listingCardFeedPresentation = 'standard',
   reanimatedScrollHandler,
@@ -226,7 +226,7 @@ export function ListingFeed({
 
   const isHomeCardInset =
     listingCardFeedPresentation === 'home' && homeFeedCardInset != null;
-  const homeCardInset = homeFeedCardInset ?? spacing.base;
+  const homeCardInset = homeFeedCardInset ?? spacing.screenHorizontal;
   const homeInsetStyle = useMemo(
     () => (isHomeCardInset ? { paddingHorizontal: homeCardInset } : null),
     [isHomeCardInset, homeCardInset]
@@ -530,7 +530,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 6,
     paddingVertical: 6,
-    paddingHorizontal: spacing.base,
+    paddingHorizontal: spacing.screenHorizontal,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: 'rgba(15,23,42,0.08)',
   },
@@ -557,7 +557,7 @@ const styles = StyleSheet.create({
   },
   footer: {
     paddingVertical: spacing['2xl'],
-    paddingHorizontal: spacing.base,
+    paddingHorizontal: spacing.screenHorizontal,
     alignItems: 'center',
     justifyContent: 'center',
     minHeight: 56,
@@ -575,7 +575,7 @@ const styles = StyleSheet.create({
   },
   footerRetry: {
     paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.base,
+    paddingHorizontal: spacing.screenHorizontal,
   },
   footerRetryPressed: {
     opacity: 0.8,
@@ -587,7 +587,7 @@ const styles = StyleSheet.create({
   },
   footerEndWrap: {
     paddingVertical: spacing['2xl'],
-    paddingHorizontal: spacing.base,
+    paddingHorizontal: spacing.screenHorizontal,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -605,7 +605,7 @@ const styles = StyleSheet.create({
   },
   limitFooter: {
     paddingVertical: spacing['3xl'],
-    paddingHorizontal: spacing.base,
+    paddingHorizontal: spacing.screenHorizontal,
     alignItems: 'center',
   },
   limitDivider: {

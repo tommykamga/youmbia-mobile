@@ -16,7 +16,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import type { WindowSizeBucket } from '@/lib/responsiveLayout';
 import { getRootMarketplaceCategories, getSellParentIcon } from '@/lib/marketplaceCategories';
 import { useMarketplaceCategories } from '@/hooks/useMarketplaceCategories';
-import { colors } from '@/theme';
+import { colors, getShadowStyle } from '@/theme';
 
 const AUTRES_LABEL = 'Autres';
 
@@ -81,16 +81,8 @@ function stripDimensions(bucket: WindowSizeBucket): {
   return { itemWidth: 60, minHeight: 64, iconSize: 19 };
 }
 
-/** Ombre légère iOS uniquement — pas d’elevation Android (évite halo / plaque claire derrière l’icône). */
-const cellShadow = Platform.select({
-  ios: {
-    shadowColor: '#0F172A',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.04,
-    shadowRadius: 6,
-  },
-  default: {},
-});
+/** Ombre légère — Android elevation 1 pour éviter halo derrière l’icône. */
+const cellShadow = getShadowStyle('subtle', { androidElevation: 1 });
 
 const androidIconStyle =
   Platform.OS === 'android'

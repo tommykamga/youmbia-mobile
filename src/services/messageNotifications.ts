@@ -2,7 +2,9 @@ import { getSession } from '@/services/auth';
 import { getConversations, type Conversation } from '@/services/conversations';
 import {
   getPushPermissionStatus,
+  getStoredPushToken,
   initializeNotifications,
+  isPushNotificationsAvailable,
   reserveNotificationDispatch,
 } from '@/services/notifications';
 
@@ -15,6 +17,7 @@ type MessageNotificationSnapshot = {
 };
 
 let syncInFlight = false;
+let silentSnapshotInFlight = false;
 
 /**
  * Safe localStorage accessor (release-safe)
@@ -99,6 +102,28 @@ function isConversationAlreadyOpen(currentPath: string | null | undefined, conve
   return safePath === `/conversation/${conversationId}`;
 }
 
+/**
+ * B1 — Alerte locale message uniquement en fallback (Expo Go, ou build natif sans token push local).
+ * Build natif + permission accordée + token Expo stocké → push serveur = source de vérité, pas de locale.
+ */
+export async function shouldScheduleLocalMessageNotification(): Promise<boolean> {
+  if (!isPushNotificationsAvailable()) {
+    return true;
+  }
+
+  const permissionStatus = await getPushPermissionStatus();
+  if (permissionStatus !== 'granted') {
+    return false;
+  }
+
+  const token = getStoredPushToken();
+  if (token) {
+    return false;
+  }
+
+  return true;
+}
+
 async function scheduleNewMessageNotification(conversation: Conversation): Promise<void> {
   initializeNotifications();
 
@@ -120,6 +145,30 @@ async function scheduleNewMessageNotification(conversation: Conversation): Promi
     },
     trigger: null,
   });
+}
+
+/**
+ * B2 — Met à jour le snapshot unread depuis le serveur sans notification locale.
+ * À appeler au retour foreground pour éviter une fausse « hausse » après un push background.
+ */
+export async function refreshMessageNotificationSnapshotSilently(): Promise<void> {
+  if (silentSnapshotInFlight) return;
+  silentSnapshotInFlight = true;
+
+  try {
+    const userId = await getCurrentUserId();
+    if (!userId) return;
+
+    const result = await getConversations();
+    if (result.error || !result.data) return;
+
+    writeSnapshot({
+      userId,
+      unreadByConversation: buildUnreadMap(result.data),
+    });
+  } finally {
+    silentSnapshotInFlight = false;
+  }
 }
 
 export async function syncNewMessageNotifications(
@@ -161,9 +210,10 @@ export async function syncNewMessageNotifications(
     });
 
     const notificationKey = newestConversation ? `message:${newestConversation.id}` : '';
+    const allowLocalAlert = canNotify && (await shouldScheduleLocalMessageNotification());
 
     if (
-      canNotify &&
+      allowLocalAlert &&
       newestConversation &&
       reserveNotificationDispatch(notificationKey, MESSAGE_NOTIFICATION_COOLDOWN_MS)
     ) {

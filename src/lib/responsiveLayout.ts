@@ -6,6 +6,7 @@
  */
 import { useMemo } from 'react';
 import { useWindowDimensions } from 'react-native';
+import { spacing } from '@/theme';
 
 export type WindowSizeBucket = 'compact' | 'regular' | 'large';
 
@@ -78,13 +79,11 @@ export function getScrollBottomReserveForTabBar(width: number, safeAreaBottom: n
 }
 
 /**
- * Grille horizontale homepage unique (recherche, catégories, rails, titres, cartes).
- * Compact 10 · regular 12 · large 14 — respiration premium sans coller au bord.
+ * Gouttière horizontale marketplace (recherche, catégories, rails, titres, cartes).
+ * @deprecated Préférer `spacing.screenHorizontal` ; conservé pour compat des hooks existants.
  */
-export function getHomeMarketplaceHorizontalPadding(width: number): number {
-  if (width < WIDTH_COMPACT_BOUND) return 10;
-  if (width >= WIDTH_REGULAR_BOUND) return 14;
-  return 12;
+export function getHomeMarketplaceHorizontalPadding(_width?: number): number {
+  return spacing.screenHorizontal;
 }
 
 /** @deprecated Alias — préférer `getHomeMarketplaceHorizontalPadding`. */

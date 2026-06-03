@@ -192,7 +192,7 @@ export default function UserProfileScreen() {
 
   if (state.status === 'loading') {
     return (
-      <Screen safe={false}>
+      <Screen noPadding safe={false}>
         <AppHeader title="Profil" showBack density="compact" />
         <Loader />
       </Screen>
@@ -201,7 +201,7 @@ export default function UserProfileScreen() {
 
   if (state.status === 'error') {
     return (
-      <Screen safe={false}>
+      <Screen noPadding safe={false}>
         <AppHeader title="Profil" showBack density="compact" />
         <View style={styles.emptyWrapPlain}>
           <EmptyState
@@ -312,7 +312,7 @@ export default function UserProfileScreen() {
   );
 
   return (
-    <Screen scroll={false} safe={false}>
+    <Screen scroll={false} noPadding safe={false}>
       <AppHeader title="Profil vendeur" showBack density="compact" />
       <Modal
         visible={reportModalVisible}
@@ -400,11 +400,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.xl,
     paddingBottom: spacing.xl,
   },
+  /** Gouttière horizontale portée par `listContent` uniquement (aligné Favoris). */
   header: {
     maxWidth: 900,
     width: '100%',
     alignSelf: 'center',
-    paddingHorizontal: spacing.base,
     paddingTop: spacing.sm,
     paddingBottom: spacing.base,
   },
@@ -571,7 +571,7 @@ const styles = StyleSheet.create({
   },
   reasonOption: {
     paddingVertical: spacing.md,
-    paddingHorizontal: spacing.base,
+    paddingHorizontal: spacing.screenHorizontal,
     borderRadius: 12,
     marginBottom: spacing.xs,
     borderWidth: 1,
@@ -603,7 +603,7 @@ const styles = StyleSheet.create({
     maxWidth: 900,
     width: '100%',
     alignSelf: 'center',
-    paddingHorizontal: spacing.base,
+    paddingHorizontal: spacing.screenHorizontal,
     paddingTop: spacing.xs,
     paddingBottom: spacing['3xl'],
     flexGrow: 1,

@@ -6,7 +6,7 @@ import { spacing, radius } from '@/theme';
 
 export function ShopScreenSkeleton() {
   const { width: screenWidth } = useWindowDimensions();
-  const cardWidth = Math.floor((screenWidth - spacing.base * 2 - spacing.sm) / 2);
+  const cardWidth = Math.floor((screenWidth - spacing.screenHorizontal * 2 - spacing.sm) / 2);
 
   return (
     <View style={styles.root}>
@@ -46,7 +46,7 @@ const styles = StyleSheet.create({
   profileRow: {
     flexDirection: 'row',
     gap: spacing.base,
-    paddingHorizontal: spacing.base,
+    paddingHorizontal: spacing.screenHorizontal,
     marginTop: -28,
   },
   logo: {
@@ -78,7 +78,7 @@ const styles = StyleSheet.create({
   ctaRow: {
     flexDirection: 'row',
     gap: spacing.sm,
-    paddingHorizontal: spacing.base,
+    paddingHorizontal: spacing.screenHorizontal,
     marginTop: spacing.base,
   },
   cta: {
@@ -90,7 +90,7 @@ const styles = StyleSheet.create({
     height: 20,
     width: '45%',
     borderRadius: 8,
-    marginHorizontal: spacing.base,
+    marginHorizontal: spacing.screenHorizontal,
     marginTop: spacing.lg,
     marginBottom: spacing.sm,
   },
@@ -98,6 +98,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: spacing.sm,
-    paddingHorizontal: spacing.base,
+    paddingHorizontal: spacing.screenHorizontal,
   },
 });

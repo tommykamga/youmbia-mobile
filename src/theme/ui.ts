@@ -12,6 +12,7 @@ import type { TextStyle, ViewStyle } from 'react-native';
 import { colors } from './colors';
 import { typography, fontWeights } from './typography';
 import { spacing as space, radius as rad, shadows } from './tokens';
+import { platformShadow } from './shadows';
 
 // ─── Couleurs (base claire, vert primary, contraste sobre) ───────────────────
 
@@ -39,6 +40,7 @@ export const uiSpacing = {
   md: space.md,
   lg: space.base,
   xl: space.xl,
+  screen: space.screenHorizontal,
 } as const;
 
 // ─── Radius ─────────────────────────────────────────────────────────────────
@@ -99,10 +101,14 @@ export const uiTypography = {
 
 export const uiShadow = {
   none: shadows.none,
-  /** Cartes listes, surfaces flottantes légères. */
-  soft: shadows.card,
-  /** Élévation modérée (modales, CTA). */
-  medium: shadows.md,
+  subtle: platformShadow.subtle,
+  card: platformShadow.card,
+  floating: platformShadow.floating,
+  sticky: platformShadow.sticky,
+  /** @deprecated Alias — `uiShadow.card`. */
+  soft: platformShadow.card,
+  /** @deprecated Alias — `uiShadow.floating`. */
+  medium: platformShadow.floating,
 } as const satisfies Record<string, ViewStyle>;
 
 // ─── Objet unique `ui` (consommation préférée) ─────────────────────────────

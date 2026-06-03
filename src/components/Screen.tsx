@@ -65,8 +65,8 @@ export const Screen = forwardRef<ScrollViewType, ScreenProps>(function Screen(
   const paddingStyle = {
     paddingTop: safe ? insets.top : 0,
     paddingBottom: safe ? insets.bottom : 0,
-    paddingLeft: noPadding ? 0 : spacing.base,
-    paddingRight: noPadding ? 0 : spacing.base,
+    paddingLeft: noPadding ? 0 : spacing.screenHorizontal,
+    paddingRight: noPadding ? 0 : spacing.screenHorizontal,
   };
 
   const scrollKeyboardInsets = keyboardAvoid && scroll && Platform.OS !== 'web';
