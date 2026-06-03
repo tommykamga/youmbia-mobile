@@ -18,6 +18,7 @@ import {
   getNotificationNavigationTarget,
   initializeNotifications,
   isPushNotificationsAvailable,
+  syncPushTokenIfGranted,
 } from '@/services/notifications';
 import { FavoritesProvider } from '@/context/FavoritesContext';
 import { AppUpdateGate } from '@/components/AppUpdateGate';
@@ -106,6 +107,32 @@ export default function RootLayout() {
   useEffect(() => {
     if (!isPushNotificationsAvailable()) return;
     initializeNotifications();
+  }, []);
+
+  // Persiste côté serveur le token push d'un utilisateur ayant DÉJÀ accordé la
+  // permission (au démarrage + à chaque connexion), sans jamais redemander la
+  // permission ni afficher de prompt. Best-effort, non bloquant.
+  useEffect(() => {
+    if (!isPushNotificationsAvailable()) return;
+    let cancelled = false;
+
+    const trySync = async () => {
+      const session = await getSession();
+      if (cancelled || !session?.user) return;
+      void syncPushTokenIfGranted();
+    };
+    void trySync();
+
+    const unsubscribe = onAuthStateChange((event, session) => {
+      if (session?.user && (event === 'SIGNED_IN' || event === 'INITIAL_SESSION')) {
+        void syncPushTokenIfGranted();
+      }
+    });
+
+    return () => {
+      cancelled = true;
+      unsubscribe();
+    };
   }, []);
 
   useEffect(() => {

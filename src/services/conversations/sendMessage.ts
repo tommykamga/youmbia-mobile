@@ -62,5 +62,21 @@ export async function sendMessage(
     .update({ updated_at: new Date().toISOString() } as never)
     .eq('id', conversationId);
 
+  // Notification push au destinataire (best-effort, fire-and-forget).
+  // Ne bloque jamais l'envoi : si l'Edge Function échoue, on log en dev uniquement
+  // et le message reste considéré comme envoyé.
+  void supabase.functions
+    .invoke('send-message-push', { body: { message_id: message.id } })
+    .then(({ error }) => {
+      if (error && typeof __DEV__ !== 'undefined' && __DEV__) {
+        console.warn('[sendMessage] send-message-push failed:', error.message);
+      }
+    })
+    .catch((err) => {
+      if (typeof __DEV__ !== 'undefined' && __DEV__) {
+        console.warn('[sendMessage] send-message-push exception:', err);
+      }
+    });
+
   return { data: message, error: null };
 }

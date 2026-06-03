@@ -3,6 +3,7 @@ import 'expo-sqlite/localStorage/install';
 import Constants from 'expo-constants';
 import { Platform } from 'react-native';
 import { getListingHrefFromUrl } from '@/lib/listingDeepLink';
+import { supabase } from '@/lib/supabase';
 
 const PUSH_TOKEN_STORAGE_KEY = 'youmbia.pushToken.v1';
 const PUSH_PERMISSION_ASKED_KEY = 'youmbia.pushPermissionAsked.v1';
@@ -236,6 +237,76 @@ export async function getPushPermissionStatus(): Promise<'granted' | 'denied'> {
   }
 }
 
+/**
+ * Upsert best-effort du token Expo dans public.user_push_tokens (clé: expo_push_token).
+ * - N'upsert pas si l'utilisateur n'est pas connecté.
+ * - En cas d'échec : log __DEV__ uniquement, aucune erreur remontée, aucun blocage.
+ */
+async function persistPushTokenToServer(token: string): Promise<void> {
+  try {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return;
+
+    const now = new Date().toISOString();
+    const { error } = await supabase
+      .from('user_push_tokens')
+      .upsert(
+        {
+          user_id: user.id,
+          expo_push_token: token,
+          platform: Platform.OS,
+          updated_at: now,
+          last_seen_at: now,
+        } as never,
+        { onConflict: 'expo_push_token' }
+      );
+
+    if (error && typeof __DEV__ !== 'undefined' && __DEV__) {
+      console.warn('[notifications] persistPushTokenToServer failed:', error.message);
+    }
+  } catch (err) {
+    if (typeof __DEV__ !== 'undefined' && __DEV__) {
+      console.warn('[notifications] persistPushTokenToServer exception:', err);
+    }
+  }
+}
+
+/**
+ * Sync silencieux au démarrage/login : si la permission notifications est DÉJÀ
+ * accordée, récupère le token Expo et le (ré)upsert côté serveur. Ne demande JAMAIS
+ * la permission et n'affiche aucun prompt. Best-effort : tout échec est log __DEV__
+ * uniquement et ne bloque jamais l'app. Préserve le flux NotificationsPromptCard.
+ */
+export async function syncPushTokenIfGranted(): Promise<void> {
+  try {
+    if (!isPushNotificationsAvailable() || !isRunningOnPhysicalDevice()) return;
+
+    // Ne pas redemander : on n'agit que si la permission est déjà 'granted'.
+    const permissionStatus = await getPushPermissionStatus();
+    if (permissionStatus !== 'granted') return;
+
+    initializeNotifications();
+    const Notifications = await loadNotificationsModule();
+    if (!Notifications) return;
+
+    const projectId = getProjectId();
+    if (!projectId) return;
+
+    const tokenResponse = await Notifications.getExpoPushTokenAsync({ projectId });
+    const token = String(tokenResponse.data ?? '').trim();
+    if (!token) return;
+
+    writeStorage(PUSH_TOKEN_STORAGE_KEY, token);
+    await persistPushTokenToServer(token);
+  } catch (err) {
+    if (typeof __DEV__ !== 'undefined' && __DEV__) {
+      console.warn('[notifications] syncPushTokenIfGranted failed:', err);
+    }
+  }
+}
+
 export async function registerForPushNotifications(): Promise<PushRegistrationResult> {
   try {
     if (!isPushNotificationsAvailable()) {
@@ -280,6 +351,10 @@ export async function registerForPushNotifications(): Promise<PushRegistrationRe
 
     writeStorage(PUSH_TOKEN_STORAGE_KEY, token);
     clearPushPromptDismissed();
+
+    // Persistance serveur (best-effort) : nécessaire pour les push réels côté
+    // destinataire. N'interrompt jamais le flux et n'affiche aucune erreur.
+    void persistPushTokenToServer(token);
 
     return { ok: true, status: 'granted', token };
   } catch {
