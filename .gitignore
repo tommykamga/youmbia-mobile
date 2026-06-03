@@ -25,6 +25,9 @@ expo-env.d.ts
 # Metro
 .metro-health-check*
 
+# Supabase CLI (artefacts locaux)
+supabase/.temp/
+
 # IDE / Editor
 .idea/
 .vscode/
