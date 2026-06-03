@@ -21,8 +21,13 @@ import {
   getConversationById,
 } from '@/services/conversations';
 import { getSession } from '@/services/auth';
-import { supabase } from '@/lib/supabase';
 import { buildAuthGateHref } from '@/lib/authGateNavigation';
+import {
+  appendMessageDeduped,
+  emitConversationRead,
+  setOpenConversationId,
+  subscribeMessagingEvents,
+} from '@/lib/messagingRealtime';
 import { markConversationNotificationAsRead, syncMessageNotificationSnapshot } from '@/services/messageNotifications';
 import type { Message } from '@/services/conversations';
 import { spacing, colors, typography, fontWeights } from '@/theme';
@@ -143,42 +148,60 @@ export default function ConversationThreadScreen() {
     if (res.data) setMessages(res.data);
   }, [id]);
 
+  const applyReadOptimistic = useCallback(() => {
+    if (!id) return;
+    const readAt = new Date().toISOString();
+    setMessages((prev) =>
+      prev.map((m) =>
+        m.sender_id !== userId && m.read_at == null ? { ...m, read_at: readAt } : m
+      )
+    );
+    emitConversationRead(id);
+  }, [id, userId]);
+
   useFocusEffect(
     useCallback(() => {
-      if (id && status === 'success') {
-        void markConversationRead(id)
-          .then(() => markConversationNotificationAsRead(id))
-          .catch(() => {});
-        void refreshMessages();
-      }
-    }, [id, status, refreshMessages])
+      setOpenConversationId(id ?? null);
+      return () => setOpenConversationId(null);
+    }, [id])
   );
 
-  // Realtime : quand le destinataire ouvre la conversation et marque nos messages
-  // comme lus, on reçoit l'UPDATE de read_at et on passe « Envoyé » → « Lu » en direct.
-  // Dégradation gracieuse : si la réplication Realtime n'est pas activée pour
-  // public.messages, aucun événement n'arrive mais rien ne casse (le refetch au focus
-  // prend le relais).
+  useFocusEffect(
+    useCallback(() => {
+      if (!id || status !== 'success') return;
+      applyReadOptimistic();
+      void markConversationRead(id)
+        .then(() => markConversationNotificationAsRead(id))
+        .catch(() => {
+          void refreshMessages();
+        });
+      void refreshMessages();
+    }, [id, status, refreshMessages, applyReadOptimistic])
+  );
+
+  // Canal Realtime global (INSERT/UPDATE) — fil ouvert + accusés de lecture.
   useEffect(() => {
     if (!id || status !== 'success') return;
-    const channel = supabase
-      .channel(`messages:read:${id}`)
-      .on(
-        'postgres_changes',
-        { event: 'UPDATE', schema: 'public', table: 'messages', filter: `conversation_id=eq.${id}` },
-        (payload) => {
-          const updated = payload.new as { id?: string; read_at?: string | null };
-          if (!updated?.id) return;
-          setMessages((prev) =>
-            prev.map((m) => (m.id === updated.id ? { ...m, read_at: updated.read_at ?? null } : m))
-          );
+
+    return subscribeMessagingEvents((event) => {
+      if (event.type === 'message_inserted' && event.message.conversation_id === id) {
+        setMessages((prev) => appendMessageDeduped(prev, event.message));
+        if (event.message.sender_id !== userId) {
+          applyReadOptimistic();
+          void markConversationRead(id).catch(() => {});
         }
-      )
-      .subscribe();
-    return () => {
-      void supabase.removeChannel(channel);
-    };
-  }, [id, status]);
+        setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 100);
+        return;
+      }
+
+      if (event.type === 'message_updated' && event.message.conversation_id === id) {
+        const updated = event.message;
+        setMessages((prev) =>
+          prev.map((m) => (m.id === updated.id ? { ...m, read_at: updated.read_at } : m))
+        );
+      }
+    });
+  }, [id, status, userId, applyReadOptimistic]);
 
   const handleSend = useCallback(async () => {
     const trimmed = inputText.trim();
@@ -194,7 +217,7 @@ export default function ConversationThreadScreen() {
         return;
       }
       if (result.data) {
-        setMessages((prev) => [...prev, result.data!]);
+        setMessages((prev) => appendMessageDeduped(prev, result.data!));
         setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 100);
       }
     } catch (error) {

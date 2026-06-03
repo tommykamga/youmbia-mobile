@@ -4,6 +4,8 @@
  */
 
 import React, { useMemo } from 'react';
+import { useMessagingRealtime } from '@/hooks/useMessagingRealtime';
+import { useUnreadConversationsCount } from '@/hooks/useUnreadConversationsCount';
 import { View, Text, StyleSheet, Platform, useWindowDimensions } from 'react-native';
 import { Tabs, useRouter, type Href } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -125,6 +127,16 @@ export default function TabLayout() {
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
 
+  useMessagingRealtime();
+  const { count: unreadConversationsCount } = useUnreadConversationsCount();
+
+  const messagesTabBadge =
+    unreadConversationsCount > 0
+      ? unreadConversationsCount > 9
+        ? '9+'
+        : unreadConversationsCount
+      : undefined;
+
   const tabBarMetrics = useMemo(() => getTabBarVisualMetrics(width), [width]);
 
   const tabBarBottomPad = insets.bottom > 0 ? insets.bottom : 6;
@@ -177,6 +189,7 @@ export default function TabLayout() {
         options={{
           title: 'Messages',
           headerShown: false,
+          tabBarBadge: messagesTabBadge,
           tabBarLabel: makeTabBarLabel('Messages', tabBarMetrics.labelFontSize),
           tabBarIcon: ({ focused }) => (
             <TabIconSlot>

@@ -1,11 +1,12 @@
-import React, { useCallback, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { FlatList, View, Text, StyleSheet, Pressable, RefreshControl, useWindowDimensions } from 'react-native';
 import { useRouter, useFocusEffect, Redirect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Screen, EmptyState, Button, AppHeader } from '@/components';
 import { getSession } from '@/services/auth';
 import { getConversations } from '@/services/conversations';
-import type { Conversation } from '@/services/conversations/types';
+import type { Conversation, Message } from '@/services/conversations/types';
+import { subscribeMessagingEvents } from '@/lib/messagingRealtime';
 import { spacing, colors, typography, fontWeights, radius } from '@/theme';
 import { buildAuthGateHref } from '@/lib/authGateNavigation';
 import { lightCacheKeys, lightCacheRead, lightCacheWrite } from '@/lib/lightCache';
@@ -118,12 +119,41 @@ function sortConversationsInbox(data: Conversation[]): void {
   });
 }
 
+function patchInboxOnIncoming(
+  conversations: Conversation[],
+  message: Message,
+  userId: string
+): Conversation[] | 'refetch' {
+  const idx = conversations.findIndex((c) => c.id === message.conversation_id);
+  if (idx < 0) return 'refetch';
+  const isFromOther = message.sender_id !== userId;
+  const preview =
+    message.body.length > 60 ? `${message.body.slice(0, 60)}…` : message.body;
+  const next = [...conversations];
+  const conv = { ...next[idx] };
+  conv.last_message_at = message.created_at;
+  conv.last_message_preview = preview;
+  if (isFromOther) {
+    conv.unread_count = (conv.unread_count ?? 0) + 1;
+  }
+  next[idx] = conv;
+  sortConversationsInbox(next);
+  return next;
+}
+
+function patchInboxOnRead(conversations: Conversation[], conversationId: string): Conversation[] {
+  return conversations.map((c) =>
+    c.id === conversationId ? { ...c, unread_count: 0 } : c
+  );
+}
+
 export default function MessagesScreen() {
   useWindowDimensions();
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [status, setStatus] = useState<'loading' | 'error_network' | 'error_generic' | 'success' | 'empty' | 'unauthenticated'>('loading');
   const [refreshing, setRefreshing] = useState(false);
   const shownFromCacheRef = useRef(false);
+  const userIdRef = useRef<string | null>(null);
 
   const tabsBottomPad = 72;
 
@@ -135,6 +165,7 @@ export default function MessagesScreen() {
         return;
       }
       const uid = session.user.id;
+      userIdRef.current = uid;
       shownFromCacheRef.current = false;
       const cacheKey = lightCacheKeys.conversations(uid);
       const cached = await lightCacheRead<InboxCachePayload>(cacheKey);
@@ -199,6 +230,29 @@ export default function MessagesScreen() {
       fetchInbox();
     }, [fetchInbox])
   );
+
+  useEffect(() => {
+    return subscribeMessagingEvents((event) => {
+      const userId = userIdRef.current;
+      if (!userId) return;
+
+      if (event.type === 'conversation_read') {
+        setConversations((prev) => patchInboxOnRead(prev, event.conversationId));
+        return;
+      }
+
+      if (event.type === 'message_inserted') {
+        setConversations((prev) => {
+          const patched = patchInboxOnIncoming(prev, event.message, userId);
+          if (patched === 'refetch') {
+            void fetchInbox();
+            return prev;
+          }
+          return patched;
+        });
+      }
+    });
+  }, [fetchInbox]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);

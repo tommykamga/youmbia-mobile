@@ -5,4 +5,5 @@ export * from './getOrCreateConversation';
 export * from './markConversationRead';
 export * from './sendMessage';
 export * from './getUnreadMessagesCount';
+export * from './getUnreadConversationsCount';
 export * from './types';

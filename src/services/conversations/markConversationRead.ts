@@ -55,7 +55,9 @@ export async function markConversationRead(conversationId: string): Promise<Mark
       }
     }
   } catch (err) {
-    console.warn('[markConversationRead] Failed to reset conversation unread count:', err);
+    if (__DEV__) {
+      console.warn('[markConversationRead] Failed to reset conversation unread count:', err);
+    }
   }
 
   return { data: null, error: null };

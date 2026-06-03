@@ -1,0 +1,21 @@
+-- PROPOSITION OPS — NE PAS APPLIQUER SANS VALIDATION (Sprint P0 messagerie).
+--
+-- Prérequis pour que le client mobile reçoive les événements INSERT/UPDATE
+-- via Supabase Realtime sur public.messages.
+--
+-- Vérification (SQL Editor Supabase) :
+--
+--   SELECT schemaname, tablename
+--   FROM pg_publication_tables
+--   WHERE pubname = 'supabase_realtime'
+--     AND tablename = 'messages';
+--
+-- Si aucune ligne : la table n'est pas publiée → pas d'événements temps réel côté app
+-- (l'UI dégrade gracieusement : refocus / pull-to-refresh / polling push existant).
+--
+-- Correctif typique (Dashboard : Database → Replication → supabase_realtime → messages)
+-- ou SQL :
+--
+--   ALTER PUBLICATION supabase_realtime ADD TABLE public.messages;
+--
+-- RLS : les événements Realtime respectent les policies SELECT du subscriber authentifié.
