@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState, useRef } from 'react';
+import React, { useCallback, useEffect, useMemo, useState, useRef } from 'react';
 import {
   View,
   Text,
@@ -21,6 +21,7 @@ import {
   getConversationById,
 } from '@/services/conversations';
 import { getSession } from '@/services/auth';
+import { supabase } from '@/lib/supabase';
 import { buildAuthGateHref } from '@/lib/authGateNavigation';
 import { markConversationNotificationAsRead, syncMessageNotificationSnapshot } from '@/services/messageNotifications';
 import type { Message } from '@/services/conversations';
@@ -133,15 +134,50 @@ export default function ConversationThreadScreen() {
     load();
   }, [load]);
 
+  // Refetch silencieux : capte l'évolution de read_at (ex. l'autre partie a lu nos
+  // messages) sans repasser par l'état de chargement, donc sans flicker.
+  const refreshMessages = useCallback(async () => {
+    if (!id) return;
+    const res = await getMessages(id);
+    if (res.data) setMessages(res.data);
+  }, [id]);
+
   useFocusEffect(
     useCallback(() => {
       if (id && status === 'success') {
         void markConversationRead(id)
           .then(() => markConversationNotificationAsRead(id))
           .catch(() => {});
+        void refreshMessages();
       }
-    }, [id, status])
+    }, [id, status, refreshMessages])
   );
+
+  // Realtime : quand le destinataire ouvre la conversation et marque nos messages
+  // comme lus, on reçoit l'UPDATE de read_at et on passe « Envoyé » → « Lu » en direct.
+  // Dégradation gracieuse : si la réplication Realtime n'est pas activée pour
+  // public.messages, aucun événement n'arrive mais rien ne casse (le refetch au focus
+  // prend le relais).
+  useEffect(() => {
+    if (!id || status !== 'success') return;
+    const channel = supabase
+      .channel(`messages:read:${id}`)
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'messages', filter: `conversation_id=eq.${id}` },
+        (payload) => {
+          const updated = payload.new as { id?: string; read_at?: string | null };
+          if (!updated?.id) return;
+          setMessages((prev) =>
+            prev.map((m) => (m.id === updated.id ? { ...m, read_at: updated.read_at ?? null } : m))
+          );
+        }
+      )
+      .subscribe();
+    return () => {
+      void supabase.removeChannel(channel);
+    };
+  }, [id, status]);
 
   const handleSend = useCallback(async () => {
     const trimmed = inputText.trim();
@@ -182,29 +218,45 @@ export default function ConversationThreadScreen() {
     []
   );
 
+  // Confirmation de lecture affichée uniquement sous le DERNIER message envoyé par
+  // l'utilisateur connecté (évite de surcharger l'interface).
+  const lastSentMessageId = useMemo(() => {
+    if (!userId) return null;
+    for (let i = messages.length - 1; i >= 0; i -= 1) {
+      if (messages[i].sender_id === userId) return messages[i].id;
+    }
+    return null;
+  }, [messages, userId]);
+
   const renderItemWithUser = useCallback(
     ({ item, index }: { item: Message; index: number }) => {
       const isMe = item.sender_id === userId;
       // Show spacing if previous message was from a different sender
       const prevMsg = messages[index - 1];
       const showExtraSpace = prevMsg && prevMsg.sender_id !== item.sender_id;
-      
+      const showReadStatus = isMe && item.id === lastSentMessageId;
+
       return (
         <View style={[
           styles.bubbleWrap, 
           isMe ? styles.bubbleWrapMe : styles.bubbleWrapThem,
           { marginTop: showExtraSpace ? spacing.md : spacing.xs }
         ]}>
-          <View style={[styles.bubble, isMe ? styles.bubbleMe : styles.bubbleThem]}>
-            <Text style={isMe ? styles.bubbleTextMe : styles.bubbleText}>{item.body}</Text>
-            <Text style={[styles.bubbleTime, isMe && { color: 'rgba(255,255,255,0.7)' }]}>
-              {formatMessageTime(item.created_at)}
-            </Text>
+          <View style={[styles.bubbleColumn, { alignItems: isMe ? 'flex-end' : 'flex-start' }]}>
+            <View style={[styles.bubble, isMe ? styles.bubbleMe : styles.bubbleThem]}>
+              <Text style={isMe ? styles.bubbleTextMe : styles.bubbleText}>{item.body}</Text>
+              <Text style={[styles.bubbleTime, isMe && { color: 'rgba(255,255,255,0.7)' }]}>
+                {formatMessageTime(item.created_at)}
+              </Text>
+            </View>
+            {showReadStatus && (
+              <Text style={styles.readStatus}>{item.read_at ? 'Lu' : 'Envoyé'}</Text>
+            )}
           </View>
         </View>
       );
     },
-    [userId, messages]
+    [userId, messages, lastSentMessageId]
   );
 
   if (status === 'error') {
@@ -326,8 +378,11 @@ const styles = StyleSheet.create({
   bubbleWrapThem: {
     justifyContent: 'flex-start',
   },
-  bubble: {
+  bubbleColumn: {
     maxWidth: '85%',
+  },
+  bubble: {
+    maxWidth: '100%',
     paddingVertical: 10,
     paddingHorizontal: 14,
     borderRadius: 20,
@@ -362,6 +417,12 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
     marginTop: 4,
     alignSelf: 'flex-end',
+  },
+  readStatus: {
+    ...typography.xs,
+    color: colors.textMuted,
+    marginTop: 2,
+    marginRight: 4,
   },
   inputContainer: {
     backgroundColor: colors.surface,
