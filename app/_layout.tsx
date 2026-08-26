@@ -8,6 +8,7 @@ import { Alert, AppState, Linking } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { colors } from '@/theme';
 import { getSession, onAuthStateChange } from '@/services/auth';
+import { startProfileProvisioningOnAuth } from '@/services/profile';
 import { handleSupabaseAuthDeepLink } from '@/services/auth/handleSupabaseAuthDeepLink';
 import { getListingHrefFromUrl } from '@/lib/listingDeepLink';
 import {
@@ -102,6 +103,12 @@ export default function RootLayout() {
     }
 
     prepare();
+  }, []);
+
+  // Auto-réparation profil : un seul listener (INITIAL_SESSION / SIGNED_IN / USER_UPDATED).
+  // Fire-and-forget — ne bloque pas le splash ni isAppReady.
+  useEffect(() => {
+    return startProfileProvisioningOnAuth();
   }, []);
 
   useEffect(() => {

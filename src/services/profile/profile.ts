@@ -25,9 +25,191 @@ export interface ProfileRow {
   avatar_url: string | null;
   phone?: string | null;
   is_banned?: boolean | null;
+  shop_id?: string | null;
+  seller_type?: string | null;
   created_at?: string;
   updated_at?: string;
   [key: string]: unknown;
+}
+
+/** Message métier : jamais de contrainte SQL / message PostgreSQL brut. */
+export const PROFILE_PROVISIONING_ERROR_MESSAGE =
+  'Impossible de préparer votre profil vendeur. Réessayez dans quelques instants.';
+
+const PROFILE_ENSURE_SELECT =
+  'id, full_name, avatar_url, phone, is_banned, shop_id, seller_type, created_at';
+
+function logProfileProvisioningDev(phase: string, err: unknown): void {
+  if (typeof __DEV__ !== 'undefined' && __DEV__) {
+    console.warn(`[ensureProfile] ${phase}`, err);
+  }
+}
+
+function metaString(
+  meta: Record<string, unknown> | undefined,
+  keys: string[]
+): string | null {
+  if (!meta) return null;
+  for (const key of keys) {
+    const value = meta[key];
+    if (typeof value === 'string' && value.trim()) return value.trim();
+  }
+  return null;
+}
+
+/** Graine d'upsert alignée sur public.handle_new_user() (metadata Auth uniquement). */
+export function getProfileSeedFromAuthUser(user: {
+  id: string;
+  user_metadata?: Record<string, unknown> | null;
+}): { id: string; full_name: string | null; avatar_url: string | null } {
+  const meta = (user.user_metadata ?? undefined) as Record<string, unknown> | undefined;
+  return {
+    id: user.id,
+    full_name: metaString(meta, ['full_name', 'name']),
+    avatar_url: metaString(meta, ['avatar_url', 'picture']),
+  };
+}
+
+export type EnsureProfileResult =
+  | { data: ProfileRow; error: null }
+  | { data: null; error: { message: string } };
+
+function isBlankProfileValue(value: string | null | undefined): boolean {
+  return value == null || String(value).trim() === '';
+}
+
+function ghostProfile(userId: string): ProfileRow {
+  return {
+    id: userId,
+    full_name: null,
+    avatar_url: null,
+    phone: null,
+    is_banned: null,
+  };
+}
+
+let ensureInFlight: Promise<EnsureProfileResult> | null = null;
+
+/** Reset du verrou in-memory — tests uniquement. */
+export function resetEnsureProfileLockForTests(): void {
+  ensureInFlight = null;
+}
+
+async function fillEmptyProfileFieldsFromAuth(
+  user: { id: string; user_metadata?: Record<string, unknown> | null },
+  existing: ProfileRow
+): Promise<ProfileRow> {
+  const seed = getProfileSeedFromAuthUser({
+    id: user.id,
+    user_metadata: user.user_metadata,
+  });
+  const patch: { full_name?: string; avatar_url?: string } = {};
+  if (isBlankProfileValue(existing.full_name) && seed.full_name) {
+    patch.full_name = seed.full_name;
+  }
+  if (isBlankProfileValue(existing.avatar_url) && seed.avatar_url) {
+    patch.avatar_url = seed.avatar_url;
+  }
+  if (Object.keys(patch).length === 0) {
+    return existing;
+  }
+
+  const { data: updated, error: updateError } = await supabase
+    .from('profiles')
+    .update(patch as never)
+    .eq('id', user.id)
+    .select(PROFILE_ENSURE_SELECT)
+    .maybeSingle();
+
+  if (updateError || !updated) {
+    logProfileProvisioningDev('fill-empty', updateError ?? 'no row');
+    return existing;
+  }
+
+  return updated as ProfileRow;
+}
+
+async function runEnsureProfile(): Promise<EnsureProfileResult> {
+  const {
+    data: { user },
+    error: userError,
+  } = await supabase.auth.getUser();
+
+  if (userError || !user) {
+    return {
+      data: null,
+      error: { message: userError?.message ?? 'Non connecté' },
+    };
+  }
+
+  const { data: existing, error: readError } = await supabase
+    .from('profiles')
+    .select(PROFILE_ENSURE_SELECT)
+    .eq('id', user.id)
+    .maybeSingle();
+
+  if (readError) {
+    logProfileProvisioningDev('select', readError);
+    return { data: null, error: { message: PROFILE_PROVISIONING_ERROR_MESSAGE } };
+  }
+
+  if (existing) {
+    const filled = await fillEmptyProfileFieldsFromAuth(
+      {
+        id: user.id,
+        user_metadata: user.user_metadata as Record<string, unknown> | undefined,
+      },
+      existing as ProfileRow
+    );
+    return { data: filled, error: null };
+  }
+
+  const seed = getProfileSeedFromAuthUser({
+    id: user.id,
+    user_metadata: user.user_metadata as Record<string, unknown> | undefined,
+  });
+
+  const { error: upsertError } = await supabase.from('profiles').upsert(
+    {
+      id: seed.id,
+      full_name: seed.full_name,
+      avatar_url: seed.avatar_url,
+    } as never,
+    { onConflict: 'id', ignoreDuplicates: true }
+  );
+
+  if (upsertError) {
+    logProfileProvisioningDev('upsert', upsertError);
+    return { data: null, error: { message: PROFILE_PROVISIONING_ERROR_MESSAGE } };
+  }
+
+  const { data: created, error: refetchError } = await supabase
+    .from('profiles')
+    .select(PROFILE_ENSURE_SELECT)
+    .eq('id', user.id)
+    .maybeSingle();
+
+  if (refetchError || !created) {
+    logProfileProvisioningDev('refetch', refetchError ?? 'row still missing');
+    return { data: null, error: { message: PROFILE_PROVISIONING_ERROR_MESSAGE } };
+  }
+
+  return { data: created as ProfileRow, error: null };
+}
+
+/**
+ * Garantit une ligne public.profiles pour l'utilisateur courant.
+ * Idempotent : si la ligne existe, elle est renvoyée telle quelle (aucun écrasement
+ * d'un nom/avatar déjà saisi). Les champs vides peuvent être complétés depuis
+ * les metadata Auth (Apple : nom arrivé après l'INSERT).
+ * Promesse partagée : les appels concurrents n'enclenchent qu'un seul aller-retour.
+ */
+export async function ensureProfile(): Promise<EnsureProfileResult> {
+  if (ensureInFlight) return ensureInFlight;
+  ensureInFlight = runEnsureProfile().finally(() => {
+    ensureInFlight = null;
+  });
+  return ensureInFlight;
 }
 
 /**
@@ -127,7 +309,8 @@ export type GetCurrentProfileResult =
 
 /**
  * Fetches the profile row for the currently authenticated user.
- * Returns null if not signed in or profile not found (RLS).
+ * Lecture normale si la ligne existe. Self-healing via ensureProfile() seulement
+ * si elle est absente — ensureProfile ne rappelle jamais getCurrentProfile.
  */
 export async function getCurrentProfile(): Promise<GetCurrentProfileResult> {
   const {
@@ -149,24 +332,21 @@ export async function getCurrentProfile(): Promise<GetCurrentProfileResult> {
     .maybeSingle();
 
   if (error) {
-    return { data: null, error: { message: error.message } };
+    logProfileProvisioningDev('getCurrentProfile.select', error);
+    return { data: null, error: { message: PROFILE_PROVISIONING_ERROR_MESSAGE } };
   }
 
-  // Ligne absente en base (nouveau compte, trigger manquant) : pas d’erreur — formulaire éditable.
-  if (!data) {
-    return {
-      data: {
-        id: user.id,
-        full_name: null,
-        avatar_url: null,
-        phone: null,
-        is_banned: null,
-      },
-      error: null,
-    };
+  if (data) {
+    return { data: data as ProfileRow, error: null };
   }
 
-  return { data: data as ProfileRow, error: null };
+  const ensured = await ensureProfile();
+  if (ensured.data) {
+    return { data: ensured.data, error: null };
+  }
+
+  logProfileProvisioningDev('getCurrentProfile.ensure', ensured.error);
+  return { data: ghostProfile(user.id), error: null };
 }
 
 /**

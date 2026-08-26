@@ -5,7 +5,11 @@
 import { supabase } from '@/lib/supabase';
 import { buildShopSlugCandidate, slugifyShopName } from '@/lib/shopSlug';
 import { resolveShopMediaUrls } from '@/lib/shopMediaUrl';
-import { normalizePhoneForProfile } from '@/services/profile';
+import {
+  ensureProfile,
+  normalizePhoneForProfile,
+  PROFILE_PROVISIONING_ERROR_MESSAGE,
+} from '@/services/profile';
 import type { PublicShop } from '@/types/shops';
 import { SHOP_PUBLIC_SELECT } from './shopSelect';
 import { uploadShopImage, type ShopImageUploadInput } from './uploadShopImage';
@@ -25,6 +29,38 @@ export type CreateProShopResult =
   | { data: null; error: { message: string } };
 
 const SLUG_MAX_ATTEMPTS = 8;
+
+function logCreateProShopDev(phase: string, err: unknown): void {
+  if (typeof __DEV__ !== 'undefined' && __DEV__) {
+    console.warn(`[createProShop] ${phase}`, err);
+  }
+}
+
+function toCreateProShopUserMessage(raw: string | null | undefined, fallback: string): string {
+  const message = String(raw ?? '').trim();
+  if (!message) return fallback;
+  const lower = message.toLowerCase();
+  if (
+    lower.includes('shops_owner_id_fkey') ||
+    lower.includes('foreign key') ||
+    lower.includes('violates foreign key') ||
+    lower.includes('owner_id')
+  ) {
+    return PROFILE_PROVISIONING_ERROR_MESSAGE;
+  }
+  if (lower.includes('duplicate') || lower.includes('unique')) {
+    return 'Ce nom de boutique est déjà pris. Choisissez un autre nom.';
+  }
+  if (
+    lower.includes('fkey') ||
+    lower.includes('constraint') ||
+    lower.includes('sqlstate') ||
+    lower.includes('postgres')
+  ) {
+    return fallback;
+  }
+  return message;
+}
 
 async function findAvailableSlug(name: string): Promise<string | null> {
   const base = slugifyShopName(name);
@@ -57,17 +93,24 @@ export async function createProShop(payload: CreateProShopPayload): Promise<Crea
     return { data: null, error: { message: 'Nom de boutique requis (2 caractères minimum)' } };
   }
 
-  const { data: existingProfile, error: profileReadError } = await supabase
-    .from('profiles')
-    .select('shop_id, seller_type')
-    .eq('id', user.id)
-    .maybeSingle();
-
-  if (profileReadError) {
-    return { data: null, error: { message: profileReadError.message } };
+  const ensured = await ensureProfile();
+  if (ensured.error || !ensured.data) {
+    logCreateProShopDev('ensureProfile', ensured.error);
+    return {
+      data: null,
+      error: { message: ensured.error?.message ?? PROFILE_PROVISIONING_ERROR_MESSAGE },
+    };
   }
 
-  if ((existingProfile as { shop_id?: string | null } | null)?.shop_id) {
+  if (ensured.data.id !== user.id) {
+    logCreateProShopDev('ensureProfile id mismatch', {
+      profileId: ensured.data.id,
+      userId: user.id,
+    });
+    return { data: null, error: { message: PROFILE_PROVISIONING_ERROR_MESSAGE } };
+  }
+
+  if (ensured.data.shop_id) {
     return { data: null, error: { message: 'Vous avez déjà une boutique professionnelle.' } };
   }
 
@@ -111,10 +154,16 @@ export async function createProShop(payload: CreateProShopPayload): Promise<Crea
     .single();
 
   if (insertError || !inserted) {
-    const msg = insertError?.message?.includes('duplicate')
-      ? 'Ce nom de boutique est déjà pris. Choisissez un autre nom.'
-      : insertError?.message ?? 'Impossible de créer la boutique';
-    return { data: null, error: { message: msg } };
+    logCreateProShopDev('shops.insert', insertError);
+    return {
+      data: null,
+      error: {
+        message: toCreateProShopUserMessage(
+          insertError?.message,
+          'Impossible de créer la boutique'
+        ),
+      },
+    };
   }
 
   const shopId = String((inserted as { id: string }).id);
