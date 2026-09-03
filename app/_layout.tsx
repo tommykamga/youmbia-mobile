@@ -9,6 +9,11 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { colors } from '@/theme';
 import { getSession, onAuthStateChange } from '@/services/auth';
 import { identifyCurrentUser, initMixpanel, resetAnalytics } from '@/lib/analytics';
+import {
+  initCrashReporting,
+  setCrashReportingUser,
+  wrapRootLayout,
+} from '@/lib/sentry';
 import { startProfileProvisioningOnAuth } from '@/services/profile';
 import { handleSupabaseAuthDeepLink } from '@/services/auth/handleSupabaseAuthDeepLink';
 import { getListingHrefFromUrl } from '@/lib/listingDeepLink';
@@ -34,6 +39,8 @@ const MESSAGE_NOTIFICATIONS_POLL_MS = 45000;
 const STARTUP_NOTIFICATION_SYNC_DELAY_MS = 2500;
 
 export { ErrorBoundary } from 'expo-router';
+
+initCrashReporting();
 
 SplashScreen.preventAutoHideAsync();
 
@@ -66,7 +73,7 @@ function isProtectedSegment(segments: string[]): boolean {
   return false;
 }
 
-export default function RootLayout() {
+function RootLayout() {
   const [isAppReady, setIsAppReady] = useState(false);
   const [isSplashAnimationComplete, setIsSplashAnimationComplete] = useState(false);
   const router = useRouter();
@@ -98,6 +105,7 @@ export default function RootLayout() {
         const { data } = await supabase.auth.getSession();
         if (data.session?.user) {
           await identifyCurrentUser(data.session.user);
+          setCrashReportingUser(data.session.user.id);
         }
       } catch (e) {
         console.warn('App preparation error:', e);
@@ -119,9 +127,11 @@ export default function RootLayout() {
     const unsubscribe = onAuthStateChange((event, session) => {
       if (session?.user && (event === 'SIGNED_IN' || event === 'INITIAL_SESSION')) {
         void identifyCurrentUser(session.user);
+        setCrashReportingUser(session.user.id);
       }
       if (event === 'SIGNED_OUT') {
         void resetAnalytics();
+        setCrashReportingUser(null);
       }
     });
     return unsubscribe;
@@ -405,3 +415,5 @@ export default function RootLayout() {
     </SafeAreaProvider>
   );
 }
+
+export default wrapRootLayout(RootLayout);

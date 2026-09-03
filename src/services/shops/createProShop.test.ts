@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { PROFILE_PROVISIONING_ERROR_MESSAGE } from '@/services/profile';
+import { PROFILE_PROVISIONING_ERROR_MESSAGE } from '@/services/profile/profile';
 import { createProShop } from './createProShop';
 
 const mocks = vi.hoisted(() => ({
@@ -16,13 +16,16 @@ vi.mock('@/lib/supabase', () => ({
   supabaseRuntime: { isConfigured: true, canPersistSession: true },
 }));
 
-vi.mock('@/services/profile', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@/services/profile')>();
-  return {
-    ...actual,
-    ensureProfile: mocks.ensureProfile,
-  };
-});
+vi.mock('@/services/profile', () => ({
+  PROFILE_PROVISIONING_ERROR_MESSAGE:
+    'Impossible de préparer votre profil vendeur. Réessayez dans quelques instants.',
+  ensureProfile: mocks.ensureProfile,
+  normalizePhoneForProfile: (raw: string | null | undefined) => {
+    if (raw == null || typeof raw !== 'string') return { value: null };
+    const trimmed = raw.trim();
+    return { value: trimmed || null };
+  },
+}));
 
 vi.mock('@/lib/shopMediaUrl', () => ({
   resolveShopMediaUrls: vi.fn(async (shop: unknown) => shop),
