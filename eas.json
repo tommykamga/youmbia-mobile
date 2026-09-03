@@ -30,6 +30,7 @@
       }
     },
     "production": {
+      "environment": "production",
       "distribution": "store",
       "ios": {},
       "android": {
