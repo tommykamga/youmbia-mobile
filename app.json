@@ -11,6 +11,10 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.youmbia.mobile",
       "usesAppleSignIn": true,
+      "associatedDomains": [
+        "applinks:www.youmbia.com",
+        "applinks:youmbia.com"
+      ],
       "splash": {
         "image": "./assets/images/splash.png",
         "resizeMode": "contain",
