@@ -21,7 +21,11 @@ import {
   getConversationById,
 } from '@/services/conversations';
 import { getSession } from '@/services/auth';
+import { submitReport } from '@/services/reports';
 import { buildAuthGateHref } from '@/lib/authGateNavigation';
+import { REPORT_SUCCESS_MESSAGE } from '@/constants/reportMessages';
+import type { ReportReasonCode } from '@/constants/reportReasons';
+import { ReportComposerModal } from '@/features/reports';
 import {
   appendMessageDeduped,
   emitConversationRead,
@@ -94,6 +98,11 @@ export default function ConversationThreadScreen() {
   const listRef = useRef<FlatList>(null);
   const [userId, setUserId] = useState<string | null>(null);
   const keyboardInset = useKeyboardInset(Platform.OS !== 'web');
+  const [reportModalVisible, setReportModalVisible] = useState(false);
+  const [reportLoading, setReportLoading] = useState(false);
+  const [reportReason, setReportReason] = useState<ReportReasonCode | null>(null);
+  const [reportComment, setReportComment] = useState('');
+  const [reportedConversationId, setReportedConversationId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -248,6 +257,49 @@ export default function ConversationThreadScreen() {
     }
   }, [id, inputText, sending]);
 
+  const handleReportPress = useCallback(() => {
+    if (!id || status !== 'success') return;
+    if (reportedConversationId === id) {
+      Alert.alert('Déjà signalé', 'Vous avez déjà signalé cette conversation.');
+      return;
+    }
+    setReportReason(null);
+    setReportComment('');
+    setReportModalVisible(true);
+  }, [id, status, reportedConversationId]);
+
+  const handleReportSubmit = useCallback(() => {
+    if (!id || !reportReason || reportLoading) return;
+    Alert.alert(
+      'Confirmer le signalement',
+      'Votre signalement sera envoyé pour modération.',
+      [
+        { text: 'Annuler', style: 'cancel' },
+        {
+          text: 'Envoyer',
+          onPress: async () => {
+            if (reportLoading) return;
+            setReportLoading(true);
+            const result = await submitReport({
+              targetType: 'conversation',
+              targetId: id,
+              reason: reportReason,
+              comment: reportComment,
+            });
+            setReportLoading(false);
+            if (result.error) {
+              Alert.alert('Erreur', result.error.message);
+              return;
+            }
+            setReportModalVisible(false);
+            setReportedConversationId(id);
+            Alert.alert('Merci', REPORT_SUCCESS_MESSAGE);
+          },
+        },
+      ]
+    );
+  }, [id, reportReason, reportComment, reportLoading]);
+
   const keyExtractor = useCallback((item: Message) => item.id, []);
   
   const listEmptyComponent = useCallback(
@@ -342,6 +394,19 @@ export default function ConversationThreadScreen() {
         showBack
         noBorder
         density="compact"
+        right={
+          status === 'success' ? (
+            <Pressable
+              onPress={handleReportPress}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel="Signaler"
+              style={({ pressed }) => [styles.reportHeaderBtn, pressed && styles.reportHeaderBtnPressed]}
+            >
+              <Text style={styles.reportHeaderText}>Signaler</Text>
+            </Pressable>
+          ) : undefined
+        }
       />
       
       {status === 'loading' && <MessagesSkeleton />}
@@ -388,6 +453,18 @@ export default function ConversationThreadScreen() {
           </View>
         </KeyboardSafeView>
       )}
+      <ReportComposerModal
+        visible={reportModalVisible}
+        targetType="conversation"
+        title="Signaler"
+        loading={reportLoading}
+        reason={reportReason}
+        comment={reportComment}
+        onChangeReason={setReportReason}
+        onChangeComment={setReportComment}
+        onCancel={() => !reportLoading && setReportModalVisible(false)}
+        onSubmit={handleReportSubmit}
+      />
     </Screen>
   );
 }
@@ -406,6 +483,19 @@ const styles = StyleSheet.create({
     ...typography.lg,
     fontWeight: fontWeights.bold,
     color: colors.text,
+  },
+  reportHeaderBtn: {
+    minHeight: 40,
+    justifyContent: 'center',
+    paddingLeft: spacing.xs,
+  },
+  reportHeaderBtnPressed: {
+    opacity: 0.7,
+  },
+  reportHeaderText: {
+    ...typography.sm,
+    color: colors.textMuted,
+    fontWeight: fontWeights.medium,
   },
   keyboard: { flex: 1, backgroundColor: colors.background },
   listContent: {

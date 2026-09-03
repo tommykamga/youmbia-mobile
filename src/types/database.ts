@@ -319,6 +319,41 @@ export type Database = {
           },
         ];
       };
+      conversation_reports: {
+        Row: {
+          comment: string | null;
+          conversation_id: string;
+          created_at: string;
+          id: string;
+          reason: string;
+          user_id: string;
+        };
+        Insert: {
+          comment?: string | null;
+          conversation_id: string;
+          created_at?: string;
+          id?: string;
+          reason: string;
+          user_id: string;
+        };
+        Update: {
+          comment?: string | null;
+          conversation_id?: string;
+          created_at?: string;
+          id?: string;
+          reason?: string;
+          user_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'conversation_reports_conversation_id_fkey';
+            columns: ['conversation_id'];
+            isOneToOne: false;
+            referencedRelation: 'conversations';
+            referencedColumns: ['id'];
+          },
+        ];
+      };
       shops: {
         Row: {
           id: string;
