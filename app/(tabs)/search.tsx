@@ -37,6 +37,13 @@ import {
   saveSearch,
   type SavedSearch,
 } from '@/services/savedSearches';
+import {
+  buildRecentSearchLabel,
+  clearRecentSearches,
+  getRecentSearches,
+  rememberRecentSearch,
+  type RecentSearch,
+} from '@/services/recentSearches';
 import { getRootMarketplaceCategories } from '@/lib/marketplaceCategories';
 import { useMarketplaceCategories } from '@/hooks/useMarketplaceCategories';
 import { formatPrice } from '@/lib/format';
@@ -45,7 +52,7 @@ import { colors, spacing, typography, fontWeights, radius } from '@/theme';
 import { getSession } from '@/services/auth';
 import { buildAuthGateHref } from '@/lib/authGateNavigation';
 import { useResponsiveLayout, getScrollBottomReserveForTabBar } from '@/lib/responsiveLayout';
-import { trackListingSearched } from '@/lib/analytics';
+import { trackListingSearched, trackRecentSearchSelected } from '@/lib/analytics';
 
 const SUGGESTIONS_DEBOUNCE_MS = 300;
 /** Ne pas relancer `runSearch` si les params de navigation sont identiques sous ce délai (anti double effet / focus). */
@@ -196,6 +203,7 @@ export default function SearchScreen() {
   const FAVORITES_FETCH_TTL_MS = 120_000;
   const [loadingMoreSearch, setLoadingMoreSearch] = useState(false);
   const [savedSearches, setSavedSearches] = useState<SavedSearch[]>([]);
+  const [recentSearches, setRecentSearches] = useState<RecentSearch[]>([]);
   const [savedSearchFeedback, setSavedSearchFeedback] = useState<string | null>(null);
   const [overlaySuggestions, setOverlaySuggestions] = useState<string[]>([]);
   const [filtersOpen, setFiltersOpen] = useState(false);
@@ -245,6 +253,10 @@ export default function SearchScreen() {
 
   const loadSavedSearches = useCallback(() => {
     setSavedSearches(getSavedSearches());
+  }, []);
+
+  const loadRecentSearches = useCallback(() => {
+    void getRecentSearches().then(setRecentSearches);
   }, []);
 
   useFocusEffect(
@@ -321,6 +333,24 @@ export default function SearchScreen() {
       return;
     }
 
+    const categoryLabel =
+      filters?.category !== undefined ? filters.category : appliedSearchFilters.category;
+
+    if (!browseFromHome) {
+      const shouldRemember =
+        trimmed.length >= 2 ||
+        searchCategoryId != null ||
+        (searchCity != null && String(searchCity).trim() !== '');
+      if (shouldRemember) {
+        void rememberRecentSearch({
+          query: trimmed,
+          category: categoryLabel,
+          categoryId: searchCategoryId,
+          city: searchCity,
+        }).then(setRecentSearches);
+      }
+    }
+
     const page1Key = buildSearchPage1SessionKey({
       q: trimmed,
       categoryId: searchCategoryId,
@@ -335,8 +365,6 @@ export default function SearchScreen() {
       return;
     }
 
-    const categoryLabel =
-      filters?.category !== undefined ? filters.category : appliedSearchFilters.category;
     trackListingSearched({
       search_query: trimmed,
       category: categoryLabel,
@@ -576,6 +604,11 @@ export default function SearchScreen() {
 
   useEffect(() => {
     if (!searchOverlayOpen) return;
+    loadRecentSearches();
+  }, [searchOverlayOpen, loadRecentSearches]);
+
+  useEffect(() => {
+    if (!searchOverlayOpen) return;
     const t = setTimeout(() => overlayInputRef.current?.focus(), 280);
     return () => clearTimeout(t);
   }, [searchOverlayOpen]);
@@ -690,6 +723,37 @@ export default function SearchScreen() {
     },
     [loadSavedSearches]
   );
+
+  const handleRecentSearchPress = useCallback(
+    (item: RecentSearch) => {
+      trackRecentSearchSelected({ search_query: item.query });
+      clearPendingMainSearchDebounce();
+      setQuery(item.query);
+      setSubmittedQuery(item.query);
+      setOverlayDraft(item.query);
+      setCategory(item.category ?? '');
+      setCity(item.city ?? '');
+      setCategoryId(item.categoryId ?? null);
+      setAppliedSearchFilters({
+        category: item.category ?? null,
+        categoryId: item.categoryId ?? null,
+        city: item.city ?? null,
+      });
+      setPriceFilterError(null);
+      setOverlaySuggestions([]);
+      setSearchOverlayOpen(false);
+      runSearch(item.query, {
+        category: item.category ?? null,
+        categoryId: item.categoryId ?? null,
+        city: item.city ?? null,
+      });
+    },
+    [runSearch, clearPendingMainSearchDebounce]
+  );
+
+  const handleClearRecentSearches = useCallback(() => {
+    void clearRecentSearches().then(() => setRecentSearches([]));
+  }, []);
 
   const keyExtractor = useCallback((item: PublicListing) => item.id, []);
   const renderItem = useCallback(
@@ -1685,6 +1749,38 @@ export default function SearchScreen() {
                     showsVerticalScrollIndicator={false}
                     contentContainerStyle={styles.searchOverlayScrollContentBelow}
                   >
+                    {overlayDraft.trim().length === 0 && recentSearches.length > 0 ? (
+                      <View style={styles.recentSection}>
+                        <View style={styles.savedSectionHeader}>
+                          <Text style={styles.savedSectionTitle}>Recherches récentes</Text>
+                          <Pressable
+                            onPress={handleClearRecentSearches}
+                            hitSlop={8}
+                            accessibilityRole="button"
+                            accessibilityLabel="Effacer les recherches récentes"
+                          >
+                            <Text style={styles.recentClearText}>Effacer</Text>
+                          </Pressable>
+                        </View>
+                        {recentSearches.map((item) => (
+                          <Pressable
+                            key={`${item.searchedAt}-${item.query}-${item.categoryId ?? ''}-${item.city ?? ''}`}
+                            style={({ pressed }) => [styles.recentRow, pressed && styles.savedRowPressed]}
+                            onPress={() => handleRecentSearchPress(item)}
+                          >
+                            <Ionicons
+                              name="time-outline"
+                              size={18}
+                              color={colors.textMuted}
+                              style={styles.suggestionIcon}
+                            />
+                            <Text style={styles.recentRowText} numberOfLines={1}>
+                              {buildRecentSearchLabel(item)}
+                            </Text>
+                          </Pressable>
+                        ))}
+                      </View>
+                    ) : null}
                     {overlaySuggestions.length > 0 ? (
                       <View style={styles.searchOverlaySuggestions}>
                         {overlaySuggestions.map((text) => (
@@ -1926,6 +2022,30 @@ const styles = StyleSheet.create({
     borderColor: colors.borderLight,
     borderRadius: radius.lg,
     overflow: 'hidden',
+  },
+  recentSection: {
+    marginBottom: spacing.base,
+    gap: spacing.sm,
+  },
+  recentClearText: {
+    ...typography.sm,
+    color: colors.primary,
+    fontWeight: fontWeights.semibold,
+  },
+  recentRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.sm,
+    borderWidth: 1,
+    borderColor: colors.borderLight,
+    borderRadius: radius.xl,
+    backgroundColor: colors.surface,
+  },
+  recentRowText: {
+    flex: 1,
+    ...typography.base,
+    color: colors.text,
   },
   suggestionRow: {
     flexDirection: 'row',

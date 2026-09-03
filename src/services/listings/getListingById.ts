@@ -53,7 +53,7 @@ export type ListingDetail = {
     reports_count?: number | null;
     /** When true, contact CTAs are hidden (backend may use this for banned/restricted sellers). */
     is_banned?: boolean | null;
-    /** Optional: "Répond généralement en quelques heures" – computed from conversation history when backend provides it. */
+    /** Optional: populated only if the backend exposes a reliable response-time signal. */
     response_hint?: string | null;
   } | null;
 };
@@ -179,6 +179,12 @@ export async function getListingById(id: string): Promise<GetListingByIdResult> 
         trust_score: p.trust_score ?? null,
         reports_count: p.reports_count ?? null,
         is_banned: p.is_banned ?? null,
+        /**
+         * TOM-101 — seller response signal NOT IMPLEMENTED — insufficient reliable data.
+         * `profiles` has no last-active field; `last_seen_at` is push-token only;
+         * `get_seller_response_indicator` is an unused boolean RPC with no SQL in this repo.
+         * Do not invent "Actif aujourd'hui" or a typical reply-time copy.
+         */
       };
     }
   }

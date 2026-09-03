@@ -5,10 +5,15 @@
 
 import { Share, Linking, Platform } from 'react-native';
 import { formatPrice } from './format';
-import { trackListingShared, type ShareChannel } from '@/lib/analytics';
+import {
+  trackListingShareInitiated,
+  trackListingShared,
+  type ShareChannel,
+} from '@/lib/analytics';
 
 const LISTING_URL_BASE = 'https://www.youmbia.com/annonce';
 const SELLER_URL_BASE = 'https://www.youmbia.com/vendeur';
+const WHATSAPP_PREFIX = 'https://wa.me';
 
 export type ShareListingPayload = {
   id: string;
@@ -35,7 +40,7 @@ export function getPublicSellerUrl(id: string | null | undefined): string | null
   return `${SELLER_URL_BASE}/${safeId}`;
 }
 
-function buildShareMessage(payload: ShareListingPayload): string {
+export function buildListingShareMessage(payload: ShareListingPayload): string {
   const title = String(payload.title ?? '').trim() || 'Annonce YOUMBIA';
   const priceFormatted =
     typeof payload.price === 'number' && Number.isFinite(payload.price)
@@ -43,12 +48,15 @@ function buildShareMessage(payload: ShareListingPayload): string {
       : null;
   const city = payload.city?.trim() || null;
   const url = getPublicListingUrl(payload.id);
-  const summary = [title, priceFormatted, city].filter(Boolean).join(' — ');
-  return [
-    `Découvrez cette annonce sur YOUMBIA : ${summary || title}`,
-    '',
-    url ?? '',
-  ].join('\n');
+  const lines = [title, priceFormatted, city].filter(Boolean) as string[];
+  if (url) {
+    lines.push(`Voir l'annonce sur YOUMBIA : ${url}`);
+  }
+  return lines.join('\n');
+}
+
+export function buildWhatsAppShareUrl(message: string): string {
+  return `${WHATSAPP_PREFIX}/?text=${encodeURIComponent(message)}`;
 }
 
 function buildSellerShareMessage(payload: ShareSellerPayload): string {
@@ -62,8 +70,6 @@ function buildSellerShareMessage(payload: ShareSellerPayload): string {
     url ?? '',
   ].join('\n');
 }
-
-const WHATSAPP_PREFIX = 'https://wa.me';
 
 function inferShareChannel(
   activityType: string | null | undefined,
@@ -107,17 +113,41 @@ async function shareMessage(
   }
 }
 
+async function openWhatsAppWithMessage(message: string): Promise<boolean> {
+  try {
+    await Linking.openURL(buildWhatsAppShareUrl(message));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export type ShareListingOptions = {
+  /** Caller already emitted `listing_share_initiated`. */
+  skipShareInitiated?: boolean;
+};
+
 /**
  * Opens native share sheet when available; on failure falls back to WhatsApp deep link.
  * Returns success so the caller can show error feedback when both fail.
  */
-export async function shareListing(payload: ShareListingPayload): Promise<{ success: boolean; error?: string }> {
+export async function shareListing(
+  payload: ShareListingPayload,
+  options?: ShareListingOptions
+): Promise<{ success: boolean; error?: string }> {
   if (!payload.id || !String(payload.title ?? '').trim()) {
     return { success: false, error: 'Impossible de partager cette annonce' };
   }
 
-  const message = buildShareMessage(payload);
-  const result = await shareMessage(message, () => shareListingViaWhatsApp(payload));
+  if (!options?.skipShareInitiated) {
+    trackListingShareInitiated({
+      listing_id: payload.id,
+      share_channel: 'other',
+    });
+  }
+
+  const message = buildListingShareMessage(payload);
+  const result = await shareMessage(message, () => openWhatsAppWithMessage(message));
   if (result.success) {
     trackListingShared({
       listing_id: payload.id,
@@ -132,14 +162,35 @@ export async function shareListing(payload: ShareListingPayload): Promise<{ succ
  * Returns true if the URL was opened, false otherwise.
  */
 export async function shareListingViaWhatsApp(payload: ShareListingPayload): Promise<boolean> {
-  const message = buildShareMessage(payload);
-  const url = `${WHATSAPP_PREFIX}/?text=${encodeURIComponent(message)}`;
-  try {
-    await Linking.openURL(url);
-    return true;
-  } catch {
-    return false;
+  const message = buildListingShareMessage(payload);
+  return openWhatsAppWithMessage(message);
+}
+
+/**
+ * Post-publish WhatsApp CTA: WhatsApp first, native share sheet if WhatsApp cannot open.
+ */
+export async function shareListingPreferWhatsApp(
+  payload: ShareListingPayload
+): Promise<{ success: boolean; error?: string }> {
+  if (!payload.id || !String(payload.title ?? '').trim()) {
+    return { success: false, error: 'Impossible de partager cette annonce' };
   }
+
+  trackListingShareInitiated({
+    listing_id: payload.id,
+    share_channel: 'whatsapp',
+  });
+
+  const waOk = await shareListingViaWhatsApp(payload);
+  if (waOk) {
+    trackListingShared({
+      listing_id: payload.id,
+      share_channel: 'whatsapp',
+    });
+    return { success: true };
+  }
+
+  return shareListing(payload, { skipShareInitiated: true });
 }
 
 export async function shareSellerProfile(
