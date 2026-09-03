@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Screen, AppHeader, EmptyState, KeyboardSafeView, UserAvatar } from '@/components';
+import { Screen, AppHeader, EmptyState, KeyboardSafeView, UserAvatar, Button } from '@/components';
 import { useKeyboardInset } from '@/hooks/useKeyboardInset';
 import {
   getMessages,
@@ -241,7 +241,13 @@ export default function ConversationThreadScreen() {
       if (result.error) {
         setInputText(trimmed);
         if (__DEV__) console.error('[MESSAGING ERROR] sendMessage result.error', result.error);
-        Alert.alert('Erreur', 'Votre message n\'a pas pu être envoyé. Veuillez réessayer.');
+        const network = getThreadErrorMessage(result.error.message, '') === 'Réseau indisponible';
+        Alert.alert(
+          network ? 'Connexion instable' : 'Message non envoyé',
+          network
+            ? 'Votre texte a été conservé. Réessayez quand la connexion est rétablie.'
+            : 'Votre message n\'a pas pu être envoyé. Le texte a été conservé.'
+        );
         return;
       }
       if (result.data) {
@@ -251,7 +257,15 @@ export default function ConversationThreadScreen() {
     } catch (error) {
       setInputText(trimmed);
       if (__DEV__) console.error('[MESSAGING ERROR]', error);
-      Alert.alert('Erreur', 'Votre message n\'a pas pu être envoyé. Veuillez réessayer.');
+      const network =
+        getThreadErrorMessage(error instanceof Error ? error.message : String(error), '') ===
+        'Réseau indisponible';
+      Alert.alert(
+        network ? 'Connexion instable' : 'Message non envoyé',
+        network
+          ? 'Votre texte a été conservé. Réessayez quand la connexion est rétablie.'
+          : 'Votre message n\'a pas pu être envoyé. Le texte a été conservé.'
+      );
     } finally {
       setSending(false);
     }
@@ -362,8 +376,15 @@ export default function ConversationThreadScreen() {
           <EmptyState
             variant="plain"
             icon={<Ionicons name="alert-circle-outline" size={24} color={colors.textSecondary} />}
-            title="Erreur de chargement"
+            title="Impossible de charger la conversation"
             message={errorMessage}
+            action={
+              <View style={styles.threadErrorAction}>
+                <Button variant="secondary" onPress={() => void load()}>
+                  Réessayer
+                </Button>
+              </View>
+            }
           />
         </View>
       </Screen>
@@ -446,6 +467,9 @@ export default function ConversationThreadScreen() {
                 ]}
                 onPress={handleSend}
                 disabled={!inputText.trim() || sending}
+                accessibilityRole="button"
+                accessibilityLabel="Envoyer"
+                hitSlop={4}
               >
                 <Ionicons name="paper-plane" size={20} color={colors.surface} />
               </Pressable>
@@ -513,6 +537,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.xl, // ~24
     paddingBottom: spacing.xl,
     transform: [{ translateY: -24 }],
+  },
+  threadErrorAction: {
+    width: '100%',
+    alignItems: 'center',
+    minWidth: 200,
   },
   emptyWrap: {
     flex: 1,

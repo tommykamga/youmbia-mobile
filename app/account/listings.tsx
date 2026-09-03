@@ -15,7 +15,7 @@ import {
 import { useRouter, Redirect } from 'expo-router';
 import { buildAuthGateHref } from '@/lib/authGateNavigation';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { Screen, AppHeader, EmptyState, Loader, Button } from '@/components';
+import { Screen, AppHeader, EmptyState, Button, LoadingState } from '@/components';
 import { ListingCard } from '@/features/listings';
 import {
   bumpListing,
@@ -597,7 +597,7 @@ export default function AccountListingsScreen() {
     <Screen safe={false}>
       <AppHeader title="Mes annonces" showBack density="compact" />
       {state.status === 'loading' && (
-        <Loader />
+        <LoadingState message="Chargement de vos annonces…" />
       )}
       {state.status === 'unauthenticated' && (
         <Redirect href={buildAuthGateHref('listings')} />
@@ -606,8 +606,13 @@ export default function AccountListingsScreen() {
         <View style={[styles.contentArea, { paddingBottom: bottomPad }]}>
           <EmptyState
             variant="plain"
-            title="Erreur"
-            message={state.message}
+            icon={<Ionicons name="cloud-offline-outline" size={24} color={colors.error} />}
+            title="Impossible de charger vos annonces"
+            message={
+              state.message?.trim()
+                ? state.message
+                : 'Vérifiez votre connexion, puis réessayez. Vos annonces ne sont pas perdues.'
+            }
             action={
               <View style={styles.emptyAction}>
                 <Button variant="secondary" onPress={() => load()} style={styles.emptyCta}>

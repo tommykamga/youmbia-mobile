@@ -14,10 +14,16 @@ type LoadingStateProps = {
 
 export function LoadingState({ message, style }: LoadingStateProps) {
   return (
-    <View style={[styles.wrapper, style]}>
+    <View
+      style={[styles.wrapper, style]}
+      accessibilityRole="progressbar"
+      accessibilityLabel={message ?? 'Chargement'}
+    >
       <ActivityIndicator size="large" color={colors.primary} />
       {message ? (
-        <Text style={styles.message}>{message}</Text>
+        <Text style={styles.message} maxFontSizeMultiplier={1.35}>
+          {message}
+        </Text>
       ) : null}
     </View>
   );

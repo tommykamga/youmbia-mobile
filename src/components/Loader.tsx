@@ -29,7 +29,11 @@ export default function Loader() {
   }));
 
   return (
-    <View style={styles.container}>
+    <View
+      style={styles.container}
+      accessibilityRole="progressbar"
+      accessibilityLabel="Chargement"
+    >
       <Animated.View style={pulseStyle}>
         <ActivityIndicator size="large" color={colors.primary} />
       </Animated.View>

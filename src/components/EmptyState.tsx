@@ -26,19 +26,44 @@ export function EmptyState({
   variant = 'card',
   style,
 }: EmptyStateProps) {
+  const accessibilityLabel = [title, message].filter(Boolean).join('. ');
+  const groupText = !action;
+
   return (
-    <View style={[styles.wrapper, variant === 'plain' ? styles.wrapperPlain : null, style]}>
+    <View
+      style={[styles.wrapper, variant === 'plain' ? styles.wrapperPlain : null, style]}
+      accessible={groupText}
+      accessibilityRole={groupText ? 'summary' : undefined}
+      accessibilityLabel={groupText ? accessibilityLabel : undefined}
+    >
       {icon ? (
-        <View style={[styles.iconWrap, variant === 'plain' ? styles.iconWrapPlain : null]}>
+        <View
+          style={[styles.iconWrap, variant === 'plain' ? styles.iconWrapPlain : null]}
+          importantForAccessibility="no-hide-descendants"
+          accessibilityElementsHidden
+        >
           {icon}
         </View>
       ) : null}
-      <Text style={[styles.title, variant === 'plain' ? styles.titlePlain : null]}>{title}</Text>
+      <Text
+        style={[styles.title, variant === 'plain' ? styles.titlePlain : null]}
+        maxFontSizeMultiplier={1.35}
+        accessibilityRole="header"
+      >
+        {title}
+      </Text>
       {message ? (
-        <Text style={[styles.message, variant === 'plain' ? styles.messagePlain : null]}>{message}</Text>
+        <Text
+          style={[styles.message, variant === 'plain' ? styles.messagePlain : null]}
+          maxFontSizeMultiplier={1.4}
+        >
+          {message}
+        </Text>
       ) : null}
       {action ? (
-        <View style={[styles.action, variant === 'plain' ? styles.actionPlain : null]}>{action}</View>
+        <View style={[styles.action, variant === 'plain' ? styles.actionPlain : null]}>
+          {action}
+        </View>
       ) : null}
     </View>
   );

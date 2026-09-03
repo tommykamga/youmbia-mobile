@@ -75,6 +75,7 @@ import {
 } from '@/lib/listingPublishFormValidation';
 import { computeListingQualityScore } from '@/lib/listingQualityScore';
 import Ionicons from '@expo/vector-icons/Ionicons';
+import * as Haptics from 'expo-haptics';
 import {
   trackListingCreationCompleted,
   trackListingCreationStarted,
@@ -243,6 +244,7 @@ export default function SellScreen() {
   const [validationAttempted, setValidationAttempted] = useState(false);
   const [retryUploadLoading, setRetryUploadLoading] = useState(false);
   const [sharingWhatsApp, setSharingWhatsApp] = useState(false);
+  const [slowPublishHint, setSlowPublishHint] = useState(false);
   const postPublishViewedRef = useRef<string | null>(null);
   const [keyboardVisible, setKeyboardVisible] = useState(false);
 
@@ -321,6 +323,15 @@ export default function SellScreen() {
     };
   }, []);
 
+  useEffect(() => {
+    if (!submitLoading && !retryUploadLoading) {
+      setSlowPublishHint(false);
+      return;
+    }
+    const timer = setTimeout(() => setSlowPublishHint(true), 8000);
+    return () => clearTimeout(timer);
+  }, [submitLoading, retryUploadLoading]);
+
   const goBackOrHome = useCallback(() => {
     const canGoBack =
       typeof (router as unknown as { canGoBack?: () => boolean }).canGoBack === 'function'
@@ -336,6 +347,7 @@ export default function SellScreen() {
   const resetForm = () => {
     postPublishViewedRef.current = null;
     setSharingWhatsApp(false);
+    setSlowPublishHint(false);
     setPublishState({ status: 'idle' });
     setPrequalStatus('loading');
     setProfileAny(null);
@@ -363,6 +375,7 @@ export default function SellScreen() {
 
   const markPublishSuccess = useCallback((listingId: string) => {
     const parsed = parseListingPrice(priceStr);
+    void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     setPublishState({
       status: 'success',
       listingId,
@@ -951,6 +964,11 @@ export default function SellScreen() {
           <Text style={styles.partialMeta}>
             Photos ajoutées : {publishState.uploadedCount}/{publishState.totalCount}
           </Text>
+          {slowPublishHint ? (
+            <Text style={styles.slowPublishHint}>
+              La connexion est lente. Votre annonce est déjà créée ; les photos peuvent être réessayées.
+            </Text>
+          ) : null}
           <View style={styles.successActions}>
             <Button
               size="lg"
@@ -1339,6 +1357,11 @@ export default function SellScreen() {
             <Text style={styles.requiredLegend}>* Champ obligatoire</Text>
 
             {submitError ? <Text style={styles.submitErrorForm}>{submitError}</Text> : null}
+            {slowPublishHint ? (
+              <Text style={styles.slowPublishHint} accessibilityLiveRegion="polite">
+                Connexion lente. Vos informations restent enregistrées, sans republication automatique.
+              </Text>
+            ) : null}
 
             <View
               style={styles.qualityCardCompact}
@@ -1388,6 +1411,7 @@ export default function SellScreen() {
             </Button>
             <Pressable
               accessibilityRole="button"
+              accessibilityLabel="Annuler"
               onPress={goBackOrHome}
               disabled={submitLoading}
               hitSlop={{ top: 8, bottom: 8, left: 12, right: 12 }}
@@ -1985,6 +2009,12 @@ const styles = StyleSheet.create({
     ...typography.xs,
     color: colors.error,
     lineHeight: 16,
+    marginTop: spacing.sm,
+  },
+  slowPublishHint: {
+    ...typography.sm,
+    color: colors.textSecondary,
+    lineHeight: 20,
     marginTop: spacing.sm,
   },
 });
