@@ -31,6 +31,7 @@ import {
   getChildMarketplaceCategories,
   getRootMarketplaceCategories,
   getSellParentIcon,
+  resolveMarketplaceCategoryLabel,
   resolveSellCategorySelection,
 } from '@/lib/marketplaceCategories';
 import { consumeListingPublishDuplicateDraft } from '@/lib/listingPublishDraft';
@@ -74,6 +75,10 @@ import {
 } from '@/lib/listingPublishFormValidation';
 import { computeListingQualityScore } from '@/lib/listingQualityScore';
 import Ionicons from '@expo/vector-icons/Ionicons';
+import {
+  trackListingCreationCompleted,
+  trackListingCreationStarted,
+} from '@/lib/analytics';
 
 /** Aligné web : maximum 4 photos par annonce. */
 const MAX_LISTING_IMAGES = 4;
@@ -220,6 +225,7 @@ export default function SellScreen() {
   const [pendingDuplicateCategoryId, setPendingDuplicateCategoryId] = useState<number | null>(null);
   const pendingDuplicateDynamicRef = useRef<Record<string, string> | null>(null);
   const publishMemoryAppliedRef = useRef(false);
+  const listingCreationStartedRef = useRef(false);
 
   const [dynamicDefs, setDynamicDefs] = useState<EffectiveCategoryAttributeDefinitionResolved[]>([]);
   const [dynamicOptionsByDef, setDynamicOptionsByDef] = useState<
@@ -415,6 +421,18 @@ export default function SellScreen() {
       if (draft) {
         publishMemoryAppliedRef.current = true;
         applyDuplicateDraft(draft);
+        if (!listingCreationStartedRef.current) {
+          listingCreationStartedRef.current = true;
+          trackListingCreationStarted({
+            creation_origin: 'duplicate',
+            city_selected: draft.city,
+          });
+        }
+        return;
+      }
+      if (!listingCreationStartedRef.current) {
+        listingCreationStartedRef.current = true;
+        trackListingCreationStarted({ creation_origin: 'sell_tab' });
       }
     }, [applyDuplicateDraft])
   );
@@ -692,6 +710,13 @@ export default function SellScreen() {
         setSubmitError("Impossible de publier l'annonce");
         return;
       }
+
+      trackListingCreationCompleted({
+        listing_id: listingId,
+        has_photos: images.length > 0,
+        category: resolveMarketplaceCategoryLabel(marketplaceCategories, publishCategoryId),
+        city: city.trim(),
+      });
 
       const dynamicRows = buildListingDynamicAttributeRows(
         dynamicDefs,

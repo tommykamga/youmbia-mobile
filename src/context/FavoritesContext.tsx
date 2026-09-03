@@ -15,7 +15,7 @@ type FavoritesCachePayload = { userId: string; ids: string[] };
 type FavoritesContextType = {
   favorites: Set<string>;
   isFavorite: (id: string) => boolean;
-  toggleFavorite: (id: string) => Promise<void>;
+  toggleFavorite: (id: string, source?: string) => Promise<void>;
   loading: boolean;
   refresh: () => Promise<void>;
 };
@@ -82,7 +82,7 @@ export function FavoritesProvider({ children }: { children: React.ReactNode }) {
 
   const isFavorite = useCallback((id: string) => favorites.has(id), [favorites]);
 
-  const toggleFavorite = useCallback(async (id: string) => {
+  const toggleFavorite = useCallback(async (id: string, source?: string) => {
     // 0. Auth check
     const session = await getSession();
     if (!session?.user) {
@@ -114,7 +114,7 @@ export function FavoritesProvider({ children }: { children: React.ReactNode }) {
 
     try {
       // 3. Backend Sync
-      const result = await toggleFavoriteService(id);
+      const result = await toggleFavoriteService(id, { source });
       
       if (result.error) {
         // Rollback on error

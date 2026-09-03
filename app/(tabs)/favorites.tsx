@@ -128,7 +128,7 @@ export default function FavoritesScreen() {
   const keyExtractor = useCallback((item: PublicListing) => item.id, []);
   const renderItem = useCallback(
     ({ item }: { item: PublicListing }) => (
-      <ListingCard listing={item} />
+      <ListingCard listing={item} source="favorites" />
     ),
     []
   );

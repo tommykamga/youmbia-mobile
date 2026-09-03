@@ -58,6 +58,11 @@ import {
 import { useResponsiveLayout } from '@/lib/responsiveLayout';
 import { FF_SIMILAR_LISTINGS } from '@/lib/featureFlags';
 import { peekListingDetailSession, putListingDetailSession } from '@/services/listings/listingDetailSessionCache';
+import {
+  getListingViewSource,
+  trackListingViewed,
+  trackSellerContactInitiated,
+} from '@/lib/analytics';
 
 type State =
   | { status: 'loading' }
@@ -162,10 +167,12 @@ export default function ListingDetailScreen() {
   /** Évite de rejouer l’action contact après retour auth (pas de boucle). */
   const contactHandledRef = useRef<string | null>(null);
   const listingIdRef = useRef<string | undefined>(undefined);
+  const viewedListingIdRef = useRef<string | null>(null);
   listingIdRef.current = id;
 
   useEffect(() => {
     contactHandledRef.current = null;
+    viewedListingIdRef.current = null;
   }, [id]);
 
   useEffect(() => {
@@ -173,6 +180,21 @@ export default function ListingDetailScreen() {
     setSimilarListings([]);
     setSimilarLoading(false);
   }, [id]);
+
+  useEffect(() => {
+    if (state.status !== 'success' || !id) return;
+    if (viewedListingIdRef.current === id) return;
+    viewedListingIdRef.current = id;
+    trackListingViewed({
+      listing_id: id,
+      listing_category: resolveMarketplaceCategoryLabel(
+        marketplaceCategories,
+        state.listing.category_id
+      ),
+      listing_city: state.listing.city,
+      source: getListingViewSource(),
+    });
+  }, [id, marketplaceCategories, state]);
 
   useEffect(() => {
     if (!id) {
@@ -343,7 +365,7 @@ export default function ListingDetailScreen() {
     setIsFavorite(nextFavorite);
     setFavoriteLoading(true);
     try {
-      const result = await toggleFavorite(id);
+      const result = await toggleFavorite(id, { source: 'listing_detail' });
       if (!result.error) return;
 
       setIsFavorite(!nextFavorite);
@@ -385,6 +407,7 @@ export default function ListingDetailScreen() {
       return false;
     }
     router.push(`/conversation/${conversationId}` as const);
+    trackSellerContactInitiated({ listing_id: id, contact_method: 'message' });
     return true;
   }, [id, router]);
 
@@ -417,6 +440,7 @@ export default function ListingDetailScreen() {
       return;
     }
     await openWhatsAppForListing(state.listing);
+    trackSellerContactInitiated({ listing_id: id, contact_method: 'whatsapp' });
   }, [id, state, router]);
 
   const handleSecureCall = useCallback(async () => {
@@ -427,6 +451,7 @@ export default function ListingDetailScreen() {
       return;
     }
     await openSellerPhoneCall(state.listing);
+    trackSellerContactInitiated({ listing_id: id, contact_method: 'call' });
   }, [id, state, router]);
 
   const handleSecureSms = useCallback(async () => {
@@ -437,6 +462,7 @@ export default function ListingDetailScreen() {
       return;
     }
     await openSellerSms(state.listing);
+    trackSellerContactInitiated({ listing_id: id, contact_method: 'sms' });
   }, [id, state, router]);
 
   useEffect(() => {
@@ -468,12 +494,15 @@ export default function ListingDetailScreen() {
         switch (contact) {
           case 'whatsapp':
             await openWhatsAppForListing(listing);
+            trackSellerContactInitiated({ listing_id: id, contact_method: 'whatsapp' });
             break;
           case 'call':
             await openSellerPhoneCall(listing);
+            trackSellerContactInitiated({ listing_id: id, contact_method: 'call' });
             break;
           case 'sms':
             await openSellerSms(listing);
+            trackSellerContactInitiated({ listing_id: id, contact_method: 'sms' });
             break;
           case 'message':
             await openConversationForListing();
@@ -577,7 +606,7 @@ export default function ListingDetailScreen() {
 
   const renderSimilarItem = ({ item }: { item: PublicListing }) => (
     <View style={{ width: CARD_WIDTH }}>
-      <ListingCard listing={item} />
+      <ListingCard listing={item} source="other" />
     </View>
   );
 
@@ -608,6 +637,7 @@ export default function ListingDetailScreen() {
       >
         <ListingGallery
           key={listing.id}
+          listingId={listing.id}
           images={listing.images}
           lazySourcePaths={listing.galleryLazySourcePaths}
         />

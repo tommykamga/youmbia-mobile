@@ -6,6 +6,7 @@
 
 import * as WebBrowser from 'expo-web-browser';
 import { makeRedirectUri } from 'expo-auth-session';
+import { captureAuthSuccess } from '@/lib/analytics';
 import { supabase } from '@/lib/supabase';
 import type { AuthError } from '@supabase/supabase-js';
 import type { SignInResult } from './signInOut';
@@ -87,6 +88,11 @@ export async function signInWithGoogle(): Promise<SignInResult> {
 
   if (sessionError) {
     return { ok: false, error: sessionError };
+  }
+
+  const { data: userData } = await supabase.auth.getUser();
+  if (userData.user) {
+    void captureAuthSuccess(userData.user, { method: 'google' });
   }
 
   return { ok: true, error: null };

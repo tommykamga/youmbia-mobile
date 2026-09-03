@@ -23,6 +23,7 @@ import { FavoriteButton } from '@/components/FavoriteButton';
 import { getDisplayLocationLine, getDisplayUrgent } from '@/lib/listingSchemaFeatures';
 import { timeAgo, isListingNew } from '@/utils/timeAgo';
 import type { PublicListing } from '@/services/listings';
+import { setListingViewSource } from '@/lib/analytics';
 
 const IMAGE_ASPECT = 4 / 3;
 const BODY_PADDING = spacing.sm;
@@ -62,6 +63,7 @@ function NearYouCardInner({
   const isNear = Boolean(userCity?.trim() && city && userCity.trim().toLowerCase() === city.toLowerCase());
 
   const handlePress = useCallback(() => {
+    setListingViewSource('home');
     router.push(`/listing/${listing.id}`);
   }, [listing.id, router]);
 
@@ -115,7 +117,7 @@ function NearYouCardInner({
           </View>
         ) : null}
         <View style={styles.heartPosition}>
-          <FavoriteButton listingId={listing.id} size={HEART_SIZE} />
+          <FavoriteButton listingId={listing.id} size={HEART_SIZE} source="home" />
         </View>
       </View>
       <View style={styles.body}>

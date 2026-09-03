@@ -9,6 +9,7 @@
 
 import { REPORT_OWN_CONTENT_MESSAGE } from '@/constants/reportMessages';
 import { supabase } from '@/lib/supabase';
+import { trackListingReported } from '@/lib/analytics';
 
 export type ReportListingResult =
   | { data: null; error: null }
@@ -70,6 +71,11 @@ export async function reportListing(
   if (error) {
     return { data: null, error: { message: error.message } };
   }
+
+  trackListingReported({
+    listing_id: trimmedListingId,
+    report_reason: trimmedReason,
+  });
 
   return { data: null, error: null };
 }

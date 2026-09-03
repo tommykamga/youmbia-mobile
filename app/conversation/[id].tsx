@@ -32,6 +32,7 @@ import { markConversationNotificationAsRead, syncMessageNotificationSnapshot } f
 import type { Message } from '@/services/conversations';
 import { spacing, colors, typography, fontWeights } from '@/theme';
 import { Ionicons } from '@expo/vector-icons';
+import { trackConversationViewed } from '@/lib/analytics';
 
 function formatMessageTime(iso: string): string {
   try {
@@ -139,6 +140,15 @@ export default function ConversationThreadScreen() {
       setMessages(messagesResult.data ?? []);
       void syncMessageNotificationSnapshot(convListResult.data ?? []);
       setStatus('success');
+      const unreadFromInbox = convListResult.data?.find((item) => item.id === id)?.unread_count;
+      const unreadFromMessages = (messagesResult.data ?? []).filter(
+        (message) => message.sender_id !== session.user.id && message.read_at == null
+      ).length;
+      trackConversationViewed({
+        conversation_id: id,
+        unread_messages_count:
+          typeof unreadFromInbox === 'number' ? unreadFromInbox : unreadFromMessages,
+      });
     } catch {
       setStatus('error');
       setErrorMessage('Une erreur inattendue est survenue.');

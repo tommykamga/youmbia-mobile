@@ -18,11 +18,12 @@ type FavoriteButtonProps = {
   size?: number;
   /** Cercle discret type fil d’accueil (ombre légère, 44pt). */
   surface?: 'default' | 'home';
+  source?: string;
 };
 
 const AnimatedIonicons = Animated.createAnimatedComponent(Ionicons);
 
-export function FavoriteButton({ listingId, size = 24, surface = 'default' }: FavoriteButtonProps) {
+export function FavoriteButton({ listingId, size = 24, surface = 'default', source }: FavoriteButtonProps) {
   const { isFavorite, toggleFavorite } = useFavorites();
   const favorite = isFavorite(listingId);
 
@@ -44,7 +45,7 @@ export function FavoriteButton({ listingId, size = 24, surface = 'default' }: Fa
       withTiming(1.2, { duration: 100, easing: Easing.out(Easing.quad) }),
       withSpring(1, { damping: 15, stiffness: 300 })
     );
-    toggleFavorite(listingId);
+    toggleFavorite(listingId, source);
   };
 
   const animatedStyle = useAnimatedStyle(() => {

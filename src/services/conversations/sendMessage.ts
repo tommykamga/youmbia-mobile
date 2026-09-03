@@ -3,6 +3,7 @@
  */
 
 import { supabase } from '@/lib/supabase';
+import { trackMessageSendFailed, trackMessageSent } from '@/lib/analytics';
 import type { Message } from './types';
 
 export type SendMessageResult =
@@ -37,7 +38,10 @@ export async function sendMessage(
     .select('id, conversation_id, sender_id, body, created_at, read_at')
     .single();
 
-  if (error) return { data: null, error: { message: error.message } };
+  if (error) {
+    trackMessageSendFailed({ conversation_id: conversationId, error: error.message });
+    return { data: null, error: { message: error.message } };
+  }
 
   const row = data as {
     id: string;
@@ -77,6 +81,23 @@ export async function sendMessage(
         console.warn('[sendMessage] send-message-push exception:', err);
       }
     });
+
+  let messageCount = 1;
+  try {
+    const { count } = await supabase
+      .from('messages')
+      .select('id', { count: 'exact', head: true })
+      .eq('conversation_id', conversationId);
+    if (typeof count === 'number') messageCount = count;
+  } catch {
+    // Analytics must never fail the send path.
+  }
+
+  trackMessageSent({
+    conversation_id: conversationId,
+    message_count: messageCount,
+    message_type: 'text',
+  });
 
   return { data: message, error: null };
 }

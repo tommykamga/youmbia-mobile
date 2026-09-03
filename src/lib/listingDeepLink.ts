@@ -1,3 +1,5 @@
+import { setListingViewSource } from '@/lib/analytics';
+
 const WEB_HOSTS = new Set(['www.youmbia.com', 'youmbia.com']);
 const LISTING_ID_PATTERN = /^[A-Za-z0-9-]+$/;
 
@@ -23,7 +25,11 @@ export function getListingHrefFromUrl(url: string | null | undefined): string | 
     if (WEB_HOSTS.has(parsed.hostname)) {
       if (!parsed.pathname.toLowerCase().startsWith('/annonce')) return null;
       const listingId = getListingIdFromPath(parsed.pathname);
-      return listingId ? `/listing/${listingId}` : '/(tabs)/home';
+      if (listingId) {
+        setListingViewSource('shared');
+        return `/listing/${listingId}`;
+      }
+      return '/(tabs)/home';
     }
 
     if (parsed.protocol === 'youmbiamobile:') {
@@ -32,10 +38,17 @@ export function getListingHrefFromUrl(url: string | null | undefined): string | 
       if (!isHostFormat && !isPathFormat) return null;
 
       const hostId = isHostFormat ? normalizeListingId(parsed.pathname.slice(1)) : null;
-      if (hostId) return `/listing/${hostId}`;
+      if (hostId) {
+        setListingViewSource('link');
+        return `/listing/${hostId}`;
+      }
 
       const pathId = getListingIdFromPath(parsed.pathname);
-      return pathId ? `/listing/${pathId}` : '/(tabs)/home';
+      if (pathId) {
+        setListingViewSource('link');
+        return `/listing/${pathId}`;
+      }
+      return '/(tabs)/home';
     }
   } catch {
     return raw.toLowerCase().includes('annonce') ? '/(tabs)/home' : null;

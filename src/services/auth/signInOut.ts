@@ -2,6 +2,7 @@
  * Sign in / sign out / sign up – no UI; call from auth screens.
  */
 
+import { captureAuthSuccess, trackSignOut } from '@/lib/analytics';
 import { supabase } from '@/lib/supabase';
 import type { AuthError } from '@supabase/supabase-js';
 
@@ -41,6 +42,11 @@ export async function signIn(
       return { ok: false, error: { message: getSafeAuthErrorMessage(error) } };
     }
 
+    const { data } = await supabase.auth.getUser();
+    if (data.user) {
+      void captureAuthSuccess(data.user, { method: 'email', flow: 'signin' });
+    }
+
     return { ok: true, error: null };
   } catch (error) {
     return { ok: false, error: { message: getSafeAuthErrorMessage(error) } };
@@ -69,6 +75,10 @@ export async function signUp(
       };
     }
 
+    if (data.user) {
+      void captureAuthSuccess(data.user, { method: 'email', flow: 'signup' });
+    }
+
     if (data.user && !data.session) {
       return { ok: true, error: null, requiresEmailConfirmation: true };
     }
@@ -86,7 +96,10 @@ export async function signUp(
 /**
  * Sign out the current user and clear the persisted session.
  */
-export async function signOut(): Promise<{ error: AuthError | null }> {
+export async function signOut(options?: {
+  reason?: string;
+}): Promise<{ error: AuthError | null }> {
+  await trackSignOut({ signed_out_reason: options?.reason ?? 'user_initiated' });
   const { error } = await supabase.auth.signOut();
   return { error: error ?? null };
 }

@@ -168,7 +168,7 @@ export function BoostedSection({ onVoirToutPress }: BoostedSectionProps) {
 
   const renderItem = useCallback(
     ({ item }: { item: PublicListing }) => (
-      <ListingCard listing={item} variant="rail" railPresentation="featured" />
+      <ListingCard listing={item} variant="rail" railPresentation="featured" source="home" />
     ),
     []
   );

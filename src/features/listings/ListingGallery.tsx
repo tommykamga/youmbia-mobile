@@ -21,6 +21,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { resolveSingleListingImageUrl } from '@/lib/listingImageUrl';
+import { trackListingGallerySwiped } from '@/lib/analytics';
 import { colors, spacing, radius, typography, fontWeights } from '@/theme';
 
 const ZOOM_MAX = 3;
@@ -39,11 +40,12 @@ function getGalleryHeight(width: number, height: number): number {
 
 type ListingGalleryProps = {
   images: string[];
+  listingId?: string;
   /** Chemins Storage / URLs à signer au swipe (photos après la première). */
   lazySourcePaths?: string[];
 };
 
-export function ListingGallery({ images, lazySourcePaths }: ListingGalleryProps) {
+export function ListingGallery({ images, listingId, lazySourcePaths }: ListingGalleryProps) {
   const { width, height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const slideHeight = getGalleryHeight(width, height);
@@ -99,11 +101,18 @@ export function ListingGallery({ images, lazySourcePaths }: ListingGalleryProps)
     (e: NativeSyntheticEvent<NativeScrollEvent>) => {
       const x = e.nativeEvent.contentOffset.x;
       const index = Math.round(x / width);
-      if (index >= 0 && index < totalSlides) {
+      if (index >= 0 && index < totalSlides && index !== currentIndex) {
+        if (listingId) {
+          trackListingGallerySwiped({
+            listing_id: listingId,
+            gallery_image_index: index,
+            gallery_direction: index > currentIndex ? 'next' : 'previous',
+          });
+        }
         setCurrentIndex(index);
       }
     },
-    [width, totalSlides]
+    [width, totalSlides, currentIndex, listingId]
   );
 
   const openFullScreen = useCallback(

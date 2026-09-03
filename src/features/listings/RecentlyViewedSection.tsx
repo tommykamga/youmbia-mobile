@@ -76,7 +76,7 @@ export function RecentlyViewedSection() {
         snapToInterval={ITEM_WIDTH}
         snapToAlignment="start"
         decelerationRate="fast"
-        renderItem={({ item }) => <ListingCard listing={item} variant="rail" />}
+        renderItem={({ item }) => <ListingCard listing={item} variant="rail" source="home" />}
       />
     </View>
   );

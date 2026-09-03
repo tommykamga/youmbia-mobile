@@ -4,6 +4,7 @@
  */
 
 import { supabase } from '@/lib/supabase';
+import { trackListingFavorited, trackListingUnfavorited } from '@/lib/analytics';
 
 export type ToggleFavoriteResult =
   | { isFavorite: boolean; error: null }
@@ -24,7 +25,10 @@ function getFavoriteErrorMessage(message: string, fallback: string): string {
  * If the listing is currently favorited, removes it. Otherwise adds it.
  * Returns the new state (isFavorite) or error if not logged in / request failed.
  */
-export async function toggleFavorite(listingId: string): Promise<ToggleFavoriteResult> {
+export async function toggleFavorite(
+  listingId: string,
+  options?: { source?: string }
+): Promise<ToggleFavoriteResult> {
   try {
     const {
       data: { user },
@@ -74,6 +78,10 @@ export async function toggleFavorite(listingId: string): Promise<ToggleFavoriteR
           },
         };
       }
+      trackListingUnfavorited({
+        listing_id: listingId,
+        favorite_source: options?.source?.trim() || 'other',
+      });
       return { isFavorite: false, error: null };
     }
 
@@ -92,6 +100,10 @@ export async function toggleFavorite(listingId: string): Promise<ToggleFavoriteR
         },
       };
     }
+    trackListingFavorited({
+      listing_id: listingId,
+      favorite_source: options?.source?.trim() || 'other',
+    });
     return { isFavorite: true, error: null };
   } catch {
     return {

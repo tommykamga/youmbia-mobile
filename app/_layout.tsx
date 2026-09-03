@@ -8,6 +8,7 @@ import { Alert, AppState, Linking } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { colors } from '@/theme';
 import { getSession, onAuthStateChange } from '@/services/auth';
+import { identifyCurrentUser, initMixpanel, resetAnalytics } from '@/lib/analytics';
 import { startProfileProvisioningOnAuth } from '@/services/profile';
 import { handleSupabaseAuthDeepLink } from '@/services/auth/handleSupabaseAuthDeepLink';
 import { getListingHrefFromUrl } from '@/lib/listingDeepLink';
@@ -91,10 +92,13 @@ export default function RootLayout() {
         // Chargement parallèle des ressources critiques (ex: Session Supabase)
         const [{ supabase }] = await Promise.all([
           import('@/lib/supabase'),
-          // Ajouter d'autres préchargements ici si besoin
+          initMixpanel(),
         ]);
 
-        await supabase.auth.getSession();
+        const { data } = await supabase.auth.getSession();
+        if (data.session?.user) {
+          await identifyCurrentUser(data.session.user);
+        }
       } catch (e) {
         console.warn('App preparation error:', e);
       } finally {
@@ -109,6 +113,18 @@ export default function RootLayout() {
   // Fire-and-forget — ne bloque pas le splash ni isAppReady.
   useEffect(() => {
     return startProfileProvisioningOnAuth();
+  }, []);
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChange((event, session) => {
+      if (session?.user && (event === 'SIGNED_IN' || event === 'INITIAL_SESSION')) {
+        void identifyCurrentUser(session.user);
+      }
+      if (event === 'SIGNED_OUT') {
+        void resetAnalytics();
+      }
+    });
+    return unsubscribe;
   }, []);
 
   useEffect(() => {

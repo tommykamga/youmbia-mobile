@@ -8,6 +8,7 @@
  * au cold start sur les plateformes non‑iOS.
  */
 
+import { captureAuthSuccess } from '@/lib/analytics';
 import { supabase } from '@/lib/supabase';
 import type { SignInResult } from './signInOut';
 
@@ -51,6 +52,11 @@ export async function signInWithApple(): Promise<SignInResult> {
       } catch {
         // non bloquant
       }
+    }
+
+    const { data: userData } = await supabase.auth.getUser();
+    if (userData.user) {
+      void captureAuthSuccess(userData.user, { method: 'apple' });
     }
 
     return { ok: true, error: null };

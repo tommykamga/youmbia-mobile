@@ -9,6 +9,7 @@
 
 import * as Linking from 'expo-linking';
 import type { Href } from 'expo-router';
+import { captureAuthSuccess } from '@/lib/analytics';
 import { supabase } from '@/lib/supabase';
 import { buildLoginHref, buildPostAuthHref } from '@/lib/authRedirect';
 import { isSellerContactAction } from '@/lib/sellerContact';
@@ -199,6 +200,11 @@ export async function handleSupabaseAuthDeepLink(
           errorMessage: 'Connexion incomplète. Réessayez.',
         };
       }
+      lastConsumedAuthUrl = raw;
+      if (data.session.user) {
+        void captureAuthSuccess(data.session.user, { method: 'email' });
+      }
+      return { consumed: true, navigateTo: dest };
     } else if (params.access_token && params.refresh_token) {
       const { data: existing } = await supabase.auth.getSession();
       if (existing.session?.user) {

@@ -23,6 +23,7 @@ import { spacing, colors, typography, fontWeights, radius, ui } from '@/theme';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useFavorites } from '@/context/FavoritesContext';
 import { lightCacheKeys, lightCacheRead, lightCacheWrite } from '@/lib/lightCache';
+import { trackHomeFeedViewed } from '@/lib/analytics';
 
 const PAGE_SIZE = 15;
 const FAVORITES_FOCUS_REFRESH_MIN_INTERVAL_MS = 120_000;
@@ -219,10 +220,22 @@ export function ListingFeed({
     }, [refreshFavorites])
   );
 
+  useFocusEffect(
+    useCallback(() => {
+      if (listingCardFeedPresentation !== 'home') return;
+      trackHomeFeedViewed({ feed_context: 'default', favorites_only: false });
+    }, [listingCardFeedPresentation])
+  );
+
   const onRefresh = useCallback(() => {
     setRefreshing(true);
-    load(0, false).finally(() => setRefreshing(false));
-  }, [load]);
+    load(0, false).finally(() => {
+      setRefreshing(false);
+      if (listingCardFeedPresentation === 'home') {
+        trackHomeFeedViewed({ feed_context: 'refresh', favorites_only: false });
+      }
+    });
+  }, [load, listingCardFeedPresentation]);
 
   const isHomeCardInset =
     listingCardFeedPresentation === 'home' && homeFeedCardInset != null;
@@ -257,6 +270,7 @@ export function ListingFeed({
         <ListingCard
           listing={item as PublicListing}
           feedPresentation={listingCardFeedPresentation}
+          source={listingCardFeedPresentation === 'home' ? 'home' : 'other'}
         />
       );
     },

@@ -8,6 +8,7 @@
  * Voir : supabase/migrations/20260602210000_delete_account_v1.sql
  */
 
+import { trackSignOut } from '@/lib/analytics';
 import { supabase } from '@/lib/supabase';
 
 export type DeleteAccountResult =
@@ -32,6 +33,8 @@ export async function deleteAccount(): Promise<DeleteAccountResult> {
     if (error) {
       return { ok: false, message: safeMessage(error.message) };
     }
+
+    await trackSignOut({ signed_out_reason: 'account_deleted' });
 
     // Le compte n'existe plus : on purge la session locale (best-effort).
     try {

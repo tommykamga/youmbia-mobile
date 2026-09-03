@@ -5,6 +5,7 @@
 
 import { Share, Linking, Platform } from 'react-native';
 import { formatPrice } from './format';
+import { trackListingShared, type ShareChannel } from '@/lib/analytics';
 
 const LISTING_URL_BASE = 'https://www.youmbia.com/annonce';
 const SELLER_URL_BASE = 'https://www.youmbia.com/vendeur';
@@ -64,10 +65,21 @@ function buildSellerShareMessage(payload: ShareSellerPayload): string {
 
 const WHATSAPP_PREFIX = 'https://wa.me';
 
+function inferShareChannel(
+  activityType: string | null | undefined,
+  usedWhatsAppFallback: boolean
+): ShareChannel {
+  if (usedWhatsAppFallback) return 'whatsapp';
+  const type = String(activityType ?? '').toLowerCase();
+  if (type.includes('whatsapp')) return 'whatsapp';
+  if (type.includes('copy') || type.includes('pasteboard')) return 'copy_link';
+  return 'other';
+}
+
 async function shareMessage(
   message: string,
   fallback: () => Promise<boolean>
-): Promise<{ success: boolean; error?: string }> {
+): Promise<{ success: boolean; error?: string; channel?: ShareChannel }> {
   try {
     const result = await Share.share(
       Platform.OS === 'ios'
@@ -76,16 +88,20 @@ async function shareMessage(
     );
 
     if (result.action === Share.sharedAction) {
-      return { success: true };
+      return {
+        success: true,
+        channel: inferShareChannel(result.activityType, false),
+      };
     }
     if (result.action === Share.dismissedAction) {
       return { success: false };
     }
-    return { success: true };
+    return { success: true, channel: 'other' };
   } catch {
     const fallbackOk = await fallback();
     return {
       success: fallbackOk,
+      channel: fallbackOk ? 'whatsapp' : undefined,
       error: fallbackOk ? undefined : 'Partage indisponible',
     };
   }
@@ -101,7 +117,14 @@ export async function shareListing(payload: ShareListingPayload): Promise<{ succ
   }
 
   const message = buildShareMessage(payload);
-  return shareMessage(message, () => shareListingViaWhatsApp(payload));
+  const result = await shareMessage(message, () => shareListingViaWhatsApp(payload));
+  if (result.success) {
+    trackListingShared({
+      listing_id: payload.id,
+      share_channel: result.channel ?? 'other',
+    });
+  }
+  return result;
 }
 
 /**

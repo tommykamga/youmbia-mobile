@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabase';
+import { trackBumpActivated } from '@/lib/analytics';
 import type { TablesUpdate } from '@/types/database';
 
 export type BumpListingResult =
@@ -33,6 +34,12 @@ export async function bumpListing(listingId: string): Promise<BumpListingResult>
     if (error || !data) {
       return { data: null, error: { message: GENERIC_ERROR_MESSAGE } };
     }
+
+    trackBumpActivated({
+      listing_id: listingId,
+      bump_duration_days: 1,
+      bump_price_cfa: 0,
+    });
 
     return { data: null, error: null };
   } catch {

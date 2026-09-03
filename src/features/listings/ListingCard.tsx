@@ -24,6 +24,7 @@ import { timeAgo, isListingNew } from '@/utils/timeAgo';
 import { getDisplayUrgent, getDisplayLocationLine } from '@/lib/listingSchemaFeatures';
 import type { PublicListing } from '@/services/listings';
 import { ProSellerBadge } from '@/features/shops/ProSellerBadge';
+import { setListingViewSource, type ListingViewSource } from '@/lib/analytics';
 
 /** Largeur carte en carrousel (home sections horizontales). */
 export const LISTING_CARD_RAIL_WIDTH = 220;
@@ -63,6 +64,7 @@ export type ListingCardProps = {
    * Ne pas utiliser hors ListingFeed home pour garder les autres écrans inchangés.
    */
   feedPresentation?: 'standard' | 'home';
+  source?: ListingViewSource;
 };
 
 /** Clé stable (URL / chemin) pour l’image de couverture — évite de dépendre de l’objet `listing` entier. */
@@ -85,6 +87,7 @@ function listingCardPropsAreEqual(prev: ListingCardProps, next: ListingCardProps
   if ((prev.railPresentation ?? 'default') !== (next.railPresentation ?? 'default')) return false;
   if (prev.feedPresentation !== next.feedPresentation) return false;
   if (prev.variant !== next.variant) return false;
+  if ((prev.source ?? '') !== (next.source ?? '')) return false;
   const a = prev.listing;
   const b = next.listing;
   if (a.id !== b.id) return false;
@@ -115,6 +118,7 @@ function ListingCardInner({
   variant = 'feed',
   railPresentation = 'default',
   feedPresentation = 'standard',
+  source,
 }: ListingCardProps) {
   const router = useRouter();
   const { width: winW } = useWindowDimensions();
@@ -159,8 +163,11 @@ function ListingCardInner({
   const priceLabel = formatPrice(listing.price);
 
   const handlePress = useCallback(() => {
+    const resolvedSource: ListingViewSource =
+      source ?? (feedPresentation === 'home' ? 'home' : 'other');
+    setListingViewSource(resolvedSource);
     router.push(`/listing/${listing.id}`);
-  }, [listing.id, router]);
+  }, [feedPresentation, listing.id, router, source]);
 
   const onPressIn = () => {
     scale.value = withTiming(0.97, { duration: 100, easing: Easing.out(Easing.quad) });
@@ -228,6 +235,7 @@ function ListingCardInner({
             listingId={listing.id}
             size={isHomeFeed ? HEART_SIZE_HOME : HEART_SIZE}
             surface={isHomeFeed ? 'home' : 'default'}
+            source={source ?? (feedPresentation === 'home' ? 'home' : 'listing_card')}
           />
         </View>
       </View>

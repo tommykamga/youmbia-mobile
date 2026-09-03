@@ -179,7 +179,7 @@ export function ForYouSection() {
   const keyExtractor = useCallback((item: PublicListing) => item.id, []);
   const renderItem = useCallback(
     ({ item }: { item: PublicListing }) => (
-      <ListingCard listing={item} variant="rail" />
+      <ListingCard listing={item} variant="rail" source="home" />
     ),
     []
   );

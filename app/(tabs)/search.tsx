@@ -45,6 +45,7 @@ import { colors, spacing, typography, fontWeights, radius } from '@/theme';
 import { getSession } from '@/services/auth';
 import { buildAuthGateHref } from '@/lib/authGateNavigation';
 import { useResponsiveLayout, getScrollBottomReserveForTabBar } from '@/lib/responsiveLayout';
+import { trackListingSearched } from '@/lib/analytics';
 
 const SUGGESTIONS_DEBOUNCE_MS = 300;
 /** Ne pas relancer `runSearch` si les params de navigation sont identiques sous ce délai (anti double effet / focus). */
@@ -333,6 +334,14 @@ export default function SearchScreen() {
       setSubmittedQuery(trimmed);
       return;
     }
+
+    const categoryLabel =
+      filters?.category !== undefined ? filters.category : appliedSearchFilters.category;
+    trackListingSearched({
+      search_query: trimmed,
+      category: categoryLabel,
+      city: searchCity,
+    });
 
     const cached = searchSessionPage1Cache.get(page1Key);
     if (cached) {
@@ -685,7 +694,7 @@ export default function SearchScreen() {
   const keyExtractor = useCallback((item: PublicListing) => item.id, []);
   const renderItem = useCallback(
     ({ item }: { item: PublicListing }) => (
-      <ListingCard listing={item} />
+      <ListingCard listing={item} source="search" />
     ),
     []
   );

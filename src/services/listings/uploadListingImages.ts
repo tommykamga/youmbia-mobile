@@ -5,6 +5,7 @@
 
 import { decode } from 'base64-arraybuffer';
 import { supabase } from '@/lib/supabase';
+import { trackListingImagesUploaded } from '@/lib/analytics';
 import { compressListingPhotoForStorageUpload } from '@/lib/listingPhotoUploadCompression';
 
 const BUCKET = 'listing-images';
@@ -193,11 +194,18 @@ export async function uploadListingImages(
 
     const totalCount = images.length;
     if (failedCount === 0) {
+      if (uploadedCount > 0) {
+        trackListingImagesUploaded({ listing_id: listingId, image_count: uploadedCount });
+      }
       return {
         status: 'ok',
         data: { uploadedCount, failedCount: 0, totalCount },
         error: null,
       };
+    }
+
+    if (uploadedCount > 0) {
+      trackListingImagesUploaded({ listing_id: listingId, image_count: uploadedCount });
     }
 
     return {
