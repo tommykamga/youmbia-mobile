@@ -12,8 +12,7 @@
       "bundleIdentifier": "com.youmbia.mobile",
       "usesAppleSignIn": true,
       "associatedDomains": [
-        "applinks:www.youmbia.com",
-        "applinks:youmbia.com"
+        "applinks:www.youmbia.com"
       ],
       "splash": {
         "image": "./assets/images/splash.png",
@@ -47,6 +46,7 @@
       "intentFilters": [
         {
           "action": "VIEW",
+          "autoVerify": true,
           "category": [
             "BROWSABLE",
             "DEFAULT"
@@ -55,11 +55,6 @@
             {
               "scheme": "https",
               "host": "www.youmbia.com",
-              "pathPrefix": "/annonce"
-            },
-            {
-              "scheme": "https",
-              "host": "youmbia.com",
               "pathPrefix": "/annonce"
             }
           ]
