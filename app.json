@@ -2,7 +2,7 @@
   "expo": {
     "name": "YOUMBIA",
     "slug": "youmbia-mobile",
-    "version": "4.4.1",
+    "version": "4.5.0",
     "orientation": "default",
     "icon": "./assets/images/icon.png",
     "scheme": "youmbiamobile",
@@ -10,6 +10,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.youmbia.mobile",
+      "buildNumber": "2",
       "usesAppleSignIn": true,
       "associatedDomains": [
         "applinks:www.youmbia.com"
@@ -30,7 +31,7 @@
     },
     "android": {
       "package": "com.youmbia.mobile",
-      "versionCode": 34,
+      "versionCode": 35,
       "softwareKeyboardLayoutMode": "resize",
       "splash": {
         "image": "./assets/images/splash.png",
