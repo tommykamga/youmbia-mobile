@@ -2,7 +2,7 @@
   "expo": {
     "name": "YOUMBIA",
     "slug": "youmbia-mobile",
-    "version": "4.5.0",
+    "version": "4.5.1",
     "orientation": "default",
     "icon": "./assets/images/icon.png",
     "scheme": "youmbiamobile",
@@ -31,7 +31,7 @@
     },
     "android": {
       "package": "com.youmbia.mobile",
-      "versionCode": 35,
+      "versionCode": 36,
       "softwareKeyboardLayoutMode": "resize",
       "splash": {
         "image": "./assets/images/splash.png",
@@ -56,6 +56,11 @@
             {
               "scheme": "https",
               "host": "www.youmbia.com",
+              "pathPrefix": "/annonce"
+            },
+            {
+              "scheme": "https",
+              "host": "youmbia.com",
               "pathPrefix": "/annonce"
             }
           ]
