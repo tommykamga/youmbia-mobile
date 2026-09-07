@@ -2,7 +2,7 @@
   "expo": {
     "name": "YOUMBIA",
     "slug": "youmbia-mobile",
-    "version": "4.4.1",
+    "version": "4.5.0",
     "orientation": "default",
     "icon": "./assets/images/icon.png",
     "scheme": "youmbiamobile",
@@ -10,7 +10,11 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.youmbia.mobile",
+      "buildNumber": "2",
       "usesAppleSignIn": true,
+      "associatedDomains": [
+        "applinks:www.youmbia.com"
+      ],
       "splash": {
         "image": "./assets/images/splash.png",
         "resizeMode": "contain",
@@ -27,7 +31,7 @@
     },
     "android": {
       "package": "com.youmbia.mobile",
-      "versionCode": 34,
+      "versionCode": 35,
       "softwareKeyboardLayoutMode": "resize",
       "splash": {
         "image": "./assets/images/splash.png",
@@ -43,6 +47,7 @@
       "intentFilters": [
         {
           "action": "VIEW",
+          "autoVerify": true,
           "category": [
             "BROWSABLE",
             "DEFAULT"
@@ -51,11 +56,6 @@
             {
               "scheme": "https",
               "host": "www.youmbia.com",
-              "pathPrefix": "/annonce"
-            },
-            {
-              "scheme": "https",
-              "host": "youmbia.com",
               "pathPrefix": "/annonce"
             }
           ]
@@ -82,6 +82,13 @@
           "photosPermission": "YOUMBIA accède à vos photos pour ajouter des images à vos annonces et à votre profil.",
           "cameraPermission": "YOUMBIA accède à votre caméra pour prendre une photo de profil.",
           "microphonePermission": false
+        }
+      ],
+      [
+        "@sentry/react-native/expo",
+        {
+          "url": "https://sentry.io/",
+          "note": "Use SENTRY_AUTH_TOKEN, SENTRY_ORG and SENTRY_PROJECT env vars. Never commit tokens or DSN in source."
         }
       ]
     ]

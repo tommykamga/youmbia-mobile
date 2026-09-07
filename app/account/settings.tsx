@@ -7,6 +7,7 @@ import { useRouter } from 'expo-router';
 import Constants from 'expo-constants';
 import { Screen, AppHeader, Button } from '@/components';
 import { signOut } from '@/services/auth';
+import { captureSentryTestException } from '@/lib/sentry';
 import { colors, spacing, typography, fontWeights } from '@/theme';
 
 export default function AccountSettingsScreen() {
@@ -54,6 +55,16 @@ export default function AccountSettingsScreen() {
         <View style={styles.appInfo}>
           <Text style={styles.appName}>{appName}</Text>
           <Text style={styles.appVersion}>Version {appVersion}</Text>
+          {__DEV__ ? (
+            <Button
+              variant="ghost"
+              onPress={captureSentryTestException}
+              style={styles.sentryTestBtn}
+              textStyle={styles.sentryTestBtnText}
+            >
+              Tester Sentry (dev)
+            </Button>
+          ) : null}
         </View>
       </View>
     </Screen>
@@ -91,6 +102,14 @@ const styles = StyleSheet.create({
     marginBottom: spacing.xs,
   },
   appVersion: {
+    ...typography.xs,
+    color: colors.textTertiary,
+  },
+  sentryTestBtn: {
+    marginTop: spacing.sm,
+    alignSelf: 'center',
+  },
+  sentryTestBtnText: {
     ...typography.xs,
     color: colors.textTertiary,
   },

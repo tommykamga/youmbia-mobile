@@ -108,6 +108,7 @@ export function Button({
               },
               textStyle,
             ]}
+            maxFontSizeMultiplier={1.3}
             {...(Platform.OS === 'android' ? { includeFontPadding: false } : {})}
           >
             {children}
@@ -122,6 +123,7 @@ export function Button({
     <Pressable
       onPress={onPress}
       disabled={disabled || loading}
+      accessibilityRole="button"
       {...pressableProps}
       style={({ pressed }) => {
         const pressedOpacity =

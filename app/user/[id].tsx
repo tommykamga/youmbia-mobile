@@ -4,8 +4,8 @@
  */
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { View, Text, StyleSheet, FlatList, Modal, Pressable, Alert, Platform } from 'react-native';
-import { useLocalSearchParams } from 'expo-router';
+import { View, Text, StyleSheet, FlatList, Pressable, Alert, Platform } from 'react-native';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Screen, AppHeader, Loader, EmptyState, Button, UserAvatar } from '@/components';
 import { getSellerStats, getUserProfile } from '@/services/users';
 import { getUserDisplayName } from '@/services/profile';
@@ -15,9 +15,11 @@ import { ListingCard, SellerBadge } from '@/features/listings';
 import type { PublicListing } from '@/services/listings';
 import { formatJoinDate } from '@/lib/format';
 import { shareSellerProfile } from '@/lib/shareListing';
+import { buildAuthGateHref } from '@/lib/authGateNavigation';
+import { REPORT_OWN_CONTENT_MESSAGE, REPORT_SUCCESS_MESSAGE } from '@/constants/reportMessages';
+import type { ReportReasonCode } from '@/constants/reportReasons';
+import { ReportComposerModal } from '@/features/reports';
 import { colors, spacing, typography, fontWeights, cardStyles } from '@/theme';
-
-const REPORT_REASONS = ['Arnaque', 'Comportement inapproprié', 'Spam', 'Autre'] as const;
 
 type State =
   | { status: 'loading' }
@@ -48,10 +50,12 @@ type State =
 
 export default function UserProfileScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
+  const router = useRouter();
   const [state, setState] = useState<State>({ status: 'loading' });
   const [reportModalVisible, setReportModalVisible] = useState(false);
   const [reportLoading, setReportLoading] = useState(false);
-  const [reportReason, setReportReason] = useState<string | null>(null);
+  const [reportReason, setReportReason] = useState<ReportReasonCode | null>(null);
+  const [reportComment, setReportComment] = useState('');
   const [reportedUserId, setReportedUserId] = useState<string | null>(null);
   const [sharingProfile, setSharingProfile] = useState(false);
   const loadRequestIdRef = useRef(0);
@@ -119,11 +123,11 @@ export default function UserProfileScreen() {
     if (!id) return;
     getSession().then((session) => {
       if (!session?.user) {
-        Alert.alert('Connexion requise', 'Connecte-toi pour signaler ce vendeur.');
+        router.replace(buildAuthGateHref('account', { redirect: `/user/${id}` }));
         return;
       }
       if (session.user.id === id) {
-        Alert.alert('Action impossible', 'Vous ne pouvez pas vous signaler vous-même.');
+        Alert.alert('Action impossible', REPORT_OWN_CONTENT_MESSAGE);
         return;
       }
       if (reportedUserId === id) {
@@ -131,12 +135,13 @@ export default function UserProfileScreen() {
         return;
       }
       setReportReason(null);
+      setReportComment('');
       setReportModalVisible(true);
     });
-  }, [id, reportedUserId]);
+  }, [id, reportedUserId, router]);
 
   const handleReportSubmit = useCallback(() => {
-    if (!id || !reportReason?.trim()) return;
+    if (!id || !reportReason || reportLoading) return;
     Alert.alert(
       'Confirmer le signalement',
       'Votre signalement sera envoyé pour modération.',
@@ -145,8 +150,9 @@ export default function UserProfileScreen() {
         {
           text: 'Envoyer',
           onPress: async () => {
+            if (reportLoading) return;
             setReportLoading(true);
-            const result = await reportUser(id, reportReason.trim());
+            const result = await reportUser(id, reportReason, { comment: reportComment });
             setReportLoading(false);
             if (result.error) {
               Alert.alert('Erreur', result.error.message);
@@ -154,12 +160,12 @@ export default function UserProfileScreen() {
             }
             setReportModalVisible(false);
             setReportedUserId(id);
-            Alert.alert('Merci', 'Votre signalement a bien été envoyé.');
+            Alert.alert('Merci', REPORT_SUCCESS_MESSAGE);
           },
         },
       ]
     );
-  }, [id, reportReason]);
+  }, [id, reportReason, reportComment, reportLoading]);
 
   const handleShareProfile = useCallback(async () => {
     if (!id || sharingProfile || state.status !== 'success') return;
@@ -314,58 +320,18 @@ export default function UserProfileScreen() {
   return (
     <Screen scroll={false} noPadding safe={false}>
       <AppHeader title="Profil vendeur" showBack density="compact" />
-      <Modal
+      <ReportComposerModal
         visible={reportModalVisible}
-        transparent
-        animationType="fade"
-        onRequestClose={() => !reportLoading && setReportModalVisible(false)}
-      >
-        <Pressable
-          style={styles.modalOverlay}
-          onPress={() => !reportLoading && setReportModalVisible(false)}
-        >
-          <Pressable style={styles.modalCard} onPress={(e) => e.stopPropagation()}>
-            <Text style={styles.modalTitle}>Signaler ce vendeur</Text>
-            <Text style={styles.modalSubtitle}>Choisissez un motif</Text>
-            {REPORT_REASONS.map((label) => (
-              <Pressable
-                key={label}
-                style={({ pressed }) => [
-                  styles.reasonOption,
-                  reportReason === label && styles.reasonOptionSelected,
-                  pressed && styles.reasonOptionPressed,
-                ]}
-                onPress={() => setReportReason(reportReason === label ? null : label)}
-              >
-                <Text
-                  style={[
-                    styles.reasonOptionText,
-                    reportReason === label && styles.reasonOptionTextSelected,
-                  ]}
-                >
-                  {label}
-                </Text>
-              </Pressable>
-            ))}
-            <View style={styles.modalActions}>
-              <Button
-                variant="ghost"
-                onPress={() => !reportLoading && setReportModalVisible(false)}
-                disabled={reportLoading}
-              >
-                Annuler
-              </Button>
-              <Button
-                onPress={handleReportSubmit}
-                loading={reportLoading}
-                disabled={reportLoading || !reportReason?.trim()}
-              >
-                Envoyer le signalement
-              </Button>
-            </View>
-          </Pressable>
-        </Pressable>
-      </Modal>
+        targetType="seller"
+        title="Signaler ce vendeur"
+        loading={reportLoading}
+        reason={reportReason}
+        comment={reportComment}
+        onChangeReason={setReportReason}
+        onChangeComment={setReportComment}
+        onCancel={() => !reportLoading && setReportModalVisible(false)}
+        onSubmit={handleReportSubmit}
+      />
       <FlatList
         data={state.listings}
         numColumns={2}

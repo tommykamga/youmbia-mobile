@@ -7,7 +7,7 @@ import React, { useCallback, useEffect, useState, useMemo, useRef } from 'react'
 import { FlatList, View, StyleSheet, RefreshControl, Platform, Text } from 'react-native';
 import { useRouter, Redirect, useFocusEffect } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { Screen, Loader, EmptyState, Button, AppHeader } from '@/components';
+import { Screen, EmptyState, Button, AppHeader, LoadingState } from '@/components';
 import { getFavorites } from '@/services/favorites';
 import { getSession } from '@/services/auth';
 import { ListingCard } from '@/features/listings';
@@ -135,7 +135,12 @@ export default function FavoritesScreen() {
   const itemSeparator = useCallback(() => <View style={styles.separator} />, []);
 
   if (state.status === 'loading') {
-    return <Loader />;
+    return (
+      <Screen noPadding safe={false}>
+        <AppHeader title="Favoris" noBorder density="compact" />
+        <LoadingState message="Chargement de vos favoris…" />
+      </Screen>
+    );
   }
 
   if (state.status === 'unauthenticated') {
@@ -147,7 +152,19 @@ export default function FavoritesScreen() {
       <Screen noPadding safe={false}>
         <AppHeader title="Favoris" noBorder density="compact" />
         <View style={styles.emptyWrap}>
-          <EmptyState variant="plain" title="Erreur" message={state.message} />
+          <EmptyState
+            variant="plain"
+            icon={<Ionicons name="cloud-offline-outline" size={24} color={colors.error} />}
+            title="Impossible de charger vos favoris"
+            message="Vérifiez votre connexion, puis réessayez. Vos favoris ne sont pas perdus."
+            action={
+              <View style={styles.emptyAction}>
+                <Button variant="secondary" onPress={() => void load()} style={styles.emptyCta}>
+                  Réessayer
+                </Button>
+              </View>
+            }
+          />
         </View>
       </Screen>
     );

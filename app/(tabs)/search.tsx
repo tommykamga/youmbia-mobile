@@ -20,7 +20,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useAppUpdateBannerInset } from '@/context/AppUpdateBannerInsetContext';
 import { useFocusEffect, useLocalSearchParams, useRouter, type Href } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { Screen, Loader, EmptyState, Button, HomeBrandHeader, HomeCategoryStrip, KeyboardSafeView } from '@/components';
+import { Screen, Button, HomeBrandHeader, HomeCategoryStrip, KeyboardSafeView, LoadingState } from '@/components';
 import { ListingCard, ListingFeed } from '@/features/listings';
 import {
   HomeMarketplaceFeedHeader,
@@ -28,7 +28,6 @@ import {
 } from '@/features/home/HomeMarketplaceFeedHeader';
 import { PopularShopsSection } from '@/features/shops';
 import { searchListings } from '@/services/listings';
-import { getSearchSuggestions } from '@/services/searchSuggestions';
 import { getFavoriteIds as getFavIds } from '@/services/favorites';
 import { sortListings, type SortOption } from '@/utils/sortListings';
 import {
@@ -37,6 +36,12 @@ import {
   saveSearch,
   type SavedSearch,
 } from '@/services/savedSearches';
+import {
+  clearRecentSearches,
+  getRecentSearches,
+  rememberRecentSearch,
+  type RecentSearch,
+} from '@/services/recentSearches';
 import { getRootMarketplaceCategories } from '@/lib/marketplaceCategories';
 import { useMarketplaceCategories } from '@/hooks/useMarketplaceCategories';
 import { formatPrice } from '@/lib/format';
@@ -45,123 +50,35 @@ import { colors, spacing, typography, fontWeights, radius } from '@/theme';
 import { getSession } from '@/services/auth';
 import { buildAuthGateHref } from '@/lib/authGateNavigation';
 import { useResponsiveLayout, getScrollBottomReserveForTabBar } from '@/lib/responsiveLayout';
-import { trackListingSearched } from '@/lib/analytics';
-
-const SUGGESTIONS_DEBOUNCE_MS = 300;
-/** Ne pas relancer `runSearch` si les params de navigation sont identiques sous ce délai (anti double effet / focus). */
-const SEARCH_NAV_PARAMS_RUN_COOLDOWN_MS = 2 * 60 * 1000;
-/** Première page recherche — le reste au bouton « Voir plus » (egress). */
-const SEARCH_INITIAL_PAGE_SIZE = 6;
-/** Depuis la Home : afficher plus qu’un seul lot (évite “1er clic = rien”). */
-const HOME_EXPLORE_INITIAL_PAGE_SIZE = 12;
-const HOME_LISTING_FEED_NETWORK_COOLDOWN_MS = 2 * 60 * 1000;
-const HOME_FEED_PAGE_SIZE = 6;
-/** Apostrophe typographique (’). Constante JS : évite le rendu littéral « \\u2019 » si mis en JSX texte brut. */
-const LABEL_VOIR_PLUS_ANNONCES = 'Voir plus d\u2019annonces';
-
-type SearchPage1SessionCacheEntry = {
-  empty: boolean;
-  data: PublicListing[];
-  total: number;
-};
-
-/** Cache mémoire session : première page par clé query + filtres appliqués (hors tri UI). */
-const searchSessionPage1Cache = new Map<string, SearchPage1SessionCacheEntry>();
-
-function buildSearchPage1SessionKey(parts: {
-  q: string;
-  categoryId: number | null;
-  city: string | null;
-  min: number | null;
-  max: number | null;
-  pageSize: number;
-}): string {
-  return JSON.stringify(parts);
-}
-const PRICE_INPUT_PATTERN = /^\d+$/;
+import { trackListingSearched, trackRecentSearchSelected } from '@/lib/analytics';
+import {
+  getCategoryIdByLabel,
+  normalizeFilterText,
+  normalizeMatchText,
+  validatePriceFilters,
+  type AppliedPriceFilters,
+  type AppliedSearchFilters,
+} from '@/features/search/searchFilterHelpers';
+import {
+  HOME_EXPLORE_INITIAL_PAGE_SIZE,
+  HOME_FEED_PAGE_SIZE,
+  HOME_LISTING_FEED_NETWORK_COOLDOWN_MS,
+  LABEL_VOIR_PLUS_ANNONCES,
+  SEARCH_INITIAL_PAGE_SIZE,
+  SEARCH_NAV_PARAMS_RUN_COOLDOWN_MS,
+  buildSearchPage1SessionKey,
+  searchSessionPage1Cache,
+  type SearchState,
+} from '@/features/search/searchSession';
+import { useSearchOverlaySuggestions } from '@/features/search/useSearchOverlaySuggestions';
+import { SearchRecentSearches } from '@/features/search/SearchRecentSearches';
+import {
+  SearchEmptyPanel,
+  SearchErrorPanel,
+  SearchFilteredEmptyPanel,
+} from '@/features/search/SearchStatusPanels';
 
 const SEARCH_FIELD_PLACEHOLDER = 'Rechercher un téléphone, une voiture…';
-
-type SearchState =
-  | { status: 'idle' }
-  | { status: 'loading' }
-  | { status: 'empty'; query: string }
-  | { status: 'error'; message: string }
-  | {
-      status: 'success';
-      data: PublicListing[];
-      query: string;
-      total: number;
-      page: number;
-      hasMore: boolean;
-      pageSize?: number;
-    };
-
-type AppliedPriceFilters = {
-  min: number | null;
-  max: number | null;
-};
-
-type AppliedSearchFilters = {
-  category: string | null;
-  categoryId: number | null;
-  city: string | null;
-};
-
-function normalizeFilterText(value: string | null | undefined): string | null {
-  const trimmed = String(value ?? '').trim();
-  return trimmed ? trimmed : null;
-}
-
-function normalizeMatchText(value: string | null | undefined): string {
-  return String(value ?? '')
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .toLowerCase()
-    .trim();
-}
-
-function getCategoryIdByLabel(
-  label: string | null,
-  rootCategories: { id: number; name: string }[]
-): number | null {
-  if (!label) return null;
-  const normalized = label.trim().toLowerCase();
-  const found = rootCategories.find((category) => category.name.toLowerCase() === normalized);
-  return found ? found.id : null;
-}
-
-function parsePriceValue(value: string, invalidMessage: string): { value: number | null; error: string | null } {
-  const trimmed = value.trim();
-  if (!trimmed) return { value: null, error: null };
-  if (!PRICE_INPUT_PATTERN.test(trimmed)) {
-    return { value: null, error: invalidMessage };
-  }
-  const parsed = parseInt(trimmed, 10);
-  if (!Number.isFinite(parsed)) {
-    return { value: null, error: invalidMessage };
-  }
-  return { value: parsed, error: null };
-}
-
-function validatePriceFilters(priceMin: string, priceMax: string): {
-  min: number | null;
-  max: number | null;
-  error: string | null;
-} {
-  const minResult = parsePriceValue(priceMin, 'Prix minimum invalide');
-  if (minResult.error) {
-    return { min: null, max: null, error: minResult.error };
-  }
-  const maxResult = parsePriceValue(priceMax, 'Prix maximum invalide');
-  if (maxResult.error) {
-    return { min: null, max: null, error: maxResult.error };
-  }
-  if (minResult.value != null && maxResult.value != null && minResult.value > maxResult.value) {
-    return { min: null, max: null, error: 'La fourchette de prix est incohérente' };
-  }
-  return { min: minResult.value, max: maxResult.value, error: null };
-}
 
 export default function SearchScreen() {
   const router = useRouter();
@@ -196,11 +113,15 @@ export default function SearchScreen() {
   const FAVORITES_FETCH_TTL_MS = 120_000;
   const [loadingMoreSearch, setLoadingMoreSearch] = useState(false);
   const [savedSearches, setSavedSearches] = useState<SavedSearch[]>([]);
+  const [recentSearches, setRecentSearches] = useState<RecentSearch[]>([]);
   const [savedSearchFeedback, setSavedSearchFeedback] = useState<string | null>(null);
-  const [overlaySuggestions, setOverlaySuggestions] = useState<string[]>([]);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [searchOverlayOpen, setSearchOverlayOpen] = useState(false);
   const [overlayDraft, setOverlayDraft] = useState('');
+  const { overlaySuggestions, setOverlaySuggestions } = useSearchOverlaySuggestions(
+    searchOverlayOpen,
+    overlayDraft
+  );
   const [savedOpen, setSavedOpen] = useState(false);
   const mainSearchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastDisplayedPage1KeyRef = useRef<string | null>(null);
@@ -215,7 +136,6 @@ export default function SearchScreen() {
   const lastNavParamsSearchEffectKeyRef = useRef<string>('');
   const lastNavParamsSearchEffectAtRef = useRef(0);
   const overlayInputRef = useRef<TextInput | null>(null);
-  const overlaySuggestDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   /** Clic « Voir plus d’annonces » sur le feed accueil : lancer une recherche sans mot-clé ni injection UI. */
   const browseFromHomeFooterRef = useRef(false);
   const { categories: marketplaceCategories } = useMarketplaceCategories();
@@ -247,49 +167,16 @@ export default function SearchScreen() {
     setSavedSearches(getSavedSearches());
   }, []);
 
+  const loadRecentSearches = useCallback(() => {
+    void getRecentSearches().then(setRecentSearches);
+  }, []);
+
   useFocusEffect(
     useCallback(() => {
       loadFavorites();
       loadSavedSearches();
     }, [loadFavorites, loadSavedSearches])
   );
-
-  /** Suggestions dans la feuille de recherche uniquement (pas de recherche auto sur la saisie principale). */
-  useEffect(() => {
-    if (!searchOverlayOpen) {
-      if (overlaySuggestDebounceRef.current) {
-        clearTimeout(overlaySuggestDebounceRef.current);
-        overlaySuggestDebounceRef.current = null;
-      }
-      setOverlaySuggestions([]);
-      return;
-    }
-    if (overlaySuggestDebounceRef.current) {
-      clearTimeout(overlaySuggestDebounceRef.current);
-      overlaySuggestDebounceRef.current = null;
-    }
-    const trimmed = overlayDraft.trim();
-    if (trimmed.length < 2) {
-      setOverlaySuggestions([]);
-      return;
-    }
-    overlaySuggestDebounceRef.current = setTimeout(() => {
-      overlaySuggestDebounceRef.current = null;
-      getSearchSuggestions(trimmed).then((result) => {
-        if (result.error) {
-          setOverlaySuggestions([]);
-          return;
-        }
-        setOverlaySuggestions(result.data ?? []);
-      });
-    }, SUGGESTIONS_DEBOUNCE_MS);
-    return () => {
-      if (overlaySuggestDebounceRef.current) {
-        clearTimeout(overlaySuggestDebounceRef.current);
-        overlaySuggestDebounceRef.current = null;
-      }
-    };
-  }, [overlayDraft, searchOverlayOpen]);
 
   const runSearch = useCallback(async (q: string, filters?: Partial<AppliedSearchFilters & AppliedPriceFilters>) => {
     const trimmed = q.trim();
@@ -321,6 +208,24 @@ export default function SearchScreen() {
       return;
     }
 
+    const categoryLabel =
+      filters?.category !== undefined ? filters.category : appliedSearchFilters.category;
+
+    if (!browseFromHome) {
+      const shouldRemember =
+        trimmed.length >= 2 ||
+        searchCategoryId != null ||
+        (searchCity != null && String(searchCity).trim() !== '');
+      if (shouldRemember) {
+        void rememberRecentSearch({
+          query: trimmed,
+          category: categoryLabel,
+          categoryId: searchCategoryId,
+          city: searchCity,
+        }).then(setRecentSearches);
+      }
+    }
+
     const page1Key = buildSearchPage1SessionKey({
       q: trimmed,
       categoryId: searchCategoryId,
@@ -335,8 +240,6 @@ export default function SearchScreen() {
       return;
     }
 
-    const categoryLabel =
-      filters?.category !== undefined ? filters.category : appliedSearchFilters.category;
     trackListingSearched({
       search_query: trimmed,
       category: categoryLabel,
@@ -572,7 +475,12 @@ export default function SearchScreen() {
     Keyboard.dismiss();
     setSearchOverlayOpen(false);
     setOverlaySuggestions([]);
-  }, []);
+  }, [setOverlaySuggestions]);
+
+  useEffect(() => {
+    if (!searchOverlayOpen) return;
+    loadRecentSearches();
+  }, [searchOverlayOpen, loadRecentSearches]);
 
   useEffect(() => {
     if (!searchOverlayOpen) return;
@@ -591,8 +499,14 @@ export default function SearchScreen() {
       runSearch(q);
       setSearchOverlayOpen(false);
     },
-    [overlayDraft, runSearch, clearPendingMainSearchDebounce]
+    [overlayDraft, runSearch, clearPendingMainSearchDebounce, setOverlaySuggestions]
   );
+
+  const handleRetrySearch = useCallback(() => {
+    clearPendingMainSearchDebounce();
+    lastDisplayedPage1KeyRef.current = null;
+    runSearch(submittedQuery);
+  }, [runSearch, submittedQuery, clearPendingMainSearchDebounce]);
 
   const handleResetSearch = useCallback(() => {
     clearPendingMainSearchDebounce();
@@ -610,7 +524,7 @@ export default function SearchScreen() {
     setAppliedSearchFilters({ category: null, categoryId: null, city: null });
     setPriceFilterError(null);
     runSearch('');
-  }, [runSearch, clearPendingMainSearchDebounce]);
+  }, [runSearch, clearPendingMainSearchDebounce, setOverlaySuggestions]);
 
   const handleOverlaySuggestionPress = useCallback(
     (suggestion: string) => {
@@ -676,7 +590,7 @@ export default function SearchScreen() {
         max: item.priceMax ?? null,
       });
     },
-    [runSearch, clearPendingMainSearchDebounce]
+    [runSearch, clearPendingMainSearchDebounce, setOverlaySuggestions]
   );
 
   const handleRemoveSavedSearch = useCallback(
@@ -690,6 +604,37 @@ export default function SearchScreen() {
     },
     [loadSavedSearches]
   );
+
+  const handleRecentSearchPress = useCallback(
+    (item: RecentSearch) => {
+      trackRecentSearchSelected({ search_query: item.query });
+      clearPendingMainSearchDebounce();
+      setQuery(item.query);
+      setSubmittedQuery(item.query);
+      setOverlayDraft(item.query);
+      setCategory(item.category ?? '');
+      setCity(item.city ?? '');
+      setCategoryId(item.categoryId ?? null);
+      setAppliedSearchFilters({
+        category: item.category ?? null,
+        categoryId: item.categoryId ?? null,
+        city: item.city ?? null,
+      });
+      setPriceFilterError(null);
+      setOverlaySuggestions([]);
+      setSearchOverlayOpen(false);
+      runSearch(item.query, {
+        category: item.category ?? null,
+        categoryId: item.categoryId ?? null,
+        city: item.city ?? null,
+      });
+    },
+    [runSearch, clearPendingMainSearchDebounce, setOverlaySuggestions]
+  );
+
+  const handleClearRecentSearches = useCallback(() => {
+    void clearRecentSearches().then(() => setRecentSearches([]));
+  }, []);
 
   const keyExtractor = useCallback((item: PublicListing) => item.id, []);
   const renderItem = useCallback(
@@ -1099,6 +1044,8 @@ export default function SearchScreen() {
             </View>
             <Pressable
               hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel="Supprimer cette recherche enregistrée"
               onPress={(e) => {
                 e.stopPropagation();
                 handleRemoveSavedSearch(item.id);
@@ -1177,7 +1124,13 @@ export default function SearchScreen() {
       <View style={styles.sheetCard}>
         <View style={styles.sheetHeader}>
           <Text style={styles.sheetTitle}>Filtres</Text>
-          <Pressable onPress={closeFilters} hitSlop={10} style={({ pressed }) => [styles.sheetCloseBtn, pressed && styles.sheetCloseBtnPressed]}>
+          <Pressable
+            onPress={closeFilters}
+            hitSlop={12}
+            accessibilityRole="button"
+            accessibilityLabel="Fermer les filtres"
+            style={({ pressed }) => [styles.sheetCloseBtn, pressed && styles.sheetCloseBtnPressed]}
+          >
             <Ionicons name="close" size={22} color={colors.textMuted} />
           </Pressable>
         </View>
@@ -1190,6 +1143,9 @@ export default function SearchScreen() {
               return (
                 <Pressable
                   key={option}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: isSelected }}
+                  accessibilityLabel={option}
                   style={({ pressed }) => [
                     styles.filterOptionChip,
                     isSelected && styles.filterOptionChipSelected,
@@ -1232,6 +1188,9 @@ export default function SearchScreen() {
                 return (
                   <Pressable
                     key={option}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: isSelected }}
+                    accessibilityLabel={option}
                     style={({ pressed }) => [
                       styles.filterOptionChip,
                       isSelected && styles.filterOptionChipSelected,
@@ -1523,30 +1482,16 @@ export default function SearchScreen() {
                 />
               ) : (
                 <>
-                  {state.status === 'loading' && <Loader />}
+                  {state.status === 'loading' && (
+                    <LoadingState message="Recherche en cours…" />
+                  )}
 
                   {state.status === 'error' && (
-                    <EmptyState
-                      title="Erreur"
-                      message={state.message}
-                      style={styles.centerEdge}
-                    />
+                    <SearchErrorPanel message={state.message} onRetry={handleRetrySearch} />
                   )}
 
                   {state.status === 'empty' && (
-                    <EmptyState
-                      icon={<Ionicons name="search-outline" size={24} color={colors.primary} />}
-                      title="Aucun résultat"
-                      message={`Essayez un autre mot-clé ou modifiez vos filtres pour "${state.query}".`}
-                      action={
-                        <View style={styles.emptyAction}>
-                          <Button variant="secondary" onPress={handleResetSearch}>
-                            Réinitialiser la recherche
-                          </Button>
-                        </View>
-                      }
-                      style={styles.centerEdge}
-                    />
+                    <SearchEmptyPanel query={state.query} onReset={handleResetSearch} />
                   )}
 
                   {state.status === 'success' && (
@@ -1590,19 +1535,7 @@ export default function SearchScreen() {
                       windowSize={Platform.OS === 'ios' ? 5 : 8}
                       removeClippedSubviews={Platform.OS === 'ios'}
                       ListEmptyComponent={
-                        <EmptyState
-                          icon={<Ionicons name="options-outline" size={24} color={colors.primary} />}
-                          title="Aucun résultat avec ces filtres"
-                          message="Essayez de réinitialiser ou d’assouplir vos filtres de catégorie, ville ou prix."
-                          action={
-                            <View style={styles.emptyAction}>
-                              <Button variant="secondary" onPress={handleResetSearch}>
-                                Réinitialiser la recherche
-                              </Button>
-                            </View>
-                          }
-                          style={styles.listEmpty}
-                        />
+                        <SearchFilteredEmptyPanel onReset={handleResetSearch} />
                       }
                     />
                   )}
@@ -1656,6 +1589,8 @@ export default function SearchScreen() {
                         <Pressable
                           hitSlop={8}
                           onPress={() => setOverlayDraft('')}
+                          accessibilityRole="button"
+                          accessibilityLabel="Effacer la saisie"
                           style={({ pressed }) => [styles.searchOverlayClear, pressed && { opacity: 0.7 }]}
                         >
                           <Ionicons name="close-circle" size={20} color={colors.textMuted} />
@@ -1685,6 +1620,12 @@ export default function SearchScreen() {
                     showsVerticalScrollIndicator={false}
                     contentContainerStyle={styles.searchOverlayScrollContentBelow}
                   >
+                    <SearchRecentSearches
+                      items={recentSearches}
+                      visible={overlayDraft.trim().length === 0}
+                      onSelect={handleRecentSearchPress}
+                      onClear={handleClearRecentSearches}
+                    />
                     {overlaySuggestions.length > 0 ? (
                       <View style={styles.searchOverlaySuggestions}>
                         {overlaySuggestions.map((text) => (
@@ -1695,6 +1636,8 @@ export default function SearchScreen() {
                               pressed && styles.suggestionRowPressed,
                             ]}
                             onPress={() => handleOverlaySuggestionPress(text)}
+                            accessibilityRole="button"
+                            accessibilityLabel={`Suggestion ${text}`}
                           >
                             <Ionicons
                               name="search"
@@ -2004,17 +1947,6 @@ const styles = StyleSheet.create({
   },
   savedDeleteBtnPressed: {
     opacity: 0.7,
-  },
-  center: {
-    flex: 1,
-  },
-  centerEdge: {
-    flex: 1,
-    paddingHorizontal: spacing.screenHorizontal,
-  },
-  listEmpty: {
-    marginHorizontal: 0,
-    marginTop: spacing.base,
   },
   listContent: {
     maxWidth: 760,
@@ -2377,9 +2309,6 @@ const styles = StyleSheet.create({
     ...typography.sm,
     fontWeight: fontWeights.semibold,
     color: colors.primary,
-  },
-  emptyAction: {
-    minWidth: 240,
   },
   resultsHeaderWrap: {
     paddingBottom: spacing.xs,

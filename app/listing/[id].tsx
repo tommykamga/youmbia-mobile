@@ -3,7 +3,6 @@ import {
   View,
   ScrollView,
   StyleSheet,
-  Modal,
   Pressable,
   Text,
   Alert,
@@ -31,8 +30,9 @@ import { useMarketplaceCategories } from '@/hooks/useMarketplaceCategories';
 import { getOrCreateConversation } from '@/services/conversations';
 import { getSession } from '@/services/auth';
 import { reportListing } from '@/services/reports';
-import { REPORT_OWN_CONTENT_MESSAGE } from '@/constants/reportMessages';
-import { MARKETPLACE_REPORT_REASONS } from '@/constants/reportReasons';
+import { REPORT_OWN_CONTENT_MESSAGE, REPORT_SUCCESS_MESSAGE } from '@/constants/reportMessages';
+import type { ReportReasonCode } from '@/constants/reportReasons';
+import { ReportComposerModal } from '@/features/reports';
 import { MarketplaceTrustTips } from '@/features/trust';
 import { getSellerStats } from '@/services/users';
 import { ListingCard } from '@/features/listings/ListingCard';
@@ -148,7 +148,8 @@ export default function ListingDetailScreen() {
   const FAVORITES_FETCH_TTL_MS = 120_000;
   const [reportModalVisible, setReportModalVisible] = useState(false);
   const [reportLoading, setReportLoading] = useState(false);
-  const [reportReason, setReportReason] = useState<string | null>(null);
+  const [reportReason, setReportReason] = useState<ReportReasonCode | null>(null);
+  const [reportComment, setReportComment] = useState('');
   const [favoriteLoading, setFavoriteLoading] = useState(false);
   const [messageLoading, setMessageLoading] = useState(false);
   const [sessionStatus, setSessionStatus] = useState<'loading' | 'authed' | 'guest'>('loading');
@@ -537,11 +538,12 @@ export default function ListingDetailScreen() {
       return;
     }
     setReportReason(null);
+    setReportComment('');
     setReportModalVisible(true);
   }, [id, router, reportedListingId, state]);
 
   const handleReportSubmit = useCallback(() => {
-    if (!id || !reportReason?.trim()) return;
+    if (!id || !reportReason || reportLoading) return;
     Alert.alert(
       'Confirmer le signalement',
       'Votre signalement sera envoyé pour modération.',
@@ -550,9 +552,13 @@ export default function ListingDetailScreen() {
         {
           text: 'Envoyer',
           onPress: async () => {
+            if (reportLoading) return;
             setReportLoading(true);
             const sellerId = state.status === 'success' ? state.listing.seller_id : null;
-            const result = await reportListing(id, reportReason.trim(), { sellerId });
+            const result = await reportListing(id, reportReason, {
+              sellerId,
+              comment: reportComment,
+            });
             setReportLoading(false);
             if (result.error) {
               Alert.alert('Erreur', result.error.message);
@@ -560,12 +566,12 @@ export default function ListingDetailScreen() {
             }
             setReportModalVisible(false);
             setReportedListingId(id);
-            Alert.alert('Merci', 'Votre signalement a bien été envoyé.');
+            Alert.alert('Merci', REPORT_SUCCESS_MESSAGE);
           },
         },
       ]
     );
-  }, [id, reportReason, state]);
+  }, [id, reportReason, reportComment, reportLoading, state]);
 
   if (state.status === 'loading') {
     return (
@@ -718,58 +724,18 @@ export default function ListingDetailScreen() {
           ) : null}
         </View>
       </ScrollView>
-      <Modal
+      <ReportComposerModal
         visible={reportModalVisible}
-        transparent
-        animationType="fade"
-        onRequestClose={() => !reportLoading && setReportModalVisible(false)}
-      >
-        <Pressable
-          style={styles.modalOverlay}
-          onPress={() => !reportLoading && setReportModalVisible(false)}
-        >
-          <Pressable style={styles.modalCard} onPress={(e) => e.stopPropagation()}>
-            <Text style={styles.modalTitle}>Signaler cette annonce</Text>
-            <Text style={styles.modalSubtitle}>Choisissez un motif</Text>
-            {MARKETPLACE_REPORT_REASONS.map((label) => (
-              <Pressable
-                key={label}
-                style={({ pressed }) => [
-                  styles.reasonOption,
-                  reportReason === label && styles.reasonOptionSelected,
-                  pressed && styles.reasonOptionPressed,
-                ]}
-                onPress={() => setReportReason(reportReason === label ? null : label)}
-              >
-                <Text
-                  style={[
-                    styles.reasonOptionText,
-                    reportReason === label && styles.reasonOptionTextSelected,
-                  ]}
-                >
-                  {label}
-                </Text>
-              </Pressable>
-            ))}
-            <View style={styles.modalActions}>
-              <Button
-                variant="ghost"
-                onPress={() => !reportLoading && setReportModalVisible(false)}
-                disabled={reportLoading}
-              >
-                Annuler
-              </Button>
-              <Button
-                onPress={handleReportSubmit}
-                loading={reportLoading}
-                disabled={reportLoading || !reportReason?.trim()}
-              >
-                Envoyer le signalement
-              </Button>
-            </View>
-          </Pressable>
-        </Pressable>
-      </Modal>
+        targetType="listing"
+        title="Signaler cette annonce"
+        loading={reportLoading}
+        reason={reportReason}
+        comment={reportComment}
+        onChangeReason={setReportReason}
+        onChangeComment={setReportComment}
+        onCancel={() => !reportLoading && setReportModalVisible(false)}
+        onSubmit={handleReportSubmit}
+      />
       <ListingActions
         listing={listing}
         sellerId={listing.seller_id}

@@ -84,6 +84,7 @@ export function ListingSeller({ listing, memberSince, listingCount, onPress }: L
       )}
 
       {seller?.response_hint?.trim() && (
+        /* Shown only when a backend-provided hint exists. TOM-101: not populated — insufficient reliable data. */
         <View style={styles.hintContainer}>
           <Ionicons name="time-outline" size={14} color={colors.success} />
           <Text style={styles.responseHint}>{seller.response_hint.trim()}</Text>

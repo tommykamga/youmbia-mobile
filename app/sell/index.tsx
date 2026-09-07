@@ -75,10 +75,13 @@ import {
 } from '@/lib/listingPublishFormValidation';
 import { computeListingQualityScore } from '@/lib/listingQualityScore';
 import Ionicons from '@expo/vector-icons/Ionicons';
+import * as Haptics from 'expo-haptics';
 import {
   trackListingCreationCompleted,
   trackListingCreationStarted,
+  trackPostPublishViewed,
 } from '@/lib/analytics';
+import { shareListingPreferWhatsApp } from '@/lib/shareListing';
 
 /** Aligné web : maximum 4 photos par annonce. */
 const MAX_LISTING_IMAGES = 4;
@@ -146,7 +149,7 @@ type PickedImage = { uri: string; base64: string | null; mimeType?: string | nul
 
 type PublishState =
   | { status: 'idle' }
-  | { status: 'success'; listingId: string }
+  | { status: 'success'; listingId: string; title: string; price: number; city: string }
   | {
       status: 'partial';
       listingId: string;
@@ -240,6 +243,9 @@ export default function SellScreen() {
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [validationAttempted, setValidationAttempted] = useState(false);
   const [retryUploadLoading, setRetryUploadLoading] = useState(false);
+  const [sharingWhatsApp, setSharingWhatsApp] = useState(false);
+  const [slowPublishHint, setSlowPublishHint] = useState(false);
+  const postPublishViewedRef = useRef<string | null>(null);
   const [keyboardVisible, setKeyboardVisible] = useState(false);
 
   const subcategoryOptions = useMemo(() => {
@@ -317,6 +323,15 @@ export default function SellScreen() {
     };
   }, []);
 
+  useEffect(() => {
+    if (!submitLoading && !retryUploadLoading) {
+      setSlowPublishHint(false);
+      return;
+    }
+    const timer = setTimeout(() => setSlowPublishHint(true), 8000);
+    return () => clearTimeout(timer);
+  }, [submitLoading, retryUploadLoading]);
+
   const goBackOrHome = useCallback(() => {
     const canGoBack =
       typeof (router as unknown as { canGoBack?: () => boolean }).canGoBack === 'function'
@@ -330,6 +345,9 @@ export default function SellScreen() {
   }, [router]);
 
   const resetForm = () => {
+    postPublishViewedRef.current = null;
+    setSharingWhatsApp(false);
+    setSlowPublishHint(false);
     setPublishState({ status: 'idle' });
     setPrequalStatus('loading');
     setProfileAny(null);
@@ -354,6 +372,18 @@ export default function SellScreen() {
     publishMemoryAppliedRef.current = false;
     void loadSellerPrequalProfile();
   };
+
+  const markPublishSuccess = useCallback((listingId: string) => {
+    const parsed = parseListingPrice(priceStr);
+    void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    setPublishState({
+      status: 'success',
+      listingId,
+      title: title.trim(),
+      price: Number.isFinite(parsed) ? Math.round(parsed) : 0,
+      city: city.trim(),
+    });
+  }, [city, priceStr, title]);
 
   const loadSellerPrequalProfile = useCallback(async () => {
     setPrequalStatus('loading');
@@ -755,7 +785,7 @@ export default function SellScreen() {
             publishCategoryId,
             dynamicValues,
           });
-          setPublishState({ status: 'success', listingId });
+          markPublishSuccess(listingId);
           return;
         }
 
@@ -793,13 +823,20 @@ export default function SellScreen() {
         publishCategoryId,
         dynamicValues,
       });
-      setPublishState({ status: 'success', listingId });
+      markPublishSuccess(listingId);
     } catch (e) {
       setSubmitError(e instanceof Error ? e.message : "Impossible de publier l'annonce");
     } finally {
       setSubmitLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (publishState.status !== 'success') return;
+    if (postPublishViewedRef.current === publishState.listingId) return;
+    postPublishViewedRef.current = publishState.listingId;
+    trackPostPublishViewed({ listing_id: publishState.listingId });
+  }, [publishState]);
 
   const handleRetryImageUpload = async () => {
     if (publishState.status !== 'partial' || retryUploadLoading) return;
@@ -836,7 +873,7 @@ export default function SellScreen() {
       const totalCount = images.length;
 
       if (uploadResult.status === 'ok' && missingBase64Count === 0) {
-        setPublishState({ status: 'success', listingId: publishState.listingId });
+        markPublishSuccess(publishState.listingId);
         return;
       }
 
@@ -856,37 +893,59 @@ export default function SellScreen() {
     }
   };
 
+  const handleViewPublishedListing = () => {
+    if (publishState.status !== 'success' || !publishState.listingId) return;
+    router.push(`/listing/${publishState.listingId}`);
+  };
+
+  const handleSharePublishedWhatsApp = async () => {
+    if (publishState.status !== 'success' || sharingWhatsApp || !publishState.listingId) return;
+    setSharingWhatsApp(true);
+    try {
+      const result = await shareListingPreferWhatsApp({
+        id: publishState.listingId,
+        title: publishState.title,
+        price: publishState.price,
+        city: publishState.city,
+      });
+      if (!result.success && result.error) {
+        Alert.alert('Partage', result.error);
+      }
+    } catch {
+      Alert.alert('Partage', 'Impossible de partager cette annonce.');
+    } finally {
+      setSharingWhatsApp(false);
+    }
+  };
+
   if (publishState.status === 'success') {
-    /* Sprint 3.2 – post-publish continuity: clear next steps (view listing, publish another, home). */
     return (
       <Screen>
         <View style={styles.successBlock}>
-          <Text style={styles.successTitle}>Annonce publiée</Text>
+          <Text style={styles.successTitle}>Votre annonce est en ligne</Text>
           <Text style={styles.successSubtitle}>
-            Votre annonce est en ligne. Vous pouvez la consulter ou en publier une autre.
+            Consultez-la ou partagez-la avec vos contacts.
           </Text>
           <View style={styles.successActions}>
             <Button
               size="lg"
-              onPress={() => router.push(`/listing/${publishState.listingId}`)}
+              onPress={handleViewPublishedListing}
               style={styles.successBtn}
             >
-              {"Voir l'annonce"}
+              Voir mon annonce
             </Button>
             <Button
               variant="secondary"
               size="lg"
-              onPress={resetForm}
-            >
-              Publier une autre annonce
-            </Button>
-            <Button
-              variant="ghost"
-              size="lg"
-              onPress={() => router.replace('/(tabs)/home' as Href)}
+              onPress={handleSharePublishedWhatsApp}
+              loading={sharingWhatsApp}
+              disabled={sharingWhatsApp}
               style={styles.successBtn}
             >
-              {"Retour à l'accueil"}
+              Partager sur WhatsApp
+            </Button>
+            <Button variant="ghost" size="lg" onPress={resetForm} style={styles.successBtn}>
+              Publier une autre annonce
             </Button>
           </View>
         </View>
@@ -905,6 +964,11 @@ export default function SellScreen() {
           <Text style={styles.partialMeta}>
             Photos ajoutées : {publishState.uploadedCount}/{publishState.totalCount}
           </Text>
+          {slowPublishHint ? (
+            <Text style={styles.slowPublishHint}>
+              La connexion est lente. Votre annonce est déjà créée ; les photos peuvent être réessayées.
+            </Text>
+          ) : null}
           <View style={styles.successActions}>
             <Button
               size="lg"
@@ -1293,6 +1357,11 @@ export default function SellScreen() {
             <Text style={styles.requiredLegend}>* Champ obligatoire</Text>
 
             {submitError ? <Text style={styles.submitErrorForm}>{submitError}</Text> : null}
+            {slowPublishHint ? (
+              <Text style={styles.slowPublishHint} accessibilityLiveRegion="polite">
+                Connexion lente. Vos informations restent enregistrées, sans republication automatique.
+              </Text>
+            ) : null}
 
             <View
               style={styles.qualityCardCompact}
@@ -1342,6 +1411,7 @@ export default function SellScreen() {
             </Button>
             <Pressable
               accessibilityRole="button"
+              accessibilityLabel="Annuler"
               onPress={goBackOrHome}
               disabled={submitLoading}
               hitSlop={{ top: 8, bottom: 8, left: 12, right: 12 }}
@@ -1939,6 +2009,12 @@ const styles = StyleSheet.create({
     ...typography.xs,
     color: colors.error,
     lineHeight: 16,
+    marginTop: spacing.sm,
+  },
+  slowPublishHint: {
+    ...typography.sm,
+    color: colors.textSecondary,
+    lineHeight: 20,
     marginTop: spacing.sm,
   },
 });

@@ -14,7 +14,6 @@ import {
   RefreshControl,
   Platform,
   Pressable,
-  Modal,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -39,8 +38,9 @@ import { normalizePhoneForWhatsApp, openSellerPhoneCallRaw } from '@/lib/sellerC
 import { getShopInitials } from '@/lib/shopSeller';
 import { buildAuthGateHref } from '@/lib/authGateNavigation';
 import { formatJoinDate } from '@/lib/format';
-import { REPORT_OWN_CONTENT_MESSAGE } from '@/constants/reportMessages';
-import { MARKETPLACE_REPORT_REASONS } from '@/constants/reportReasons';
+import { REPORT_OWN_CONTENT_MESSAGE, REPORT_SUCCESS_MESSAGE } from '@/constants/reportMessages';
+import type { ReportReasonCode } from '@/constants/reportReasons';
+import { ReportComposerModal } from '@/features/reports';
 import type { PublicShop } from '@/types/shops';
 import type { PublicListing } from '@/services/listings';
 import { colors, spacing, typography, fontWeights, radius } from '@/theme';
@@ -66,7 +66,8 @@ export default function ShopScreen() {
   const [ownerMemberSince, setOwnerMemberSince] = useState<string | null>(null);
   const [reportModalVisible, setReportModalVisible] = useState(false);
   const [reportLoading, setReportLoading] = useState(false);
-  const [reportReason, setReportReason] = useState<string | null>(null);
+  const [reportReason, setReportReason] = useState<ReportReasonCode | null>(null);
+  const [reportComment, setReportComment] = useState('');
   const [reportedShopId, setReportedShopId] = useState<string | null>(null);
   const [sessionUserId, setSessionUserId] = useState<string | null>(null);
   const [logoFailed, setLogoFailed] = useState(false);
@@ -241,11 +242,12 @@ export default function ShopScreen() {
       return;
     }
     setReportReason(null);
+    setReportComment('');
     setReportModalVisible(true);
   }, [router, reportedShopId, state]);
 
   const handleReportSubmit = useCallback(() => {
-    if (state.status !== 'ready' || !reportReason?.trim()) return;
+    if (state.status !== 'ready' || !reportReason || reportLoading) return;
     const shop = state.shop;
     Alert.alert(
       'Confirmer le signalement',
@@ -255,9 +257,11 @@ export default function ShopScreen() {
         {
           text: 'Envoyer',
           onPress: async () => {
+            if (reportLoading) return;
             setReportLoading(true);
-            const result = await reportShop(shop.id, reportReason.trim(), {
+            const result = await reportShop(shop.id, reportReason, {
               ownerId: shop.owner_id,
+              comment: reportComment,
             });
             setReportLoading(false);
             if (result.error) {
@@ -266,12 +270,12 @@ export default function ShopScreen() {
             }
             setReportModalVisible(false);
             setReportedShopId(shop.id);
-            Alert.alert('Merci', 'Votre signalement a bien été envoyé.');
+            Alert.alert('Merci', REPORT_SUCCESS_MESSAGE);
           },
         },
       ]
     );
-  }, [reportReason, state]);
+  }, [reportReason, reportComment, reportLoading, state]);
 
   if (state.status === 'loading') {
     return (
@@ -572,58 +576,18 @@ export default function ShopScreen() {
         sharing={sharing}
       />
 
-      <Modal
+      <ReportComposerModal
         visible={reportModalVisible}
-        transparent
-        animationType="fade"
-        onRequestClose={() => !reportLoading && setReportModalVisible(false)}
-      >
-        <Pressable
-          style={styles.modalOverlay}
-          onPress={() => !reportLoading && setReportModalVisible(false)}
-        >
-          <Pressable style={styles.modalCard} onPress={(e) => e.stopPropagation()}>
-            <Text style={styles.modalTitle}>Signaler cette boutique</Text>
-            <Text style={styles.modalSubtitle}>Choisissez un motif</Text>
-            {MARKETPLACE_REPORT_REASONS.map((label) => (
-              <Pressable
-                key={label}
-                style={({ pressed }) => [
-                  styles.reasonOption,
-                  reportReason === label && styles.reasonOptionSelected,
-                  pressed && styles.reasonOptionPressed,
-                ]}
-                onPress={() => setReportReason(reportReason === label ? null : label)}
-              >
-                <Text
-                  style={[
-                    styles.reasonOptionText,
-                    reportReason === label && styles.reasonOptionTextSelected,
-                  ]}
-                >
-                  {label}
-                </Text>
-              </Pressable>
-            ))}
-            <View style={styles.modalActions}>
-              <Button
-                variant="ghost"
-                onPress={() => !reportLoading && setReportModalVisible(false)}
-                disabled={reportLoading}
-              >
-                Annuler
-              </Button>
-              <Button
-                onPress={handleReportSubmit}
-                loading={reportLoading}
-                disabled={reportLoading || !reportReason?.trim()}
-              >
-                Envoyer le signalement
-              </Button>
-            </View>
-          </Pressable>
-        </Pressable>
-      </Modal>
+        targetType="listing"
+        title="Signaler cette boutique"
+        loading={reportLoading}
+        reason={reportReason}
+        comment={reportComment}
+        onChangeReason={setReportReason}
+        onChangeComment={setReportComment}
+        onCancel={() => !reportLoading && setReportModalVisible(false)}
+        onSubmit={handleReportSubmit}
+      />
     </Screen>
   );
 }

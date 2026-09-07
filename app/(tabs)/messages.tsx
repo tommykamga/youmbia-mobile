@@ -57,6 +57,8 @@ function MessageItem({ item }: { item: Conversation }) {
         onPressIn={onPressIn}
         onPressOut={onPressOut}
         onPress={() => router.push(`/conversation/${item.id}`)}
+        accessibilityRole="button"
+        accessibilityLabel={`${item.other_party_name || 'Utilisateur'}, ${item.listing_title || 'Annonce'}`}
       >
         <UserAvatar
           name={item.other_party_name}
@@ -152,6 +154,7 @@ function patchInboxOnRead(conversations: Conversation[], conversationId: string)
 
 export default function MessagesScreen() {
   useWindowDimensions();
+  const router = useRouter();
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [status, setStatus] = useState<'loading' | 'error_network' | 'error_generic' | 'success' | 'empty' | 'unauthenticated'>('loading');
   const [refreshing, setRefreshing] = useState(false);
@@ -336,6 +339,17 @@ export default function MessagesScreen() {
             icon={<Ionicons name="chatbubbles-outline" size={24} color={colors.primary} />}
             title="Aucun message"
             message="Vos échanges avec les vendeurs apparaîtront ici."
+            action={
+              <View style={styles.emptyAction}>
+                <Button
+                  variant="secondary"
+                  onPress={() => router.replace('/(tabs)/home')}
+                  style={styles.emptyCta}
+                >
+                  Découvrir les annonces
+                </Button>
+              </View>
+            }
           />
         </View>
       </Screen>

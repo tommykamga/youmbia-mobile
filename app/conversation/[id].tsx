@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Screen, AppHeader, EmptyState, KeyboardSafeView, UserAvatar } from '@/components';
+import { Screen, AppHeader, EmptyState, KeyboardSafeView, UserAvatar, Button } from '@/components';
 import { useKeyboardInset } from '@/hooks/useKeyboardInset';
 import {
   getMessages,
@@ -21,7 +21,11 @@ import {
   getConversationById,
 } from '@/services/conversations';
 import { getSession } from '@/services/auth';
+import { submitReport } from '@/services/reports';
 import { buildAuthGateHref } from '@/lib/authGateNavigation';
+import { REPORT_SUCCESS_MESSAGE } from '@/constants/reportMessages';
+import type { ReportReasonCode } from '@/constants/reportReasons';
+import { ReportComposerModal } from '@/features/reports';
 import {
   appendMessageDeduped,
   emitConversationRead,
@@ -94,6 +98,11 @@ export default function ConversationThreadScreen() {
   const listRef = useRef<FlatList>(null);
   const [userId, setUserId] = useState<string | null>(null);
   const keyboardInset = useKeyboardInset(Platform.OS !== 'web');
+  const [reportModalVisible, setReportModalVisible] = useState(false);
+  const [reportLoading, setReportLoading] = useState(false);
+  const [reportReason, setReportReason] = useState<ReportReasonCode | null>(null);
+  const [reportComment, setReportComment] = useState('');
+  const [reportedConversationId, setReportedConversationId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -232,7 +241,13 @@ export default function ConversationThreadScreen() {
       if (result.error) {
         setInputText(trimmed);
         if (__DEV__) console.error('[MESSAGING ERROR] sendMessage result.error', result.error);
-        Alert.alert('Erreur', 'Votre message n\'a pas pu être envoyé. Veuillez réessayer.');
+        const network = getThreadErrorMessage(result.error.message, '') === 'Réseau indisponible';
+        Alert.alert(
+          network ? 'Connexion instable' : 'Message non envoyé',
+          network
+            ? 'Votre texte a été conservé. Réessayez quand la connexion est rétablie.'
+            : 'Votre message n\'a pas pu être envoyé. Le texte a été conservé.'
+        );
         return;
       }
       if (result.data) {
@@ -242,11 +257,62 @@ export default function ConversationThreadScreen() {
     } catch (error) {
       setInputText(trimmed);
       if (__DEV__) console.error('[MESSAGING ERROR]', error);
-      Alert.alert('Erreur', 'Votre message n\'a pas pu être envoyé. Veuillez réessayer.');
+      const network =
+        getThreadErrorMessage(error instanceof Error ? error.message : String(error), '') ===
+        'Réseau indisponible';
+      Alert.alert(
+        network ? 'Connexion instable' : 'Message non envoyé',
+        network
+          ? 'Votre texte a été conservé. Réessayez quand la connexion est rétablie.'
+          : 'Votre message n\'a pas pu être envoyé. Le texte a été conservé.'
+      );
     } finally {
       setSending(false);
     }
   }, [id, inputText, sending]);
+
+  const handleReportPress = useCallback(() => {
+    if (!id || status !== 'success') return;
+    if (reportedConversationId === id) {
+      Alert.alert('Déjà signalé', 'Vous avez déjà signalé cette conversation.');
+      return;
+    }
+    setReportReason(null);
+    setReportComment('');
+    setReportModalVisible(true);
+  }, [id, status, reportedConversationId]);
+
+  const handleReportSubmit = useCallback(() => {
+    if (!id || !reportReason || reportLoading) return;
+    Alert.alert(
+      'Confirmer le signalement',
+      'Votre signalement sera envoyé pour modération.',
+      [
+        { text: 'Annuler', style: 'cancel' },
+        {
+          text: 'Envoyer',
+          onPress: async () => {
+            if (reportLoading) return;
+            setReportLoading(true);
+            const result = await submitReport({
+              targetType: 'conversation',
+              targetId: id,
+              reason: reportReason,
+              comment: reportComment,
+            });
+            setReportLoading(false);
+            if (result.error) {
+              Alert.alert('Erreur', result.error.message);
+              return;
+            }
+            setReportModalVisible(false);
+            setReportedConversationId(id);
+            Alert.alert('Merci', REPORT_SUCCESS_MESSAGE);
+          },
+        },
+      ]
+    );
+  }, [id, reportReason, reportComment, reportLoading]);
 
   const keyExtractor = useCallback((item: Message) => item.id, []);
   
@@ -310,8 +376,15 @@ export default function ConversationThreadScreen() {
           <EmptyState
             variant="plain"
             icon={<Ionicons name="alert-circle-outline" size={24} color={colors.textSecondary} />}
-            title="Erreur de chargement"
+            title="Impossible de charger la conversation"
             message={errorMessage}
+            action={
+              <View style={styles.threadErrorAction}>
+                <Button variant="secondary" onPress={() => void load()}>
+                  Réessayer
+                </Button>
+              </View>
+            }
           />
         </View>
       </Screen>
@@ -342,6 +415,19 @@ export default function ConversationThreadScreen() {
         showBack
         noBorder
         density="compact"
+        right={
+          status === 'success' ? (
+            <Pressable
+              onPress={handleReportPress}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel="Signaler"
+              style={({ pressed }) => [styles.reportHeaderBtn, pressed && styles.reportHeaderBtnPressed]}
+            >
+              <Text style={styles.reportHeaderText}>Signaler</Text>
+            </Pressable>
+          ) : undefined
+        }
       />
       
       {status === 'loading' && <MessagesSkeleton />}
@@ -381,6 +467,9 @@ export default function ConversationThreadScreen() {
                 ]}
                 onPress={handleSend}
                 disabled={!inputText.trim() || sending}
+                accessibilityRole="button"
+                accessibilityLabel="Envoyer"
+                hitSlop={4}
               >
                 <Ionicons name="paper-plane" size={20} color={colors.surface} />
               </Pressable>
@@ -388,6 +477,18 @@ export default function ConversationThreadScreen() {
           </View>
         </KeyboardSafeView>
       )}
+      <ReportComposerModal
+        visible={reportModalVisible}
+        targetType="conversation"
+        title="Signaler"
+        loading={reportLoading}
+        reason={reportReason}
+        comment={reportComment}
+        onChangeReason={setReportReason}
+        onChangeComment={setReportComment}
+        onCancel={() => !reportLoading && setReportModalVisible(false)}
+        onSubmit={handleReportSubmit}
+      />
     </Screen>
   );
 }
@@ -407,6 +508,19 @@ const styles = StyleSheet.create({
     fontWeight: fontWeights.bold,
     color: colors.text,
   },
+  reportHeaderBtn: {
+    minHeight: 40,
+    justifyContent: 'center',
+    paddingLeft: spacing.xs,
+  },
+  reportHeaderBtnPressed: {
+    opacity: 0.7,
+  },
+  reportHeaderText: {
+    ...typography.sm,
+    color: colors.textMuted,
+    fontWeight: fontWeights.medium,
+  },
   keyboard: { flex: 1, backgroundColor: colors.background },
   listContent: {
     maxWidth: 760,
@@ -423,6 +537,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.xl, // ~24
     paddingBottom: spacing.xl,
     transform: [{ translateY: -24 }],
+  },
+  threadErrorAction: {
+    width: '100%',
+    alignItems: 'center',
+    minWidth: 200,
   },
   emptyWrap: {
     flex: 1,

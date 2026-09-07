@@ -263,6 +263,23 @@ export function trackListingShared(properties: {
   trackEvent('listing_shared', properties);
 }
 
+export function trackPostPublishViewed(properties: { listing_id: string }): void {
+  trackEvent('post_publish_viewed', properties);
+}
+
+export function trackListingShareInitiated(properties: {
+  listing_id: string;
+  share_channel: ShareChannel;
+}): void {
+  trackEvent('listing_share_initiated', properties);
+}
+
+export function trackRecentSearchSelected(properties: { search_query: string }): void {
+  trackEvent('recent_search_selected', {
+    search_query: properties.search_query,
+  });
+}
+
 export function trackListingReported(properties: {
   listing_id: string;
   report_reason: string;
