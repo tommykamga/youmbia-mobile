@@ -1,47 +1,86 @@
 /**
- * Saved searches – list and run saved searches.
- * Persistence: in-memory (see src/services/savedSearches). Replace with AsyncStorage or Supabase for production.
+ * Saved searches – list, toggle alerts, delete, reopen Search.
+ * Source de vérité : Supabase RLS (owner only).
  */
 
 import React, { useCallback, useState } from 'react';
-import { View, Text, StyleSheet, Pressable, FlatList } from 'react-native';
+import { View, Text, StyleSheet, Pressable, FlatList, ActivityIndicator } from 'react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { Screen, AppHeader, EmptyState } from '@/components';
-import { getSavedSearches, removeSavedSearch, type SavedSearch } from '@/services/savedSearches';
+import { Screen, AppHeader, EmptyState, NotificationsActivationCard } from '@/components';
+import {
+  buildSavedSearchHref,
+  deleteSavedSearch,
+  getSavedSearches,
+  setSavedSearchEnabled,
+  trackSavedSearchOpen,
+  type SavedSearch,
+} from '@/services/savedSearches';
+import { getSession } from '@/services/auth';
+import { buildAuthGateHref } from '@/lib/authGateNavigation';
 import { colors, spacing, typography, fontWeights, radius } from '@/theme';
 
 export default function SavedSearchesScreen() {
   const router = useRouter();
   const [list, setList] = useState<SavedSearch[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const load = useCallback(() => {
-    setList(getSavedSearches());
-  }, []);
+  const load = useCallback(async () => {
+    const session = await getSession();
+    if (!session?.user) {
+      router.replace(
+        buildAuthGateHref('search', { redirect: '/account/saved-searches' })
+      );
+      return;
+    }
+    setLoading(true);
+    setError(null);
+    try {
+      const next = await getSavedSearches();
+      setList(next);
+    } catch {
+      setError('Impossible de charger vos recherches');
+    } finally {
+      setLoading(false);
+    }
+  }, [router]);
 
   useFocusEffect(
     useCallback(() => {
-      load();
+      void load();
     }, [load])
   );
 
   const handlePress = useCallback(
     (item: SavedSearch) => {
-      const params = new URLSearchParams();
-      if (item.query) params.set('q', item.query);
-      if (item.priceMin != null) params.set('priceMin', String(item.priceMin));
-      if (item.priceMax != null) params.set('priceMax', String(item.priceMax));
-      if (item.category) params.set('category', item.category);
-      if (item.city) params.set('city', item.city);
-      router.push(`/(tabs)/search?${params.toString()}` as const);
+      trackSavedSearchOpen(item.id);
+      router.push(buildSavedSearchHref(item) as never);
     },
     [router]
   );
 
-  const handleDelete = useCallback((id: string) => {
-    const ok = removeSavedSearch(id);
-    if (!ok) return;
-    setList(getSavedSearches());
+  const handleToggle = useCallback(async (item: SavedSearch) => {
+    const nextEnabled = !item.enabled;
+    setList((current) =>
+      current.map((row) => (row.id === item.id ? { ...row, enabled: nextEnabled } : row))
+    );
+    const result = await setSavedSearchEnabled(item.id, nextEnabled);
+    if (!result.ok) {
+      setList((current) =>
+        current.map((row) => (row.id === item.id ? { ...row, enabled: item.enabled } : row))
+      );
+      setError(result.error.message);
+    }
+  }, []);
+
+  const handleDelete = useCallback(async (id: string) => {
+    const result = await deleteSavedSearch(id);
+    if (!result.ok) {
+      setError(result.error.message);
+      return;
+    }
+    setList((current) => current.filter((item) => item.id !== id));
   }, []);
 
   const keyExtractor = useCallback((item: SavedSearch) => item.id, []);
@@ -52,6 +91,7 @@ export default function SavedSearchesScreen() {
         item.city,
         item.priceMin != null && `Min ${item.priceMin} FCFA`,
         item.priceMax != null && `Max ${item.priceMax} FCFA`,
+        item.enabled ? 'Alerte activée' : 'Alerte désactivée',
       ]
         .filter(Boolean)
         .join(' · ');
@@ -61,28 +101,55 @@ export default function SavedSearchesScreen() {
           onPress={() => handlePress(item)}
         >
           <View style={styles.rowBody}>
-            <Text style={styles.rowQuery} numberOfLines={1}>{item.label || item.query || 'Recherche'}</Text>
+            <Text style={styles.rowQuery} numberOfLines={1}>
+              {item.label || item.query || 'Recherche'}
+            </Text>
             {subtitle ? (
-              <Text style={styles.rowSubtitle} numberOfLines={1}>{subtitle}</Text>
+              <Text style={styles.rowSubtitle} numberOfLines={1}>
+                {subtitle}
+              </Text>
             ) : null}
           </View>
           <Pressable
-            style={({ pressed }) => [styles.deleteBtn, pressed && styles.deleteBtnPressed]}
-            onPress={() => handleDelete(item.id)}
+            style={({ pressed }) => [styles.iconBtn, pressed && styles.iconBtnPressed]}
+            onPress={() => void handleToggle(item)}
             hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel={item.enabled ? 'Désactiver l’alerte' : 'Activer l’alerte'}
+          >
+            <Ionicons
+              name={item.enabled ? 'notifications-outline' : 'notifications-off-outline'}
+              size={20}
+              color={item.enabled ? colors.primary : colors.textMuted}
+            />
+          </Pressable>
+          <Pressable
+            style={({ pressed }) => [styles.iconBtn, pressed && styles.iconBtnPressed]}
+            onPress={() => void handleDelete(item.id)}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel="Supprimer cette recherche"
           >
             <Ionicons name="trash-outline" size={20} color={colors.textMuted} />
           </Pressable>
         </Pressable>
       );
     },
-    [handlePress, handleDelete]
+    [handlePress, handleToggle, handleDelete]
   );
 
-  if (list.length === 0) {
-    return (
-      <Screen safe={false}>
-        <AppHeader title="Recherches sauvegardées" showBack density="compact" />
+  return (
+    <Screen safe={false}>
+      <AppHeader title="Recherches sauvegardées" showBack density="compact" />
+      <View style={styles.activationWrap}>
+        <NotificationsActivationCard />
+      </View>
+      {error ? <Text style={styles.errorText}>{error}</Text> : null}
+      {loading && list.length === 0 ? (
+        <View style={styles.emptyWrap}>
+          <ActivityIndicator color={colors.primary} />
+        </View>
+      ) : list.length === 0 ? (
         <View style={styles.emptyWrap}>
           <EmptyState
             variant="plain"
@@ -90,25 +157,29 @@ export default function SavedSearchesScreen() {
             message="Sur l'écran Recherche, lancez une recherche puis appuyez sur « Sauvegarder cette recherche »."
           />
         </View>
-      </Screen>
-    );
-  }
-
-  return (
-    <Screen safe={false}>
-      <AppHeader title="Recherches sauvegardées" showBack density="compact" />
-      <FlatList
-        data={list}
-        keyExtractor={keyExtractor}
-        renderItem={renderItem}
-        contentContainerStyle={styles.listContent}
-        showsVerticalScrollIndicator={false}
-      />
+      ) : (
+        <FlatList
+          data={list}
+          keyExtractor={keyExtractor}
+          renderItem={renderItem}
+          contentContainerStyle={styles.listContent}
+          showsVerticalScrollIndicator={false}
+        />
+      )}
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
+  activationWrap: {
+    paddingHorizontal: spacing.base,
+  },
+  errorText: {
+    ...typography.xs,
+    color: colors.error,
+    paddingHorizontal: spacing.base,
+    marginBottom: spacing.sm,
+  },
   emptyWrap: {
     flex: 1,
     justifyContent: 'center',
@@ -150,10 +221,10 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
     marginTop: spacing.xs,
   },
-  deleteBtn: {
+  iconBtn: {
     padding: spacing.sm,
   },
-  deleteBtnPressed: {
+  iconBtnPressed: {
     opacity: 0.7,
   },
 });

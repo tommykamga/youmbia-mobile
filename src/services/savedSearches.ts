@@ -1,11 +1,24 @@
 /**
- * Saved searches – persisted locally for MVP.
- * Uses Expo SQLite localStorage polyfill already present in the app.
+ * Saved searches – source de vérité Postgres (RLS owner).
+ * Plus de localStorage. Les alertes sont serveur (ledger + Edge Function).
  */
 
-import 'expo-sqlite/localStorage/install';
-
-const STORAGE_KEY = 'youmbia.savedSearches.v1';
+import { supabase } from '@/lib/supabase';
+import {
+  MAX_SAVED_SEARCHES,
+  buildSavedSearchHref,
+  buildSavedSearchLabel,
+  hasSavedSearchCriteria,
+  isSameSavedSearchCriteria,
+  normalizeSavedSearchCriteria,
+  type SavedSearchCriteria,
+} from '@/lib/savedSearchCriteria';
+import {
+  trackSavedSearchCreated,
+  trackSavedSearchDeleted,
+  trackSavedSearchOpened,
+  trackSavedSearchToggled,
+} from '@/lib/analytics';
 
 export type SavedSearch = {
   id: string;
@@ -16,7 +29,9 @@ export type SavedSearch = {
   category: string | null;
   categoryId: number | null;
   city: string | null;
+  enabled: boolean;
   createdAt: string;
+  updatedAt: string;
 };
 
 export type SaveSearchResult =
@@ -24,187 +39,257 @@ export type SaveSearchResult =
   | { ok: true; status: 'exists'; item: SavedSearch }
   | { ok: false; error: { message: string } };
 
-let cache: SavedSearch[] | null = null;
+export type SavedSearchMutationResult =
+  | { ok: true }
+  | { ok: false; error: { message: string } };
 
-function nextId(): string {
-  return `saved_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-}
-
-function normalizeNumber(value: number | null | undefined): number | null {
-  return typeof value === 'number' && Number.isFinite(value) ? value : null;
-}
-
-function normalizeText(value: string | null | undefined): string | null {
-  const trimmed = String(value ?? '').trim();
-  return trimmed ? trimmed : null;
-}
-
-function buildSavedSearchLabel(params: {
+type SavedSearchRow = {
+  id: string;
+  name: string | null;
   query: string;
-  priceMin?: number | null;
-  priceMax?: number | null;
-  category?: string | null;
-  city?: string | null;
-}): string {
-  const query = params.query.trim();
-  const rawParts = [
-    query || null,
-    normalizeText(params.category),
-    normalizeText(params.city),
-    params.priceMin != null ? `Min ${params.priceMin} FCFA` : null,
-    params.priceMax != null ? `Max ${params.priceMax} FCFA` : null,
-  ].filter(Boolean);
-  const seen = new Set<string>();
-  const parts = rawParts.filter((part) => {
-    const key = String(part).toLowerCase();
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
-  return parts.join(' · ') || 'Recherche';
-}
+  category_id: number | null;
+  city: string | null;
+  min_price: number | null;
+  max_price: number | null;
+  enabled: boolean;
+  created_at: string;
+  updated_at: string;
+};
 
-function isValidSavedSearch(value: unknown): value is SavedSearch {
-  if (!value || typeof value !== 'object') return false;
-  const item = value as Partial<SavedSearch>;
-  return (
-    typeof item.id === 'string' &&
-    typeof item.query === 'string' &&
-    (typeof item.priceMin === 'number' || item.priceMin === null) &&
-    (typeof item.priceMax === 'number' || item.priceMax === null) &&
-    typeof item.createdAt === 'string'
-  );
-}
+export { buildSavedSearchHref, isSameSavedSearchCriteria, MAX_SAVED_SEARCHES };
 
-function normalizeSavedSearch(value: SavedSearch): SavedSearch {
-  const normalized = {
-    id: value.id,
-    query: String(value.query ?? '').trim(),
-    priceMin: normalizeNumber(value.priceMin),
-    priceMax: normalizeNumber(value.priceMax),
-    category: normalizeText(value.category),
-    categoryId: normalizeNumber(value.categoryId),
-    city: normalizeText(value.city),
-    createdAt: String(value.createdAt ?? '') || new Date().toISOString(),
-  };
+function mapSavedSearchRow(row: SavedSearchRow, categoryName?: string | null): SavedSearch {
+  const query = String(row.query ?? '').trim();
+  const priceMin = typeof row.min_price === 'number' ? row.min_price : null;
+  const priceMax = typeof row.max_price === 'number' ? row.max_price : null;
+  const city = row.city?.trim() || null;
+  const category = categoryName?.trim() || null;
   return {
-    ...normalized,
+    id: row.id,
+    query,
+    priceMin,
+    priceMax,
+    category,
+    categoryId: typeof row.category_id === 'number' ? row.category_id : null,
+    city,
+    enabled: row.enabled !== false,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
     label:
-      normalizeText(value.label) ??
+      row.name?.trim() ||
       buildSavedSearchLabel({
-        query: normalized.query,
-        priceMin: normalized.priceMin,
-        priceMax: normalized.priceMax,
-        category: normalized.category,
-        city: normalized.city,
+        query,
+        category,
+        city,
+        minPrice: priceMin,
+        maxPrice: priceMax,
       }),
   };
 }
 
-function readStore(): SavedSearch[] {
-  if (cache != null) return [...cache];
-  try {
-    const raw = typeof localStorage !== 'undefined' ? localStorage.getItem(STORAGE_KEY) : null;
-    const parsed = raw ? JSON.parse(raw) : [];
-    const safe = Array.isArray(parsed) ? parsed.filter(isValidSavedSearch).map(normalizeSavedSearch) : [];
-    cache = safe.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-    return [...cache];
-  } catch {
-    cache = [];
-    return [];
+function getSavedSearchErrorMessage(message: string): string {
+  const msg = message.toLowerCase();
+  if (msg.includes('network') || msg.includes('fetch') || msg.includes('internet')) {
+    return 'Réseau indisponible';
   }
+  if (msg.includes('jwt') || msg.includes('jwt expired') || msg.includes('auth')) {
+    return 'Connexion requise';
+  }
+  if (msg.includes('maximum 20') || msg.includes('20 recherches')) {
+    return 'Vous pouvez enregistrer au maximum 20 recherches.';
+  }
+  if (msg.includes('duplicate') || msg.includes('unique') || msg.includes('23505')) {
+    return 'Cette recherche existe déjà';
+  }
+  return 'Impossible d’enregistrer la recherche';
 }
 
-function persistStore(nextStore: SavedSearch[]): boolean {
-  try {
-    cache = [...nextStore];
-    if (typeof localStorage !== 'undefined') {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(nextStore));
-    }
-    return true;
-  } catch {
-    return false;
-  }
+function isUniqueViolation(error: { code?: string; message?: string } | null): boolean {
+  if (!error) return false;
+  if (error.code === '23505') return true;
+  const msg = String(error.message ?? '').toLowerCase();
+  return msg.includes('duplicate') || msg.includes('saved_searches_user_criteria');
 }
 
-function isSameSearch(
-  a: Pick<SavedSearch, 'query' | 'priceMin' | 'priceMax' | 'category' | 'categoryId' | 'city'>,
-  b: Pick<SavedSearch, 'query' | 'priceMin' | 'priceMax' | 'category' | 'categoryId' | 'city'>
-): boolean {
+async function fetchExistingByCriteria(
+  userId: string,
+  criteria: SavedSearchCriteria
+): Promise<SavedSearch | null> {
+  const { data, error } = await supabase
+    .from('saved_searches')
+    .select('id, name, query, category_id, city, min_price, max_price, enabled, created_at, updated_at')
+    .eq('user_id', userId);
+
+  if (error || !data) return null;
   return (
-    a.query.trim().toLowerCase() === b.query.trim().toLowerCase() &&
-    normalizeNumber(a.priceMin) === normalizeNumber(b.priceMin) &&
-    normalizeNumber(a.priceMax) === normalizeNumber(b.priceMax) &&
-    normalizeText(a.category)?.toLowerCase() === normalizeText(b.category)?.toLowerCase() &&
-    normalizeNumber(a.categoryId) === normalizeNumber(b.categoryId) &&
-    normalizeText(a.city)?.toLowerCase() === normalizeText(b.city)?.toLowerCase()
+    (data as SavedSearchRow[])
+      .map((row) => mapSavedSearchRow(row))
+      .find((item) =>
+        isSameSavedSearchCriteria(
+          {
+            query: item.query,
+            categoryId: item.categoryId,
+            city: item.city,
+            minPrice: item.priceMin,
+            maxPrice: item.priceMax,
+          },
+          criteria
+        )
+      ) ?? null
   );
 }
 
-export function buildSavedSearchHref(search: SavedSearch): string {
-  const params = new URLSearchParams();
-  if (search.query) params.set('q', search.query);
-  if (search.priceMin != null) params.set('priceMin', String(search.priceMin));
-  if (search.priceMax != null) params.set('priceMax', String(search.priceMax));
-  if (search.category) params.set('category', search.category);
-  if (search.categoryId != null) params.set('categoryId', String(search.categoryId));
-  if (search.city) params.set('city', search.city);
-  return `/(tabs)/search?${params.toString()}`;
+export async function listSavedSearches(): Promise<SavedSearch[]> {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return [];
+
+  const { data, error } = await supabase
+    .from('saved_searches')
+    .select('id, name, query, category_id, city, min_price, max_price, enabled, created_at, updated_at')
+    .eq('user_id', user.id)
+    .order('created_at', { ascending: false });
+
+  if (error || !data) return [];
+  return (data as SavedSearchRow[]).map((row) => mapSavedSearchRow(row));
 }
 
-export function getSavedSearches(): SavedSearch[] {
-  return readStore();
+/** Compat UI existante — alias async. */
+export async function getSavedSearches(): Promise<SavedSearch[]> {
+  return listSavedSearches();
 }
 
-export function saveSearch(params: {
+export async function saveSearch(params: {
   query: string;
   priceMin?: number | null;
   priceMax?: number | null;
   category?: string | null;
   categoryId?: number | null;
   city?: string | null;
-}): SaveSearchResult {
-  const query = params.query?.trim() || '';
-  if (!query) {
+}): Promise<SaveSearchResult> {
+  const criteria = normalizeSavedSearchCriteria({
+    query: params.query,
+    categoryId: params.categoryId,
+    city: params.city,
+    minPrice: params.priceMin,
+    maxPrice: params.priceMax,
+  });
+
+  if (!hasSavedSearchCriteria(criteria)) {
     return { ok: false, error: { message: 'Impossible d’enregistrer la recherche' } };
   }
 
-  const nextItem: SavedSearch = {
-    id: nextId(),
-    label: buildSavedSearchLabel(params),
-    query,
-    priceMin: normalizeNumber(params.priceMin),
-    priceMax: normalizeNumber(params.priceMax),
-    category: normalizeText(params.category),
-    categoryId: normalizeNumber(params.categoryId),
-    city: normalizeText(params.city),
-    createdAt: new Date().toISOString(),
-  };
+  const {
+    data: { user },
+    error: userError,
+  } = await supabase.auth.getUser();
+  if (userError || !user) {
+    return { ok: false, error: { message: 'Connexion requise' } };
+  }
 
-  const current = readStore();
-  const existing = current.find((item) => isSameSearch(item, nextItem));
-  if (existing) {
-    const updatedExisting = { ...existing, createdAt: nextItem.createdAt };
-    const nextStore = [updatedExisting, ...current.filter((item) => item.id !== existing.id)];
-    if (!persistStore(nextStore)) {
-      return { ok: false, error: { message: 'Impossible d’enregistrer la recherche' } };
+  const name = buildSavedSearchLabel({
+    query: criteria.query,
+    category: params.category,
+    city: criteria.city,
+    minPrice: criteria.minPrice,
+    maxPrice: criteria.maxPrice,
+  });
+
+  const { data, error } = await supabase
+    .from('saved_searches')
+    .insert({
+      user_id: user.id,
+      name,
+      query: criteria.query,
+      category_id: criteria.categoryId,
+      city: criteria.city,
+      min_price: criteria.minPrice,
+      max_price: criteria.maxPrice,
+      enabled: true,
+    })
+    .select('id, name, query, category_id, city, min_price, max_price, enabled, created_at, updated_at')
+    .single();
+
+  if (error) {
+    if (isUniqueViolation(error)) {
+      const existing = await fetchExistingByCriteria(user.id, criteria);
+      if (existing) {
+        return { ok: true, status: 'exists', item: existing };
+      }
     }
-    return { ok: true, status: 'exists', item: updatedExisting };
+    return { ok: false, error: { message: getSavedSearchErrorMessage(error.message) } };
   }
 
-  const nextStore = [nextItem, ...current];
-  if (!persistStore(nextStore)) {
+  if (!data) {
     return { ok: false, error: { message: 'Impossible d’enregistrer la recherche' } };
   }
-  return { ok: true, status: 'saved', item: nextItem };
+
+  const item = mapSavedSearchRow(data as SavedSearchRow, params.category);
+  trackSavedSearchCreated({
+    saved_search_id: item.id,
+    has_query: criteria.query.length > 0,
+    has_category: criteria.categoryId != null,
+    has_city: criteria.city != null,
+    has_price: criteria.minPrice != null || criteria.maxPrice != null,
+  });
+  return { ok: true, status: 'saved', item };
 }
 
-export function removeSavedSearch(id: string): boolean {
-  const current = readStore();
-  const nextStore = current.filter((s) => s.id !== id);
-  return persistStore(nextStore);
+export async function removeSavedSearch(id: string): Promise<boolean> {
+  const result = await deleteSavedSearch(id);
+  return result.ok;
 }
 
-export function getSavedSearchById(id: string): SavedSearch | null {
-  return readStore().find((s) => s.id === id) ?? null;
+export async function deleteSavedSearch(id: string): Promise<SavedSearchMutationResult> {
+  const searchId = String(id ?? '').trim();
+  if (!searchId) {
+    return { ok: false, error: { message: 'Impossible de supprimer la recherche' } };
+  }
+
+  const { error } = await supabase.from('saved_searches').delete().eq('id', searchId);
+  if (error) {
+    return { ok: false, error: { message: 'Impossible de supprimer la recherche' } };
+  }
+  trackSavedSearchDeleted({ saved_search_id: searchId });
+  return { ok: true };
+}
+
+export async function setSavedSearchEnabled(
+  id: string,
+  enabled: boolean
+): Promise<SavedSearchMutationResult> {
+  const searchId = String(id ?? '').trim();
+  if (!searchId) {
+    return { ok: false, error: { message: 'Impossible de modifier l’alerte' } };
+  }
+
+  const { error } = await supabase
+    .from('saved_searches')
+    .update({ enabled })
+    .eq('id', searchId);
+
+  if (error) {
+    return { ok: false, error: { message: 'Impossible de modifier l’alerte' } };
+  }
+  trackSavedSearchToggled({ saved_search_id: searchId, enabled });
+  return { ok: true };
+}
+
+export function trackSavedSearchOpen(id: string): void {
+  const searchId = String(id ?? '').trim();
+  if (!searchId) return;
+  trackSavedSearchOpened({ saved_search_id: searchId });
+}
+
+export async function getSavedSearchById(id: string): Promise<SavedSearch | null> {
+  const searchId = String(id ?? '').trim();
+  if (!searchId) return null;
+  const { data, error } = await supabase
+    .from('saved_searches')
+    .select('id, name, query, category_id, city, min_price, max_price, enabled, created_at, updated_at')
+    .eq('id', searchId)
+    .maybeSingle();
+  if (error || !data) return null;
+  return mapSavedSearchRow(data as SavedSearchRow);
 }

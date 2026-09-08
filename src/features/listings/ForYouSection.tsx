@@ -123,10 +123,11 @@ export function ForYouSection() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [feedResult, favoriteIdsResult, favoritesResult] = await Promise.all([
+      const [feedResult, favoriteIdsResult, favoritesResult, savedSearches] = await Promise.all([
         getPublicListings(0, FOR_YOU_FETCH_LIMIT),
         getFavoriteIds(),
         getFavorites(),
+        getSavedSearches(),
       ]);
 
       if (favoriteIdsResult.data) {
@@ -137,7 +138,7 @@ export function ForYouSection() {
       const recentResult = recentIds.length > 0 ? await getListingsByIds(recentIds.slice(0, 8)) : { data: [], error: null };
 
       const signals: RecommendationSignals = {
-        savedSearches: getSavedSearches().slice(0, 8),
+        savedSearches: savedSearches.slice(0, 8),
         favoriteListings: favoritesResult.data ?? [],
         recentListings: recentResult.data ?? [],
         recentIds,

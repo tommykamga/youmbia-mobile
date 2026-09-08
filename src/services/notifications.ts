@@ -105,7 +105,7 @@ function writeCooldownMap(map: NotificationCooldownMap): void {
 
 function getSearchQueryString(params: Record<string, unknown>): string {
   const searchParams = new URLSearchParams();
-  const keys = ['q', 'priceMin', 'priceMax', 'category', 'city'] as const;
+  const keys = ['q', 'priceMin', 'priceMax', 'category', 'categoryId', 'city'] as const;
   keys.forEach((key) => {
     const value = params[key];
     if (typeof value === 'string' && value.trim()) {
@@ -409,6 +409,28 @@ export async function addNotificationResponseReceivedListenerSafe(
   } catch {
     return null;
   }
+}
+
+export type NotificationOpenMeta = {
+  target: string | null;
+  type: string | null;
+  listingId: string | null;
+  savedSearchId: string | null;
+};
+
+export function getNotificationOpenMeta(
+  response: NotificationResponseLike | null | undefined
+): NotificationOpenMeta {
+  const data = getSafeNotificationData(response?.notification?.request?.content?.data);
+  const type = typeof data.type === 'string' ? data.type.trim() : null;
+  const listingId = typeof data.listingId === 'string' ? data.listingId.trim() : '';
+  const savedSearchId = typeof data.savedSearchId === 'string' ? data.savedSearchId.trim() : '';
+  return {
+    target: getNotificationNavigationTarget(response),
+    type: type || null,
+    listingId: listingId || null,
+    savedSearchId: savedSearchId || null,
+  };
 }
 
 export function getNotificationNavigationTarget(

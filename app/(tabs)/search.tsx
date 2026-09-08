@@ -32,9 +32,11 @@ import { appendUniqueSearchListings } from '@/services/listings/searchQuery';
 import { getFavoriteIds as getFavIds } from '@/services/favorites';
 import { sortListings, type SortOption } from '@/utils/sortListings';
 import {
+  buildSavedSearchHref,
   getSavedSearches,
   removeSavedSearch,
   saveSearch,
+  trackSavedSearchOpen,
   type SavedSearch,
 } from '@/services/savedSearches';
 import {
@@ -184,7 +186,7 @@ export default function SearchScreen() {
   }, []);
 
   const loadSavedSearches = useCallback(() => {
-    setSavedSearches(getSavedSearches());
+    void getSavedSearches().then(setSavedSearches);
   }, []);
 
   const loadRecentSearches = useCallback(() => {
@@ -551,8 +553,26 @@ export default function SearchScreen() {
     [submitKeywordSearch]
   );
 
-  const handleSaveSearch = useCallback(() => {
-    const result = saveSearch({
+  const handleSaveSearch = useCallback(async () => {
+    const session = await getSession();
+    const criteria = {
+      query: submittedQuery,
+      minPrice: appliedPriceFilters.min,
+      maxPrice: appliedPriceFilters.max,
+      category: appliedSearchFilters.category,
+      categoryId: appliedSearchFilters.categoryId,
+      city: appliedSearchFilters.city,
+    };
+    if (!session?.user) {
+      router.push(
+        buildAuthGateHref('search', {
+          redirect: buildSavedSearchHref(criteria),
+        })
+      );
+      return;
+    }
+
+    const result = await saveSearch({
       query: submittedQuery,
       priceMin: appliedPriceFilters.min,
       priceMax: appliedPriceFilters.max,
@@ -573,7 +593,7 @@ export default function SearchScreen() {
       setSavedSearchFeedback('Recherche enregistrée');
     }
     savedSearchFeedbackTimeoutRef.current = setTimeout(() => setSavedSearchFeedback(null), 2000);
-  }, [submittedQuery, appliedPriceFilters, appliedSearchFilters, loadSavedSearches]);
+  }, [submittedQuery, appliedPriceFilters, appliedSearchFilters, loadSavedSearches, router]);
 
   useEffect(() => {
     return () => {
@@ -585,6 +605,7 @@ export default function SearchScreen() {
 
   const handleSavedSearchPress = useCallback(
     (item: SavedSearch) => {
+      trackSavedSearchOpen(item.id);
       clearPendingMainSearchDebounce();
       setQuery(item.query);
       setSubmittedQuery(item.query);
@@ -613,12 +634,13 @@ export default function SearchScreen() {
 
   const handleRemoveSavedSearch = useCallback(
     (id: string) => {
-      const ok = removeSavedSearch(id);
-      if (!ok) {
-        setSavedSearchFeedback('Impossible de supprimer la recherche');
-        return;
-      }
-      loadSavedSearches();
+      void removeSavedSearch(id).then((ok) => {
+        if (!ok) {
+          setSavedSearchFeedback('Impossible de supprimer la recherche');
+          return;
+        }
+        loadSavedSearches();
+      });
     },
     [loadSavedSearches]
   );

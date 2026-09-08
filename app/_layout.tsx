@@ -8,7 +8,12 @@ import { Alert, AppState, Linking } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { colors } from '@/theme';
 import { getSession, onAuthStateChange } from '@/services/auth';
-import { identifyCurrentUser, initMixpanel, resetAnalytics } from '@/lib/analytics';
+import {
+  identifyCurrentUser,
+  initMixpanel,
+  resetAnalytics,
+  trackSavedSearchNotificationOpened,
+} from '@/lib/analytics';
 import {
   initCrashReporting,
   setCrashReportingUser,
@@ -22,7 +27,7 @@ import {
   getComparableRouteKey,
   getComparableTargetKey,
   getLastNotificationResponseAsyncSafe,
-  getNotificationNavigationTarget,
+  getNotificationOpenMeta,
   initializeNotifications,
   isPushNotificationsAvailable,
   syncPushTokenIfGranted,
@@ -31,11 +36,11 @@ import { FavoritesProvider } from '@/context/FavoritesContext';
 import { AppUpdateGate } from '@/components/AppUpdateGate';
 
 /**
- * Polling sync notifications (messages + recherches enregistrées), actif quand l’app est au premier plan.
- * 45s ≥ 30s recommandé pour limiter la charge ; augmenter (ex. 90s) si besoin côté serveur — à valider produit.
+ * Polling sync notifications messages, actif quand l’app est au premier plan.
+ * Les alertes saved-search sont serveur (trigger + Edge Function), pas de scan client.
  */
 const MESSAGE_NOTIFICATIONS_POLL_MS = 45000;
-/** Délai avant le 1er sync messages / recherches sauvegardées pour ne pas concurrencer session + 1er rendu. */
+/** Délai avant le 1er sync messages pour ne pas concurrencer session + 1er rendu. */
 const STARTUP_NOTIFICATION_SYNC_DELAY_MS = 2500;
 
 export { ErrorBoundary } from 'expo-router';
@@ -179,13 +184,9 @@ function RootLayout() {
       try {
         const session = await getSession();
         if (!session?.user) return;
-        const [{ syncNewMessageNotifications }, { syncSavedSearchNotifications }] = await Promise.all([
-          import('@/services/messageNotifications'),
-          import('@/services/savedSearchNotifications'),
-        ]);
+        const { syncNewMessageNotifications } = await import('@/services/messageNotifications');
         if (cancelled) return;
         void syncNewMessageNotifications(routeKeyRef.current);
-        void syncSavedSearchNotifications(routeKeyRef.current);
       } catch {
         // Prochain intervalle ou prochain focus actif retentera le chargement des modules.
       }
@@ -307,7 +308,11 @@ function RootLayout() {
   }, [handleIncomingUrl]);
 
   const handleNotificationResponse = useCallback(
-    (identifier: string | null | undefined, target: string | null) => {
+    (
+      identifier: string | null | undefined,
+      target: string | null,
+      meta?: { type: string | null; listingId: string | null; savedSearchId: string | null }
+    ) => {
       if (!target) return;
       const safeIdentifier = String(identifier ?? '').trim();
       if (safeIdentifier && lastHandledNotificationRef.current === safeIdentifier) return;
@@ -316,6 +321,12 @@ function RootLayout() {
         return;
       }
       lastHandledNotificationRef.current = safeIdentifier || target;
+      if (meta?.type === 'saved_search_match') {
+        trackSavedSearchNotificationOpened({
+          listing_id: meta.listingId,
+          saved_search_id: meta.savedSearchId,
+        });
+      }
       router.replace(target as never);
     },
     [router]
@@ -328,17 +339,21 @@ function RootLayout() {
     getLastNotificationResponseAsyncSafe()
       .then((initialResponse) => {
         if (!active || !initialResponse) return;
+        const meta = getNotificationOpenMeta(initialResponse);
         handleNotificationResponse(
           initialResponse.notification?.request?.identifier,
-          getNotificationNavigationTarget(initialResponse)
+          meta.target,
+          meta
         );
       })
       .catch(() => {});
 
     void addNotificationResponseReceivedListenerSafe((response) => {
+      const meta = getNotificationOpenMeta(response);
       handleNotificationResponse(
         response.notification?.request?.identifier,
-        getNotificationNavigationTarget(response)
+        meta.target,
+        meta
       );
     }).then((listenerSubscription) => {
       if (!active) {

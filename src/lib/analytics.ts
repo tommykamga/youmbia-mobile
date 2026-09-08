@@ -280,6 +280,41 @@ export function trackRecentSearchSelected(properties: { search_query: string }):
   });
 }
 
+export function trackSavedSearchCreated(properties: {
+  saved_search_id: string;
+  has_query: boolean;
+  has_category: boolean;
+  has_city: boolean;
+  has_price: boolean;
+}): void {
+  trackEvent('saved_search_created', properties);
+}
+
+export function trackSavedSearchDeleted(properties: { saved_search_id: string }): void {
+  trackEvent('saved_search_deleted', properties);
+}
+
+export function trackSavedSearchToggled(properties: {
+  saved_search_id: string;
+  enabled: boolean;
+}): void {
+  trackEvent('saved_search_toggled', properties);
+}
+
+export function trackSavedSearchOpened(properties: { saved_search_id: string }): void {
+  trackEvent('saved_search_opened', properties);
+}
+
+export function trackSavedSearchNotificationOpened(properties: {
+  listing_id?: string | null;
+  saved_search_id?: string | null;
+}): void {
+  trackEvent('saved_search_notification_opened', {
+    listing_id: properties.listing_id ?? undefined,
+    saved_search_id: properties.saved_search_id ?? undefined,
+  });
+}
+
 export function trackListingReported(properties: {
   listing_id: string;
   report_reason: string;

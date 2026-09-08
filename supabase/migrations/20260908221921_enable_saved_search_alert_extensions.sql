@@ -1,0 +1,6 @@
+-- Historical production migration.
+-- Extensions required by TOM-97 were enabled directly on the linked Supabase project.
+-- Kept locally to align migration history with production.
+-- TOM-97 migration 20260908250000_saved_search_alerts_v1.sql also declares
+-- CREATE EXTENSION IF NOT EXISTS pg_net;
+-- CREATE EXTENSION IF NOT EXISTS pg_cron;
