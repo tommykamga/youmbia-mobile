@@ -277,19 +277,14 @@ export default function ListingDetailScreen() {
     similarLoadStartedRef.current = true;
     setSimilarLoading(true);
     const listing = state.listing;
-    const currentCategory = listing.category_id
-      ? resolveMarketplaceCategoryLabel(marketplaceCategories, listing.category_id)
-      : null;
     const targetListingId = listing.id;
     void (async () => {
       try {
         const similarResult = await getSimilarListings(
           {
             id: listing.id,
-            title: listing.title,
-            description: listing.description,
             city: listing.city,
-            category: currentCategory,
+            categoryId: listing.category_id ?? null,
             price: listing.price,
           },
           4
@@ -304,7 +299,7 @@ export default function ListingDetailScreen() {
         }
       }
     })();
-  }, [marketplaceCategories, state]);
+  }, [state]);
 
   const handleDetailScroll = useCallback(
     (e: NativeSyntheticEvent<NativeScrollEvent>) => {

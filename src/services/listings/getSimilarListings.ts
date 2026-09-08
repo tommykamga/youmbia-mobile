@@ -1,19 +1,18 @@
 import { supabase } from '@/lib/supabase';
 import { getSignedUrlsMap, listingStoragePathsForCardCover, mapListingCardImages } from '@/lib/listingImageUrl';
-import { getDisplayBoosted, normalizeListingSchemaFeatures } from '@/lib/listingSchemaFeatures';
+import { normalizeListingSchemaFeatures } from '@/lib/listingSchemaFeatures';
+import { getMarketplaceCategoriesCached } from '@/services/categories';
 import type { Tables } from '@/types/database';
 import type { PublicListing } from './getPublicListings';
 import { listingPublicListSelect } from './listingListSelect';
-
-const CATEGORY_OPTIONS = ['Véhicules', 'Mode', 'Maison', 'Électronique', 'Sport', 'Loisirs', 'Autre'] as const;
-const DEFAULT_LIMIT = 4;
-const FETCH_LIMIT = 16;
-const MIN_RESULTS_TO_SHOW = 2;
-const STOPWORDS = new Set([
-  'avec', 'dans', 'pour', 'sans', 'chez', 'des', 'les', 'une', 'sur', 'par', 'vous', 'nous',
-  'elle', 'ils', 'elles', 'mais', 'donc', 'plus', 'tres', 'trop', 'petit', 'petite', 'grand',
-  'grande', 'prix', 'annonce', 'vendeur', 'neuf', 'neuve',
-]);
+import {
+  ACTIVE_LISTING_STATUS,
+  rankSimilarListings,
+  resolveSimilarFetchCategoryIds,
+  shouldFetchSimilarListings,
+  SIMILAR_LISTINGS_FETCH_LIMIT,
+  SIMILAR_LISTINGS_LIMIT,
+} from './similarListingsRank';
 
 type ListingImageRow = Pick<
   Tables<'listing_images'>,
@@ -44,45 +43,13 @@ export type SimilarListingInput = {
   city?: string | null;
   description?: string | null;
   category?: string | null;
+  categoryId?: number | null;
   price?: number | null;
 };
 
 export type GetSimilarListingsResult =
   | { data: PublicListing[]; error: null }
   | { data: PublicListing[]; error: { message: string } };
-
-function normalizeText(value: string | null | undefined): string {
-  return String(value ?? '')
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .toLowerCase()
-    .trim();
-}
-
-function inferCategory(value: Pick<SimilarListingInput, 'title' | 'description' | 'category'>): string | null {
-  const explicit = normalizeText(value.category);
-  if (explicit) return explicit;
-  const haystack = normalizeText(`${value.title ?? ''} ${value.description ?? ''}`);
-  if (!haystack) return null;
-  const match = CATEGORY_OPTIONS.find((option) => haystack.includes(normalizeText(option)));
-  return match ? normalizeText(match) : null;
-}
-
-function extractKeywords(value: Pick<SimilarListingInput, 'title' | 'description'>): string[] {
-  return Array.from(
-    new Set(
-      normalizeText(`${value.title ?? ''} ${value.description ?? ''}`)
-        .split(/[^a-z0-9]+/i)
-        .filter((token) => token.length >= 4 && !STOPWORDS.has(token))
-    )
-  );
-}
-
-function countSharedKeywords(a: string[], b: string[]): number {
-  if (a.length === 0 || b.length === 0) return 0;
-  const setB = new Set(b);
-  return a.reduce((count, token) => count + (setB.has(token) ? 1 : 0), 0);
-}
 
 function mapRow(row: ListingRow, signedMap: Map<string, string>): PublicListing {
   const images = mapListingCardImages(row.listing_images, signedMap);
@@ -104,127 +71,70 @@ function mapRow(row: ListingRow, signedMap: Map<string, string>): PublicListing 
 
 export async function getSimilarListings(
   input: SimilarListingInput,
-  limit: number = DEFAULT_LIMIT
+  limit: number = SIMILAR_LISTINGS_LIMIT
 ): Promise<GetSimilarListingsResult> {
   const currentId = input.id?.trim();
   if (!currentId) {
     return { data: [], error: { message: 'Identifiant annonce manquant' } };
   }
 
-  const safeLimit = Math.max(1, Math.min(limit, DEFAULT_LIMIT));
-  const currentCity = normalizeText(input.city);
-  const currentCategory = input.category || inferCategory(input);
-  const currentPrice = input.price;
-  const currentKeywords = extractKeywords(input);
+  const categoryId = shouldFetchSimilarListings(input.categoryId) ? input.categoryId : null;
+  if (categoryId == null) {
+    return { data: [], error: null };
+  }
+
+  const safeLimit = Math.max(1, Math.min(limit, SIMILAR_LISTINGS_LIMIT));
 
   try {
+    let branchIds = [categoryId];
+    let categories: Awaited<ReturnType<typeof getMarketplaceCategoriesCached>> = [];
+    try {
+      categories = await getMarketplaceCategoriesCached();
+      branchIds = resolveSimilarFetchCategoryIds(categories, categoryId);
+    } catch {
+      branchIds = [categoryId];
+    }
+
     const { data, error } = await supabase
       .from('listings')
       .select(listingPublicListSelect(false))
-      .eq('status', 'active')
+      .eq('status', ACTIVE_LISTING_STATUS)
       .neq('id', currentId)
+      .in('category_id', branchIds)
       .order('created_at', { ascending: false })
-      .limit(FETCH_LIMIT);
+      .limit(SIMILAR_LISTINGS_FETCH_LIMIT);
 
     if (error) {
       return { data: [], error: { message: 'Impossible de charger les annonces similaires' } };
     }
 
     const rows = (data ?? []) as unknown as ListingRow[];
-    const allPaths = rows.flatMap((row) => listingStoragePathsForCardCover(row.listing_images));
+    const rankedRows = rankSimilarListings(
+      {
+        id: currentId,
+        categoryId,
+        city: input.city,
+        price: input.price,
+      },
+      rows.map((row) => ({
+        id: row.id,
+        category_id: row.category_id ?? null,
+        city: row.city,
+        price: row.price,
+        created_at: row.created_at,
+        status: ACTIVE_LISTING_STATUS,
+      })),
+      categories,
+      safeLimit
+    );
+    const rankedIds = new Set(rankedRows.map((row) => row.id));
+    const orderedRows = rankedRows
+      .map((ranked) => rows.find((row) => row.id === ranked.id))
+      .filter((row): row is ListingRow => row != null && rankedIds.has(row.id));
+
+    const allPaths = orderedRows.flatMap((row) => listingStoragePathsForCardCover(row.listing_images));
     const signedMap = await getSignedUrlsMap(allPaths);
-    const candidates = rows.map((row) => mapRow(row, signedMap));
-    const seen = new Set<string>();
-
-    const scored = candidates
-      .filter((item) => {
-        if (!item.id || item.id === currentId) return false;
-        if (seen.has(item.id)) return false;
-        seen.add(item.id);
-        return true;
-      })
-      .map((item) => {
-        const sameCity = currentCity !== '' && normalizeText(item.city) === currentCity;
-        const sameCategory =
-          currentCategory != null &&
-          inferCategory({
-            title: item.title,
-            description: item.description ?? null,
-            category: null,
-          }) === currentCategory;
-        const sharedKeywords = countSharedKeywords(
-          currentKeywords,
-          extractKeywords({ title: item.title, description: item.description ?? null })
-        );
-
-        let score = 0;
-        if (sameCity) score += 150; // Priority
-        if (sameCategory) score += 100;
-
-        // Price proximity bonus (+/- 25%)
-        if (currentPrice != null && item.price != null) {
-          const diff = Math.abs(currentPrice - item.price);
-          const ratio = diff / currentPrice;
-          if (ratio <= 0.25) {
-            score += 50;
-          }
-        }
-
-        score += Math.min(sharedKeywords, 3) * 10;
-
-        const isRelevant =
-          sameCategory ||
-          sameCity ||
-          sharedKeywords >= 2;
-
-        return { item, sameCategory, sameCity, sharedKeywords, score, isRelevant };
-      })
-      .filter((entry) => entry.isRelevant)
-      .sort((a, b) => {
-        if (b.score !== a.score) return b.score - a.score;
-        const aUrgent = a.item.urgent ? 1 : 0;
-        const bUrgent = b.item.urgent ? 1 : 0;
-        if (bUrgent !== aUrgent) return bUrgent - aUrgent;
-        const aBoost = getDisplayBoosted(a.item) ? 1 : 0;
-        const bBoost = getDisplayBoosted(b.item) ? 1 : 0;
-        if (bBoost !== aBoost) return bBoost - aBoost;
-        return Date.parse(b.item.created_at) - Date.parse(a.item.created_at);
-      })
-      .map((entry) => entry.item);
-
-    if (scored.length >= MIN_RESULTS_TO_SHOW) {
-      return { data: scored.slice(0, safeLimit), error: null };
-    }
-
-    const fallback = candidates
-      .filter((item) => item.id !== currentId)
-      .filter((item, index, array) => array.findIndex((candidate) => candidate.id === item.id) === index)
-      .filter((item) => {
-        const sameCity = currentCity !== '' && normalizeText(item.city) === currentCity;
-        const sameCategory =
-          currentCategory != null &&
-          inferCategory({
-            title: item.title,
-            description: item.description ?? null,
-            category: null,
-          }) === currentCategory;
-        return sameCategory || sameCity;
-      })
-      .sort((a, b) => {
-        const aUrgent = a.urgent ? 1 : 0;
-        const bUrgent = b.urgent ? 1 : 0;
-        if (bUrgent !== aUrgent) return bUrgent - aUrgent;
-        const aBoost = getDisplayBoosted(a) ? 1 : 0;
-        const bBoost = getDisplayBoosted(b) ? 1 : 0;
-        if (bBoost !== aBoost) return bBoost - aBoost;
-        return Date.parse(b.created_at) - Date.parse(a.created_at);
-      });
-
-    if (fallback.length < MIN_RESULTS_TO_SHOW) {
-      return { data: [], error: null };
-    }
-
-    return { data: fallback.slice(0, safeLimit), error: null };
+    return { data: orderedRows.map((row) => mapRow(row, signedMap)), error: null };
   } catch {
     return { data: [], error: { message: 'Impossible de charger les annonces similaires' } };
   }
