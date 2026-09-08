@@ -295,7 +295,10 @@ export function trackBumpActivated(properties: {
   trackEvent('bump_activated', properties);
 }
 
-export function trackListingMarkedSold(properties: { listing_id: string }): void {
+export function trackListingMarkedSold(properties: {
+  listing_id: string;
+  time_to_sale_seconds?: number;
+}): void {
   trackEvent('listing_marked_sold', properties);
 }
 

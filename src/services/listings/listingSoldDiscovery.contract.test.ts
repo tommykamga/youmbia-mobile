@@ -56,4 +56,14 @@ describe('sold exclu des requêtes discovery actives', () => {
     expect(inbox).toMatch(/\.from\('listings'\)/);
     expect(inbox).not.toMatch(/\.eq\('status'/);
   });
+
+  it('les selects liste / discovery n’exigent pas sold_at ni sale_cycle_started_at', () => {
+    const listSelect = read('src/services/listings/listingListSelect.ts');
+    const publicFeed = read('src/services/listings/getPublicListings.ts');
+    const search = read('src/services/listings/searchListings.ts');
+    expect(listSelect).not.toMatch(/sold_at/);
+    expect(listSelect).not.toMatch(/sale_cycle_started_at/);
+    expect(publicFeed).not.toMatch(/sold_at/);
+    expect(search).not.toMatch(/sold_at/);
+  });
 });

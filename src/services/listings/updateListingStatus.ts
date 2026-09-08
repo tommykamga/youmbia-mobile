@@ -11,6 +11,7 @@ import {
   LISTING_STATUS,
   type ListingStatus,
 } from '@/lib/listingStatus';
+import { timeToSaleSeconds } from '@/lib/timeToSale';
 import { removeListingDetailSession } from './listingDetailSessionCache';
 
 export type { ListingStatus };
@@ -97,6 +98,7 @@ export async function updateListingStatus(
     }
   }
 
+  // `sold_at` / `sale_cycle_started_at` : trigger DB `listings_set_sale_cycle`, jamais écrits ici.
   const { data, error } = await supabase
     .from('listings')
     .update({ status })
@@ -180,6 +182,38 @@ export async function markListingSold(listingId: string): Promise<UpdateListingS
   const result = await updateListingStatus(id, LISTING_STATUS.sold);
   if (result.error) return result;
 
-  trackListingMarkedSold({ listing_id: id });
+  trackListingMarkedSold({
+    listing_id: id,
+    ...(await readTimeToSaleSeconds(id, user.id)),
+  });
   return result;
+}
+
+/**
+ * Enrichit Mixpanel uniquement si les timestamps DB permettent un calcul fiable.
+ * N’échoue jamais le marquage vendue (colonne absente, trigger non appliqué, etc.).
+ */
+async function readTimeToSaleSeconds(
+  listingId: string,
+  userId: string
+): Promise<{ time_to_sale_seconds: number } | Record<string, never>> {
+  try {
+    const { data, error } = await supabase
+      .from('listings')
+      .select('created_at, sold_at, sale_cycle_started_at')
+      .eq('id', listingId)
+      .eq('user_id', userId)
+      .maybeSingle();
+
+    if (error || !data) return {};
+    const row = data as {
+      created_at?: string | null;
+      sold_at?: string | null;
+      sale_cycle_started_at?: string | null;
+    };
+    const seconds = timeToSaleSeconds(row.created_at, row.sold_at, row.sale_cycle_started_at);
+    return seconds == null ? {} : { time_to_sale_seconds: seconds };
+  } catch {
+    return {};
+  }
 }
