@@ -431,6 +431,8 @@ export type Database = {
           model: string | null;
           price: number;
           shop_id: string | null;
+          sale_cycle_started_at: string | null;
+          sold_at: string | null;
           status: Database['public']['Enums']['listing_status'];
           title: string;
           updated_at: string;
@@ -452,6 +454,8 @@ export type Database = {
           model?: string | null;
           price: number;
           shop_id?: string | null;
+          sale_cycle_started_at?: string | null;
+          sold_at?: string | null;
           status?: Database['public']['Enums']['listing_status'];
           title: string;
           updated_at?: string;
@@ -473,6 +477,8 @@ export type Database = {
           model?: string | null;
           price?: number;
           shop_id?: string | null;
+          sale_cycle_started_at?: string | null;
+          sold_at?: string | null;
           status?: Database['public']['Enums']['listing_status'];
           title?: string;
           updated_at?: string;
