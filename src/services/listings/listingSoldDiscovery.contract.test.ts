@@ -42,7 +42,11 @@ describe('sold exclu des requêtes discovery actives', () => {
     expect(detail).toMatch(/isOwnListing/);
     expect(detail).toMatch(/markListingSold/);
     expect(detail).toMatch(/canSellerReactivateListing/);
-    expect(detail).toMatch(/Réactiver/);
+    expect(detail).toMatch(/getSellerReactivateActionLabel/);
+    expect(detail).toMatch(/canSellerRenewListing/);
+    expect(mine).toMatch(/renewListing/);
+    expect(mine).toMatch(/getSellerReactivateActionLabel/);
+    expect(mine).not.toMatch(/Remonter l'annonce/);
   });
 
   it('delete_my_account ne dépend pas du statut sold', () => {
@@ -63,7 +67,24 @@ describe('sold exclu des requêtes discovery actives', () => {
     const search = read('src/services/listings/searchListings.ts');
     expect(listSelect).not.toMatch(/sold_at/);
     expect(listSelect).not.toMatch(/sale_cycle_started_at/);
+    expect(listSelect).not.toMatch(/renewed_at/);
+    expect(listSelect).toMatch(/last_published_at/);
     expect(publicFeed).not.toMatch(/sold_at/);
     expect(search).not.toMatch(/sold_at/);
+  });
+
+  it('Home / Search / Similar trient last_published_at, jamais updated_at', () => {
+    const publicFeed = read('src/services/listings/getPublicListings.ts');
+    const search = read('src/services/listings/searchListings.ts');
+    const similar = read('src/services/listings/getSimilarListings.ts');
+    const byCity = read('src/services/listings/getListingsByCity.ts');
+    const listSelect = read('src/services/listings/listingListSelect.ts');
+    expect(listSelect).toMatch(/LISTING_DISCOVERY_ORDER_COLUMN = 'last_published_at'/);
+    expect(publicFeed).toMatch(/LISTING_DISCOVERY_ORDER_COLUMN/);
+    expect(search).toMatch(/LISTING_DISCOVERY_ORDER_COLUMN/);
+    expect(similar).toMatch(/LISTING_DISCOVERY_ORDER_COLUMN/);
+    expect(byCity).toMatch(/LISTING_DISCOVERY_ORDER_COLUMN/);
+    expect(publicFeed).not.toMatch(/\.order\('updated_at'/);
+    expect(search).not.toMatch(/\.order\('updated_at'/);
   });
 });

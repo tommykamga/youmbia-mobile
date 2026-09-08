@@ -7,7 +7,8 @@ import { supabase } from '@/lib/supabase';
 import { getSignedUrlsMap, listingStoragePathsForCardCover, mapListingCardImages } from '@/lib/listingImageUrl';
 import { normalizeListingSchemaFeatures } from '@/lib/listingSchemaFeatures';
 import type { PublicListing } from './getPublicListings';
-import { listingPublicListSelect } from './listingListSelect';
+import { listingPublicListSelect, LISTING_DISCOVERY_ORDER_COLUMN } from './listingListSelect';
+import { pickListingRecency } from '@/lib/listingPublishedAt';
 
 type ListingImageRow = {
   url: string;
@@ -29,6 +30,7 @@ type ListingRow = {
   urgent?: boolean | null;
   district?: string | null;
   updated_at: string;
+  last_published_at?: string | null;
   listing_images: ListingImageRow[] | null;
 };
 
@@ -48,6 +50,7 @@ function mapRow(row: ListingRow, signedMap: Map<string, string>): PublicListing 
     views_count: row.views_count ?? 0,
     seller_id: row.user_id ?? '',
     updated_at: row.updated_at,
+    ...pickListingRecency(row),
     ...schema,
   };
 }
@@ -57,7 +60,7 @@ export type GetListingsByCityResult =
   | { data: null; error: { message: string } };
 
 /**
- * Fetches active listings in the given city, ordered by updated_at desc then created_at desc.
+ * Fetches active listings in the given city, ordered by urgent then last_published_at desc.
  * City match is case-insensitive (ilike). Use for "Près de vous" when user city is known.
  */
 export async function getListingsByCity(
@@ -75,7 +78,7 @@ export async function getListingsByCity(
     .eq('status', 'active')
     .ilike('city', trimmed)
     .order('urgent', { ascending: false })
-    .order('created_at', { ascending: false })
+    .order(LISTING_DISCOVERY_ORDER_COLUMN, { ascending: false })
     .limit(limit);
 
   if (error) {

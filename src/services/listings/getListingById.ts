@@ -26,6 +26,7 @@ export type ListingDetail = {
   description: string;
   boosted?: boolean;
   created_at: string;
+  last_published_at?: string | null;
   views_count: number;
   seller_id: string;
   /** Statut brut (owner sold uniquement hors discovery). */
@@ -80,6 +81,7 @@ type ListingRow = {
   city: string;
   description: string | null;
   created_at: string;
+  last_published_at?: string | null;
   views_count: number | null;
   user_id: string | null;
   status?: string | null;
@@ -107,7 +109,7 @@ export async function getListingById(id: string): Promise<GetListingByIdResult> 
   const { data: listingRow, error: listingError } = await supabase
     .from('listings')
     .select(
-      'id, title, price, city, description, boosted, urgent, district, created_at, views_count, user_id, status, category_id, shop_id, listing_images(url, sort_order)'
+      'id, title, price, city, description, boosted, urgent, district, created_at, last_published_at, views_count, user_id, status, category_id, shop_id, listing_images(url, sort_order)'
     )
     .eq('id', id)
     .maybeSingle();
@@ -229,6 +231,7 @@ export async function getListingById(id: string): Promise<GetListingByIdResult> 
     description: row.description ?? '',
     boosted,
     created_at: row.created_at,
+    last_published_at: row.last_published_at ?? null,
     views_count: row.views_count ?? 0,
     seller_id: row.user_id ?? '',
     status: listingStatus,

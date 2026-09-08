@@ -17,7 +17,8 @@ import type { PublicListing } from './getPublicListings';
 import { parseListingShopEmbed } from '@/lib/listingShopEmbed';
 import type { ShopSummary } from '@/types/shops';
 import { SHOP_SUMMARY_SELECT } from '@/services/shops/shopSelect';
-import { listingPublicListSelect } from './listingListSelect';
+import { listingPublicListSelect, LISTING_DISCOVERY_ORDER_COLUMN } from './listingListSelect';
+import { pickListingRecency } from '@/lib/listingPublishedAt';
 import {
   buildSearchTextOrClauses,
   resolveSearchCategoryFilter,
@@ -47,6 +48,7 @@ type ListingRow = {
   urgent?: boolean | null;
   district?: string | null;
   updated_at: string;
+  last_published_at?: string | null;
   listing_images: ListingImageRow[] | null;
 };
 
@@ -69,6 +71,7 @@ function mapRow(row: ListingRow, signedMap: Map<string, string>): PublicListing 
     views_count: row.views_count ?? 0,
     seller_id: row.user_id ?? '',
     updated_at: row.updated_at,
+    ...pickListingRecency(row),
     shop_id: row.shop_id ?? null,
     shop: parseListingShopEmbed(row.shops),
     ...schema,
@@ -197,7 +200,7 @@ export async function searchListings(options: SearchOptions = {}): Promise<Searc
   } else if (sortBy === 'price_desc') {
     request = request.order('price', { ascending: false });
   } else {
-    request = request.order('created_at', { ascending: false });
+    request = request.order(LISTING_DISCOVERY_ORDER_COLUMN, { ascending: false });
   }
 
   // Pagination

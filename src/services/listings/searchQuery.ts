@@ -3,6 +3,7 @@
  * La requête Supabase (ilike / or / order) reste dans searchListings.ts.
  */
 
+import { listingPublishedAtMs } from '@/lib/listingPublishedAt';
 import {
   collectCategoryBranchIds,
   type MarketplaceCategoryIdentity,
@@ -34,6 +35,8 @@ export type SearchRelevanceListing = {
   description?: string | null;
   category_id?: number | null;
   created_at?: string;
+  last_published_at?: string | null;
+  renewed_at?: string | null;
   price?: number;
 };
 
@@ -255,7 +258,7 @@ export function compareSearchRelevance(
   const scoreDelta =
     computeSearchRelevanceScore(b, query, categories) - computeSearchRelevanceScore(a, query, categories);
   if (scoreDelta !== 0) return scoreDelta;
-  return Date.parse(b.created_at ?? '') - Date.parse(a.created_at ?? '') || 0;
+  return listingPublishedAtMs(b) - listingPublishedAtMs(a);
 }
 
 export function appendUniqueSearchListings<T extends { id: string }>(existing: T[], batch: T[]): T[] {
