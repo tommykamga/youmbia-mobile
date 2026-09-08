@@ -47,3 +47,7 @@ export function putListingDetailSession(
     cachedAt: Date.now(),
   });
 }
+
+export function removeListingDetailSession(id: string): void {
+  cache.delete(String(id ?? '').trim());
+}

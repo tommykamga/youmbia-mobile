@@ -19,6 +19,8 @@ import {
   getListingById,
   getSimilarListings,
   getListingDynamicAttributesForDisplay,
+  markListingSold,
+  updateListingStatus,
   type ListingDetail,
   type ListingDynamicAttributeDisplay,
   type PublicListing,
@@ -63,6 +65,18 @@ import {
   trackListingViewed,
   trackSellerContactInitiated,
 } from '@/lib/analytics';
+import {
+  canSellerMarkListingSold,
+  canSellerReactivateListing,
+  isSoldListingStatus,
+  LISTING_STATUS,
+  MARK_LISTING_SOLD_CONFIRM_ACTION,
+  MARK_LISTING_SOLD_CONFIRM_MESSAGE,
+  MARK_LISTING_SOLD_CONFIRM_TITLE,
+  MARK_LISTING_SOLD_ERROR_MESSAGE,
+  MARK_LISTING_SOLD_SUCCESS_MESSAGE,
+  MARK_LISTING_SOLD_SUCCESS_TITLE,
+} from '@/lib/listingStatus';
 
 type State =
   | { status: 'loading' }
@@ -152,6 +166,8 @@ export default function ListingDetailScreen() {
   const [reportComment, setReportComment] = useState('');
   const [favoriteLoading, setFavoriteLoading] = useState(false);
   const [messageLoading, setMessageLoading] = useState(false);
+  const [markSoldLoading, setMarkSoldLoading] = useState(false);
+  const [reactivateLoading, setReactivateLoading] = useState(false);
   const [sessionStatus, setSessionStatus] = useState<'loading' | 'authed' | 'guest'>('loading');
   const [sessionUserId, setSessionUserId] = useState<string | null>(null);
   const [sellerStats, setSellerStats] = useState<{ memberSince: string | null; listingCount: number | null }>({
@@ -516,6 +532,52 @@ export default function ListingDetailScreen() {
     };
   }, [contactParam, state, id, router, openConversationForListing]);
 
+  const handleMarkSold = useCallback(() => {
+    if (!id || markSoldLoading) return;
+    Alert.alert(MARK_LISTING_SOLD_CONFIRM_TITLE, MARK_LISTING_SOLD_CONFIRM_MESSAGE, [
+      { text: 'Annuler', style: 'cancel' },
+      {
+        text: MARK_LISTING_SOLD_CONFIRM_ACTION,
+        onPress: async () => {
+          setMarkSoldLoading(true);
+          const result = await markListingSold(id);
+          setMarkSoldLoading(false);
+          if (result.error) {
+            Alert.alert('Erreur', result.error.message || MARK_LISTING_SOLD_ERROR_MESSAGE);
+            return;
+          }
+          Alert.alert(MARK_LISTING_SOLD_SUCCESS_TITLE, MARK_LISTING_SOLD_SUCCESS_MESSAGE, [
+            { text: 'OK', onPress: () => router.back() },
+          ]);
+        },
+      },
+    ]);
+  }, [id, markSoldLoading, router]);
+
+  const handleReactivate = useCallback(async () => {
+    if (!id || reactivateLoading) return;
+    setReactivateLoading(true);
+    const result = await updateListingStatus(id, LISTING_STATUS.active);
+    if (result.error) {
+      setReactivateLoading(false);
+      Alert.alert('Erreur', result.error.message || "Impossible de remettre l'annonce en ligne");
+      return;
+    }
+    const listingResult = await getListingById(id);
+    setReactivateLoading(false);
+    if (listingResult.error || !listingResult.data) {
+      Alert.alert('Annonce', "L'annonce a été remise en ligne.");
+      return;
+    }
+    const nextListing = listingResult.data;
+    setState((prev) => {
+      const dynamicAttributes = prev.status === 'success' ? prev.dynamicAttributes : [];
+      putListingDetailSession(id, nextListing, dynamicAttributes);
+      return { status: 'success', listing: nextListing, dynamicAttributes };
+    });
+    Alert.alert('Annonce', "L'annonce est de nouveau en ligne.");
+  }, [id, reactivateLoading]);
+
   const handleReportPress = useCallback(async () => {
     if (!id) return;
     const session = await getSession();
@@ -603,6 +665,9 @@ export default function ListingDetailScreen() {
   const isGuest = sessionStatus === 'guest';
   const isOwnListing =
     sessionUserId != null && listing.seller_id != null && listing.seller_id === sessionUserId;
+  const isSoldListing = isSoldListingStatus(listing.status);
+  const canMarkSold = isOwnListing && canSellerMarkListingSold(listing.status);
+  const canReactivate = isOwnListing && canSellerReactivateListing(listing.status);
   const maskedPhone = maskPhoneForPreview(listing.seller?.phone ?? null);
 
   const renderSimilarItem = ({ item }: { item: PublicListing }) => (
@@ -716,6 +781,31 @@ export default function ListingDetailScreen() {
             >
               <Text style={styles.reportLinkText}>Signaler cette annonce</Text>
             </Pressable>
+          ) : canMarkSold || canReactivate ? (
+            <View style={styles.ownerSoldAction}>
+              {canMarkSold ? (
+                <Button
+                  variant="outline"
+                  size="md"
+                  onPress={handleMarkSold}
+                  disabled={markSoldLoading || reactivateLoading}
+                  loading={markSoldLoading}
+                >
+                  Marquer comme vendue
+                </Button>
+              ) : null}
+              {canReactivate ? (
+                <Button
+                  variant="outline"
+                  size="md"
+                  onPress={() => void handleReactivate()}
+                  disabled={markSoldLoading || reactivateLoading}
+                  loading={reactivateLoading}
+                >
+                  Réactiver
+                </Button>
+              ) : null}
+            </View>
           ) : null}
         </View>
       </ScrollView>
@@ -731,6 +821,7 @@ export default function ListingDetailScreen() {
         onCancel={() => !reportLoading && setReportModalVisible(false)}
         onSubmit={handleReportSubmit}
       />
+      {!isSoldListing ? (
       <ListingActions
         listing={listing}
         sellerId={listing.seller_id}
@@ -745,6 +836,7 @@ export default function ListingDetailScreen() {
         showAuthHint={isGuest}
         maskedPhone={maskedPhone}
       />
+      ) : null}
     </Screen>
   );
 }
@@ -799,6 +891,12 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
     paddingVertical: spacing.sm,
     paddingHorizontal: 0,
+  },
+  ownerSoldAction: {
+    alignSelf: 'flex-start',
+    marginTop: spacing.sm,
+    marginBottom: spacing.sm,
+    gap: spacing.sm,
   },
   reportLinkPressed: {
     opacity: 0.7,

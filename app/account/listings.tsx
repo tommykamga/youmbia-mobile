@@ -22,12 +22,25 @@ import {
   deleteListing,
   getMyListings,
   getListingStats,
+  markListingSold,
   updateListingStatus,
   updateListingUrgent,
   buildListingDuplicateDraft,
   type ListingStats,
   type MyListing,
 } from '@/services/listings';
+import {
+  canSellerMarkListingSold,
+  getSellerListingStatusLabel,
+  LISTING_STATUS,
+  MARK_LISTING_SOLD_CONFIRM_ACTION,
+  MARK_LISTING_SOLD_CONFIRM_MESSAGE,
+  MARK_LISTING_SOLD_CONFIRM_TITLE,
+  MARK_LISTING_SOLD_ERROR_MESSAGE,
+  MARK_LISTING_SOLD_SUCCESS_MESSAGE,
+  MARK_LISTING_SOLD_SUCCESS_TITLE,
+  canSellerReactivateListing,
+} from '@/lib/listingStatus';
 import { shareListing } from '@/lib/shareListing';
 import { ProSellerActivationCard, SellerAcquisitionTips } from '@/features/shops';
 import { spacing, colors, typography, fontWeights, radius } from '@/theme';
@@ -101,12 +114,8 @@ function getListingQualityBadge(
 }
 
 function StatusBadge({ status }: { status: string }) {
-  const normalized = String(status ?? '').toLowerCase();
-  const isActive = normalized === 'active';
-  const isHidden = normalized === 'hidden';
-  const isSuspended = normalized === 'suspended';
-
-  const label = isActive ? 'En ligne' : isSuspended ? 'Suspendue' : isHidden ? 'En pause' : 'Hors ligne';
+  const isActive = String(status ?? '').toLowerCase() === LISTING_STATUS.active;
+  const label = getSellerListingStatusLabel(status);
   return (
     <View style={[styles.statusBadge, isActive ? styles.statusActive : styles.statusInactive]}>
       <Text style={[styles.statusText, isActive ? styles.statusTextActive : styles.statusTextInactive]}>
@@ -156,9 +165,9 @@ const MyListingRowInner = memo(function MyListingRow({
   onRemoveListing: (listingId: string) => void;
 }) {
   const router = useRouter();
-  const [pendingAction, setPendingAction] = useState<null | 'status' | 'urgent' | 'bump' | 'duplicate'>(
-    null
-  );
+  const [pendingAction, setPendingAction] = useState<
+    null | 'status' | 'sold' | 'urgent' | 'bump' | 'duplicate'
+  >(null);
   const [sharing, setSharing] = useState(false);
   const isMutating = pendingAction != null;
 
@@ -191,16 +200,40 @@ const MyListingRowInner = memo(function MyListingRow({
 
   const handleReactivate = useCallback(async () => {
     if (isMutating) return;
+    if (!canSellerReactivateListing(listing.status)) return;
     setPendingAction('status');
     onPatchListing(listing.id, { status: 'active' });
     const result = await updateListingStatus(listing.id, 'active');
     if (result.error) {
       onPatchListing(listing.id, { status: listing.status });
-      Alert.alert('Erreur', "Impossible de mettre à jour l'annonce");
+      Alert.alert('Erreur', result.error.message || "Impossible de mettre à jour l'annonce");
       setPendingAction(null);
       return;
     }
     setPendingAction(null);
+  }, [isMutating, listing.id, listing.status, onPatchListing]);
+
+  const handleMarkSold = useCallback(() => {
+    if (isMutating) return;
+    Alert.alert(MARK_LISTING_SOLD_CONFIRM_TITLE, MARK_LISTING_SOLD_CONFIRM_MESSAGE, [
+      { text: 'Annuler', style: 'cancel' },
+      {
+        text: MARK_LISTING_SOLD_CONFIRM_ACTION,
+        onPress: async () => {
+          setPendingAction('sold');
+          onPatchListing(listing.id, { status: LISTING_STATUS.sold });
+          const result = await markListingSold(listing.id);
+          if (result.error) {
+            onPatchListing(listing.id, { status: listing.status });
+            Alert.alert('Erreur', result.error.message || MARK_LISTING_SOLD_ERROR_MESSAGE);
+            setPendingAction(null);
+            return;
+          }
+          Alert.alert(MARK_LISTING_SOLD_SUCCESS_TITLE, MARK_LISTING_SOLD_SUCCESS_MESSAGE);
+          setPendingAction(null);
+        },
+      },
+    ]);
   }, [isMutating, listing.id, listing.status, onPatchListing]);
 
   const handleToggleUrgent = useCallback(async () => {
@@ -308,6 +341,9 @@ const MyListingRowInner = memo(function MyListingRow({
   }, [isMutating, listing.id, onRemoveListing]);
 
   const isActive = listing.status === 'active';
+  const isSold = listing.status === LISTING_STATUS.sold;
+  const canMarkSold = canSellerMarkListingSold(listing.status);
+  const canReactivate = canSellerReactivateListing(listing.status);
   const isUrgent = listing.urgent === true;
   const isBoosted = listing.boosted === true;
   const qualityBadge = getListingQualityBadge(listing, stats);
@@ -387,23 +423,27 @@ const MyListingRowInner = memo(function MyListingRow({
               {"Remonter l'annonce"}
             </Button>
           ) : null}
-          <Button
-            variant={isUrgent ? 'secondary' : 'ghost'}
-            size="sm"
-            onPress={handleToggleUrgent}
-            disabled={isMutating}
-            loading={pendingAction === 'urgent'}
-          >
-            {isUrgent ? 'Retirer urgent' : 'Marquer urgent'}
-          </Button>
-          <Button
-            variant={isBoosted ? 'secondary' : 'outline'}
-            size="sm"
-            onPress={handleBoostPress}
-            disabled={isMutating}
-          >
-            {isBoosted ? 'Boostée' : 'Booster'}
-          </Button>
+          {!isSold ? (
+            <Button
+              variant={isUrgent ? 'secondary' : 'ghost'}
+              size="sm"
+              onPress={handleToggleUrgent}
+              disabled={isMutating}
+              loading={pendingAction === 'urgent'}
+            >
+              {isUrgent ? 'Retirer urgent' : 'Marquer urgent'}
+            </Button>
+          ) : null}
+          {!isSold ? (
+            <Button
+              variant={isBoosted ? 'secondary' : 'outline'}
+              size="sm"
+              onPress={handleBoostPress}
+              disabled={isMutating}
+            >
+              {isBoosted ? 'Boostée' : 'Booster'}
+            </Button>
+          ) : null}
           <Button
             variant="ghost"
             size="sm"
@@ -438,6 +478,17 @@ const MyListingRowInner = memo(function MyListingRow({
           >
             Supprimer
           </Button>
+          {canMarkSold ? (
+            <Button
+              variant="outline"
+              size="sm"
+              onPress={handleMarkSold}
+              disabled={isMutating}
+              loading={pendingAction === 'sold'}
+            >
+              Marquer comme vendue
+            </Button>
+          ) : null}
           {isActive ? (
             <Button
               variant="ghost"
@@ -448,7 +499,7 @@ const MyListingRowInner = memo(function MyListingRow({
             >
               Mettre en pause
             </Button>
-          ) : (
+          ) : canReactivate ? (
             <Button
               variant="outline"
               size="sm"
@@ -458,7 +509,7 @@ const MyListingRowInner = memo(function MyListingRow({
             >
               Réactiver
             </Button>
-          )}
+          ) : null}
         </View>
       </View>
     </View>

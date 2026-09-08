@@ -295,6 +295,10 @@ export function trackBumpActivated(properties: {
   trackEvent('bump_activated', properties);
 }
 
+export function trackListingMarkedSold(properties: { listing_id: string }): void {
+  trackEvent('listing_marked_sold', properties);
+}
+
 export function trackTransactionCompleted(properties: {
   listing_id: string;
   transaction_value_cfa: number;
