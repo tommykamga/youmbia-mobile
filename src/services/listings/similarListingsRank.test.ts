@@ -68,6 +68,20 @@ describe('similarListingsRank', () => {
     expect(ranked.map((row) => row.id)).toEqual(['leaf', 'sibling']);
   });
 
+  it('à score égal, last_published_at gagne sur created_at', () => {
+    const olderCreated = item({
+      id: 'old-created',
+      created_at: '2026-08-01T00:00:00.000Z',
+    });
+    const renewed = item({
+      id: 'renewed',
+      created_at: '2026-01-01T00:00:00.000Z',
+      last_published_at: '2026-09-01T00:00:00.000Z',
+    });
+    const ranked = rankSimilarListings(seed, [olderCreated, renewed], TAXONOMY);
+    expect(ranked.map((row) => row.id)).toEqual(['renewed', 'old-created']);
+  });
+
   it('préfère la même ville à prix égal et catégorie égale', () => {
     const otherCity = item({ id: 'yaounde', city: 'Yaoundé', created_at: '2026-08-01T00:00:00.000Z' });
     const sameCity = item({ id: 'douala', city: 'Douala', created_at: '2026-01-01T00:00:00.000Z' });

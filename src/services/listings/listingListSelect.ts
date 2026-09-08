@@ -12,7 +12,10 @@ export const LISTING_LIST_IMAGES_SELECT =
  * `status` omis ici quand le filtre est `.eq('status','active')` (valeur constante).
  */
 export const LISTING_PUBLIC_LIST_CORE_SELECT =
-  'id, title, price, city, category_id, boosted, urgent, district, created_at, updated_at, views_count, user_id, shop_id';
+  'id, title, price, city, category_id, boosted, urgent, district, created_at, updated_at, last_published_at, views_count, user_id, shop_id';
+
+/** Clé de tri discovery générée (COALESCE renewal/created). Jamais updated_at. */
+export const LISTING_DISCOVERY_ORDER_COLUMN = 'last_published_at' as const;
 
 /** Résumé boutique pour badges cartes (jointure FK listing → shop). */
 export const LISTING_PUBLIC_LIST_SHOP_EMBED =

@@ -25,6 +25,26 @@ export const MARK_LISTING_SOLD_SUCCESS_MESSAGE =
   "Votre annonce n'apparaît plus dans le fil. Elle n'a pas été supprimée.";
 export const MARK_LISTING_SOLD_ERROR_MESSAGE = "Impossible de marquer l'annonce comme vendue.";
 
+export const REACTIVATE_HIDDEN_CONFIRM_TITLE = "Réactiver l'annonce ?";
+export const REACTIVATE_HIDDEN_CONFIRM_MESSAGE =
+  "L'annonce sera de nouveau visible dans l'accueil et la recherche. Sa date de publication ne change pas.";
+export const REACTIVATE_HIDDEN_CONFIRM_ACTION = 'Réactiver';
+export const REACTIVATE_HIDDEN_SUCCESS_MESSAGE = "L'annonce est de nouveau en ligne.";
+
+export const REACTIVATE_SOLD_CONFIRM_TITLE = "Remettre l'annonce en ligne ?";
+export const REACTIVATE_SOLD_CONFIRM_MESSAGE =
+  "L'annonce redeviendra visible. Un nouveau cycle de vente commencera. Elle n'est pas dupliquée : favoris, messages et lien restent les mêmes.";
+export const REACTIVATE_SOLD_CONFIRM_ACTION = 'Remettre en ligne';
+export const REACTIVATE_SOLD_SUCCESS_MESSAGE = "L'annonce est de nouveau en ligne.";
+export const REACTIVATE_LISTING_ERROR_MESSAGE = "Impossible de remettre l'annonce en ligne.";
+
+export const RENEW_LISTING_CONFIRM_TITLE = "Renouveler l'annonce ?";
+export const RENEW_LISTING_CONFIRM_MESSAGE =
+  "L'annonce sera remise en tête des résultats récents. Elle ne sera pas dupliquée. Les favoris, messages et le lien restent les mêmes.";
+export const RENEW_LISTING_CONFIRM_ACTION = 'Renouveler';
+export const RENEW_LISTING_SUCCESS_MESSAGE = "L'annonce a été renouvelée.";
+export const RENEW_LISTING_ERROR_MESSAGE = "Impossible de renouveler l'annonce.";
+
 export function normalizeListingStatus(status: string | null | undefined): string {
   return String(status ?? LISTING_STATUS.active).toLowerCase();
 }
@@ -46,6 +66,15 @@ export function canSellerMarkListingSold(status: string | null | undefined): boo
 export function canSellerReactivateListing(status: string | null | undefined): boolean {
   const normalized = normalizeListingStatus(status);
   return normalized === LISTING_STATUS.hidden || normalized === LISTING_STATUS.sold;
+}
+
+/** Renouvellement manuel : annonce déjà en ligne uniquement. Suspendue / pause / vendue : non. */
+export function canSellerRenewListing(status: string | null | undefined): boolean {
+  return normalizeListingStatus(status) === LISTING_STATUS.active;
+}
+
+export function getSellerReactivateActionLabel(status: string | null | undefined): string {
+  return isSoldListingStatus(status) ? REACTIVATE_SOLD_CONFIRM_ACTION : REACTIVATE_HIDDEN_CONFIRM_ACTION;
 }
 
 /**

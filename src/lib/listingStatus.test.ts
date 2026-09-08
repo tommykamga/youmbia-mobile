@@ -2,8 +2,10 @@ import { describe, expect, it } from 'vitest';
 import {
   canSellerMarkListingSold,
   canSellerReactivateListing,
+  canSellerRenewListing,
   canViewerAccessListingDetail,
   getSellerListingStatusLabel,
+  getSellerReactivateActionLabel,
   isAllowedListingStatus,
   isDiscoveryListingStatus,
   isSoldListingStatus,
@@ -39,6 +41,15 @@ describe('listingStatus', () => {
     expect(canSellerReactivateListing('hidden')).toBe(true);
     expect(canSellerReactivateListing('suspended')).toBe(false);
     expect(canSellerReactivateListing('active')).toBe(false);
+  });
+
+  it('renouvellement manuel : active uniquement ; sold/hidden restent sur réactivation', () => {
+    expect(canSellerRenewListing('active')).toBe(true);
+    expect(canSellerRenewListing('sold')).toBe(false);
+    expect(canSellerRenewListing('hidden')).toBe(false);
+    expect(canSellerRenewListing('suspended')).toBe(false);
+    expect(getSellerReactivateActionLabel('sold')).toBe('Remettre en ligne');
+    expect(getSellerReactivateActionLabel('hidden')).toBe('Réactiver');
   });
 
   it('public/non-owner sold => indisponible ; owner sold => consultable ; active inchangé', () => {

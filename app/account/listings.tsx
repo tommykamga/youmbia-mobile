@@ -18,11 +18,11 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { Screen, AppHeader, EmptyState, Button, LoadingState } from '@/components';
 import { ListingCard } from '@/features/listings';
 import {
-  bumpListing,
   deleteListing,
   getMyListings,
   getListingStats,
   markListingSold,
+  renewListing,
   updateListingStatus,
   updateListingUrgent,
   buildListingDuplicateDraft,
@@ -32,6 +32,7 @@ import {
 import {
   canSellerMarkListingSold,
   getSellerListingStatusLabel,
+  getSellerReactivateActionLabel,
   LISTING_STATUS,
   MARK_LISTING_SOLD_CONFIRM_ACTION,
   MARK_LISTING_SOLD_CONFIRM_MESSAGE,
@@ -40,7 +41,19 @@ import {
   MARK_LISTING_SOLD_SUCCESS_MESSAGE,
   MARK_LISTING_SOLD_SUCCESS_TITLE,
   canSellerReactivateListing,
+  canSellerRenewListing,
+  REACTIVATE_HIDDEN_CONFIRM_MESSAGE,
+  REACTIVATE_HIDDEN_CONFIRM_TITLE,
+  REACTIVATE_LISTING_ERROR_MESSAGE,
+  REACTIVATE_SOLD_CONFIRM_MESSAGE,
+  REACTIVATE_SOLD_CONFIRM_TITLE,
+  RENEW_LISTING_CONFIRM_ACTION,
+  RENEW_LISTING_CONFIRM_MESSAGE,
+  RENEW_LISTING_CONFIRM_TITLE,
+  RENEW_LISTING_ERROR_MESSAGE,
+  RENEW_LISTING_SUCCESS_MESSAGE,
 } from '@/lib/listingStatus';
+import { isListingRenewalDue, listingAgeInDays } from '@/lib/listingPublishedAt';
 import { shareListing } from '@/lib/shareListing';
 import { ProSellerActivationCard, SellerAcquisitionTips } from '@/features/shops';
 import { spacing, colors, typography, fontWeights, radius } from '@/theme';
@@ -66,14 +79,6 @@ type ListingQualityBadge = {
   tone: 'warning' | 'neutral';
 };
 
-function getAgeInDays(value: string | null | undefined): number | null {
-  const timestamp = Date.parse(String(value ?? ''));
-  if (!Number.isFinite(timestamp)) return null;
-  const diff = Date.now() - timestamp;
-  if (!Number.isFinite(diff) || diff < 0) return null;
-  return diff / (1000 * 60 * 60 * 24);
-}
-
 function getListingQualityBadge(
   listing: MyListing,
   stats: ListingStats
@@ -83,7 +88,7 @@ function getListingQualityBadge(
   const hasCity = String(listing.city ?? '').trim().length > 0;
   const description = typeof listing.description === 'string' ? listing.description.trim() : null;
   const hasShortDescription = description != null && description.length < 30;
-  const ageInDays = getAgeInDays(listing.created_at);
+  const ageInDays = listingAgeInDays(listing);
   const views = Math.max(0, Number(stats.views ?? 0) || 0);
 
   if (!hasImages || hasShortDescription || !hasPrice || !hasCity) {
@@ -97,7 +102,7 @@ function getListingQualityBadge(
   if (views === 0 && ageInDays != null && ageInDays > 3) {
     return {
       title: 'Relancer l’annonce',
-      subtitle: 'Modifiez l’annonce pour la remettre en tête',
+      subtitle: 'Renouvelez-la pour la remettre en tête du fil',
       tone: 'warning',
     };
   }
@@ -105,7 +110,7 @@ function getListingQualityBadge(
   if (ageInDays != null && ageInDays > 30) {
     return {
       title: 'Annonce ancienne',
-      subtitle: 'Modifiez l’annonce pour la remettre en avant',
+      subtitle: 'Renouvelez-la pour la remettre en avant',
       tone: 'neutral',
     };
   }
@@ -166,7 +171,7 @@ const MyListingRowInner = memo(function MyListingRow({
 }) {
   const router = useRouter();
   const [pendingAction, setPendingAction] = useState<
-    null | 'status' | 'sold' | 'urgent' | 'bump' | 'duplicate'
+    null | 'status' | 'sold' | 'urgent' | 'renew' | 'duplicate'
   >(null);
   const [sharing, setSharing] = useState(false);
   const isMutating = pendingAction != null;
@@ -198,19 +203,32 @@ const MyListingRowInner = memo(function MyListingRow({
     );
   }, [isMutating, listing.id, listing.status, onPatchListing]);
 
-  const handleReactivate = useCallback(async () => {
+  const handleReactivate = useCallback(() => {
     if (isMutating) return;
     if (!canSellerReactivateListing(listing.status)) return;
-    setPendingAction('status');
-    onPatchListing(listing.id, { status: 'active' });
-    const result = await updateListingStatus(listing.id, 'active');
-    if (result.error) {
-      onPatchListing(listing.id, { status: listing.status });
-      Alert.alert('Erreur', result.error.message || "Impossible de mettre à jour l'annonce");
-      setPendingAction(null);
-      return;
-    }
-    setPendingAction(null);
+    const isSoldReactivation = listing.status === LISTING_STATUS.sold;
+    Alert.alert(
+      isSoldReactivation ? REACTIVATE_SOLD_CONFIRM_TITLE : REACTIVATE_HIDDEN_CONFIRM_TITLE,
+      isSoldReactivation ? REACTIVATE_SOLD_CONFIRM_MESSAGE : REACTIVATE_HIDDEN_CONFIRM_MESSAGE,
+      [
+        { text: 'Annuler', style: 'cancel' },
+        {
+          text: getSellerReactivateActionLabel(listing.status),
+          onPress: async () => {
+            setPendingAction('status');
+            onPatchListing(listing.id, { status: 'active' });
+            const result = await updateListingStatus(listing.id, 'active');
+            if (result.error) {
+              onPatchListing(listing.id, { status: listing.status });
+              Alert.alert('Erreur', result.error.message || REACTIVATE_LISTING_ERROR_MESSAGE);
+              setPendingAction(null);
+              return;
+            }
+            setPendingAction(null);
+          },
+        },
+      ]
+    );
   }, [isMutating, listing.id, listing.status, onPatchListing]);
 
   const handleMarkSold = useCallback(() => {
@@ -276,18 +294,29 @@ const MyListingRowInner = memo(function MyListingRow({
     router.push('/sell');
   }, [isMutating, listing.id, router]);
 
-  const handleBumpListing = useCallback(async () => {
+  const handleRenewListing = useCallback(() => {
     if (isMutating) return;
-    setPendingAction('bump');
-    const result = await bumpListing(listing.id);
-    if (result.error) {
-      Alert.alert('Erreur', "Impossible de remonter l'annonce");
-      setPendingAction(null);
-      return;
-    }
-    onPromoteListing(listing.id);
-    setPendingAction(null);
-  }, [isMutating, listing.id, onPromoteListing]);
+    if (!canSellerRenewListing(listing.status)) return;
+    Alert.alert(RENEW_LISTING_CONFIRM_TITLE, RENEW_LISTING_CONFIRM_MESSAGE, [
+      { text: 'Annuler', style: 'cancel' },
+      {
+        text: RENEW_LISTING_CONFIRM_ACTION,
+        onPress: async () => {
+          setPendingAction('renew');
+          const result = await renewListing(listing.id);
+          if (result.error) {
+            Alert.alert('Erreur', result.error.message || RENEW_LISTING_ERROR_MESSAGE);
+            setPendingAction(null);
+            return;
+          }
+          onPatchListing(listing.id, { last_published_at: new Date().toISOString() });
+          onPromoteListing(listing.id);
+          Alert.alert('Annonce', RENEW_LISTING_SUCCESS_MESSAGE);
+          setPendingAction(null);
+        },
+      },
+    ]);
+  }, [isMutating, listing.id, listing.status, onPatchListing, onPromoteListing]);
 
   const handleShareListing = useCallback(async () => {
     const listingId = listing.id?.trim();
@@ -344,11 +373,10 @@ const MyListingRowInner = memo(function MyListingRow({
   const isSold = listing.status === LISTING_STATUS.sold;
   const canMarkSold = canSellerMarkListingSold(listing.status);
   const canReactivate = canSellerReactivateListing(listing.status);
+  const canRenewListing = canSellerRenewListing(listing.status) && isListingRenewalDue(listing);
   const isUrgent = listing.urgent === true;
   const isBoosted = listing.boosted === true;
   const qualityBadge = getListingQualityBadge(listing, stats);
-  const listingAgeInDays = getAgeInDays(listing.created_at);
-  const canBumpListing = isActive && listingAgeInDays != null && listingAgeInDays > 3;
   const showImproveAction = qualityBadge?.title === 'Annonce à compléter';
   const canShareListing = String(listing.id ?? '').trim().length > 0;
 
@@ -412,15 +440,15 @@ const MyListingRowInner = memo(function MyListingRow({
               Partager
             </Button>
           ) : null}
-          {canBumpListing ? (
+          {canRenewListing ? (
             <Button
               variant="outline"
               size="sm"
-              onPress={handleBumpListing}
+              onPress={handleRenewListing}
               disabled={isMutating}
-              loading={pendingAction === 'bump'}
+              loading={pendingAction === 'renew'}
             >
-              {"Remonter l'annonce"}
+              {RENEW_LISTING_CONFIRM_ACTION}
             </Button>
           ) : null}
           {!isSold ? (
@@ -507,7 +535,7 @@ const MyListingRowInner = memo(function MyListingRow({
               disabled={isMutating}
               loading={pendingAction === 'status'}
             >
-              Réactiver
+              {getSellerReactivateActionLabel(listing.status)}
             </Button>
           ) : null}
         </View>

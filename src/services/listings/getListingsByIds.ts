@@ -8,6 +8,7 @@ import { getSignedUrlsMap, listingStoragePathsForCardCover, mapListingCardImages
 import { normalizeListingSchemaFeatures } from '@/lib/listingSchemaFeatures';
 import type { PublicListing } from './getPublicListings';
 import { listingPublicListSelect } from './listingListSelect';
+import { pickListingRecency } from '@/lib/listingPublishedAt';
 
 type ListingImageRow = {
   url: string;
@@ -24,6 +25,7 @@ type ListingRow = {
   category_id?: number | null;
   created_at: string;
   updated_at: string;
+  last_published_at?: string | null;
   views_count: number | null;
   user_id: string | null;
   boosted?: boolean | null;
@@ -43,6 +45,7 @@ function mapRow(row: ListingRow, signedMap: Map<string, string>): PublicListing 
     category_id: row.category_id ?? null,
     created_at: row.created_at,
     updated_at: row.updated_at,
+    ...pickListingRecency(row),
     images,
     views_count: row.views_count ?? 0,
     seller_id: row.user_id ?? '',

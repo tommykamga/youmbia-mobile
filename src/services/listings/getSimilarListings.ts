@@ -4,7 +4,8 @@ import { normalizeListingSchemaFeatures } from '@/lib/listingSchemaFeatures';
 import { getMarketplaceCategoriesCached } from '@/services/categories';
 import type { Tables } from '@/types/database';
 import type { PublicListing } from './getPublicListings';
-import { listingPublicListSelect } from './listingListSelect';
+import { listingPublicListSelect, LISTING_DISCOVERY_ORDER_COLUMN } from './listingListSelect';
+import { pickListingRecency } from '@/lib/listingPublishedAt';
 import {
   ACTIVE_LISTING_STATUS,
   rankSimilarListings,
@@ -33,6 +34,8 @@ type ListingRow = Pick<
   | 'urgent'
   | 'district'
   | 'updated_at'
+  | 'last_published_at'
+  | 'renewed_at'
 > & {
   listing_images: ListingImageRow[] | null;
 };
@@ -65,6 +68,7 @@ function mapRow(row: ListingRow, signedMap: Map<string, string>): PublicListing 
     views_count: row.views_count ?? 0,
     seller_id: row.user_id ?? '',
     updated_at: row.updated_at,
+    ...pickListingRecency(row),
     ...schema,
   };
 }
@@ -101,7 +105,7 @@ export async function getSimilarListings(
       .eq('status', ACTIVE_LISTING_STATUS)
       .neq('id', currentId)
       .in('category_id', branchIds)
-      .order('created_at', { ascending: false })
+      .order(LISTING_DISCOVERY_ORDER_COLUMN, { ascending: false })
       .limit(SIMILAR_LISTINGS_FETCH_LIMIT);
 
     if (error) {
@@ -122,6 +126,8 @@ export async function getSimilarListings(
         city: row.city,
         price: row.price,
         created_at: row.created_at,
+        last_published_at: row.last_published_at,
+        renewed_at: row.renewed_at,
         status: ACTIVE_LISTING_STATUS,
       })),
       categories,

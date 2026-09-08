@@ -10,7 +10,8 @@ import { getSignedUrlsMap, listingStoragePathsForCardCover, mapListingCardImages
 import { normalizeListingSchemaFeatures } from '@/lib/listingSchemaFeatures';
 import { ListingCard, LISTING_CARD_RAIL_STRIDE } from './ListingCard';
 import type { PublicListing } from '@/services/listings';
-import { listingPublicListSelect } from '@/services/listings/listingListSelect';
+import { listingPublicListSelect, LISTING_DISCOVERY_ORDER_COLUMN } from '@/services/listings/listingListSelect';
+import { pickListingRecency } from '@/lib/listingPublishedAt';
 import { colors, spacing, ui } from '@/theme';
 import { ListingSectionSkeleton } from './ListingSectionSkeleton';
 
@@ -29,7 +30,7 @@ export function UrgentSection() {
         .select(listingPublicListSelect(false))
         .eq('status', 'active')
         .eq('urgent', true)
-        .order('created_at', { ascending: false })
+        .order(LISTING_DISCOVERY_ORDER_COLUMN, { ascending: false })
         .limit(URGENT_LIMIT);
 
       if (!error && data) {
@@ -53,6 +54,7 @@ export function UrgentSection() {
             views_count: row.views_count ?? 0,
             seller_id: row.user_id ?? '',
             updated_at: row.updated_at,
+            ...pickListingRecency(row),
             ...schema,
           } as PublicListing;
         });

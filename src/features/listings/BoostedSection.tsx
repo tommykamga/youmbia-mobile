@@ -14,7 +14,8 @@ import { normalizeListingSchemaFeatures } from '@/lib/listingSchemaFeatures';
 import { parseListingShopEmbed } from '@/lib/listingShopEmbed';
 import { ListingCard, LISTING_CARD_RAIL_STRIDE_FEATURED } from './ListingCard';
 import type { PublicListing } from '@/services/listings';
-import { listingPublicListSelect } from '@/services/listings/listingListSelect';
+import { listingPublicListSelect, LISTING_DISCOVERY_ORDER_COLUMN } from '@/services/listings/listingListSelect';
+import { pickListingRecency } from '@/lib/listingPublishedAt';
 import { LIGHT_CACHE_TTL_MS } from '@/lib/lightCache';
 import { useHomeMarketplaceGridInset } from '@/lib/responsiveLayout';
 import { spacing, ui, colors } from '@/theme';
@@ -59,6 +60,7 @@ function mapRowsToListings(rows: any[], signedMap: Map<string, string>): PublicL
       views_count: row.views_count ?? 0,
       seller_id: row.user_id ?? '',
       updated_at: row.updated_at,
+      ...pickListingRecency(row),
       shop_id: row.shop_id ?? null,
       shop: parseListingShopEmbed(row.shops),
       ...schema,
@@ -72,7 +74,7 @@ async function fetchBoostedRange(from: number, to: number): Promise<any[]> {
     .select(listingPublicListSelect(false))
     .eq('status', 'active')
     .eq('boosted', true)
-    .order('created_at', { ascending: false })
+    .order(LISTING_DISCOVERY_ORDER_COLUMN, { ascending: false })
     .range(from, to);
 
   if (error || !data) return [];

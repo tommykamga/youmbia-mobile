@@ -15,7 +15,8 @@ import { normalizeListingSchemaFeatures } from '@/lib/listingSchemaFeatures';
 import { parseListingShopEmbed } from '@/lib/listingShopEmbed';
 import type { ShopSummary } from '@/types/shops';
 import { SHOP_SUMMARY_SELECT } from '@/services/shops/shopSelect';
-import { listingPublicListSelect } from './listingListSelect';
+import { listingPublicListSelect, LISTING_DISCOVERY_ORDER_COLUMN } from './listingListSelect';
+import { pickListingRecency } from '@/lib/listingPublishedAt';
 
 export type PublicListing = {
   id: string;
@@ -29,7 +30,7 @@ export type PublicListing = {
   images: string[];
   views_count: number;
   seller_id: string;
-  /** When true, listing is boosted and should appear first in feed (sort: boosted then created_at). */
+  /** When true, listing is boosted and should appear first in feed (sort: boosted then last_published_at). */
   boosted?: boolean;
   /** Badge "Urgent" – vendeur marque l’annonce comme urgente. */
   urgent?: boolean;
@@ -38,6 +39,9 @@ export type PublicListing = {
   /** En contexte favoris : true si le prix a baissé (backend / historique). */
   price_dropped?: boolean;
   updated_at: string;
+  /** COALESCE(renewed_at, created_at) — ranking discovery, jamais updated_at. */
+  last_published_at?: string | null;
+  renewed_at?: string | null;
   /** Boutique pro liée (optionnel). */
   shop_id?: string | null;
   /** Résumé boutique (jointure liste, badges cartes). */
@@ -64,6 +68,8 @@ type ListingRow = {
   urgent?: boolean | null;
   district?: string | null;
   updated_at: string;
+  last_published_at?: string | null;
+  renewed_at?: string | null;
   shop_id?: string | null;
   shops?: ShopSummary | ShopSummary[] | null;
   listing_images: ListingImageRow[] | null;
@@ -85,6 +91,7 @@ function mapRow(row: ListingRow, signedMap: Map<string, string>): PublicListing 
     views_count: row.views_count ?? 0,
     seller_id: row.user_id ?? '',
     updated_at: row.updated_at,
+    ...pickListingRecency(row),
     shop_id: row.shop_id ?? null,
     shop: parseListingShopEmbed(row.shops),
     ...schema,
@@ -96,9 +103,8 @@ export type GetPublicListingsResult =
   | { data: null; error: { message: string } };
 
 /**
- * Fetches active listings for the feed, ordered by updated_at desc then created_at desc.
- * Uses the same RLS as the web app (public select where status = 'active').
- * Supports pagination via offset/limit (Supabase .range).
+ * Fetches active listings for the feed, ordered by last_published_at desc
+ * (COALESCE(renewed_at, created_at)). Never updated_at.
  */
 export async function getPublicListings(
   offset: number = 0,
@@ -111,7 +117,7 @@ export async function getPublicListings(
     .from('listings')
     .select(listingPublicListSelect(false))
     .eq('status', 'active')
-    .order('created_at', { ascending: false })
+    .order(LISTING_DISCOVERY_ORDER_COLUMN, { ascending: false })
     .range(from, to);
 
   if (error) {

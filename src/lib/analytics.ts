@@ -302,6 +302,15 @@ export function trackListingMarkedSold(properties: {
   trackEvent('listing_marked_sold', properties);
 }
 
+export type ListingRenewedSource = 'sold_reactivation' | 'hidden_reactivation' | 'manual_renewal';
+
+export function trackListingRenewed(properties: {
+  listing_id: string;
+  source: ListingRenewedSource;
+}): void {
+  trackEvent('listing_renewed', properties);
+}
+
 export function trackTransactionCompleted(properties: {
   listing_id: string;
   transaction_value_cfa: number;

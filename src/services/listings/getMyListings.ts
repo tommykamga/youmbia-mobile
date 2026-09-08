@@ -9,6 +9,7 @@ import { normalizeListingSchemaFeatures } from '@/lib/listingSchemaFeatures';
 import type { Tables } from '@/types/database';
 import type { PublicListing } from './getPublicListings';
 import { LISTING_MY_LISTINGS_SELECT } from './listingListSelect';
+import { pickListingRecency } from '@/lib/listingPublishedAt';
 
 export type MyListing = PublicListing & {
   status: string;
@@ -26,6 +27,8 @@ type ListingRow = Pick<
   | 'description'
   | 'created_at'
   | 'updated_at'
+  | 'last_published_at'
+  | 'renewed_at'
   | 'views_count'
   | 'user_id'
   | 'status'
@@ -48,6 +51,7 @@ function mapRow(row: ListingRow, signedMap: Map<string, string>): MyListing {
     description: row.description ?? null,
     created_at: row.created_at,
     updated_at: row.updated_at,
+    ...pickListingRecency(row),
     images,
     views_count: row.views_count ?? 0,
     seller_id: row.user_id ?? '',

@@ -3,7 +3,8 @@ import { getSignedUrlsMap, listingStoragePathsForCardCover, mapListingCardImages
 import { normalizeListingSchemaFeatures } from '@/lib/listingSchemaFeatures';
 import { parseListingShopEmbed } from '@/lib/listingShopEmbed';
 import type { PublicListing } from '@/services/listings/getPublicListings';
-import { listingPublicListSelect } from '@/services/listings/listingListSelect';
+import { listingPublicListSelect, LISTING_DISCOVERY_ORDER_COLUMN } from '@/services/listings/listingListSelect';
+import { pickListingRecency } from '@/lib/listingPublishedAt';
 import type { ShopSummary } from '@/types/shops';
 
 type ListingImageRow = {
@@ -26,6 +27,7 @@ type ListingRow = {
   urgent?: boolean | null;
   district?: string | null;
   updated_at: string;
+  last_published_at?: string | null;
   shop_id?: string | null;
   shops?:
     | { id: string; slug: string; name: string; is_verified: boolean; status?: string | null }
@@ -59,6 +61,7 @@ function mapRow(
     views_count: row.views_count ?? 0,
     seller_id: row.user_id ?? '',
     updated_at: row.updated_at,
+    ...pickListingRecency(row),
     shop_id: shopId,
     shop: shopSummary,
     ...schema,
@@ -83,7 +86,7 @@ export async function getShopListings(args: {
       .eq('user_id', ownerId)
       .eq('status', 'active')
       .order('urgent', { ascending: false })
-      .order('created_at', { ascending: false });
+      .order(LISTING_DISCOVERY_ORDER_COLUMN, { ascending: false });
 
     if (error) {
       return { data: null, error: { message: error.message } };

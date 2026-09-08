@@ -3,6 +3,7 @@
  * La requête Supabase reste dans getSimilarListings.ts.
  */
 
+import { listingPublishedAtMs } from '@/lib/listingPublishedAt';
 import {
   collectCategoryBranchIds,
   type MarketplaceCategoryIdentity,
@@ -29,6 +30,8 @@ export type SimilarRankCandidate = {
   city?: string | null;
   price?: number | null;
   created_at: string;
+  last_published_at?: string | null;
+  renewed_at?: string | null;
   status?: string | null;
 };
 
@@ -125,7 +128,7 @@ export function rankSimilarListings(
     }))
     .sort((a, b) => {
       if (b.score !== a.score) return b.score - a.score;
-      return Date.parse(b.item.created_at) - Date.parse(a.item.created_at);
+      return listingPublishedAtMs(b.item) - listingPublishedAtMs(a.item);
     })
     .map((entry) => entry.item);
 

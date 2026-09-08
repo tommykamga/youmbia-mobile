@@ -10,7 +10,8 @@ import { getAvatarVersion } from '@/services/profile';
 import { normalizeListingSchemaFeatures } from '@/lib/listingSchemaFeatures';
 import type { Tables } from '@/types/database';
 import type { PublicListing } from '@/services/listings';
-import { listingPublicListSelect } from '@/services/listings/listingListSelect';
+import { listingPublicListSelect, LISTING_DISCOVERY_ORDER_COLUMN } from '@/services/listings/listingListSelect';
+import { pickListingRecency } from '@/lib/listingPublishedAt';
 
 export type UserProfile = {
   id: string;
@@ -56,6 +57,7 @@ type ListingRow = Pick<
   | 'category_id'
   | 'created_at'
   | 'updated_at'
+  | 'last_published_at'
   | 'views_count'
   | 'user_id'
   | 'boosted'
@@ -76,6 +78,7 @@ function mapListingRow(row: ListingRow, signedMap: Map<string, string>): PublicL
     category_id: row.category_id ?? null,
     created_at: row.created_at,
     updated_at: row.updated_at,
+    ...pickListingRecency(row),
     images,
     views_count: row.views_count ?? 0,
     seller_id: row.user_id ?? '',
@@ -142,7 +145,7 @@ export async function getUserProfile(userId: string): Promise<GetUserProfileResu
     .select(listingPublicListSelect(false))
     .eq('user_id', id)
     .eq('status', 'active')
-    .order('created_at', { ascending: false });
+    .order(LISTING_DISCOVERY_ORDER_COLUMN, { ascending: false });
 
   if (listingsError) {
     return { data: null, error: { message: listingsError.message } };

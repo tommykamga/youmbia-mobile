@@ -20,6 +20,7 @@ import {
   getSimilarListings,
   getListingDynamicAttributesForDisplay,
   markListingSold,
+  renewListing,
   updateListingStatus,
   type ListingDetail,
   type ListingDynamicAttributeDisplay,
@@ -68,6 +69,8 @@ import {
 import {
   canSellerMarkListingSold,
   canSellerReactivateListing,
+  canSellerRenewListing,
+  getSellerReactivateActionLabel,
   isSoldListingStatus,
   LISTING_STATUS,
   MARK_LISTING_SOLD_CONFIRM_ACTION,
@@ -76,7 +79,20 @@ import {
   MARK_LISTING_SOLD_ERROR_MESSAGE,
   MARK_LISTING_SOLD_SUCCESS_MESSAGE,
   MARK_LISTING_SOLD_SUCCESS_TITLE,
+  REACTIVATE_HIDDEN_CONFIRM_MESSAGE,
+  REACTIVATE_HIDDEN_CONFIRM_TITLE,
+  REACTIVATE_HIDDEN_SUCCESS_MESSAGE,
+  REACTIVATE_LISTING_ERROR_MESSAGE,
+  REACTIVATE_SOLD_CONFIRM_MESSAGE,
+  REACTIVATE_SOLD_CONFIRM_TITLE,
+  REACTIVATE_SOLD_SUCCESS_MESSAGE,
+  RENEW_LISTING_CONFIRM_ACTION,
+  RENEW_LISTING_CONFIRM_MESSAGE,
+  RENEW_LISTING_CONFIRM_TITLE,
+  RENEW_LISTING_ERROR_MESSAGE,
+  RENEW_LISTING_SUCCESS_MESSAGE,
 } from '@/lib/listingStatus';
+import { isListingRenewalDue } from '@/lib/listingPublishedAt';
 
 type State =
   | { status: 'loading' }
@@ -168,6 +184,7 @@ export default function ListingDetailScreen() {
   const [messageLoading, setMessageLoading] = useState(false);
   const [markSoldLoading, setMarkSoldLoading] = useState(false);
   const [reactivateLoading, setReactivateLoading] = useState(false);
+  const [renewLoading, setRenewLoading] = useState(false);
   const [sessionStatus, setSessionStatus] = useState<'loading' | 'authed' | 'guest'>('loading');
   const [sessionUserId, setSessionUserId] = useState<string | null>(null);
   const [sellerStats, setSellerStats] = useState<{ memberSince: string | null; listingCount: number | null }>({
@@ -554,29 +571,83 @@ export default function ListingDetailScreen() {
     ]);
   }, [id, markSoldLoading, router]);
 
-  const handleReactivate = useCallback(async () => {
+  const handleReactivate = useCallback(() => {
     if (!id || reactivateLoading) return;
-    setReactivateLoading(true);
-    const result = await updateListingStatus(id, LISTING_STATUS.active);
-    if (result.error) {
-      setReactivateLoading(false);
-      Alert.alert('Erreur', result.error.message || "Impossible de remettre l'annonce en ligne");
-      return;
-    }
-    const listingResult = await getListingById(id);
-    setReactivateLoading(false);
-    if (listingResult.error || !listingResult.data) {
-      Alert.alert('Annonce', "L'annonce a été remise en ligne.");
-      return;
-    }
-    const nextListing = listingResult.data;
-    setState((prev) => {
-      const dynamicAttributes = prev.status === 'success' ? prev.dynamicAttributes : [];
-      putListingDetailSession(id, nextListing, dynamicAttributes);
-      return { status: 'success', listing: nextListing, dynamicAttributes };
-    });
-    Alert.alert('Annonce', "L'annonce est de nouveau en ligne.");
-  }, [id, reactivateLoading]);
+    const currentStatus =
+      state.status === 'success' ? String(state.listing.status ?? '').toLowerCase() : '';
+    if (!canSellerReactivateListing(currentStatus)) return;
+    const isSoldReactivation = currentStatus === LISTING_STATUS.sold;
+    Alert.alert(
+      isSoldReactivation ? REACTIVATE_SOLD_CONFIRM_TITLE : REACTIVATE_HIDDEN_CONFIRM_TITLE,
+      isSoldReactivation ? REACTIVATE_SOLD_CONFIRM_MESSAGE : REACTIVATE_HIDDEN_CONFIRM_MESSAGE,
+      [
+        { text: 'Annuler', style: 'cancel' },
+        {
+          text: getSellerReactivateActionLabel(currentStatus),
+          onPress: async () => {
+            setReactivateLoading(true);
+            const result = await updateListingStatus(id, LISTING_STATUS.active);
+            if (result.error) {
+              setReactivateLoading(false);
+              Alert.alert('Erreur', result.error.message || REACTIVATE_LISTING_ERROR_MESSAGE);
+              return;
+            }
+            const listingResult = await getListingById(id);
+            setReactivateLoading(false);
+            if (listingResult.error || !listingResult.data) {
+              Alert.alert(
+                'Annonce',
+                isSoldReactivation ? REACTIVATE_SOLD_SUCCESS_MESSAGE : REACTIVATE_HIDDEN_SUCCESS_MESSAGE
+              );
+              return;
+            }
+            const nextListing = listingResult.data;
+            setState((prev) => {
+              const dynamicAttributes = prev.status === 'success' ? prev.dynamicAttributes : [];
+              putListingDetailSession(id, nextListing, dynamicAttributes);
+              return { status: 'success', listing: nextListing, dynamicAttributes };
+            });
+            Alert.alert(
+              'Annonce',
+              isSoldReactivation ? REACTIVATE_SOLD_SUCCESS_MESSAGE : REACTIVATE_HIDDEN_SUCCESS_MESSAGE
+            );
+          },
+        },
+      ]
+    );
+  }, [id, reactivateLoading, state]);
+
+  const handleRenew = useCallback(() => {
+    if (!id || renewLoading) return;
+    Alert.alert(RENEW_LISTING_CONFIRM_TITLE, RENEW_LISTING_CONFIRM_MESSAGE, [
+      { text: 'Annuler', style: 'cancel' },
+      {
+        text: RENEW_LISTING_CONFIRM_ACTION,
+        onPress: async () => {
+          setRenewLoading(true);
+          const result = await renewListing(id);
+          if (result.error) {
+            setRenewLoading(false);
+            Alert.alert('Erreur', result.error.message || RENEW_LISTING_ERROR_MESSAGE);
+            return;
+          }
+          const listingResult = await getListingById(id);
+          setRenewLoading(false);
+          if (listingResult.error || !listingResult.data) {
+            Alert.alert('Annonce', RENEW_LISTING_SUCCESS_MESSAGE);
+            return;
+          }
+          const nextListing = listingResult.data;
+          setState((prev) => {
+            const dynamicAttributes = prev.status === 'success' ? prev.dynamicAttributes : [];
+            putListingDetailSession(id, nextListing, dynamicAttributes);
+            return { status: 'success', listing: nextListing, dynamicAttributes };
+          });
+          Alert.alert('Annonce', RENEW_LISTING_SUCCESS_MESSAGE);
+        },
+      },
+    ]);
+  }, [id, renewLoading]);
 
   const handleReportPress = useCallback(async () => {
     if (!id) return;
@@ -668,6 +739,9 @@ export default function ListingDetailScreen() {
   const isSoldListing = isSoldListingStatus(listing.status);
   const canMarkSold = isOwnListing && canSellerMarkListingSold(listing.status);
   const canReactivate = isOwnListing && canSellerReactivateListing(listing.status);
+  const canRenew =
+    isOwnListing && canSellerRenewListing(listing.status) && isListingRenewalDue(listing);
+  const ownerMutating = markSoldLoading || reactivateLoading || renewLoading;
   const maskedPhone = maskPhoneForPreview(listing.seller?.phone ?? null);
 
   const renderSimilarItem = ({ item }: { item: PublicListing }) => (
@@ -781,28 +855,39 @@ export default function ListingDetailScreen() {
             >
               <Text style={styles.reportLinkText}>Signaler cette annonce</Text>
             </Pressable>
-          ) : canMarkSold || canReactivate ? (
+          ) : canMarkSold || canReactivate || canRenew ? (
             <View style={styles.ownerSoldAction}>
               {canMarkSold ? (
                 <Button
                   variant="outline"
                   size="md"
                   onPress={handleMarkSold}
-                  disabled={markSoldLoading || reactivateLoading}
+                  disabled={ownerMutating}
                   loading={markSoldLoading}
                 >
                   Marquer comme vendue
+                </Button>
+              ) : null}
+              {canRenew ? (
+                <Button
+                  variant="outline"
+                  size="md"
+                  onPress={handleRenew}
+                  disabled={ownerMutating}
+                  loading={renewLoading}
+                >
+                  {RENEW_LISTING_CONFIRM_ACTION}
                 </Button>
               ) : null}
               {canReactivate ? (
                 <Button
                   variant="outline"
                   size="md"
-                  onPress={() => void handleReactivate()}
-                  disabled={markSoldLoading || reactivateLoading}
+                  onPress={handleReactivate}
+                  disabled={ownerMutating}
                   loading={reactivateLoading}
                 >
-                  Réactiver
+                  {getSellerReactivateActionLabel(listing.status)}
                 </Button>
               ) : null}
             </View>

@@ -32,6 +32,26 @@ describe('sortListings', () => {
     expect(sortListings([newer, olderBoosted], 'recent').map((item) => item.id)).toEqual(['b', 'n']);
   });
 
+  it('recent trie sur last_published_at, pas created_at ni updated_at', () => {
+    const newerRenewed = listing({
+      id: 'renewed',
+      title: 'Ancien renouvelé',
+      created_at: '2025-01-01T00:00:00.000Z',
+      updated_at: '2026-09-01T00:00:00.000Z',
+      last_published_at: '2026-08-01T00:00:00.000Z',
+    });
+    const createdYesterday = listing({
+      id: 'created',
+      title: 'Créé récemment',
+      created_at: '2026-07-01T00:00:00.000Z',
+      updated_at: '2026-09-02T00:00:00.000Z',
+    });
+    expect(sortListings([createdYesterday, newerRenewed], 'recent').map((item) => item.id)).toEqual([
+      'renewed',
+      'created',
+    ]);
+  });
+
   it('relevance privilégie un match titre à un match description', () => {
     const descriptionOnly = listing({
       id: 'd',
