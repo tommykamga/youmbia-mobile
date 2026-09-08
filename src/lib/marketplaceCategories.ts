@@ -53,7 +53,7 @@ export function categoryHasChildren(categories: MarketplaceCategory[], categoryI
   return categories.some((category) => category.parent_id === categoryId);
 }
 
-function buildChildrenByParent(categories: MarketplaceCategoryIdentity[]): Map<number, number[]> {
+function buildChildrenByParent(categories: readonly MarketplaceCategoryIdentity[]): Map<number, number[]> {
   const childrenByParent = new Map<number, number[]>();
 
   for (const category of categories) {
@@ -73,7 +73,7 @@ function buildChildrenByParent(categories: MarketplaceCategoryIdentity[]): Map<n
  * Toujours au moins `[categoryId]`, même si l’id est absent de la liste.
  */
 export function collectCategoryBranchIds(
-  categories: MarketplaceCategoryIdentity[],
+  categories: readonly MarketplaceCategoryIdentity[],
   categoryId: number
 ): number[] {
   const childrenByParent = buildChildrenByParent(categories);

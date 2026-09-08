@@ -2,6 +2,8 @@
  * Pure search filter helpers — no I/O, no React.
  */
 
+import { getMarketplaceCategoryIdByLabel } from '@/lib/marketplaceCategories';
+
 export const PRICE_INPUT_PATTERN = /^\d+$/;
 
 export type AppliedPriceFilters = {
@@ -30,12 +32,9 @@ export function normalizeMatchText(value: string | null | undefined): string {
 
 export function getCategoryIdByLabel(
   label: string | null,
-  rootCategories: { id: number; name: string }[]
+  categories: { id: number; name: string; slug?: string | null }[]
 ): number | null {
-  if (!label) return null;
-  const normalized = label.trim().toLowerCase();
-  const found = rootCategories.find((category) => category.name.toLowerCase() === normalized);
-  return found ? found.id : null;
+  return getMarketplaceCategoryIdByLabel(categories, label);
 }
 
 export function parsePriceValue(

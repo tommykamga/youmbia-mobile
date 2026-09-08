@@ -14,12 +14,14 @@ describe('searchFilterHelpers', () => {
     expect(normalizeMatchText('Yaoundé')).toBe('yaounde');
   });
 
-  it('résout l’id de catégorie par libellé', () => {
+  it('résout l’id de catégorie par libellé, slug et alias', () => {
     const roots = [
       { id: 1, name: 'Téléphones' },
       { id: 2, name: 'Véhicules' },
+      { id: 30, name: 'Mode & Beauté', slug: 'mode-beaute' },
     ];
     expect(getCategoryIdByLabel('véhicules', roots)).toBe(2);
+    expect(getCategoryIdByLabel('Mode', roots)).toBe(30);
     expect(getCategoryIdByLabel(null, roots)).toBeNull();
   });
 
