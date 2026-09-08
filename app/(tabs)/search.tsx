@@ -1,7 +1,7 @@
 /**
  * Search tab – Sprint 2.2.
  * Complete search: query input, loading/error/empty/results, ListingCard, tap → listing detail.
- * Data: searchListings(query) → title/city/description ilike; suggestions dans la feuille de recherche.
+ * Data: searchListings(query) → tokens AND sur title/city/description ; suggestions dans la feuille de recherche.
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -28,6 +28,7 @@ import {
 } from '@/features/home/HomeMarketplaceFeedHeader';
 import { PopularShopsSection } from '@/features/shops';
 import { searchListings } from '@/services/listings';
+import { appendUniqueSearchListings } from '@/services/listings/searchQuery';
 import { getFavoriteIds as getFavIds } from '@/services/favorites';
 import { sortListings, type SortOption } from '@/utils/sortListings';
 import {
@@ -96,6 +97,7 @@ export default function SearchScreen() {
   const [submittedQuery, setSubmittedQuery] = useState('');
   const [state, setState] = useState<SearchState>({ status: 'idle' });
   const [sortBy, setSortBy] = useState<SortOption>('recent');
+  const sortTouchedRef = useRef(false);
   const [priceMin, setPriceMin] = useState<string>('');
   const [priceMax, setPriceMax] = useState<string>('');
   const [category, setCategory] = useState<string>('');
@@ -147,6 +149,24 @@ export default function SearchScreen() {
     () => rootCategories.map((category) => category.name),
     [rootCategories]
   );
+  const hasTextQuery = submittedQuery.trim().length >= 2;
+
+  const selectSort = useCallback((next: SortOption) => {
+    sortTouchedRef.current = true;
+    setSortBy(next);
+  }, []);
+
+  useEffect(() => {
+    const hasText = submittedQuery.trim().length >= 2;
+    if (!hasText) {
+      sortTouchedRef.current = false;
+      setSortBy((prev) => (prev === 'relevance' ? 'recent' : prev));
+      return;
+    }
+    if (!sortTouchedRef.current) {
+      setSortBy((prev) => (prev === 'recent' ? 'relevance' : prev));
+    }
+  }, [submittedQuery]);
 
   const clearPendingMainSearchDebounce = useCallback(() => {
     if (mainSearchDebounceRef.current) {
@@ -329,7 +349,7 @@ export default function SearchScreen() {
     const nextCategoryIdStr = typeof params.categoryId === 'string' ? params.categoryId.trim() : '';
     const nextCategoryId = nextCategoryIdStr
       ? parseInt(nextCategoryIdStr, 10)
-      : getCategoryIdByLabel(nextCategory, rootCategories);
+      : getCategoryIdByLabel(nextCategory, marketplaceCategories);
 
     setQuery(nextQ);
     setPriceMin(nextMin);
@@ -383,7 +403,7 @@ export default function SearchScreen() {
     params.categoryLabel,
     params.categoryId,
     params.city,
-    rootCategories,
+    marketplaceCategories,
     clearPendingMainSearchDebounce,
   ]);
 
@@ -409,11 +429,9 @@ export default function SearchScreen() {
       const nextTotal = result.total ?? 0;
       setState((prev) => {
         if (prev.status !== 'success') return prev;
-        const seen = new Set(prev.data.map((i) => i.id));
-        const added = batch.filter((i) => !seen.has(i.id));
         return {
           status: 'success',
-          data: [...prev.data, ...added],
+          data: appendUniqueSearchListings(prev.data, batch),
           query: prev.query,
           total: nextTotal > 0 ? nextTotal : prev.total,
           page: nextPage,
@@ -648,8 +666,14 @@ export default function SearchScreen() {
   const successSearchData = state.status === 'success' ? state.data : null;
   const sortedListings = useMemo(() => {
     const list = successSearchData ?? [];
-    return sortListings(list, sortBy);
-  }, [successSearchData, sortBy]);
+    return sortListings(
+      list,
+      sortBy,
+      sortBy === 'relevance'
+        ? { query: submittedQuery, categories: marketplaceCategories }
+        : undefined
+    );
+  }, [successSearchData, sortBy, submittedQuery, marketplaceCategories]);
 
   const availableCities = useMemo(() => {
     const values = new Set<string>();
@@ -965,9 +989,19 @@ export default function SearchScreen() {
     () => (
       <View style={[styles.sortRow, { paddingHorizontal: searchChrome.hPad }]}>
         <View style={styles.sortContainerInline}>
+          {hasTextQuery ? (
+            <Pressable
+              style={[styles.sortOption, sortBy === 'relevance' && styles.sortOptionActive]}
+              onPress={() => selectSort('relevance')}
+            >
+              <Text style={[styles.sortOptionText, sortBy === 'relevance' && styles.sortOptionTextActive]}>
+                Pertinence
+              </Text>
+            </Pressable>
+          ) : null}
           <Pressable
             style={[styles.sortOption, sortBy === 'recent' && styles.sortOptionActive]}
-            onPress={() => setSortBy('recent')}
+            onPress={() => selectSort('recent')}
           >
             <Text style={[styles.sortOptionText, sortBy === 'recent' && styles.sortOptionTextActive]}>
               Plus récentes
@@ -975,7 +1009,7 @@ export default function SearchScreen() {
           </Pressable>
           <Pressable
             style={[styles.sortOption, sortBy === 'price_asc' && styles.sortOptionActive]}
-            onPress={() => setSortBy('price_asc')}
+            onPress={() => selectSort('price_asc')}
           >
             <Text style={[styles.sortOptionText, sortBy === 'price_asc' && styles.sortOptionTextActive]}>
               Prix ↑
@@ -983,7 +1017,7 @@ export default function SearchScreen() {
           </Pressable>
           <Pressable
             style={[styles.sortOption, sortBy === 'price_desc' && styles.sortOptionActive]}
-            onPress={() => setSortBy('price_desc')}
+            onPress={() => selectSort('price_desc')}
           >
             <Text style={[styles.sortOptionText, sortBy === 'price_desc' && styles.sortOptionTextActive]}>
               Prix ↓
@@ -1012,8 +1046,9 @@ export default function SearchScreen() {
       </View>
     ),
     [
+      hasTextQuery,
       sortBy,
-      setSortBy,
+      selectSort,
       openFilters,
       hasAppliedPriceFilter,
       hasAppliedSearchFilter,
@@ -1154,7 +1189,7 @@ export default function SearchScreen() {
                   onPress={() => {
                     const newCat = category.trim() === option ? '' : option;
                     setCategory(newCat);
-                    setCategoryId(getCategoryIdByLabel(newCat, rootCategories));
+                    setCategoryId(getCategoryIdByLabel(newCat, marketplaceCategories));
                   }}
                 >
                   <Text
@@ -1319,7 +1354,7 @@ export default function SearchScreen() {
     [
       category,
       categoryFilterOptions,
-      rootCategories,
+      marketplaceCategories,
       city,
       availableCities,
       priceMin,
