@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
   getUser: vi.fn(),
   from: vi.fn(),
   trackListingMarkedSold: vi.fn(),
+  trackListingRenewed: vi.fn(),
 }));
 
 vi.mock('@/lib/supabase', () => ({
@@ -19,6 +20,7 @@ vi.mock('@/lib/supabase', () => ({
 
 vi.mock('@/lib/analytics', () => ({
   trackListingMarkedSold: mocks.trackListingMarkedSold,
+  trackListingRenewed: mocks.trackListingRenewed,
 }));
 
 const USER_ID = '11111111-1111-1111-1111-111111111111';
@@ -64,6 +66,7 @@ function createListingsClient(options: {
         expect(columns).toContain('status');
         expect(columns).not.toContain('sold_at');
         expect(columns).not.toContain('sale_cycle_started_at');
+        expect(columns).not.toContain('renewed_at');
       }
       const chain = {
         eq: (column: string, value: unknown) => {
@@ -96,6 +99,7 @@ function createListingsClient(options: {
           if (columns) {
             expect(columns).not.toContain('sold_at');
             expect(columns).not.toContain('sale_cycle_started_at');
+            expect(columns).not.toContain('renewed_at');
           }
           return chain;
         },
@@ -174,6 +178,7 @@ describe('updateListingStatus / markListingSold', () => {
     mocks.getUser.mockReset();
     mocks.from.mockReset();
     mocks.trackListingMarkedSold.mockReset();
+    mocks.trackListingRenewed.mockReset();
     mocks.getUser.mockResolvedValue({ data: { user: authUser() }, error: null });
   });
 
@@ -336,6 +341,11 @@ describe('updateListingStatus / markListingSold', () => {
     expect(result.error).toBeNull();
     expect(result.data?.status).toBe('active');
     expect(capture.payload).toEqual({ status: 'active' });
+    expect(capture.deleteCalled).toBe(false);
+    expect(mocks.trackListingRenewed).toHaveBeenCalledWith({
+      listing_id: LISTING_ID,
+      source: 'sold_reactivation',
+    });
   });
 
   it('refuse au vendeur d’assigner suspended', async () => {
@@ -363,6 +373,7 @@ describe('updateListingStatus / markListingSold', () => {
     expect(capture.payload).toEqual({ status: 'sold' });
     expect(capture.payload).not.toHaveProperty('sold_at');
     expect(capture.payload).not.toHaveProperty('sale_cycle_started_at');
+    expect(capture.payload).not.toHaveProperty('renewed_at');
     expect(capture.payload).not.toHaveProperty('created_at');
     expect(capture.payload).not.toHaveProperty('updated_at');
   });
@@ -382,6 +393,48 @@ describe('updateListingStatus / markListingSold', () => {
     expect(capture.payload).toEqual({ status: 'active' });
     expect(capture.payload).not.toHaveProperty('sold_at');
     expect(capture.payload).not.toHaveProperty('sale_cycle_started_at');
+    expect(capture.payload).not.toHaveProperty('renewed_at');
+    expect(capture.payload).not.toHaveProperty('created_at');
+    expect(mocks.trackListingRenewed).toHaveBeenCalledWith({
+      listing_id: LISTING_ID,
+      source: 'sold_reactivation',
+    });
+  });
+
+  it('hidden → active ne pose pas renewed_at et track hidden_reactivation', async () => {
+    mocks.from.mockImplementation(() =>
+      createListingsClient({
+        selectData: { id: LISTING_ID, status: 'hidden' },
+        updateData: { id: LISTING_ID, status: 'active' },
+        capture,
+      })
+    );
+
+    const result = await updateListingStatus(LISTING_ID, 'active');
+    expect(result.error).toBeNull();
+    expect(result.data?.status).toBe('active');
+    expect(capture.payload).toEqual({ status: 'active' });
+    expect(capture.payload).not.toHaveProperty('renewed_at');
+    expect(capture.deleteCalled).toBe(false);
+    expect(mocks.trackListingRenewed).toHaveBeenCalledWith({
+      listing_id: LISTING_ID,
+      source: 'hidden_reactivation',
+    });
+  });
+
+  it('déjà active : no-op, pas de listing_renewed', async () => {
+    mocks.from.mockImplementation(() =>
+      createListingsClient({
+        selectData: { id: LISTING_ID, status: 'active' },
+        capture,
+      })
+    );
+
+    const result = await updateListingStatus(LISTING_ID, 'active');
+    expect(result.error).toBeNull();
+    expect(result.data?.status).toBe('active');
+    expect(capture.payload).toBeNull();
+    expect(mocks.trackListingRenewed).not.toHaveBeenCalled();
   });
 
   it('autorise un second passage sold après réactivation', async () => {

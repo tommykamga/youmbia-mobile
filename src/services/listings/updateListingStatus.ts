@@ -4,7 +4,7 @@
  */
 
 import { supabase } from '@/lib/supabase';
-import { trackListingMarkedSold } from '@/lib/analytics';
+import { trackListingMarkedSold, trackListingRenewed } from '@/lib/analytics';
 import {
   canSellerReactivateListing,
   isAllowedListingStatus,
@@ -71,6 +71,8 @@ export async function updateListingStatus(
     return { data: null, error: { message: SUSPENDED_STATUS_ERROR } };
   }
 
+  let previousStatusForRenewalTrack: string | null = null;
+
   if (status === LISTING_STATUS.active) {
     const { data: existing, error: existingError } = await supabase
       .from('listings')
@@ -96,9 +98,11 @@ export async function updateListingStatus(
     if (!canSellerReactivateListing(current)) {
       return { data: null, error: { message: 'Statut annonce invalide' } };
     }
+
+    previousStatusForRenewalTrack = current;
   }
 
-  // `sold_at` / `sale_cycle_started_at` : trigger DB `listings_set_sale_cycle`, jamais écrits ici.
+  // `sold_at` / `sale_cycle_started_at` / `renewed_at` : triggers DB, jamais écrits ici.
   const { data, error } = await supabase
     .from('listings')
     .update({ status })
@@ -120,6 +124,15 @@ export async function updateListingStatus(
   const nextStatus = String((data as { status?: string }).status ?? status).toLowerCase();
   if (!isAllowedListingStatus(nextStatus)) {
     return { data: null, error: { message: GENERIC_UPDATE_ERROR } };
+  }
+
+  if (nextStatus === LISTING_STATUS.active && previousStatusForRenewalTrack === LISTING_STATUS.sold) {
+    trackListingRenewed({ listing_id: id, source: 'sold_reactivation' });
+  } else if (
+    nextStatus === LISTING_STATUS.active &&
+    previousStatusForRenewalTrack === LISTING_STATUS.hidden
+  ) {
+    trackListingRenewed({ listing_id: id, source: 'hidden_reactivation' });
   }
 
   return {
