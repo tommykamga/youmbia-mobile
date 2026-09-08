@@ -851,7 +851,7 @@ export type Database = {
       };
     };
     Enums: {
-      listing_status: 'active' | 'hidden' | 'suspended';
+      listing_status: 'active' | 'hidden' | 'suspended' | 'sold';
       report_status: 'open' | 'reviewed' | 'action_taken' | 'dismissed';
     };
     CompositeTypes: Record<string, never>;

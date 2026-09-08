@@ -152,7 +152,9 @@ function ListingCardInner({
       ? 'En pause'
       : normalizedStatus === 'suspended'
         ? 'Suspendue'
-        : null;
+        : normalizedStatus === 'sold'
+          ? 'Vendue'
+          : null;
 
   const showUrgent = getDisplayUrgent(listing);
   const showBoosted = listing.boosted === true;

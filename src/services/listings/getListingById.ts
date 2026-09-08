@@ -10,6 +10,12 @@ import { resolveSingleAvatarUrl } from '@/lib/avatarImageUrl';
 import { getAvatarVersion } from '@/services/profile';
 import { normalizeListingSchemaFeatures } from '@/lib/listingSchemaFeatures';
 import { getShopSummaryById } from '@/services/shops/getShopSummaryById';
+import {
+  canViewerAccessListingDetail,
+  isDiscoveryListingStatus,
+  LISTING_UNAVAILABLE_MESSAGE,
+  normalizeListingStatus,
+} from '@/lib/listingStatus';
 import type { SellerType, ShopSummary } from '@/types/shops';
 
 export type ListingDetail = {
@@ -22,6 +28,8 @@ export type ListingDetail = {
   created_at: string;
   views_count: number;
   seller_id: string;
+  /** Statut brut (owner sold uniquement hors discovery). */
+  status?: string;
   images: string[];
   /** Chemins `listing_images.url` restants : signés à la demande par la galerie (moins d’egress au chargement). */
   galleryLazySourcePaths?: string[];
@@ -89,7 +97,9 @@ export type GetListingByIdResult =
 
 /**
  * Fetches a single listing by id with images and optional seller profile.
- * Missing row → "Annonce introuvable"; exists but not active → "Cette annonce n'est plus disponible."
+ * Missing row → "Annonce introuvable" (RLS public ne retourne pas sold).
+ * Non-active hors owner sold → "Cette annonce n'est plus disponible."
+ * sold + propriétaire (RLS SELECT owner) → fiche consultable.
  */
 const GENERIC_ERROR_MESSAGE = "Une erreur s'est produite. Réessayez plus tard.";
 
@@ -117,10 +127,22 @@ export async function getListingById(id: string): Promise<GetListingByIdResult> 
   }
 
   const row = listingRow as unknown as ListingRow;
-  const status = (row.status ?? 'active').toLowerCase();
-
-  if (status !== 'active') {
-    return { data: null, error: { message: "Cette annonce n'est plus disponible." } };
+  const listingStatus = normalizeListingStatus(row.status);
+  let viewerId: string | null = null;
+  if (!isDiscoveryListingStatus(listingStatus)) {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    viewerId = user?.id ?? null;
+    if (
+      !canViewerAccessListingDetail({
+        status: listingStatus,
+        ownerId: row.user_id,
+        viewerId,
+      })
+    ) {
+      return { data: null, error: { message: LISTING_UNAVAILABLE_MESSAGE } };
+    }
   }
 
   const sellerId = row.user_id ?? null;
@@ -209,6 +231,7 @@ export async function getListingById(id: string): Promise<GetListingByIdResult> 
     created_at: row.created_at,
     views_count: row.views_count ?? 0,
     seller_id: row.user_id ?? '',
+    status: listingStatus,
     images: firstDisplay ? [firstDisplay] : [],
     ...(lazyRest.length > 0 ? { galleryLazySourcePaths: lazyRest } : {}),
     district,

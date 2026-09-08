@@ -1,0 +1,25 @@
+-- TOM-99 Lot A — statut listings `sold` (backward-compatible, additif).
+--
+-- PREUVE DU BESOIN
+-- L’enum généré `listing_status` est aujourd’hui 'active' | 'hidden' | 'suspended'.
+-- - active     = visible en discovery
+-- - hidden     = pause vendeur (réversible, pas une vente)
+-- - suspended  = modération admin
+-- Réutiliser `hidden` pour « vendue » rendrait pause et vente indistinguables
+-- (interdit par le ticket). Une suppression physique est aussi hors scope.
+--
+-- STRATÉGIE
+-- Ajouter la valeur d’enum `sold` sans réécrire les lignes existantes,
+-- sans changer le défaut (`active`), sans toucher delete_my_account.
+-- Les requêtes client filtrent déjà `status = 'active'` (Home / Search /
+-- Similar / Favorites / Shop listings) : `sold` est exclu automatiquement.
+--
+-- VALIDATION REQUISE AVANT APPLICATION EN PRODUCTION
+-- Ne pas appliquer cette migration sans validation (kill-criterion TOM-99).
+-- Vérifier ensuite : enum public.listing_status, policies SELECT/UPDATE
+-- listings, et qu’aucun CHECK/trigger n’interdit `sold`.
+--
+-- PostgreSQL 12+ : ADD VALUE est autorisé dans une transaction.
+-- IF NOT EXISTS : idempotent si la valeur est déjà présente.
+
+ALTER TYPE public.listing_status ADD VALUE IF NOT EXISTS 'sold';

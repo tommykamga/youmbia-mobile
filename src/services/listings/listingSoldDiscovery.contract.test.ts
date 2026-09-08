@@ -1,0 +1,59 @@
+import { describe, expect, it } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+
+function read(relativePath: string): string {
+  return readFileSync(resolve(process.cwd(), relativePath), 'utf8');
+}
+
+describe('sold exclu des requêtes discovery actives', () => {
+  it('Home / Search / Similar / Favorites filtrent status = active', () => {
+    const publicFeed = read('src/services/listings/getPublicListings.ts');
+    const search = read('src/services/listings/searchListings.ts');
+    const similar = read('src/services/listings/getSimilarListings.ts');
+    const byIds = read('src/services/listings/getListingsByIds.ts');
+    const byCity = read('src/services/listings/getListingsByCity.ts');
+    const homeBoosted = read('src/features/listings/BoostedSection.tsx');
+    const homeUrgent = read('src/features/listings/UrgentSection.tsx');
+
+    expect(publicFeed).toMatch(/\.eq\('status', 'active'\)/);
+    expect(search).toMatch(/\.eq\('status', 'active'\)/);
+    expect(similar).toMatch(/ACTIVE_LISTING_STATUS/);
+    expect(similar).toMatch(/\.eq\('status', ACTIVE_LISTING_STATUS\)/);
+    expect(byIds).toMatch(/\.eq\('status', 'active'\)/);
+    expect(byCity).toMatch(/\.eq\('status', 'active'\)/);
+    expect(homeBoosted).toMatch(/\.eq\('status', 'active'\)/);
+    expect(homeUrgent).toMatch(/\.eq\('status', 'active'\)/);
+  });
+
+  it('Mes annonces ne filtre pas le statut (sold reste visible au vendeur)', () => {
+    const myListings = read('src/services/listings/getMyListings.ts');
+    expect(myListings).not.toMatch(/\.eq\('status'/);
+    expect(myListings).toMatch(/any status/);
+  });
+
+  it('l’action UI vendue est réservée au propriétaire, avec confirmation', () => {
+    const mine = read('app/account/listings.tsx');
+    const detail = read('app/listing/[id].tsx');
+    expect(mine).toMatch(/markListingSold/);
+    expect(mine).toMatch(/Marquer comme vendue/);
+    expect(mine).toMatch(/MARK_LISTING_SOLD_CONFIRM_TITLE/);
+    expect(mine).toMatch(/canSellerReactivateListing/);
+    expect(detail).toMatch(/isOwnListing/);
+    expect(detail).toMatch(/markListingSold/);
+    expect(detail).toMatch(/canSellerReactivateListing/);
+    expect(detail).toMatch(/Réactiver/);
+  });
+
+  it('delete_my_account ne dépend pas du statut sold', () => {
+    const rpc = read('supabase/migrations/20260602210000_delete_account_v1.sql');
+    expect(rpc).toMatch(/DELETE FROM public\.listings WHERE user_id/);
+    expect(rpc).not.toMatch(/status = 'sold'/);
+  });
+
+  it('les conversations existantes ne filtrent pas le listing par status', () => {
+    const inbox = read('src/services/conversations/getConversations.ts');
+    expect(inbox).toMatch(/\.from\('listings'\)/);
+    expect(inbox).not.toMatch(/\.eq\('status'/);
+  });
+});
