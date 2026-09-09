@@ -4,6 +4,7 @@
  */
 
 import { supabase } from '@/lib/supabase';
+import { conversationsVisibleForUserOrFilter } from '@/lib/conversationVisibility';
 
 export type GetUnreadConversationsCountResult =
   | { count: number; conversationIds: string[]; error: null }
@@ -18,7 +19,7 @@ export async function getUnreadConversationsCount(
     const { data: convRows, error: convError } = await supabase
       .from('conversations')
       .select('id')
-      .or(`buyer_id.eq.${userId},seller_id.eq.${userId}`);
+      .or(conversationsVisibleForUserOrFilter(userId));
 
     if (convError) {
       return { count: 0, conversationIds: [], error: { message: convError.message } };

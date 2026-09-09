@@ -1,15 +1,17 @@
 import { supabase } from '@/lib/supabase';
+import { conversationsVisibleForUserOrFilter } from '@/lib/conversationVisibility';
 
 /**
  * Totals unread messages for a given user across all their conversations.
  * Counts buyer_unread_count if user is the buyer, seller_unread_count if user is the seller.
+ * Ignore les conversations masquées (« Supprimer pour moi »).
  */
 export async function getUnreadMessagesCount(userId: string): Promise<{ count: number; error: any }> {
   try {
     const { data, error } = await supabase
       .from('conversations')
       .select('buyer_id, seller_id, buyer_unread_count, seller_unread_count')
-      .or(`buyer_id.eq.${userId},seller_id.eq.${userId}`);
+      .or(conversationsVisibleForUserOrFilter(userId));
 
     if (error) return { count: 0, error };
 

@@ -102,6 +102,7 @@ export type Database = {
       };
       conversations: {
         Row: {
+          buyer_deleted_at: string | null;
           buyer_id: string;
           buyer_unread_count: number;
           created_at: string;
@@ -109,11 +110,13 @@ export type Database = {
           last_message_at: string | null;
           last_message_preview: string | null;
           listing_id: string;
+          seller_deleted_at: string | null;
           seller_id: string;
           seller_unread_count: number;
           updated_at: string | null;
         };
         Insert: {
+          buyer_deleted_at?: string | null;
           buyer_id: string;
           buyer_unread_count?: number;
           created_at?: string;
@@ -121,11 +124,13 @@ export type Database = {
           last_message_at?: string | null;
           last_message_preview?: string | null;
           listing_id: string;
+          seller_deleted_at?: string | null;
           seller_id: string;
           seller_unread_count?: number;
           updated_at?: string | null;
         };
         Update: {
+          buyer_deleted_at?: string | null;
           buyer_id?: string;
           buyer_unread_count?: number;
           created_at?: string;
@@ -133,6 +138,7 @@ export type Database = {
           last_message_at?: string | null;
           last_message_preview?: string | null;
           listing_id?: string;
+          seller_deleted_at?: string | null;
           seller_id?: string;
           seller_unread_count?: number;
           updated_at?: string | null;
@@ -944,6 +950,12 @@ export type Database = {
         Returns: boolean;
       };
       mark_conversation_read: {
+        Args: {
+          p_conversation_id: string;
+        };
+        Returns: undefined;
+      };
+      hide_conversation_for_me: {
         Args: {
           p_conversation_id: string;
         };
