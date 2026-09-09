@@ -2,7 +2,7 @@
  * Mes annonces – list of listings published by the current user.
  * Shows status, view entry, and deactivate/reactivate (Sprint 6.2: redirection si non connecté, erreur claire).
  */
-import React, { useCallback, useEffect, memo, useState } from 'react';
+import React, { useCallback, useEffect, memo, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -33,6 +33,7 @@ import {
   canSellerMarkListingSold,
   getSellerListingStatusLabel,
   getSellerReactivateActionLabel,
+  isDraftListingStatus,
   LISTING_STATUS,
   MARK_LISTING_SOLD_CONFIRM_ACTION,
   MARK_LISTING_SOLD_CONFIRM_MESSAGE,
@@ -52,6 +53,11 @@ import {
   RENEW_LISTING_CONFIRM_TITLE,
   RENEW_LISTING_ERROR_MESSAGE,
   RENEW_LISTING_SUCCESS_MESSAGE,
+  DRAFT_LISTING_DELETE_CONFIRM_ACTION,
+  DRAFT_LISTING_DELETE_CONFIRM_MESSAGE,
+  DRAFT_LISTING_DELETE_CONFIRM_TITLE,
+  DRAFT_LISTING_RESUME_ACTION,
+  DRAFT_LISTING_SECTION_TITLE,
 } from '@/lib/listingStatus';
 import { isListingRenewalDue, listingAgeInDays } from '@/lib/listingPublishedAt';
 import { shareListing } from '@/lib/shareListing';
@@ -120,10 +126,25 @@ function getListingQualityBadge(
 
 function StatusBadge({ status }: { status: string }) {
   const isActive = String(status ?? '').toLowerCase() === LISTING_STATUS.active;
+  const isDraft = isDraftListingStatus(status);
   const label = getSellerListingStatusLabel(status);
   return (
-    <View style={[styles.statusBadge, isActive ? styles.statusActive : styles.statusInactive]}>
-      <Text style={[styles.statusText, isActive ? styles.statusTextActive : styles.statusTextInactive]}>
+    <View
+      style={[
+        styles.statusBadge,
+        isActive ? styles.statusActive : isDraft ? styles.statusDraft : styles.statusInactive,
+      ]}
+    >
+      <Text
+        style={[
+          styles.statusText,
+          isActive
+            ? styles.statusTextActive
+            : isDraft
+              ? styles.statusTextDraft
+              : styles.statusTextInactive,
+        ]}
+      >
         {label}
       </Text>
     </View>
@@ -156,7 +177,107 @@ function SellerFlagBadge({
   );
 }
 
+const DraftListingRowInner = memo(function DraftListingRow({
+  listing,
+  onRemoveListing,
+}: {
+  listing: MyListing;
+  onRemoveListing: (listingId: string) => void;
+}) {
+  const router = useRouter();
+  const [pendingAction, setPendingAction] = useState<null | 'delete'>(null);
+  const isMutating = pendingAction != null;
+
+  const handleResume = useCallback(() => {
+    if (isMutating) return;
+    router.push({ pathname: '/sell', params: { draftId: listing.id } });
+  }, [isMutating, listing.id, router]);
+
+  const handleDelete = useCallback(() => {
+    if (isMutating) return;
+    Alert.alert(DRAFT_LISTING_DELETE_CONFIRM_TITLE, DRAFT_LISTING_DELETE_CONFIRM_MESSAGE, [
+      { text: 'Annuler', style: 'cancel' },
+      {
+        text: DRAFT_LISTING_DELETE_CONFIRM_ACTION,
+        style: 'destructive',
+        onPress: async () => {
+          setPendingAction('delete');
+          const result = await deleteListing(listing.id);
+          if (!result.success) {
+            Alert.alert(
+              'Suppression impossible',
+              result.error || "Impossible de supprimer le brouillon."
+            );
+            setPendingAction(null);
+            return;
+          }
+          onRemoveListing(listing.id);
+          setPendingAction(null);
+        },
+      },
+    ]);
+  }, [isMutating, listing.id, onRemoveListing]);
+
+  return (
+    <View style={styles.cardWrap}>
+      <ListingCard listing={listing} />
+      <View style={styles.metaBlock}>
+        <View style={styles.badgesRow}>
+          <StatusBadge status={listing.status} />
+        </View>
+        <View style={styles.actions}>
+          <Button
+            variant="outline"
+            size="sm"
+            onPress={handleResume}
+            disabled={isMutating}
+          >
+            {DRAFT_LISTING_RESUME_ACTION}
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            onPress={handleDelete}
+            disabled={isMutating}
+            loading={pendingAction === 'delete'}
+          >
+            Supprimer
+          </Button>
+        </View>
+      </View>
+    </View>
+  );
+});
+
 const MyListingRowInner = memo(function MyListingRow({
+  listing,
+  stats,
+  onPatchListing,
+  onPromoteListing,
+  onRemoveListing,
+}: {
+  listing: MyListing;
+  stats: ListingStats;
+  onPatchListing: (listingId: string, patch: Partial<MyListing>) => void;
+  onPromoteListing: (listingId: string) => void;
+  onRemoveListing: (listingId: string) => void;
+}) {
+  if (isDraftListingStatus(listing.status)) {
+    return <DraftListingRowInner listing={listing} onRemoveListing={onRemoveListing} />;
+  }
+
+  return (
+    <MyListingPublishedRow
+      listing={listing}
+      stats={stats}
+      onPatchListing={onPatchListing}
+      onPromoteListing={onPromoteListing}
+      onRemoveListing={onRemoveListing}
+    />
+  );
+});
+
+const MyListingPublishedRow = memo(function MyListingPublishedRow({
   listing,
   stats,
   onPatchListing,
@@ -581,13 +702,25 @@ export default function AccountListingsScreen() {
   }, [load]);
 
   const successListings = state.status === 'success' ? state.data : null;
+  const draftListings = useMemo(
+    () => (successListings ?? []).filter((item) => isDraftListingStatus(item.status)),
+    [successListings]
+  );
+  const publishedListings = useMemo(
+    () => (successListings ?? []).filter((item) => !isDraftListingStatus(item.status)),
+    [successListings]
+  );
+  const orderedListings = useMemo(
+    () => [...draftListings, ...publishedListings],
+    [draftListings, publishedListings]
+  );
 
   useEffect(() => {
-    if (!successListings || successListings.length === 0) return;
+    if (!publishedListings || publishedListings.length === 0) return;
     let cancelled = false;
     (async () => {
       const entries = await Promise.all(
-        successListings.map(async (listing) => {
+        publishedListings.map(async (listing) => {
           const result = await getListingStats(listing.id);
           const fallback = buildInitialStats(listing);
           return [listing.id, { ...fallback, ...result.data }] as const;
@@ -602,7 +735,7 @@ export default function AccountListingsScreen() {
     return () => {
       cancelled = true;
     };
-  }, [state.status, successListings]);
+  }, [state.status, publishedListings]);
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
@@ -647,30 +780,52 @@ export default function AccountListingsScreen() {
     });
   }, []);
 
-  const keyExtractor = useCallback((item: MyListing) => item.id, []);
-  const renderItem = useCallback(
-    ({ item }: { item: MyListing }) => (
-      <MyListingRowInner
-        listing={item}
-        stats={statsByListingId[item.id] ?? buildInitialStats(item)}
-        onPatchListing={patchListing}
-        onPromoteListing={promoteListing}
-        onRemoveListing={removeListing}
-      />
-    ),
-    [patchListing, promoteListing, removeListing, statsByListingId]
-  );
-  const itemSeparator = useCallback(() => <View style={styles.separator} />, []);
-
   const listHeader = useCallback(
     () => (
       <View style={styles.listHeaderPro}>
         <ProSellerActivationCard variant="listings" />
         <SellerAcquisitionTips compact />
+        {draftListings.length > 0 ? (
+          <Text style={styles.sectionTitle}>{DRAFT_LISTING_SECTION_TITLE}</Text>
+        ) : null}
       </View>
     ),
-    []
+    [draftListings.length]
   );
+
+  const renderItem = useCallback(
+    ({ item, index }: { item: MyListing; index: number }) => {
+      const showPublishedHeader =
+        draftListings.length > 0 &&
+        publishedListings.length > 0 &&
+        index === draftListings.length;
+      return (
+        <View>
+          {showPublishedHeader ? (
+            <Text style={[styles.sectionTitle, styles.sectionTitleSpaced]}>Mes annonces</Text>
+          ) : null}
+          <MyListingRowInner
+            listing={item}
+            stats={statsByListingId[item.id] ?? buildInitialStats(item)}
+            onPatchListing={patchListing}
+            onPromoteListing={promoteListing}
+            onRemoveListing={removeListing}
+          />
+        </View>
+      );
+    },
+    [
+      draftListings.length,
+      patchListing,
+      promoteListing,
+      publishedListings.length,
+      removeListing,
+      statsByListingId,
+    ]
+  );
+
+  const keyExtractor = useCallback((item: MyListing) => item.id, []);
+  const itemSeparator = useCallback(() => <View style={styles.separator} />, []);
 
   return (
     <Screen safe={false}>
@@ -725,7 +880,7 @@ export default function AccountListingsScreen() {
       )}
       {state.status === 'success' && (
         <FlatList
-          data={state.data}
+          data={orderedListings}
           keyExtractor={keyExtractor}
           renderItem={renderItem}
           ListHeaderComponent={listHeader}
@@ -792,6 +947,9 @@ const styles = StyleSheet.create({
   statusInactive: {
     backgroundColor: colors.textMuted + '30',
   },
+  statusDraft: {
+    backgroundColor: colors.warning + '22',
+  },
   statusText: {
     ...typography.xs,
     fontWeight: fontWeights.semibold,
@@ -801,6 +959,19 @@ const styles = StyleSheet.create({
   },
   statusTextInactive: {
     color: colors.textMuted,
+  },
+  statusTextDraft: {
+    color: colors.warning,
+  },
+  sectionTitle: {
+    ...typography.sm,
+    fontWeight: fontWeights.bold,
+    color: colors.text,
+    marginTop: spacing.sm,
+    marginBottom: spacing.xs,
+  },
+  sectionTitleSpaced: {
+    marginTop: spacing.base,
   },
   flagBadge: {
     paddingHorizontal: spacing.sm,
