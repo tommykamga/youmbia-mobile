@@ -215,6 +215,12 @@ function ListingCardInner({
 
   const isHomeFeed = feedPresentation === 'home' && variant === 'feed';
   const isFeaturedRail = variant === 'rail' && railPresentation === 'featured';
+  /**
+   * Entering FadeInDown + FlatList removeClippedSubviews (iOS) crée des blancs entre items.
+   * Search désactive aussi removeClippedSubviews ; on coupe l’entering ici pour éviter
+   * les rejeux d’anim au recycle / après chargement image. Home / rails gardent l’anim.
+   */
+  const enableEnteringAnimation = source !== 'search';
 
   const homeImageAspect = useMemo(() => {
     if (!isHomeFeed) return HOME_IMAGE_ASPECT_RATIO;
@@ -261,7 +267,7 @@ function ListingCardInner({
       onPress={handlePress}
       onPressIn={onPressIn}
       onPressOut={onPressOut}
-      entering={FadeInDown.duration(400).springify()}
+      entering={enableEnteringAnimation ? FadeInDown.duration(400).springify() : undefined}
       style={[
         isHomeFeed ? styles.cardHome : styles.card,
         variant === 'rail' && styles.cardRail,

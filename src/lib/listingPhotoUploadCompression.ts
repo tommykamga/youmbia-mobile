@@ -38,38 +38,37 @@ export function shouldSkipListingPhotoRasterCompression(
 }
 
 /**
- * Redimensionnement max largeur + JPEG qualité fixe, ratio conservé par le manipulateur.
- * En cas d’échec, renvoie le base64 d’origine (sans casser l’upload).
+ * Prépare un JPEG base64 uploadable.
+ * - Prefer `uri` (file:// / ph:// / content://) via ImageManipulator — fiable sur iOS physique
+ *   quand `ImagePicker.base64` est null ou trop lourd.
+ * - Sinon utilise le base64 fourni.
+ * - En cas d’échec manipulateur avec base64 d’origine : fallback base64.
  */
 export async function compressListingPhotoForStorageUpload(input: {
-  base64: string;
-  uri?: string;
+  base64?: string | null;
+  uri?: string | null;
   mimeType?: string | null;
 }): Promise<{ base64: string }> {
-  const stripped = stripDataUrlBase64Prefix(input.base64);
-  if (!stripped) {
-    return { base64: stripped };
-  }
+  const stripped = stripDataUrlBase64Prefix(input.base64 ?? '');
+  const uri =
+    typeof input.uri === 'string' && input.uri.trim().length > 0 ? input.uri.trim() : '';
 
-  const beforeApprox = approxDecodedBytesFromRawBase64(stripped);
-
-  if (shouldSkipListingPhotoRasterCompression(input.mimeType, input.uri)) {
-    if (__DEV__) {
-      console.log('[listingPhotoUpload]', {
-        skip: 'svg-or-non-raster-policy',
-        beforeBytes: beforeApprox,
-      });
-    }
+  if (shouldSkipListingPhotoRasterCompression(input.mimeType, uri || undefined)) {
     return { base64: stripped };
   }
 
   const sourceUri =
-    typeof input.uri === 'string' &&
-    input.uri.length > 0 &&
-    !input.uri.toLowerCase().endsWith('.svg') &&
-    !input.uri.toLowerCase().includes('.svg?')
-      ? input.uri
-      : buildDataUriForManipulator(stripped, input.mimeType);
+    uri && !uri.toLowerCase().endsWith('.svg') && !uri.toLowerCase().includes('.svg?')
+      ? uri
+      : stripped
+        ? buildDataUriForManipulator(stripped, input.mimeType)
+        : '';
+
+  if (!sourceUri) {
+    return { base64: stripped };
+  }
+
+  const beforeApprox = stripped ? approxDecodedBytesFromRawBase64(stripped) : 0;
 
   try {
     const result = await manipulateAsync(
@@ -85,7 +84,7 @@ export async function compressListingPhotoForStorageUpload(input: {
     const outRaw = result.base64 ? stripDataUrlBase64Prefix(result.base64) : '';
     if (!outRaw) {
       if (__DEV__) {
-        console.warn('[listingPhotoUpload] compression empty result, using original');
+        console.warn('[listingPhotoUpload] compression empty result, using original base64');
       }
       return { base64: stripped };
     }
@@ -94,13 +93,14 @@ export async function compressListingPhotoForStorageUpload(input: {
       console.log('[listingPhotoUpload]', {
         beforeBytes: beforeApprox,
         afterBytes: approxDecodedBytesFromRawBase64(outRaw),
+        source: uri ? 'uri' : 'base64',
       });
     }
 
     return { base64: outRaw };
   } catch (e) {
     if (__DEV__) {
-      console.warn('[listingPhotoUpload] compression failed, using original', e);
+      console.warn('[listingPhotoUpload] compression failed, using original base64', e);
     }
     return { base64: stripped };
   }

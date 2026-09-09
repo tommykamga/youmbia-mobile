@@ -40,6 +40,10 @@ import {
   DRAFT_LISTING_SAVED_MESSAGE,
 } from '@/lib/listingStatus';
 import {
+  filterUploadableListingPhotos,
+  nextListingImageSortOrders,
+} from '@/lib/listingDraftPhotoPlan';
+import {
   readListingPublishMemory,
   saveListingPublishMemory,
   getAttributeHintsForCategory,
@@ -255,7 +259,7 @@ export default function SellScreen() {
   const [existingDraftImages, setExistingDraftImages] = useState<ExistingDraftImage[]>([]);
   const [editingDraftId, setEditingDraftId] = useState<string | null>(null);
   const [draftLoadStatus, setDraftLoadStatus] = useState<'idle' | 'loading' | 'ready' | 'error'>(
-    'idle'
+    () => (routeDraftId ? 'loading' : 'idle')
   );
   const [draftLoadError, setDraftLoadError] = useState<string | null>(null);
   const [draftSaveLoading, setDraftSaveLoading] = useState(false);
@@ -480,14 +484,22 @@ export default function SellScreen() {
 
   /** Préremplit depuis un payload DB (source de vérité = Supabase, pas la mémoire session). */
   const applyResumeDraftData = useCallback((draft: ListingResumeDraftData) => {
+    const persisted = (draft.existingImages ?? []).filter(
+      (img) => String(img.displayUrl ?? '').trim() !== '' && String(img.id ?? '').trim() !== ''
+    );
     setEditingDraftId(draft.listingId);
     setPublishShopId(draft.shopId);
     setTitle(draft.title);
     setPriceStr(draft.price > 0 ? String(draft.price) : '');
     setCity(draft.city);
     setDescription(draft.description);
+    // Photos persistées → existingDraftImages (pas besoin de base64 ; uri = signedUrl).
+    // `images` = uniquement nouvelles photos locales picker.
     setImages([]);
-    setExistingDraftImages(draft.existingImages ?? []);
+    setExistingDraftImages(persisted);
+    if (__DEV__) {
+      console.log('[DRAFT_RESUME] setImages count', persisted.length);
+    }
     setDuplicateSourceId(null);
     if (draft.publishCategoryId != null) {
       setPendingDuplicateCategoryId(draft.publishCategoryId);
@@ -735,29 +747,34 @@ export default function SellScreen() {
   };
 
   const uploadNewDraftImages = async (listingId: string) => {
-    const withBase64 = images.filter((img): img is PickedImage & { base64: string } => !!img.base64);
-    if (withBase64.length === 0) {
-      return { uploadedCount: 0, failedCount: images.length, missingBase64Count: images.length };
+    const uploadable = filterUploadableListingPhotos(images);
+    const missingSourceCount = Math.max(0, images.length - uploadable.length);
+    if (uploadable.length === 0) {
+      return {
+        uploadedCount: 0,
+        failedCount: images.length,
+        missingSourceCount: images.length,
+        uploadStatus: 'failed' as const,
+        uploadError: "Impossible de préparer les photos du brouillon.",
+      };
     }
-    const startOrder = existingDraftImages.reduce(
-      (max, img) => Math.max(max, img.sort_order ?? -1),
-      -1
-    ) + 1;
-    const sortOrders = withBase64.map((_, i) => startOrder + i);
+    const sortOrders = nextListingImageSortOrders(
+      existingDraftImages.map((img) => img.sort_order),
+      uploadable.length
+    );
     const uploadResult = await uploadListingImages(
       listingId,
-      withBase64.map((img) => ({
+      uploadable.map((img) => ({
         base64: img.base64,
         uri: img.uri,
         mimeType: img.mimeType ?? null,
       })),
       { sortOrders }
     );
-    const missingBase64Count = Math.max(0, images.length - withBase64.length);
     return {
       uploadedCount: uploadResult.data.uploadedCount,
-      failedCount: uploadResult.data.failedCount + missingBase64Count,
-      missingBase64Count,
+      failedCount: uploadResult.data.failedCount + missingSourceCount,
+      missingSourceCount,
       uploadStatus: uploadResult.status,
       uploadError: uploadResult.error?.message ?? null,
     };
@@ -825,13 +842,30 @@ export default function SellScreen() {
       }
 
       if (images.length > 0) {
-        await uploadNewDraftImages(listingId);
-        setImages([]);
-      }
+        const uploadMeta = await uploadNewDraftImages(listingId);
+        const refreshedAfterUpload = await getListingForEdit(listingId);
+        if (refreshedAfterUpload.data) {
+          setExistingDraftImages(refreshedAfterUpload.data.imageItems ?? []);
+        }
 
-      const refreshed = await getListingForEdit(listingId);
-      if (refreshed.data) {
-        setExistingDraftImages(refreshed.data.imageItems ?? []);
+        if (uploadMeta.uploadStatus !== 'ok' || uploadMeta.failedCount > 0) {
+          // Évite de ré-uploader les photos déjà persistées (doublons sort_order).
+          if (uploadMeta.uploadedCount > 0) {
+            setImages([]);
+          }
+          setSubmitError(
+            uploadMeta.uploadError ??
+              "Le brouillon est enregistré, mais certaines photos n'ont pas pu être sauvegardées."
+          );
+          return;
+        }
+
+        setImages([]);
+      } else {
+        const refreshed = await getListingForEdit(listingId);
+        if (refreshed.data) {
+          setExistingDraftImages(refreshed.data.imageItems ?? []);
+        }
       }
 
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -1013,27 +1047,29 @@ export default function SellScreen() {
         }
       }
 
-      const withBase64 = images.filter((img): img is PickedImage & { base64: string } => !!img.base64);
-      const missingBase64Count = Math.max(0, images.length - withBase64.length);
+      const uploadable = filterUploadableListingPhotos(images);
+      const missingSourceCount = Math.max(0, images.length - uploadable.length);
 
-      if (withBase64.length > 0) {
-        const startOrder =
-          existingDraftImages.reduce((max, img) => Math.max(max, img.sort_order ?? -1), -1) + 1;
+      if (uploadable.length > 0) {
+        const sortOrders = nextListingImageSortOrders(
+          existingDraftImages.map((img) => img.sort_order),
+          uploadable.length
+        );
         const uploadResult = await uploadListingImages(
           listingId,
-          withBase64.map((img) => ({
+          uploadable.map((img) => ({
             base64: img.base64,
             uri: img.uri,
             mimeType: img.mimeType ?? null,
           })),
-          { sortOrders: withBase64.map((_, i) => startOrder + i) }
+          { sortOrders }
         );
 
         const uploadedCount = uploadResult.data.uploadedCount + existingDraftImages.length;
-        const failedCount = uploadResult.data.failedCount + missingBase64Count;
+        const failedCount = uploadResult.data.failedCount + missingSourceCount;
         const totalCount = totalPhotoCount;
 
-        if (uploadResult.status === 'ok' && missingBase64Count === 0) {
+        if (uploadResult.status === 'ok' && missingSourceCount === 0) {
           void saveListingPublishMemory({
             city: city.trim(),
             parentCategoryId: selectedParentCategoryId,
@@ -1052,7 +1088,7 @@ export default function SellScreen() {
             uploadedCount,
             failedCount,
             totalCount,
-            missingBase64Count > 0 && !uploadResult.error
+            missingSourceCount > 0 && !uploadResult.error
               ? "Annonce créée, mais certaines photos n'ont pas pu être préparées."
               : uploadResult.error?.message ?? "Annonce créée, mais certaines photos n'ont pas pu être ajoutées."
           )
@@ -1060,12 +1096,12 @@ export default function SellScreen() {
         return;
       }
 
-      if (missingBase64Count > 0 && existingDraftImages.length === 0) {
+      if (missingSourceCount > 0 && existingDraftImages.length === 0) {
         setPublishState(
           buildPartialPublishState(
             listingId,
             0,
-            missingBase64Count,
+            missingSourceCount,
             images.length,
             "Annonce créée, mais certaines photos n'ont pas pu être préparées."
           )
@@ -1099,15 +1135,15 @@ export default function SellScreen() {
   const handleRetryImageUpload = async () => {
     if (publishState.status !== 'partial' || retryUploadLoading) return;
 
-    const withBase64 = images.filter((img): img is PickedImage & { base64: string } => !!img.base64);
-    const missingBase64Count = Math.max(0, images.length - withBase64.length);
+    const uploadable = filterUploadableListingPhotos(images);
+    const missingSourceCount = Math.max(0, images.length - uploadable.length);
 
-    if (withBase64.length === 0) {
+    if (uploadable.length === 0) {
       setPublishState(
         buildPartialPublishState(
           publishState.listingId,
           0,
-          missingBase64Count,
+          missingSourceCount,
           images.length,
           "Annonce créée, mais aucune photo exploitable n'a pu être ajoutée."
         )
@@ -1119,7 +1155,7 @@ export default function SellScreen() {
     try {
       const uploadResult = await uploadListingImages(
         publishState.listingId,
-        withBase64.map((img) => ({
+        uploadable.map((img) => ({
           base64: img.base64,
           uri: img.uri,
           mimeType: img.mimeType ?? null,
@@ -1127,10 +1163,10 @@ export default function SellScreen() {
       );
 
       const uploadedCount = uploadResult.data.uploadedCount;
-      const failedCount = uploadResult.data.failedCount + missingBase64Count;
+      const failedCount = uploadResult.data.failedCount + missingSourceCount;
       const totalCount = images.length;
 
-      if (uploadResult.status === 'ok' && missingBase64Count === 0) {
+      if (uploadResult.status === 'ok' && missingSourceCount === 0) {
         markPublishSuccess(publishState.listingId);
         return;
       }
@@ -1141,7 +1177,7 @@ export default function SellScreen() {
           uploadedCount,
           failedCount,
           totalCount,
-          missingBase64Count > 0 && !uploadResult.error
+          missingSourceCount > 0 && !uploadResult.error
             ? "Annonce créée, mais certaines photos n'ont pas pu être préparées."
             : uploadResult.error?.message ?? "Annonce créée, mais certaines photos n'ont pas pu être ajoutées."
         )

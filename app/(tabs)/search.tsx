@@ -679,7 +679,9 @@ export default function SearchScreen() {
   const keyExtractor = useCallback((item: PublicListing) => item.id, []);
   const renderItem = useCallback(
     ({ item }: { item: PublicListing }) => (
-      <ListingCard listing={item} source="search" />
+      <View style={styles.resultRow}>
+        <ListingCard listing={item} source="search" />
+      </View>
     ),
     []
   );
@@ -1590,7 +1592,12 @@ export default function SearchScreen() {
                       initialNumToRender={Platform.OS === 'ios' ? 6 : 8}
                       maxToRenderPerBatch={Platform.OS === 'ios' ? 4 : 6}
                       windowSize={Platform.OS === 'ios' ? 5 : 8}
-                      removeClippedSubviews={Platform.OS === 'ios'}
+                      /**
+                       * iOS + removeClippedSubviews + entering Reanimated (ListingCard FadeInDown)
+                       * provoque des trous blancs / hauteurs fantômes entre items (souvent 1→2).
+                       * Désactivé uniquement sur ce FlatList Search ; Home / Favorites inchangés.
+                       */
+                      removeClippedSubviews={false}
                       ListEmptyComponent={
                         <SearchFilteredEmptyPanel onReset={handleResetSearch} />
                       }
@@ -2010,6 +2017,10 @@ const styles = StyleSheet.create({
     width: '100%',
     alignSelf: 'center',
     flexGrow: 1,
+  },
+  /** Conteneur item Search : hauteur = contenu carte uniquement (pas de flexGrow). */
+  resultRow: {
+    width: '100%',
   },
   separator: {
     height: spacing.base,
