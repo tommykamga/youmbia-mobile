@@ -1,89 +1,43 @@
 /**
- * Saved search alerts – local/lightweight home section.
- * Shows recent listings matching saved searches, without push notifications.
+ * Entrée légère vers les recherches sauvegardées (Home / compte).
+ * Aucun scan de feed, aucun matching client : la détection d’alerte est serveur.
  */
 
 import React, { useCallback, useState } from 'react';
-import { View, Text, StyleSheet, FlatList, Pressable } from 'react-native';
+import { View, Text, StyleSheet, Pressable } from 'react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { getPublicListings } from '@/services/listings';
-import { buildSavedSearchHref, getSavedSearches, type SavedSearch } from '@/services/savedSearches';
-import { getSavedSearchAlertMatches } from '@/services/savedSearchAlerts';
-import { ListingCard, LISTING_CARD_RAIL_STRIDE } from './ListingCard';
-import type { PublicListing } from '@/services/listings';
+import { buildSavedSearchHref, getSavedSearches, trackSavedSearchOpen, type SavedSearch } from '@/services/savedSearches';
 import { colors, spacing, typography, fontWeights, radius, ui } from '@/theme';
-
-const ALERT_LIMIT = 3;
-const ALERT_FETCH_LIMIT = 24;
-const INITIAL_NUM_TO_RENDER = 3;
-
-function buildSubtitle(matchCount: number, searchCount: number): string {
-  if (matchCount <= 0 || searchCount <= 0) return '';
-  const annonces = matchCount > 1 ? 'annonces' : 'annonce';
-  const recherches = searchCount > 1 ? 'recherches' : 'recherche';
-  return `${matchCount} nouvelle${matchCount > 1 ? 's' : ''} ${annonces} pour ${searchCount} ${recherches} enregistrée${searchCount > 1 ? 's' : ''}.`;
-}
 
 export function SavedSearchAlertsSection() {
   const router = useRouter();
-  const ITEM_WIDTH = LISTING_CARD_RAIL_STRIDE;
-  const [listings, setListings] = useState<PublicListing[]>([]);
-  const [subtitle, setSubtitle] = useState('');
-  const [topSearch, setTopSearch] = useState<SavedSearch | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [searches, setSearches] = useState<SavedSearch[]>([]);
 
   const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const savedSearches = getSavedSearches().slice(0, 8);
-      if (savedSearches.length === 0) {
-        setListings([]);
-        setSubtitle('');
-        setTopSearch(null);
-        return;
-      }
-
-      const feedResult = await getPublicListings(0, ALERT_FETCH_LIMIT);
-
-      const matches = getSavedSearchAlertMatches(feedResult.data ?? [], savedSearches);
-      if (matches.length === 0) {
-        setListings([]);
-        setSubtitle('');
-        setTopSearch(null);
-        return;
-      }
-
-      const nextListings = matches.slice(0, ALERT_LIMIT).map((item) => item.listing);
-      const matchedSearchIds = new Set(matches.flatMap((item) => item.searchIds));
-      setListings(nextListings);
-      setSubtitle(buildSubtitle(nextListings.length, matchedSearchIds.size));
-      setTopSearch(savedSearches.find((item) => matchedSearchIds.has(item.id)) ?? savedSearches[0] ?? null);
-    } finally {
-      setLoading(false);
-    }
+    const items = await getSavedSearches();
+    setSearches(items.filter((item) => item.enabled).slice(0, 5));
   }, []);
 
   useFocusEffect(
     useCallback(() => {
-      load();
+      void load();
     }, [load])
   );
 
-  const keyExtractor = useCallback((item: PublicListing) => item.id, []);
-  const renderItem = useCallback(
-    ({ item }: { item: PublicListing }) => <ListingCard listing={item} variant="rail" source="home" />,
-    []
+  const handleOpenSearch = useCallback(
+    (item: SavedSearch) => {
+      trackSavedSearchOpen(item.id);
+      router.push(buildSavedSearchHref(item) as never);
+    },
+    [router]
   );
 
-  const handleSeeMatches = useCallback(() => {
-    if (!topSearch) return;
-    router.push(buildSavedSearchHref(topSearch) as never);
-  }, [router, topSearch]);
+  const handleSeeAll = useCallback(() => {
+    router.push('/account/saved-searches' as never);
+  }, [router]);
 
-  if (loading || listings.length === 0) {
-    return null;
-  }
+  if (searches.length === 0) return null;
 
   return (
     <View style={styles.section}>
@@ -91,44 +45,34 @@ export function SavedSearchAlertsSection() {
         <View style={styles.headerBody}>
           <View style={styles.titleRow}>
             <Ionicons
-              name="notifications-outline"
+              name="bookmark-outline"
               size={18}
               color={colors.textMuted}
               style={styles.titleIcon}
             />
-            <Text style={styles.title}>Nouveautés pour vos recherches</Text>
+            <Text style={styles.title}>Vos recherches sauvegardées</Text>
           </View>
-          <Text style={styles.subtitle}>{subtitle}</Text>
+          <Text style={styles.subtitle}>Ouvrez une recherche ou gérez vos alertes.</Text>
         </View>
-        {topSearch ? (
-          <Pressable
-            style={({ pressed }) => [styles.actionBtn, pressed && styles.actionBtnPressed]}
-            onPress={handleSeeMatches}
-          >
-            <Text style={styles.actionText}>Voir</Text>
-          </Pressable>
-        ) : null}
+        <Pressable
+          style={({ pressed }) => [styles.actionBtn, pressed && styles.actionBtnPressed]}
+          onPress={handleSeeAll}
+        >
+          <Text style={styles.actionText}>Gérer</Text>
+        </Pressable>
       </View>
-      <FlatList
-        data={listings}
-        keyExtractor={keyExtractor}
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.scrollContent}
-        style={styles.scroll}
-        getItemLayout={(_, index) => ({
-          length: ITEM_WIDTH,
-          offset: index * ITEM_WIDTH,
-          index,
-        })}
-        initialNumToRender={INITIAL_NUM_TO_RENDER}
-        windowSize={5}
-        removeClippedSubviews
-        snapToInterval={ITEM_WIDTH}
-        snapToAlignment="start"
-        decelerationRate="fast"
-        renderItem={renderItem}
-      />
+      {searches.map((item) => (
+        <Pressable
+          key={item.id}
+          style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
+          onPress={() => handleOpenSearch(item)}
+        >
+          <Text style={styles.rowLabel} numberOfLines={1}>
+            {item.label || item.query || 'Recherche'}
+          </Text>
+          <Ionicons name="chevron-forward" size={16} color={colors.borderLight} />
+        </Pressable>
+      ))}
     </View>
   );
 }
@@ -183,11 +127,25 @@ const styles = StyleSheet.create({
     color: colors.text,
     fontWeight: fontWeights.semibold,
   },
-  scroll: {
-    marginHorizontal: -spacing.screenHorizontal,
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.sm,
+    borderRadius: radius.md,
+    marginBottom: spacing.xs,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.borderLight,
   },
-  scrollContent: {
-    paddingHorizontal: spacing.screenHorizontal,
-    paddingBottom: spacing.sm,
+  rowPressed: {
+    opacity: 0.9,
+  },
+  rowLabel: {
+    ...typography.sm,
+    color: colors.text,
+    flex: 1,
+    minWidth: 0,
+    marginRight: spacing.sm,
   },
 });

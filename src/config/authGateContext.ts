@@ -4,7 +4,7 @@
  */
 
 /** Contextes d’entrée supportés par l’Auth Gate. */
-export type AuthGateContextId = 'favorites' | 'sell' | 'messages' | 'account' | 'listings';
+export type AuthGateContextId = 'favorites' | 'sell' | 'messages' | 'account' | 'listings' | 'search';
 
 /** Libellés CTA mutualisés (Google / email). */
 export const AUTH_GATE_SHARED_CTA_LABELS = {
@@ -68,6 +68,11 @@ export const AUTH_GATE_CONTEXT_CONFIG: Record<AuthGateContextId, AuthGateContext
     title: 'Gérez vos annonces',
     subtitle: 'Connecte-toi pour suivre tes ventes et mettre à jour tes annonces.',
     successHref: '/account/listings',
+  }),
+  search: withSharedCtas({
+    title: 'Sauvegardez cette recherche',
+    subtitle: 'Connectez-vous pour recevoir une alerte quand une nouvelle annonce correspond.',
+    successHref: '/(tabs)/search',
   }),
 };
 

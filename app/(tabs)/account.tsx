@@ -32,6 +32,7 @@ const SECTIONS = [
       { icon: 'list', label: 'Mes annonces', route: '/account/listings' },
       { icon: 'chatbubbles-outline', label: 'Messages', route: '/(tabs)/messages' },
       { icon: 'heart-outline', label: 'Favoris', route: '/(tabs)/favorites' },
+      { icon: 'bookmark-outline', label: 'Recherches sauvegardées', route: '/account/saved-searches' },
       // { icon: 'time-outline', label: 'Historique', route: '/history' },
     ] as RouteItem[],
   },

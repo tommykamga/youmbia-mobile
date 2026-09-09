@@ -28,11 +28,11 @@ const OTHER_ID = '22222222-2222-2222-2222-222222222222';
 const LISTING_ID = '33333333-3333-3333-3333-333333333333';
 const SOLD_STATUS_MIGRATION_PATH = resolve(
   process.cwd(),
-  'supabase/migrations/20260908220000_listing_status_sold_v1.sql'
+  'supabase/migrations/20260908202412_listing_status_sold_v1.sql'
 );
 const SALE_CYCLE_MIGRATION_PATH = resolve(
   process.cwd(),
-  'supabase/migrations/20260908230000_listing_sale_cycle_v1.sql'
+  'supabase/migrations/20260908205641_listing_sale_cycle_v1.sql'
 );
 
 function authUser(id = USER_ID) {

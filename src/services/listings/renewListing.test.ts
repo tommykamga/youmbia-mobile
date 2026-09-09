@@ -27,7 +27,7 @@ const OTHER_ID = '22222222-2222-2222-2222-222222222222';
 const LISTING_ID = '33333333-3333-3333-3333-333333333333';
 const RENEWAL_MIGRATION_PATH = resolve(
   process.cwd(),
-  'supabase/migrations/20260908240000_listing_renewed_at_v1.sql'
+  'supabase/migrations/20260908213204_listing_renewed_at_v1.sql'
 );
 
 function authUser(id = USER_ID) {

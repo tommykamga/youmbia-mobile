@@ -51,6 +51,7 @@ const GATE_NAV_TITLES: Record<AuthGateContextId, string> = {
   sell: 'Publiez votre annonce',
   account: 'Bienvenue sur votre espace',
   listings: 'Gérez vos annonces',
+  search: 'Sauvegardez votre recherche',
 };
 
 export default function AuthGateScreen() {

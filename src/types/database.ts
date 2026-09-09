@@ -774,6 +774,104 @@ export type Database = {
         };
         Relationships: [];
       };
+      saved_searches: {
+        Row: {
+          id: string;
+          user_id: string;
+          name: string | null;
+          query: string;
+          category_id: number | null;
+          city: string | null;
+          min_price: number | null;
+          max_price: number | null;
+          enabled: boolean;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          name?: string | null;
+          query?: string;
+          category_id?: number | null;
+          city?: string | null;
+          min_price?: number | null;
+          max_price?: number | null;
+          enabled?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          name?: string | null;
+          query?: string;
+          category_id?: number | null;
+          city?: string | null;
+          min_price?: number | null;
+          max_price?: number | null;
+          enabled?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'saved_searches_category_id_fkey';
+            columns: ['category_id'];
+            isOneToOne: false;
+            referencedRelation: 'categories';
+            referencedColumns: ['id'];
+          },
+        ];
+      };
+      saved_search_matches: {
+        Row: {
+          id: string;
+          saved_search_id: string;
+          listing_id: string;
+          matched_at: string;
+          notified_at: string | null;
+          expired_at: string | null;
+          dispatch_claimed_at: string | null;
+          dispatch_claim_id: string | null;
+        };
+        Insert: {
+          id?: string;
+          saved_search_id: string;
+          listing_id: string;
+          matched_at?: string;
+          notified_at?: string | null;
+          expired_at?: string | null;
+          dispatch_claimed_at?: string | null;
+          dispatch_claim_id?: string | null;
+        };
+        Update: {
+          id?: string;
+          saved_search_id?: string;
+          listing_id?: string;
+          matched_at?: string;
+          notified_at?: string | null;
+          expired_at?: string | null;
+          dispatch_claimed_at?: string | null;
+          dispatch_claim_id?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'saved_search_matches_saved_search_id_fkey';
+            columns: ['saved_search_id'];
+            isOneToOne: false;
+            referencedRelation: 'saved_searches';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'saved_search_matches_listing_id_fkey';
+            columns: ['listing_id'];
+            isOneToOne: false;
+            referencedRelation: 'listings';
+            referencedColumns: ['id'];
+          },
+        ];
+      };
       user_push_tokens: {
         Row: {
           id: string;
@@ -860,6 +958,29 @@ export type Database = {
           listing_id: string;
         };
         Returns: string | null;
+      };
+      claim_saved_search_alerts: {
+        Args: {
+          p_listing_id: string;
+          p_claim_id: string;
+        };
+        Returns: {
+          id: string;
+          saved_search_id: string;
+          listing_id: string;
+          user_id: string;
+          enabled: boolean;
+          name: string | null;
+          query: string;
+        }[];
+      };
+      complete_saved_search_alert_claim: {
+        Args: {
+          p_claim_id: string;
+          p_match_ids: string[];
+          p_outcome: string;
+        };
+        Returns: number;
       };
     };
     Enums: {
