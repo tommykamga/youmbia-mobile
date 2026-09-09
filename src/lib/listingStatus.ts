@@ -85,6 +85,22 @@ export function canSellerRenewListing(status: string | null | undefined): boolea
   return normalizeListingStatus(status) === LISTING_STATUS.active;
 }
 
+export const DUPLICATE_LISTING_ACTION = 'Dupliquer';
+export const LISTING_DUPLICATE_NOT_ELIGIBLE_MESSAGE = 'Cette annonce ne peut pas être dupliquée.';
+
+/**
+ * Duplication : annonces du vendeur actives, vendues ou en pause.
+ * Brouillon = reprendre, pas dupliquer. Suspendue = hors duplication (modération).
+ */
+export function canSellerDuplicateListing(status: string | null | undefined): boolean {
+  const normalized = normalizeListingStatus(status);
+  return (
+    normalized === LISTING_STATUS.active ||
+    normalized === LISTING_STATUS.sold ||
+    normalized === LISTING_STATUS.hidden
+  );
+}
+
 export function getSellerReactivateActionLabel(status: string | null | undefined): string {
   return isSoldListingStatus(status) ? REACTIVATE_SOLD_CONFIRM_ACTION : REACTIVATE_HIDDEN_CONFIRM_ACTION;
 }

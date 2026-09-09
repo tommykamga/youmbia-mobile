@@ -3,6 +3,7 @@ import {
   canSellerMarkListingSold,
   canSellerReactivateListing,
   canSellerRenewListing,
+  canSellerDuplicateListing,
   canViewerAccessListingDetail,
   getSellerListingStatusLabel,
   getSellerReactivateActionLabel,
@@ -68,6 +69,14 @@ describe('listingStatus', () => {
     expect(canSellerRenewListing('suspended')).toBe(false);
     expect(getSellerReactivateActionLabel('sold')).toBe('Remettre en ligne');
     expect(getSellerReactivateActionLabel('hidden')).toBe('Réactiver');
+  });
+
+  it('duplication : active/sold/hidden oui ; draft et suspended non', () => {
+    expect(canSellerDuplicateListing('active')).toBe(true);
+    expect(canSellerDuplicateListing('sold')).toBe(true);
+    expect(canSellerDuplicateListing('hidden')).toBe(true);
+    expect(canSellerDuplicateListing('draft')).toBe(false);
+    expect(canSellerDuplicateListing('suspended')).toBe(false);
   });
 
   it('public/non-owner sold => indisponible ; owner sold => consultable ; active inchangé', () => {
