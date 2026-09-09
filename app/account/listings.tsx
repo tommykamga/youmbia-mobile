@@ -43,6 +43,8 @@ import {
   MARK_LISTING_SOLD_SUCCESS_TITLE,
   canSellerReactivateListing,
   canSellerRenewListing,
+  canSellerDuplicateListing,
+  DUPLICATE_LISTING_ACTION,
   REACTIVATE_HIDDEN_CONFIRM_MESSAGE,
   REACTIVATE_HIDDEN_CONFIRM_TITLE,
   REACTIVATE_LISTING_ERROR_MESSAGE,
@@ -495,6 +497,7 @@ const MyListingPublishedRow = memo(function MyListingPublishedRow({
   const canMarkSold = canSellerMarkListingSold(listing.status);
   const canReactivate = canSellerReactivateListing(listing.status);
   const canRenewListing = canSellerRenewListing(listing.status) && isListingRenewalDue(listing);
+  const canDuplicate = canSellerDuplicateListing(listing.status);
   const isUrgent = listing.urgent === true;
   const isBoosted = listing.boosted === true;
   const qualityBadge = getListingQualityBadge(listing, stats);
@@ -609,15 +612,17 @@ const MyListingPublishedRow = memo(function MyListingPublishedRow({
           >
             Modifier
           </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onPress={() => void handleDuplicateListing()}
-            disabled={isMutating}
-            loading={pendingAction === 'duplicate'}
-          >
-            Dupliquer l&apos;annonce
-          </Button>
+          {canDuplicate ? (
+            <Button
+              variant="outline"
+              size="sm"
+              onPress={() => void handleDuplicateListing()}
+              disabled={isMutating}
+              loading={pendingAction === 'duplicate'}
+            >
+              {DUPLICATE_LISTING_ACTION}
+            </Button>
+          ) : null}
           <Button
             variant="ghost"
             size="sm"

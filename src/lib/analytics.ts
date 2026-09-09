@@ -235,6 +235,22 @@ export function trackListingCreationStarted(properties: {
   });
 }
 
+export function trackListingDuplicateStarted(properties: { source_listing_id: string }): void {
+  trackEvent('listing_duplicate_started', {
+    source_listing_id: properties.source_listing_id,
+  });
+}
+
+export function trackListingDuplicatePublished(properties: {
+  source_listing_id: string;
+  listing_id: string;
+}): void {
+  trackEvent('listing_duplicate_published', {
+    source_listing_id: properties.source_listing_id,
+    listing_id: properties.listing_id,
+  });
+}
+
 export function trackListingCreationCompleted(properties: {
   listing_id: string;
   has_photos: boolean;

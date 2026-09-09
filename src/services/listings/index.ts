@@ -20,6 +20,7 @@ export {
   LISTING_PUBLISH_QUOTA_CHECK_FAILED_MESSAGE,
 } from './checkListingPublishDailyQuota';
 export { buildListingDuplicateDraft } from './buildListingDuplicateDraft';
+export { copyListingImagesToListing, LISTING_IMAGE_COPY_FAILED_MESSAGE } from './copyListingImagesToListing';
 export { buildListingResumeDraft } from './buildListingResumeDraft';
 export { saveListingDynamicAttributeValues } from './saveListingDynamicAttributeValues';
 export { uploadListingImages } from './uploadListingImages';
@@ -49,6 +50,7 @@ export type {
   PublishListingDraftResult,
 } from './publishListingDraft';
 export type { ListingPublishQuotaResult } from './checkListingPublishDailyQuota';
+export type { CopyListingImagesResult, ListingImageCopySource } from './copyListingImagesToListing';
 export type {
   BuildListingResumeDraftResult,
   ListingResumeDraftData,

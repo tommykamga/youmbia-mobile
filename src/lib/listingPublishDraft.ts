@@ -1,6 +1,14 @@
 /**
- * Brouillon de duplication en mémoire (session) — aucune écriture DB tant que l'utilisateur ne publie pas.
+ * Brouillon de duplication en mémoire (session) — aucune écriture DB tant que
+ * l’utilisateur n’enregistre pas / ne publie pas. Les images source sont
+ * référencées par path Storage, sans id `listing_images`.
  */
+
+export type ListingDuplicateSourceImage = {
+  path: string;
+  sort_order: number | null;
+  displayUrl: string;
+};
 
 export type ListingPublishDuplicateDraft = {
   sourceListingId: string;
@@ -11,8 +19,7 @@ export type ListingPublishDuplicateDraft = {
   city: string;
   dynamicValues: Record<string, string>;
   shopId: string | null;
-  /** Les images ne sont pas copiées (sécurité stockage) — l'UX l'indique sur l'écran Vendre. */
-  imagesSkipped: true;
+  sourceImages: ListingDuplicateSourceImage[];
 };
 
 let pendingDuplicateDraft: ListingPublishDuplicateDraft | null = null;
@@ -30,4 +37,9 @@ export function consumeListingPublishDuplicateDraft(): ListingPublishDuplicateDr
 
 export function peekListingPublishDuplicateDraft(): ListingPublishDuplicateDraft | null {
   return pendingDuplicateDraft;
+}
+
+/** @internal tests only */
+export function resetListingPublishDuplicateDraftForTests(): void {
+  pendingDuplicateDraft = null;
 }

@@ -41,8 +41,11 @@ import {
 } from '@/lib/listingStatus';
 import {
   filterUploadableListingPhotos,
+  isPersistedListingImageId,
   nextListingImageSortOrders,
+  pendingCopiedListingImageSources,
 } from '@/lib/listingDraftPhotoPlan';
+import { toPendingCopiedDraftImages } from '@/lib/listingDuplicateImages';
 import {
   readListingPublishMemory,
   saveListingPublishMemory,
@@ -67,13 +70,16 @@ import {
   updateListingDraft,
   publishListingDraft,
   buildListingResumeDraft,
+  copyListingImagesToListing,
   uploadListingImages,
   deleteListingImage,
+  deleteListing,
   getListingForEdit,
   saveListingDynamicAttributeValues,
   MAX_LISTINGS_PER_24H,
   LISTING_PUBLISH_QUOTA_CHECK_FAILED_MESSAGE,
   LISTING_PUBLISH_QUOTA_REACHED_MESSAGE,
+  LISTING_IMAGE_COPY_FAILED_MESSAGE,
   checkListingPublishDailyQuota,
   type ListingResumeDraftData,
 } from '@/services/listings';
@@ -101,6 +107,7 @@ import * as Haptics from 'expo-haptics';
 import {
   trackListingCreationCompleted,
   trackListingCreationStarted,
+  trackListingDuplicatePublished,
   trackPostPublishViewed,
 } from '@/lib/analytics';
 import { shareListingPreferWhatsApp } from '@/lib/shareListing';
@@ -473,7 +480,7 @@ export default function SellScreen() {
     setCity(draft.city);
     setDescription(draft.description);
     setImages([]);
-    setExistingDraftImages([]);
+    setExistingDraftImages(toPendingCopiedDraftImages(draft.sourceImages ?? []));
     setEditingDraftId(null);
     setDraftLoadStatus('idle');
     setDraftLoadError(null);
@@ -733,7 +740,7 @@ export default function SellScreen() {
     if (index < existingDraftImages.length) {
       const target = existingDraftImages[index];
       setExistingDraftImages((prev) => prev.filter((_, i) => i !== index));
-      if (target?.id) {
+      if (isPersistedListingImageId(target?.id)) {
         void deleteListingImage(target.id).then((res) => {
           if (!res.success) {
             console.warn('[SellScreen] deleteListingImage', res.error);
@@ -780,6 +787,27 @@ export default function SellScreen() {
     };
   };
 
+  const persistPendingCopiedImages = async (listingId: string) => {
+    const sources = pendingCopiedListingImageSources(existingDraftImages);
+    if (sources.length === 0) {
+      return { copiedCount: 0, failedCount: 0, status: 'ok' as const };
+    }
+    if (listingId === duplicateSourceId) {
+      return { copiedCount: 0, failedCount: sources.length, status: 'failed' as const };
+    }
+    const result = await copyListingImagesToListing(listingId, sources);
+    return {
+      copiedCount: result.data.copiedCount,
+      failedCount: result.data.failedCount,
+      status: result.status,
+    };
+  };
+
+  const rollbackNewListingIfNeeded = async (listingId: string, createdNewListing: boolean) => {
+    if (!createdNewListing || !listingId || listingId === duplicateSourceId) return;
+    await deleteListing(listingId);
+  };
+
   const handleSaveDraft = async () => {
     if (submitLoading || draftSaveLoading) return;
     setSubmitError(null);
@@ -808,6 +836,7 @@ export default function SellScreen() {
         shopId: publishShopId,
       };
 
+      const createdNewDraft = editingDraftId == null;
       const result = editingDraftId
         ? await updateListingDraft(editingDraftId, draftPayload)
         : await createListingDraft(draftPayload);
@@ -824,6 +853,21 @@ export default function SellScreen() {
       const listingId = result.data?.id;
       if (!listingId) {
         setSubmitError("Impossible d'enregistrer le brouillon");
+        return;
+      }
+      if (listingId === duplicateSourceId) {
+        setSubmitError("Impossible de dupliquer : nouvel identifiant identique à la source.");
+        return;
+      }
+
+      const copyMeta = await persistPendingCopiedImages(listingId);
+      if (copyMeta.status !== 'ok') {
+        await rollbackNewListingIfNeeded(listingId, createdNewDraft);
+        setSubmitError(
+          createdNewDraft
+            ? "Impossible de copier les photos. Le brouillon n'a pas été enregistré."
+            : LISTING_IMAGE_COPY_FAILED_MESSAGE
+        );
         return;
       }
 
@@ -1009,6 +1053,7 @@ export default function SellScreen() {
         shopId: publishShopId,
       };
 
+      const createdNewListing = editingDraftId == null;
       const { data, error } = editingDraftId
         ? await publishListingDraft(editingDraftId, publishPayload)
         : await createListing(publishPayload);
@@ -1026,6 +1071,24 @@ export default function SellScreen() {
       if (!listingId) {
         setSubmitError("Impossible de publier l'annonce");
         return;
+      }
+      if (listingId === duplicateSourceId) {
+        setSubmitError("Impossible de dupliquer : nouvel identifiant identique à la source.");
+        return;
+      }
+
+      const copyMeta = await persistPendingCopiedImages(listingId);
+      if (copyMeta.status !== 'ok') {
+        await rollbackNewListingIfNeeded(listingId, createdNewListing);
+        setSubmitError("Impossible de copier les photos. L'annonce n'a pas été publiée.");
+        return;
+      }
+
+      if (duplicateSourceId) {
+        trackListingDuplicatePublished({
+          source_listing_id: duplicateSourceId,
+          listing_id: listingId,
+        });
       }
 
       trackListingCreationCompleted({
@@ -1421,10 +1484,10 @@ export default function SellScreen() {
               <View style={styles.duplicateBanner}>
                 <Ionicons name="copy-outline" size={18} color={colors.primary} />
                 <View style={styles.duplicateBannerTextSlot}>
-                  <Text style={styles.duplicateBannerTitle}>Brouillon depuis une annonce</Text>
+                  <Text style={styles.duplicateBannerTitle}>Copie d’une annonce</Text>
                   <Text style={styles.duplicateBannerText}>
-                    Les informations sont préremplies. Ajoutez de nouvelles photos avant de publier — les
-                    images de l&apos;annonce d&apos;origine ne sont pas recopiées.
+                    Les informations et photos sont préremplies. Modifiez-les avant d’enregistrer ou de
+                    publier — l’annonce d’origine n’est pas modifiée.
                   </Text>
                 </View>
               </View>
@@ -1446,7 +1509,7 @@ export default function SellScreen() {
               <RequiredFieldLabel>Photos</RequiredFieldLabel>
               <Text style={styles.stepHelper}>
                 {duplicateSourceId
-                  ? 'Photos obligatoires pour cette nouvelle annonce (non dupliquées depuis l’originale). Ajoutez jusqu’à 4 photos — la première sera affichée en couverture.'
+                  ? 'Photos reprises de l’annonce d’origine. Vous pouvez en retirer ou en ajouter jusqu’à 4 — la première sera affichée en couverture.'
                   : editingDraftId
                     ? 'Reprenez votre brouillon : conservez les photos déjà ajoutées ou en ajoutez jusqu’à 4.'
                     : 'Ajoutez jusqu’à 4 photos. La première sera affichée en couverture.'}

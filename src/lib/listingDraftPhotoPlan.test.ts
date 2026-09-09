@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest';
 import {
   filterUploadableListingPhotos,
   isUploadableListingPhoto,
+  isPersistedListingImageId,
   nextListingImageSortOrders,
+  pendingCopiedListingImageSources,
 } from './listingDraftPhotoPlan';
 
 describe('listingDraftPhotoPlan', () => {
@@ -27,5 +29,17 @@ describe('listingDraftPhotoPlan', () => {
     expect(nextListingImageSortOrders([], 3)).toEqual([0, 1, 2]);
     expect(nextListingImageSortOrders([null, 2], 1)).toEqual([3]);
     expect(nextListingImageSortOrders([0, 1], 0)).toEqual([]);
+  });
+
+  it('distingue images persistées et copies en attente (sans id source)', () => {
+    expect(isPersistedListingImageId('img-uuid')).toBe(true);
+    expect(isPersistedListingImageId('')).toBe(false);
+    expect(isPersistedListingImageId(null)).toBe(false);
+    expect(
+      pendingCopiedListingImageSources([
+        { id: '', path: 'u/src/0.jpg', sort_order: 0 },
+        { id: 'persisted', path: 'u/new/1.jpg', sort_order: 1 },
+      ])
+    ).toEqual([{ path: 'u/src/0.jpg', sort_order: 0 }]);
   });
 });
