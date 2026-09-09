@@ -11,8 +11,13 @@ import type { PublicListing } from './getPublicListings';
 import { LISTING_MY_LISTINGS_SELECT } from './listingListSelect';
 import { pickListingRecency } from '@/lib/listingPublishedAt';
 
+const LISTING_MY_LISTINGS_STATS_SELECT =
+  `${LISTING_MY_LISTINGS_SELECT}, sold_at, sale_cycle_started_at`;
+
 export type MyListing = PublicListing & {
   status: string;
+  sold_at: string | null;
+  sale_cycle_started_at: string | null;
 };
 
 type ListingImageRow = Pick<Tables<'listing_images'>, 'url' | 'sort_order' | 'thumb_path' | 'medium_path'>;
@@ -32,6 +37,8 @@ type ListingRow = Pick<
   | 'views_count'
   | 'user_id'
   | 'status'
+  | 'sold_at'
+  | 'sale_cycle_started_at'
   | 'boosted'
   | 'urgent'
   | 'district'
@@ -60,6 +67,8 @@ function mapRow(row: ListingRow, signedMap: Map<string, string>): MyListing {
   return {
     ...base,
     status: row.status ?? 'active',
+    sold_at: row.sold_at ?? null,
+    sale_cycle_started_at: row.sale_cycle_started_at ?? null,
   };
 }
 
@@ -82,7 +91,7 @@ export async function getMyListings(): Promise<GetMyListingsResult> {
 
   const { data, error } = await supabase
     .from('listings')
-    .select(LISTING_MY_LISTINGS_SELECT)
+    .select(LISTING_MY_LISTINGS_STATS_SELECT)
     .eq('user_id', user.id)
     .order('updated_at', { ascending: false })
     .order('created_at', { ascending: false });

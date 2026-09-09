@@ -20,7 +20,7 @@ import { ListingCard } from '@/features/listings';
 import {
   deleteListing,
   getMyListings,
-  getListingStats,
+  getMySellerStats,
   markListingSold,
   renewListing,
   updateListingStatus,
@@ -28,6 +28,7 @@ import {
   buildListingDuplicateDraft,
   type ListingStats,
   type MyListing,
+  type SellerEssentialStats,
 } from '@/services/listings';
 import {
   canSellerMarkListingSold,
@@ -72,6 +73,12 @@ type State =
   | { status: 'empty' }
   | { status: 'error'; message: string }
   | { status: 'success'; data: MyListing[] };
+
+type SellerStatsState =
+  | { status: 'idle' }
+  | { status: 'loading' }
+  | { status: 'error' }
+  | { status: 'success'; data: SellerEssentialStats };
 
 function buildInitialStats(listing: MyListing): ListingStats {
   return {
@@ -547,10 +554,6 @@ const MyListingPublishedRow = memo(function MyListingPublishedRow({
         </View>
         <View style={styles.statsRow}>
           <Text style={styles.statsText}>Vues : {stats.views}</Text>
-          <Text style={styles.statsText}>Favoris : {stats.favorites}</Text>
-          {stats.contacts > 0 ? (
-            <Text style={styles.statsText}>Contacts : {stats.contacts}</Text>
-          ) : null}
         </View>
         <View style={styles.actions}>
           {canShareListing ? (
@@ -670,36 +673,117 @@ const MyListingPublishedRow = memo(function MyListingPublishedRow({
   );
 });
 
+function formatAverageTimeToSale(days: number | null): string {
+  if (days == null || !Number.isFinite(days) || days < 0) return '—';
+  if (days < 1) return '< 1 j';
+  return `${Math.round(days)} j`;
+}
+
+function SellerStatsCard({ state }: { state: SellerStatsState }) {
+  if (state.status === 'idle') return null;
+
+  return (
+    <View style={styles.sellerStatsCard}>
+      <View style={styles.sellerStatsHeader}>
+        <Text style={styles.sellerStatsTitle}>Mes statistiques</Text>
+        <Ionicons name="stats-chart-outline" size={18} color={colors.primary} />
+      </View>
+
+      {state.status === 'loading' ? (
+        <Text style={styles.sellerStatsMessage}>Chargement des statistiques…</Text>
+      ) : state.status === 'error' ? (
+        <Text style={styles.sellerStatsMessage}>
+          Statistiques indisponibles. Tirez vers le bas pour réessayer.
+        </Text>
+      ) : (
+        <>
+          <View style={styles.sellerStatsGrid}>
+            <View style={styles.sellerStatItem}>
+              <Text style={styles.sellerStatValue}>{state.data.activeListings}</Text>
+              <Text style={styles.sellerStatLabel}>Actives</Text>
+            </View>
+
+            <View style={styles.sellerStatItem}>
+              <Text style={styles.sellerStatValue}>{state.data.soldListings}</Text>
+              <Text style={styles.sellerStatLabel}>Vendues</Text>
+            </View>
+
+            <View style={styles.sellerStatItem}>
+              <Text style={styles.sellerStatValue}>{state.data.draftListings}</Text>
+              <Text style={styles.sellerStatLabel}>Brouillons</Text>
+            </View>
+
+            <View style={styles.sellerStatItem}>
+              <Text style={styles.sellerStatValue}>{state.data.pausedListings}</Text>
+              <Text style={styles.sellerStatLabel}>En pause</Text>
+            </View>
+
+            <View style={styles.sellerStatItem}>
+              <Text style={styles.sellerStatValue}>{state.data.favoritesReceived}</Text>
+              <Text style={styles.sellerStatLabel}>Favoris reçus</Text>
+            </View>
+
+            <View style={styles.sellerStatItem}>
+              <Text style={styles.sellerStatValue}>
+                {formatAverageTimeToSale(state.data.averageTimeToSaleDays)}
+              </Text>
+              <Text style={styles.sellerStatLabel}>Délai moyen vente</Text>
+            </View>
+          </View>
+
+          <Text style={styles.sellerStatsFooter}>
+            Vendues (30 j) : {state.data.soldLast30Days}
+          </Text>
+        </>
+      )}
+    </View>
+  );
+}
+
 export default function AccountListingsScreen() {
   const router = useRouter();
   const [state, setState] = useState<State>({ status: 'loading' });
   const [refreshing, setRefreshing] = useState(false);
-  const [statsByListingId, setStatsByListingId] = useState<Record<string, ListingStats>>({});
+  const [sellerStatsState, setSellerStatsState] = useState<SellerStatsState>({
+    status: 'idle',
+  });
 
   const bottomPad = 24;
 
   const load = useCallback(async () => {
+    setSellerStatsState({ status: 'loading' });
+
     const result = await getMyListings();
+
     if (result.error) {
-      setStatsByListingId({});
       if (result.error.message === 'Non connecté') {
+        setSellerStatsState({ status: 'idle' });
         setState({ status: 'unauthenticated' });
         return;
       }
+
+      setSellerStatsState({ status: 'error' });
       setState({ status: 'error', message: result.error.message });
       return;
     }
+
     const list = result.data ?? [];
-    if (list.length === 0) {
-      setStatsByListingId({});
-    } else {
-      setStatsByListingId(
-        Object.fromEntries(list.map((item) => [item.id, buildInitialStats(item)]))
-      );
-    }
+
     setState(
       list.length === 0 ? { status: 'empty' } : { status: 'success', data: list }
     );
+
+    const statsResult = await getMySellerStats(list);
+
+    if (statsResult.error) {
+      setSellerStatsState({ status: 'error' });
+      return;
+    }
+
+    setSellerStatsState({
+      status: 'success',
+      data: statsResult.data,
+    });
   }, []);
 
   useEffect(() => {
@@ -719,28 +803,6 @@ export default function AccountListingsScreen() {
     () => [...draftListings, ...publishedListings],
     [draftListings, publishedListings]
   );
-
-  useEffect(() => {
-    if (!publishedListings || publishedListings.length === 0) return;
-    let cancelled = false;
-    (async () => {
-      const entries = await Promise.all(
-        publishedListings.map(async (listing) => {
-          const result = await getListingStats(listing.id);
-          const fallback = buildInitialStats(listing);
-          return [listing.id, { ...fallback, ...result.data }] as const;
-        })
-      );
-      if (cancelled) return;
-      setStatsByListingId((prev) => ({
-        ...prev,
-        ...Object.fromEntries(entries),
-      }));
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [state.status, publishedListings]);
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
@@ -778,16 +840,12 @@ export default function AccountListingsScreen() {
       const nextData = prev.data.filter((item) => item.id !== listingId);
       return nextData.length === 0 ? { status: 'empty' } : { status: 'success', data: nextData };
     });
-    setStatsByListingId((prev) => {
-      const next = { ...prev };
-      delete next[listingId];
-      return next;
-    });
   }, []);
 
   const listHeader = useCallback(
     () => (
       <View style={styles.listHeaderPro}>
+        <SellerStatsCard state={sellerStatsState} />
         <ProSellerActivationCard variant="listings" />
         <SellerAcquisitionTips compact />
         {draftListings.length > 0 ? (
@@ -795,7 +853,7 @@ export default function AccountListingsScreen() {
         ) : null}
       </View>
     ),
-    [draftListings.length]
+    [draftListings.length, sellerStatsState]
   );
 
   const renderItem = useCallback(
@@ -811,7 +869,7 @@ export default function AccountListingsScreen() {
           ) : null}
           <MyListingRowInner
             listing={item}
-            stats={statsByListingId[item.id] ?? buildInitialStats(item)}
+            stats={buildInitialStats(item)}
             onPatchListing={patchListing}
             onPromoteListing={promoteListing}
             onRemoveListing={removeListing}
@@ -825,7 +883,6 @@ export default function AccountListingsScreen() {
       promoteListing,
       publishedListings.length,
       removeListing,
-      statsByListingId,
     ]
   );
 
@@ -863,8 +920,10 @@ export default function AccountListingsScreen() {
         </View>
       )}
       {state.status === 'empty' && (
-        <View style={[styles.contentArea, { paddingBottom: bottomPad }]}>
-          <EmptyState
+        <View style={styles.emptySellerContainer}>
+          <SellerStatsCard state={sellerStatsState} />
+          <View style={[styles.contentArea, { paddingBottom: bottomPad }]}>
+            <EmptyState
             variant="plain"
             icon={<Ionicons name="pricetags-outline" size={24} color={colors.primary} />}
             title="Publiez vos produits en quelques secondes"
@@ -881,6 +940,7 @@ export default function AccountListingsScreen() {
               </View>
             }
           />
+          </View>
         </View>
       )}
       {state.status === 'success' && (
@@ -910,6 +970,55 @@ export default function AccountListingsScreen() {
 }
 
 const styles = StyleSheet.create({
+  emptySellerContainer: {
+    flex: 1,
+    paddingHorizontal: spacing.base,
+    paddingTop: spacing.sm,
+  },
+  sellerStatsCard: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    padding: spacing.base,
+    marginBottom: spacing.base,
+  },
+  sellerStatsHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: spacing.sm,
+  },
+  sellerStatsTitle: {
+    ...typography.base,
+    fontWeight: fontWeights.bold,
+    color: colors.text,
+  },
+  sellerStatsMessage: {
+    ...typography.sm,
+    color: colors.textMuted,
+  },
+  sellerStatsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+  },
+  sellerStatItem: {
+    width: '33.3333%',
+    paddingVertical: spacing.sm,
+  },
+  sellerStatValue: {
+    ...typography.lg,
+    fontWeight: fontWeights.bold,
+    color: colors.text,
+  },
+  sellerStatLabel: {
+    ...typography.xs,
+    color: colors.textMuted,
+    marginTop: spacing.xs,
+  },
+  sellerStatsFooter: {
+    ...typography.xs,
+    color: colors.textMuted,
+    marginTop: spacing.sm,
+  },
   contentArea: {
     flex: 1,
     justifyContent: 'center',
