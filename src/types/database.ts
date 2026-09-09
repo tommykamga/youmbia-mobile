@@ -914,6 +914,17 @@ export type Database = {
     };
     Views: Record<string, never>;
     Functions: {
+      get_my_seller_stats: {
+        Args: Record<PropertyKey, never>;
+        Returns: {
+          active_listings: number;
+          sold_listings: number;
+          draft_listings: number;
+          paused_listings: number;
+          favorites_received: number;
+          sold_last_30_days: number;
+        }[];
+      };
       delete_my_account: {
         Args: Record<PropertyKey, never>;
         Returns: undefined;

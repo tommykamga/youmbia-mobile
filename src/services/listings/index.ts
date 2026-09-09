@@ -26,6 +26,10 @@ export { saveListingDynamicAttributeValues } from './saveListingDynamicAttribute
 export { uploadListingImages } from './uploadListingImages';
 export { deleteListingImage } from './deleteListingImage';
 export { getMyListings } from './getMyListings';
+export {
+  getMySellerStats,
+  computeAverageTimeToSaleDays,
+} from './getMySellerStats';
 export { getListingStats } from './getListingStats';
 export { bumpListing } from './bumpListing';
 export { renewListing } from './renewListing';
@@ -61,6 +65,10 @@ export type { DeleteListingResult } from './deleteListing';
 export type { UploadListingImagesResult, ListingImageUploadInput } from './uploadListingImages';
 export type { DeleteListingImageResult } from './deleteListingImage';
 export type { MyListing, GetMyListingsResult } from './getMyListings';
+export type {
+  SellerEssentialStats,
+  GetMySellerStatsResult,
+} from './getMySellerStats';
 export type { ListingStats, GetListingStatsResult } from './getListingStats';
 export type { BumpListingResult } from './bumpListing';
 export type { RenewListingResult } from './renewListing';
