@@ -13,6 +13,7 @@
 import { supabase } from '@/lib/supabase';
 import { getUserDisplayName, getAvatarVersion } from '@/services/profile';
 import { resolveAvatarDisplayUrls } from '@/lib/avatarImageUrl';
+import { conversationsVisibleForUserOrFilter } from '@/lib/conversationVisibility';
 import type { Conversation } from './types';
 
 export type GetConversationsResult =
@@ -58,14 +59,14 @@ export async function getConversations(): Promise<GetConversationsResult> {
     logDev('request', {
       table: 'conversations',
       userId,
-      select: 'id, listing_id, buyer_id, seller_id, created_at',
-      filter: `buyer_id.eq.${userId} OR seller_id.eq.${userId}`,
+      select: 'id, listing_id, buyer_id, seller_id, created_at, buyer_deleted_at, seller_deleted_at',
+      filter: conversationsVisibleForUserOrFilter(userId),
     });
 
     const { data: rows, error } = await supabase
       .from('conversations')
-      .select('id, listing_id, buyer_id, seller_id, created_at')
-      .or(`buyer_id.eq.${userId},seller_id.eq.${userId}`)
+      .select('id, listing_id, buyer_id, seller_id, created_at, buyer_deleted_at, seller_deleted_at')
+      .or(conversationsVisibleForUserOrFilter(userId))
       .order('created_at', { ascending: false });
 
     if (error) {

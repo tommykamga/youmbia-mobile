@@ -1,16 +1,26 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { FlatList, View, Text, StyleSheet, Pressable, RefreshControl, useWindowDimensions } from 'react-native';
+import {
+  FlatList,
+  View,
+  Text,
+  StyleSheet,
+  Pressable,
+  RefreshControl,
+  useWindowDimensions,
+  Alert,
+} from 'react-native';
 import { useRouter, useFocusEffect, Redirect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Screen, EmptyState, Button, AppHeader, UserAvatar } from '@/components';
 import { getSession } from '@/services/auth';
-import { getConversations } from '@/services/conversations';
+import { getConversations, hideConversationForMe } from '@/services/conversations';
 import type { Conversation, Message } from '@/services/conversations/types';
-import { subscribeMessagingEvents } from '@/lib/messagingRealtime';
+import { subscribeMessagingEvents, emitConversationRead } from '@/lib/messagingRealtime';
 import { spacing, colors, typography, fontWeights, radius } from '@/theme';
 import { buildAuthGateHref } from '@/lib/authGateNavigation';
 import { lightCacheKeys, lightCacheRead, lightCacheWrite } from '@/lib/lightCache';
 import Animated, { useSharedValue, useAnimatedStyle, withTiming, Easing, withSpring } from 'react-native-reanimated';
+import { SwipeToDeleteRow } from '@/features/messages/SwipeToDeleteRow';
 
 type InboxCachePayload = { userId: string; conversations: Conversation[] };
 
@@ -36,8 +46,13 @@ function formatInboxDate(iso: string | null | undefined): string {
   }
 }
 
-function MessageItem({ item }: { item: Conversation }) {
-  const router = useRouter();
+function MessageItem({
+  item,
+  onPress,
+}: {
+  item: Conversation;
+  onPress: () => void;
+}) {
   const scale = useSharedValue(1);
   const animatedStyle = useAnimatedStyle(() => ({
     transform: [{ scale: scale.value }],
@@ -56,9 +71,10 @@ function MessageItem({ item }: { item: Conversation }) {
         style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
         onPressIn={onPressIn}
         onPressOut={onPressOut}
-        onPress={() => router.push(`/conversation/${item.id}`)}
+        onPress={onPress}
         accessibilityRole="button"
         accessibilityLabel={`${item.other_party_name || 'Utilisateur'}, ${item.listing_title || 'Annonce'}`}
+        accessibilityHint="Balayez vers la gauche pour supprimer de votre messagerie"
       >
         <UserAvatar
           name={item.other_party_name}
@@ -158,8 +174,10 @@ export default function MessagesScreen() {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [status, setStatus] = useState<'loading' | 'error_network' | 'error_generic' | 'success' | 'empty' | 'unauthenticated'>('loading');
   const [refreshing, setRefreshing] = useState(false);
+  const [openRowId, setOpenRowId] = useState<string | null>(null);
   const shownFromCacheRef = useRef(false);
   const userIdRef = useRef<string | null>(null);
+  const swipeGuardRef = useRef<string | null>(null);
 
   const tabsBottomPad = 72;
 
@@ -266,7 +284,82 @@ export default function MessagesScreen() {
     setRefreshing(false);
   }, [fetchInbox]);
 
-  const renderItem = useCallback(({ item }: { item: Conversation }) => <MessageItem item={item} />, []);
+  const persistInboxCache = useCallback(async (uid: string, data: Conversation[]) => {
+    await lightCacheWrite<InboxCachePayload>(lightCacheKeys.conversations(uid), {
+      userId: uid,
+      conversations: data,
+    });
+  }, []);
+
+  const confirmHideConversation = useCallback(
+    (item: Conversation) => {
+      Alert.alert(
+        'Supprimer cette conversation de votre messagerie ?',
+        'Elle restera visible pour l’autre participant.',
+        [
+          { text: 'Annuler', style: 'cancel', onPress: () => setOpenRowId(null) },
+          {
+            text: 'Supprimer',
+            style: 'destructive',
+            onPress: () => {
+              void (async () => {
+                const uid = userIdRef.current;
+                // Optimistic : retire immédiatement de la liste locale.
+                setConversations((prev) => {
+                  const next = prev.filter((c) => c.id !== item.id);
+                  setStatus(next.length > 0 ? 'success' : 'empty');
+                  if (uid) void persistInboxCache(uid, next);
+                  return next;
+                });
+                setOpenRowId(null);
+                emitConversationRead(item.id);
+
+                const result = await hideConversationForMe(item.id);
+                if (!result.success) {
+                  Alert.alert(
+                    'Suppression impossible',
+                    result.error?.message ?? "Impossible de supprimer la conversation."
+                  );
+                  void fetchInbox();
+                }
+              })();
+            },
+          },
+        ]
+      );
+    },
+    [fetchInbox, persistInboxCache]
+  );
+
+  const renderItem = useCallback(
+    ({ item }: { item: Conversation }) => (
+      <SwipeToDeleteRow
+        rowId={item.id}
+        openRowId={openRowId}
+        onOpenRowIdChange={setOpenRowId}
+        onDeletePress={() => confirmHideConversation(item)}
+        onHorizontalGesture={() => {
+          swipeGuardRef.current = item.id;
+        }}
+      >
+        <MessageItem
+          item={item}
+          onPress={() => {
+            if (openRowId === item.id) {
+              setOpenRowId(null);
+              return;
+            }
+            if (swipeGuardRef.current === item.id) {
+              swipeGuardRef.current = null;
+              return;
+            }
+            router.push(`/conversation/${item.id}`);
+          }}
+        />
+      </SwipeToDeleteRow>
+    ),
+    [confirmHideConversation, openRowId, router]
+  );
 
   if (status === 'unauthenticated') {
     return <Redirect href={buildAuthGateHref('messages')} />;
