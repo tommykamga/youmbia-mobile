@@ -27,6 +27,24 @@ describe('listingStatus', () => {
     expect(isDiscoveryListingStatus('sold')).toBe(false);
     expect(isDiscoveryListingStatus('hidden')).toBe(false);
     expect(isDiscoveryListingStatus('suspended')).toBe(false);
+    expect(isDiscoveryListingStatus('draft')).toBe(false);
+  });
+
+  it('draft : label Brouillon, hors discovery, owner-only, pas de sold/renew/reactivate', () => {
+    expect(getSellerListingStatusLabel('draft')).toBe('Brouillon');
+    expect(isAllowedListingStatus(LISTING_STATUS.draft)).toBe(true);
+    expect(canSellerMarkListingSold('draft')).toBe(false);
+    expect(canSellerReactivateListing('draft')).toBe(false);
+    expect(canSellerRenewListing('draft')).toBe(false);
+    expect(
+      canViewerAccessListingDetail({ status: 'draft', ownerId: 'owner', viewerId: null })
+    ).toBe(false);
+    expect(
+      canViewerAccessListingDetail({ status: 'draft', ownerId: 'owner', viewerId: 'other' })
+    ).toBe(false);
+    expect(
+      canViewerAccessListingDetail({ status: 'draft', ownerId: 'owner', viewerId: 'owner' })
+    ).toBe(true);
   });
 
   it('autorise le vendeur à marquer vendue depuis active ou hidden, pas suspended/sold', () => {

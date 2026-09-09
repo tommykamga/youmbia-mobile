@@ -3,6 +3,7 @@ import type { MarketplaceCategoryIdentity } from '@/lib/marketplaceCategories';
 import {
   listingMatchesSavedSearch,
   shouldDispatchSavedSearchAlertOnEvent,
+  shouldMatchSavedSearchOnListingTransition,
   type SavedSearchMatchListing,
   type SavedSearchMatchSearch,
 } from './savedSearchMatch';
@@ -44,14 +45,68 @@ function search(partial: Partial<SavedSearchMatchSearch> = {}): SavedSearchMatch
 }
 
 describe('savedSearchMatch', () => {
-  it('sold / renewal / update : aucun nouveau match', () => {
+  it('sold / renewal / update : aucun nouveau match ; draft non éligible ; publish_from_draft OK', () => {
     expect(shouldDispatchSavedSearchAlertOnEvent('update')).toBe(false);
     expect(shouldDispatchSavedSearchAlertOnEvent('insert')).toBe(true);
+    expect(shouldDispatchSavedSearchAlertOnEvent('publish_from_draft')).toBe(true);
     expect(
       listingMatchesSavedSearch({
         listing: listing({ title: 'iPhone 13', status: 'sold' }),
         search: search(),
         categories: TAXONOMY,
+      })
+    ).toBe(false);
+    expect(
+      listingMatchesSavedSearch({
+        listing: listing({ title: 'iPhone 13', status: 'draft' }),
+        search: search(),
+        categories: TAXONOMY,
+        event: 'insert',
+      })
+    ).toBe(false);
+    expect(
+      listingMatchesSavedSearch({
+        listing: listing({ title: 'iPhone 13', status: 'active' }),
+        search: search(),
+        categories: TAXONOMY,
+        event: 'publish_from_draft',
+      })
+    ).toBe(true);
+  });
+
+  it('matrice transitions SQL : seule 1re publication draft→active matche en UPDATE', () => {
+    expect(shouldMatchSavedSearchOnListingTransition({ event: 'insert', newStatus: 'active' })).toBe(
+      true
+    );
+    expect(shouldMatchSavedSearchOnListingTransition({ event: 'insert', newStatus: 'draft' })).toBe(
+      false
+    );
+    expect(
+      shouldMatchSavedSearchOnListingTransition({
+        event: 'update',
+        oldStatus: 'draft',
+        newStatus: 'active',
+      })
+    ).toBe(true);
+    expect(
+      shouldMatchSavedSearchOnListingTransition({
+        event: 'update',
+        oldStatus: 'hidden',
+        newStatus: 'active',
+      })
+    ).toBe(false);
+    expect(
+      shouldMatchSavedSearchOnListingTransition({
+        event: 'update',
+        oldStatus: 'sold',
+        newStatus: 'active',
+      })
+    ).toBe(false);
+    expect(
+      shouldMatchSavedSearchOnListingTransition({
+        event: 'update',
+        oldStatus: 'active',
+        newStatus: 'active',
       })
     ).toBe(false);
   });

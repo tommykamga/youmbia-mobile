@@ -2,6 +2,9 @@
  * Listing image URL normalization for mobile.
  * Aligné Youmbia-web : chemins bucket + signed URLs ; préférence `thumb_path` / `medium_path` en liste
  * pour réduire egress Storage ; cache mémoire court des signed URLs.
+ *
+ * `listing_images.url` est un PATH Storage (`userId/listingId/n.jpg`), pas une URL HTTP —
+ * sauf legacy http(s) éventuel.
  */
 
 import { supabase } from '@/lib/supabase';
@@ -20,6 +23,54 @@ const signedUrlMemoryCache = new Map<string, { signedUrl: string; expiresAt: num
 
 function cacheKeyForPathOrUrl(s: string): string {
   return String(s ?? '').trim();
+}
+
+/** True si déjà une URL absolue (pas un path bucket). */
+export function isListingImageHttpUrl(urlOrPath: string): boolean {
+  return /^https?:\/\//i.test(String(urlOrPath ?? '').trim());
+}
+
+/** Path Storage à signer (non vide, non http). */
+export function isListingImageStoragePath(urlOrPath: string): boolean {
+  const s = String(urlOrPath ?? '').trim();
+  return s !== '' && !isListingImageHttpUrl(s);
+}
+
+function rememberSignedUrl(path: string, signedUrl: string, now: number): void {
+  const key = cacheKeyForPathOrUrl(path);
+  if (!key || !signedUrl) return;
+  signedUrlMemoryCache.set(key, {
+    signedUrl,
+    expiresAt: now + SIGNED_URL_MEMORY_TTL_MS,
+  });
+}
+
+/** @internal tests only */
+export function clearListingSignedUrlMemoryCacheForTests(): void {
+  signedUrlMemoryCache.clear();
+}
+
+async function createSignedUrlSingular(path: string, now: number): Promise<string> {
+  const key = cacheKeyForPathOrUrl(path);
+  if (!key) return '';
+  if (isListingImageHttpUrl(key)) return key;
+
+  const { data, error } = await supabase.storage
+    .from(LISTING_IMAGES_BUCKET)
+    .createSignedUrl(key, SIGNED_URL_EXPIRES_IN);
+
+  if (error || !data?.signedUrl) {
+    if (__DEV__) {
+      console.warn('[listingImageUrl] createSignedUrl failed', {
+        path: key,
+        message: error?.message ?? 'no signedUrl',
+      });
+    }
+    return '';
+  }
+
+  rememberSignedUrl(key, data.signedUrl, now);
+  return data.signedUrl;
 }
 
 export type ListingImageRowForCard = {
@@ -55,7 +106,7 @@ export function listingStoragePathsForCardCover(
   for (const img of sorted) {
     const p = pickListingImageStoragePath(img);
     if (!p) continue;
-    if (/^https?:\/\//i.test(p)) return [];
+    if (isListingImageHttpUrl(p)) return [];
     return maxStoragePaths <= 0 ? [p] : [p];
   }
   return [];
@@ -79,11 +130,17 @@ export function mapListingCardImages(
 /**
  * Returns a Map from storage path to signed URL.
  * Call once per request with all paths, then use map.get(path) when mapping listing_images.
+ *
+ * Durcissements :
+ * - path Storage ≠ HTTP ;
+ * - matching par index si `item.path` manquant / divergent ;
+ * - ne pas jeter le batch si error top-level + data partielle ;
+ * - fallback `createSignedUrl` unitaire pour chaque path manquant.
  */
 export async function getSignedUrlsMap(paths: string[]): Promise<Map<string, string>> {
   const trimmed = paths
     .map((p) => String(p ?? '').trim())
-    .filter((p) => p !== '' && !/^https?:\/\//i.test(p));
+    .filter((p) => p !== '' && !isListingImageHttpUrl(p));
   if (trimmed.length === 0) return new Map();
 
   const now = Date.now();
@@ -106,18 +163,33 @@ export async function getSignedUrlsMap(paths: string[]): Promise<Map<string, str
     .from(LISTING_IMAGES_BUCKET)
     .createSignedUrls(uniqueNeedFetch, SIGNED_URL_EXPIRES_IN);
 
-  if (error || !data) return map;
-  for (const item of data) {
-    if (item.path != null && item.signedUrl && item.error == null) {
-      const key = cacheKeyForPathOrUrl(String(item.path));
-      if (!key) continue;
-      map.set(key, item.signedUrl);
-      signedUrlMemoryCache.set(key, {
-        signedUrl: item.signedUrl,
-        expiresAt: now + SIGNED_URL_MEMORY_TTL_MS,
-      });
+  if (error && __DEV__) {
+    console.warn('[listingImageUrl] createSignedUrls error', error.message);
+  }
+
+  if (data?.length) {
+    for (let i = 0; i < data.length; i++) {
+      const item = data[i];
+      const requested = uniqueNeedFetch[i] ?? '';
+      const signed = item?.signedUrl ? String(item.signedUrl) : '';
+      if (!signed || item.error != null) continue;
+      const pathKey = cacheKeyForPathOrUrl(String(item.path ?? requested));
+      if (!pathKey) continue;
+      map.set(pathKey, signed);
+      rememberSignedUrl(pathKey, signed, now);
+      if (requested && requested !== pathKey) {
+        map.set(requested, signed);
+        rememberSignedUrl(requested, signed, now);
+      }
     }
   }
+
+  for (const p of uniqueNeedFetch) {
+    if (map.has(p)) continue;
+    const singular = await createSignedUrlSingular(p, now);
+    if (singular) map.set(p, singular);
+  }
+
   return map;
 }
 
@@ -128,7 +200,7 @@ export async function getSignedUrlsMap(paths: string[]): Promise<Map<string, str
 export function toDisplayImageUrl(urlOrPath: string, signedMap?: Map<string, string>): string {
   const s = cacheKeyForPathOrUrl(urlOrPath);
   if (!s) return '';
-  if (/^https?:\/\//i.test(s)) return s;
+  if (isListingImageHttpUrl(s)) return s;
   const now = Date.now();
   const mem = signedUrlMemoryCache.get(s);
   if (mem && mem.expiresAt > now) {
@@ -143,11 +215,14 @@ export function toDisplayImageUrl(urlOrPath: string, signedMap?: Map<string, str
 
 /**
  * Résout une seule image (sign Storage ou URL absolue). Pour lazy-load galerie fiche sans batch initial.
+ * Fallback unitaire `createSignedUrl` si le batch n’a pas produit d’entrée.
  */
 export async function resolveSingleListingImageUrl(urlOrPath: string): Promise<string> {
   const s = String(urlOrPath ?? '').trim();
   if (!s) return '';
-  if (/^https?:\/\//i.test(s)) return s;
+  if (isListingImageHttpUrl(s)) return s;
   const map = await getSignedUrlsMap([s]);
-  return toDisplayImageUrl(s, map);
+  const fromMap = toDisplayImageUrl(s, map);
+  if (fromMap) return fromMap;
+  return createSignedUrlSingular(s, Date.now());
 }

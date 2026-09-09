@@ -26,10 +26,18 @@ describe('sold exclu des requêtes discovery actives', () => {
     expect(homeUrgent).toMatch(/\.eq\('status', 'active'\)/);
   });
 
-  it('Mes annonces ne filtre pas le statut (sold reste visible au vendeur)', () => {
+  it('Mes annonces ne filtre pas le statut (sold/draft restent visibles au vendeur)', () => {
     const myListings = read('src/services/listings/getMyListings.ts');
     expect(myListings).not.toMatch(/\.eq\('status'/);
     expect(myListings).toMatch(/any status/);
+  });
+
+  it('draft exclu de la discovery comme sold (filtre active)', () => {
+    const publicFeed = read('src/services/listings/getPublicListings.ts');
+    const search = read('src/services/listings/searchListings.ts');
+    expect(publicFeed).toMatch(/\.eq\('status', 'active'\)/);
+    expect(search).toMatch(/\.eq\('status', 'active'\)/);
+    expect(publicFeed).not.toMatch(/status', 'draft/);
   });
 
   it('l’action UI vendue est réservée au propriétaire, avec confirmation', () => {

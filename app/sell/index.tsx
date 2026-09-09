@@ -15,7 +15,7 @@ import {
   useWindowDimensions,
   Keyboard,
 } from 'react-native';
-import { useRouter, useFocusEffect, type Href } from 'expo-router';
+import { useRouter, useFocusEffect, useLocalSearchParams, type Href } from 'expo-router';
 import { buildAuthGateHref } from '@/lib/authGateNavigation';
 import { buildAccountProfileHref } from '@/lib/profileReturnNavigation';
 import {
@@ -36,6 +36,14 @@ import {
 } from '@/lib/marketplaceCategories';
 import { consumeListingPublishDuplicateDraft } from '@/lib/listingPublishDraft';
 import {
+  DRAFT_LISTING_SAVE_ACTION,
+  DRAFT_LISTING_SAVED_MESSAGE,
+} from '@/lib/listingStatus';
+import {
+  filterUploadableListingPhotos,
+  nextListingImageSortOrders,
+} from '@/lib/listingDraftPhotoPlan';
+import {
   readListingPublishMemory,
   saveListingPublishMemory,
   getAttributeHintsForCategory,
@@ -53,14 +61,28 @@ import {
 import { buildListingDynamicAttributeRows } from '@/lib/listingDynamicAttributesPayload';
 import { DynamicCategoryAttributesFields } from '@/features/sell/DynamicCategoryAttributesFields';
 import { colors, spacing, typography, fontWeights, radius } from '@/theme';
-import { createListing, uploadListingImages, saveListingDynamicAttributeValues } from '@/services/listings';
+import {
+  createListing,
+  createListingDraft,
+  updateListingDraft,
+  publishListingDraft,
+  buildListingResumeDraft,
+  uploadListingImages,
+  deleteListingImage,
+  getListingForEdit,
+  saveListingDynamicAttributeValues,
+  MAX_LISTINGS_PER_24H,
+  LISTING_PUBLISH_QUOTA_CHECK_FAILED_MESSAGE,
+  LISTING_PUBLISH_QUOTA_REACHED_MESSAGE,
+  checkListingPublishDailyQuota,
+  type ListingResumeDraftData,
+} from '@/services/listings';
 import { getSellerShop } from '@/services/shops';
 import { getSession } from '@/services/auth';
 import {
   checkPhoneUniquenessForPublish,
   getCurrentProfile,
 } from '@/services/profile';
-import { supabase } from '@/lib/supabase';
 import { getSellCategoryGuidanceForCategoryId } from '@/lib/sellCategoryGuidance';
 import {
   LISTING_DESCRIPTION_MAX,
@@ -85,10 +107,15 @@ import { shareListingPreferWhatsApp } from '@/lib/shareListing';
 
 /** Aligné web : maximum 4 photos par annonce. */
 const MAX_LISTING_IMAGES = 4;
-/** Garde-fou trust : limite haute de publications / 24h, conservée pour éviter le spam massif. */
-const MAX_LISTINGS_PER_24H = 100;
 const YOUMBIA_SELECTED_BG = 'rgba(22, 163, 74, 0.08)';
 const YOUMBIA_SELECTED_GLOW = 'rgba(22, 163, 74, 0.18)';
+
+type ExistingDraftImage = {
+  id: string;
+  path: string;
+  sort_order: number | null;
+  displayUrl: string;
+};
 
 function getSellCategoryColumnCount(screenWidth: number): number {
   if (screenWidth >= 900) return 5;
@@ -189,6 +216,12 @@ function ChecklistRow({
 
 export default function SellScreen() {
   const router = useRouter();
+  const rawParams = useLocalSearchParams<{ draftId?: string | string[] }>();
+  const routeDraftId = useMemo(() => {
+    const raw = rawParams.draftId;
+    const value = Array.isArray(raw) ? raw[0] : raw;
+    return String(value ?? '').trim() || null;
+  }, [rawParams.draftId]);
   const { width: screenWidth } = useWindowDimensions();
   const categoryColumns = useMemo(() => getSellCategoryColumnCount(screenWidth), [screenWidth]);
   const categoryCardWidth = useMemo(
@@ -223,12 +256,20 @@ export default function SellScreen() {
   const [city, setCity] = useState('');
   const [description, setDescription] = useState('');
   const [images, setImages] = useState<PickedImage[]>([]);
+  const [existingDraftImages, setExistingDraftImages] = useState<ExistingDraftImage[]>([]);
+  const [editingDraftId, setEditingDraftId] = useState<string | null>(null);
+  const [draftLoadStatus, setDraftLoadStatus] = useState<'idle' | 'loading' | 'ready' | 'error'>(
+    () => (routeDraftId ? 'loading' : 'idle')
+  );
+  const [draftLoadError, setDraftLoadError] = useState<string | null>(null);
+  const [draftSaveLoading, setDraftSaveLoading] = useState(false);
   const [duplicateSourceId, setDuplicateSourceId] = useState<string | null>(null);
   const [publishShopId, setPublishShopId] = useState<string | null>(null);
   const [pendingDuplicateCategoryId, setPendingDuplicateCategoryId] = useState<number | null>(null);
   const pendingDuplicateDynamicRef = useRef<Record<string, string> | null>(null);
   const publishMemoryAppliedRef = useRef(false);
   const listingCreationStartedRef = useRef(false);
+  const loadedRouteDraftIdRef = useRef<string | null>(null);
 
   const [dynamicDefs, setDynamicDefs] = useState<EffectiveCategoryAttributeDefinitionResolved[]>([]);
   const [dynamicOptionsByDef, setDynamicOptionsByDef] = useState<
@@ -287,10 +328,12 @@ export default function SellScreen() {
         description,
         priceStr,
         city,
-        imageCount: images.length,
+        imageCount: existingDraftImages.length + images.length,
       }),
-    [title, description, priceStr, city, images.length]
+    [title, description, priceStr, city, existingDraftImages.length, images.length]
   );
+
+  const totalPhotoCount = existingDraftImages.length + images.length;
 
   const handleTitleChange = useCallback((text: string) => {
     setTitle(text);
@@ -360,6 +403,12 @@ export default function SellScreen() {
     setCity('');
     setDescription('');
     setImages([]);
+    setExistingDraftImages([]);
+    setEditingDraftId(null);
+    setDraftLoadStatus('idle');
+    setDraftLoadError(null);
+    setDraftSaveLoading(false);
+    loadedRouteDraftIdRef.current = null;
     setDynamicDefs([]);
     setDynamicOptionsByDef(new Map());
     setDynamicValues({});
@@ -424,9 +473,44 @@ export default function SellScreen() {
     setCity(draft.city);
     setDescription(draft.description);
     setImages([]);
+    setExistingDraftImages([]);
+    setEditingDraftId(null);
+    setDraftLoadStatus('idle');
+    setDraftLoadError(null);
     setPendingDuplicateCategoryId(draft.publishCategoryId);
     pendingDuplicateDynamicRef.current = draft.dynamicValues;
     setSubmitError(null);
+  }, []);
+
+  /** Préremplit depuis un payload DB (source de vérité = Supabase, pas la mémoire session). */
+  const applyResumeDraftData = useCallback((draft: ListingResumeDraftData) => {
+    const persisted = (draft.existingImages ?? []).filter(
+      (img) => String(img.displayUrl ?? '').trim() !== '' && String(img.id ?? '').trim() !== ''
+    );
+    setEditingDraftId(draft.listingId);
+    setPublishShopId(draft.shopId);
+    setTitle(draft.title);
+    setPriceStr(draft.price > 0 ? String(draft.price) : '');
+    setCity(draft.city);
+    setDescription(draft.description);
+    // Photos persistées → existingDraftImages (pas besoin de base64 ; uri = signedUrl).
+    // `images` = uniquement nouvelles photos locales picker.
+    setImages([]);
+    setExistingDraftImages(persisted);
+    if (__DEV__) {
+      console.log('[DRAFT_RESUME] setImages count', persisted.length);
+    }
+    setDuplicateSourceId(null);
+    if (draft.publishCategoryId != null) {
+      setPendingDuplicateCategoryId(draft.publishCategoryId);
+    } else {
+      setSelectedParentCategoryId(null);
+      setSelectedChildCategoryId(null);
+    }
+    pendingDuplicateDynamicRef.current = draft.dynamicValues;
+    setSubmitError(null);
+    setDraftLoadStatus('ready');
+    setDraftLoadError(null);
   }, []);
 
   const applyPublishMemoryDefaults = useCallback(
@@ -447,6 +531,10 @@ export default function SellScreen() {
 
   useFocusEffect(
     useCallback(() => {
+      if (routeDraftId) {
+        // Reprise persistante : chargée depuis Supabase via useEffect(routeDraftId).
+        return;
+      }
       const draft = consumeListingPublishDuplicateDraft();
       if (draft) {
         publishMemoryAppliedRef.current = true;
@@ -464,14 +552,61 @@ export default function SellScreen() {
         listingCreationStartedRef.current = true;
         trackListingCreationStarted({ creation_origin: 'sell_tab' });
       }
-    }, [applyDuplicateDraft])
+    }, [applyDuplicateDraft, routeDraftId])
   );
 
   useEffect(() => {
-    if (duplicateSourceId || publishMemoryAppliedRef.current) return;
+    if (!routeDraftId) {
+      loadedRouteDraftIdRef.current = null;
+      return;
+    }
+    if (loadedRouteDraftIdRef.current === routeDraftId) {
+      return;
+    }
+
+    let cancelled = false;
+    setDraftLoadStatus('loading');
+    setDraftLoadError(null);
+    publishMemoryAppliedRef.current = true;
+
+    (async () => {
+      const result = await buildListingResumeDraft(routeDraftId);
+      if (cancelled) return;
+      if (!result.success) {
+        setDraftLoadStatus('error');
+        setDraftLoadError(result.error.message);
+        setEditingDraftId(null);
+        return;
+      }
+      loadedRouteDraftIdRef.current = routeDraftId;
+      applyResumeDraftData(result.data);
+      if (!listingCreationStartedRef.current) {
+        listingCreationStartedRef.current = true;
+        trackListingCreationStarted({
+          creation_origin: 'draft_resume',
+          city_selected: result.data.city,
+        });
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [routeDraftId, applyResumeDraftData]);
+
+  useEffect(() => {
+    if (duplicateSourceId || editingDraftId || routeDraftId || publishMemoryAppliedRef.current) {
+      return;
+    }
     if (marketplaceCategories.length === 0) return;
     void applyPublishMemoryDefaults(marketplaceCategories);
-  }, [duplicateSourceId, marketplaceCategories, applyPublishMemoryDefaults]);
+  }, [
+    duplicateSourceId,
+    editingDraftId,
+    routeDraftId,
+    marketplaceCategories,
+    applyPublishMemoryDefaults,
+  ]);
 
   useEffect(() => {
     if (pendingDuplicateCategoryId == null || marketplaceCategories.length === 0) return;
@@ -571,6 +706,9 @@ export default function SellScreen() {
       return;
     }
 
+    const remaining = Math.max(0, MAX_LISTING_IMAGES - totalPhotoCount);
+    if (remaining <= 0) return;
+
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ['images'],
       allowsMultipleSelection: true,
@@ -585,16 +723,168 @@ export default function SellScreen() {
       base64: a.base64 ?? null,
       mimeType: a.mimeType ?? null,
     }));
-    setImages((prev) => [...prev, ...newImages].slice(0, MAX_LISTING_IMAGES));
+    setImages((prev) =>
+      [...prev, ...newImages].slice(0, Math.max(0, MAX_LISTING_IMAGES - existingDraftImages.length))
+    );
     setSubmitError(null);
   };
 
   const removeImage = (index: number) => {
-    setImages((prev) => prev.filter((_, i) => i !== index));
+    if (index < existingDraftImages.length) {
+      const target = existingDraftImages[index];
+      setExistingDraftImages((prev) => prev.filter((_, i) => i !== index));
+      if (target?.id) {
+        void deleteListingImage(target.id).then((res) => {
+          if (!res.success) {
+            console.warn('[SellScreen] deleteListingImage', res.error);
+          }
+        });
+      }
+      return;
+    }
+    const pickedIndex = index - existingDraftImages.length;
+    setImages((prev) => prev.filter((_, i) => i !== pickedIndex));
+  };
+
+  const uploadNewDraftImages = async (listingId: string) => {
+    const uploadable = filterUploadableListingPhotos(images);
+    const missingSourceCount = Math.max(0, images.length - uploadable.length);
+    if (uploadable.length === 0) {
+      return {
+        uploadedCount: 0,
+        failedCount: images.length,
+        missingSourceCount: images.length,
+        uploadStatus: 'failed' as const,
+        uploadError: "Impossible de préparer les photos du brouillon.",
+      };
+    }
+    const sortOrders = nextListingImageSortOrders(
+      existingDraftImages.map((img) => img.sort_order),
+      uploadable.length
+    );
+    const uploadResult = await uploadListingImages(
+      listingId,
+      uploadable.map((img) => ({
+        base64: img.base64,
+        uri: img.uri,
+        mimeType: img.mimeType ?? null,
+      })),
+      { sortOrders }
+    );
+    return {
+      uploadedCount: uploadResult.data.uploadedCount,
+      failedCount: uploadResult.data.failedCount + missingSourceCount,
+      missingSourceCount,
+      uploadStatus: uploadResult.status,
+      uploadError: uploadResult.error?.message ?? null,
+    };
+  };
+
+  const handleSaveDraft = async () => {
+    if (submitLoading || draftSaveLoading) return;
+    setSubmitError(null);
+    setDraftSaveLoading(true);
+
+    try {
+      const session = await getSession();
+      if (!session?.user) {
+        router.replace(buildAuthGateHref('sell'));
+        return;
+      }
+
+      const cityValidationError = validateListingCity(city);
+      if (cityValidationError) {
+        setSubmitError(cityValidationError);
+        return;
+      }
+
+      const parsedPrice = parseListingPrice(priceStr);
+      const draftPayload = {
+        title: title.trim(),
+        price: Number.isFinite(parsedPrice) && parsedPrice > 0 ? Math.round(parsedPrice) : null,
+        categoryId: publishCategoryId,
+        city: city.trim(),
+        description: description.trim() || '',
+        shopId: publishShopId,
+      };
+
+      const result = editingDraftId
+        ? await updateListingDraft(editingDraftId, draftPayload)
+        : await createListingDraft(draftPayload);
+
+      if (result.error) {
+        if (result.error.message === 'Non connecté') {
+          router.replace(buildAuthGateHref('sell'));
+          return;
+        }
+        setSubmitError(result.error.message);
+        return;
+      }
+
+      const listingId = result.data?.id;
+      if (!listingId) {
+        setSubmitError("Impossible d'enregistrer le brouillon");
+        return;
+      }
+
+      setEditingDraftId(listingId);
+
+      const dynamicRows = buildListingDynamicAttributeRows(
+        dynamicDefs,
+        dynamicValues,
+        dynamicOptionsByDef
+      );
+      if (dynamicRows.length > 0) {
+        const dynRes = await saveListingDynamicAttributeValues(listingId, dynamicRows);
+        if (!dynRes.success) {
+          console.warn('[SellScreen] saveListingDynamicAttributeValues draft', dynRes.error);
+        }
+      }
+
+      if (images.length > 0) {
+        const uploadMeta = await uploadNewDraftImages(listingId);
+        const refreshedAfterUpload = await getListingForEdit(listingId);
+        if (refreshedAfterUpload.data) {
+          setExistingDraftImages(refreshedAfterUpload.data.imageItems ?? []);
+        }
+
+        if (uploadMeta.uploadStatus !== 'ok' || uploadMeta.failedCount > 0) {
+          // Évite de ré-uploader les photos déjà persistées (doublons sort_order).
+          if (uploadMeta.uploadedCount > 0) {
+            setImages([]);
+          }
+          setSubmitError(
+            uploadMeta.uploadError ??
+              "Le brouillon est enregistré, mais certaines photos n'ont pas pu être sauvegardées."
+          );
+          return;
+        }
+
+        setImages([]);
+      } else {
+        const refreshed = await getListingForEdit(listingId);
+        if (refreshed.data) {
+          setExistingDraftImages(refreshed.data.imageItems ?? []);
+        }
+      }
+
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      Alert.alert(DRAFT_LISTING_SAVED_MESSAGE, 'Vous pourrez le reprendre depuis Mes annonces.', [
+        { text: 'Continuer', style: 'cancel' },
+        {
+          text: 'Mes annonces',
+          onPress: () => router.push('/account/listings' as Href),
+        },
+      ]);
+    } catch (e) {
+      setSubmitError(e instanceof Error ? e.message : "Impossible d'enregistrer le brouillon");
+    } finally {
+      setDraftSaveLoading(false);
+    }
   };
 
   const handleSubmit = async () => {
-    if (submitLoading) return;
+    if (submitLoading || draftSaveLoading) return;
     setSubmitError(null);
     setSubmitLoading(true);
 
@@ -673,7 +963,7 @@ export default function SellScreen() {
         }
         return;
       }
-      if (images.length === 0 || !images.some((img) => !!img.base64 || !!img.uri)) {
+      if (totalPhotoCount === 0) {
         setSubmitError('Ajoutez au moins une photo pour publier.');
         return;
       }
@@ -687,44 +977,41 @@ export default function SellScreen() {
         return;
       }
 
-      // Limite publications / 24h (safe: si erreur Supabase/réseau, on bloque la publication).
-      const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-      const { count, error: countError } = await supabase
-        .from('listings')
-        .select('id', { count: 'exact', head: true })
-        .eq('user_id', session.user.id)
-        .gte('created_at', since);
-
-      if (countError) {
-        const message = 'Impossible de vérifier votre limite de publication pour le moment. Réessayez.';
-        console.warn('[SellScreen] dailyLimitCheck', countError);
+      // Limite publications / 24h (même helper que createListing / publishListingDraft).
+      // Les brouillons restant en draft ne consomment pas le quota.
+      const sessionUserId = session.user.id;
+      const quota = await checkListingPublishDailyQuota(sessionUserId);
+      if (!quota.ok) {
+        const message =
+          quota.error.message === LISTING_PUBLISH_QUOTA_REACHED_MESSAGE
+            ? LISTING_PUBLISH_QUOTA_REACHED_MESSAGE
+            : LISTING_PUBLISH_QUOTA_CHECK_FAILED_MESSAGE;
+        console.warn('[SellScreen] dailyLimitCheck', quota.error.message, {
+          count: quota.count,
+          max: MAX_LISTINGS_PER_24H,
+        });
         setSubmitError(message);
-        Alert.alert('Vérification impossible', message);
+        Alert.alert(
+          quota.error.message === LISTING_PUBLISH_QUOTA_REACHED_MESSAGE
+            ? 'Limite atteinte'
+            : 'Vérification impossible',
+          message
+        );
         return;
       }
 
-      if (typeof count !== 'number') {
-        const message = 'Impossible de vérifier votre limite de publication pour le moment. Réessayez.';
-        setSubmitError(message);
-        Alert.alert('Vérification impossible', message);
-        return;
-      }
-
-      if (count >= MAX_LISTINGS_PER_24H) {
-        const message = "Vous avez atteint la limite de publication pour aujourd’hui. Réessayez plus tard.";
-        setSubmitError(message);
-        Alert.alert('Limite atteinte', message);
-        return;
-      }
-
-      const { data, error } = await createListing({
+      const publishPayload = {
         title: title.trim(),
         price: Math.round(price),
         categoryId: publishCategoryId,
         city: city.trim(),
         description: description.trim() || '',
         shopId: publishShopId,
-      });
+      };
+
+      const { data, error } = editingDraftId
+        ? await publishListingDraft(editingDraftId, publishPayload)
+        : await createListing(publishPayload);
 
       if (error) {
         if (error.message === 'Non connecté') {
@@ -743,7 +1030,7 @@ export default function SellScreen() {
 
       trackListingCreationCompleted({
         listing_id: listingId,
-        has_photos: images.length > 0,
+        has_photos: totalPhotoCount > 0,
         category: resolveMarketplaceCategoryLabel(marketplaceCategories, publishCategoryId),
         city: city.trim(),
       });
@@ -760,24 +1047,29 @@ export default function SellScreen() {
         }
       }
 
-      const withBase64 = images.filter((img): img is PickedImage & { base64: string } => !!img.base64);
-      const missingBase64Count = Math.max(0, images.length - withBase64.length);
+      const uploadable = filterUploadableListingPhotos(images);
+      const missingSourceCount = Math.max(0, images.length - uploadable.length);
 
-      if (withBase64.length > 0) {
+      if (uploadable.length > 0) {
+        const sortOrders = nextListingImageSortOrders(
+          existingDraftImages.map((img) => img.sort_order),
+          uploadable.length
+        );
         const uploadResult = await uploadListingImages(
           listingId,
-          withBase64.map((img) => ({
+          uploadable.map((img) => ({
             base64: img.base64,
             uri: img.uri,
             mimeType: img.mimeType ?? null,
-          }))
+          })),
+          { sortOrders }
         );
 
-        const uploadedCount = uploadResult.data.uploadedCount;
-        const failedCount = uploadResult.data.failedCount + missingBase64Count;
-        const totalCount = images.length;
+        const uploadedCount = uploadResult.data.uploadedCount + existingDraftImages.length;
+        const failedCount = uploadResult.data.failedCount + missingSourceCount;
+        const totalCount = totalPhotoCount;
 
-        if (uploadResult.status === 'ok' && missingBase64Count === 0) {
+        if (uploadResult.status === 'ok' && missingSourceCount === 0) {
           void saveListingPublishMemory({
             city: city.trim(),
             parentCategoryId: selectedParentCategoryId,
@@ -785,6 +1077,7 @@ export default function SellScreen() {
             publishCategoryId,
             dynamicValues,
           });
+          setEditingDraftId(null);
           markPublishSuccess(listingId);
           return;
         }
@@ -795,7 +1088,7 @@ export default function SellScreen() {
             uploadedCount,
             failedCount,
             totalCount,
-            missingBase64Count > 0 && !uploadResult.error
+            missingSourceCount > 0 && !uploadResult.error
               ? "Annonce créée, mais certaines photos n'ont pas pu être préparées."
               : uploadResult.error?.message ?? "Annonce créée, mais certaines photos n'ont pas pu être ajoutées."
           )
@@ -803,12 +1096,12 @@ export default function SellScreen() {
         return;
       }
 
-      if (missingBase64Count > 0) {
+      if (missingSourceCount > 0 && existingDraftImages.length === 0) {
         setPublishState(
           buildPartialPublishState(
             listingId,
             0,
-            missingBase64Count,
+            missingSourceCount,
             images.length,
             "Annonce créée, mais certaines photos n'ont pas pu être préparées."
           )
@@ -823,6 +1116,7 @@ export default function SellScreen() {
         publishCategoryId,
         dynamicValues,
       });
+      setEditingDraftId(null);
       markPublishSuccess(listingId);
     } catch (e) {
       setSubmitError(e instanceof Error ? e.message : "Impossible de publier l'annonce");
@@ -841,15 +1135,15 @@ export default function SellScreen() {
   const handleRetryImageUpload = async () => {
     if (publishState.status !== 'partial' || retryUploadLoading) return;
 
-    const withBase64 = images.filter((img): img is PickedImage & { base64: string } => !!img.base64);
-    const missingBase64Count = Math.max(0, images.length - withBase64.length);
+    const uploadable = filterUploadableListingPhotos(images);
+    const missingSourceCount = Math.max(0, images.length - uploadable.length);
 
-    if (withBase64.length === 0) {
+    if (uploadable.length === 0) {
       setPublishState(
         buildPartialPublishState(
           publishState.listingId,
           0,
-          missingBase64Count,
+          missingSourceCount,
           images.length,
           "Annonce créée, mais aucune photo exploitable n'a pu être ajoutée."
         )
@@ -861,7 +1155,7 @@ export default function SellScreen() {
     try {
       const uploadResult = await uploadListingImages(
         publishState.listingId,
-        withBase64.map((img) => ({
+        uploadable.map((img) => ({
           base64: img.base64,
           uri: img.uri,
           mimeType: img.mimeType ?? null,
@@ -869,10 +1163,10 @@ export default function SellScreen() {
       );
 
       const uploadedCount = uploadResult.data.uploadedCount;
-      const failedCount = uploadResult.data.failedCount + missingBase64Count;
+      const failedCount = uploadResult.data.failedCount + missingSourceCount;
       const totalCount = images.length;
 
-      if (uploadResult.status === 'ok' && missingBase64Count === 0) {
+      if (uploadResult.status === 'ok' && missingSourceCount === 0) {
         markPublishSuccess(publishState.listingId);
         return;
       }
@@ -883,7 +1177,7 @@ export default function SellScreen() {
           uploadedCount,
           failedCount,
           totalCount,
-          missingBase64Count > 0 && !uploadResult.error
+          missingSourceCount > 0 && !uploadResult.error
             ? "Annonce créée, mais certaines photos n'ont pas pu être préparées."
             : uploadResult.error?.message ?? "Annonce créée, mais certaines photos n'ont pas pu être ajoutées."
         )
@@ -1007,10 +1301,32 @@ export default function SellScreen() {
   const isAuthed = prequalStatus === 'ready' ? profileAny != null : false;
   const sellerProfileComplete = isSellerProfileComplete(profileAny);
 
-  if (prequalStatus === 'loading') {
+  if (prequalStatus === 'loading' || (routeDraftId && draftLoadStatus === 'loading')) {
     return (
       <Screen>
         <Loader />
+      </Screen>
+    );
+  }
+
+  if (routeDraftId && draftLoadStatus === 'error') {
+    return (
+      <Screen>
+        <View style={styles.successBlock}>
+          <Text style={styles.partialTitle}>Brouillon introuvable</Text>
+          <Text style={styles.successSubtitle}>
+            {draftLoadError?.trim() ||
+              'Impossible de reprendre ce brouillon. Vérifiez votre connexion ou réessayez depuis Mes annonces.'}
+          </Text>
+          <View style={styles.successActions}>
+            <Button size="lg" onPress={() => router.push('/account/listings' as Href)}>
+              Mes annonces
+            </Button>
+            <Button variant="ghost" size="lg" onPress={goBackOrHome}>
+              Retour
+            </Button>
+          </View>
+        </View>
       </Screen>
     );
   }
@@ -1091,8 +1407,12 @@ export default function SellScreen() {
           showsVerticalScrollIndicator={false}
         >
           <View style={styles.content}>
-            <Text style={styles.title}>Vendre</Text>
-            <Text style={styles.subtitle}>Publiez votre annonce en quelques minutes.</Text>
+            <Text style={styles.title}>{editingDraftId ? 'Reprendre le brouillon' : 'Vendre'}</Text>
+            <Text style={styles.subtitle}>
+              {editingDraftId
+                ? 'Complétez puis publiez, ou enregistrez à nouveau comme brouillon.'
+                : 'Publiez votre annonce en quelques minutes.'}
+            </Text>
             <Text style={styles.publishQualityTip}>
               Quelques détails de plus augmentent vos chances de vendre rapidement.
             </Text>
@@ -1127,23 +1447,30 @@ export default function SellScreen() {
               <Text style={styles.stepHelper}>
                 {duplicateSourceId
                   ? 'Photos obligatoires pour cette nouvelle annonce (non dupliquées depuis l’originale). Ajoutez jusqu’à 4 photos — la première sera affichée en couverture.'
-                  : 'Ajoutez jusqu’à 4 photos. La première sera affichée en couverture.'}
+                  : editingDraftId
+                    ? 'Reprenez votre brouillon : conservez les photos déjà ajoutées ou en ajoutez jusqu’à 4.'
+                    : 'Ajoutez jusqu’à 4 photos. La première sera affichée en couverture.'}
               </Text>
               <Text style={styles.photoCounter}>
-                {images.length} / {MAX_LISTING_IMAGES} photos
+                {totalPhotoCount} / {MAX_LISTING_IMAGES} photos
               </Text>
-              {images.length === 0 ? (
+              {totalPhotoCount === 0 ? (
                 <Text style={styles.photoZeroHint}>Ajoutez au moins une photo pour publier.</Text>
               ) : null}
               <View style={styles.photoSlotsRow}>
                 {Array.from({ length: MAX_LISTING_IMAGES }, (_, index) => {
-                  const image = images[index];
+                  const existing = existingDraftImages[index];
+                  const picked =
+                    index >= existingDraftImages.length
+                      ? images[index - existingDraftImages.length]
+                      : undefined;
                   const slotStyle = { width: photoSlotSize, height: photoSlotSize };
+                  const displayUri = existing?.displayUrl ?? picked?.uri;
 
-                  if (image) {
+                  if (displayUri) {
                     return (
                       <View key={`photo-slot-${index}`} style={[styles.photoSlot, slotStyle]}>
-                        <Image source={{ uri: image.uri }} style={styles.photoSlotImage} resizeMode="cover" />
+                        <Image source={{ uri: displayUri }} style={styles.photoSlotImage} resizeMode="cover" />
                         {index === 0 ? (
                           <View style={styles.photoCoverBadge} pointerEvents="none">
                             <Text style={styles.photoCoverBadgeText}>Couverture</Text>
@@ -1162,7 +1489,7 @@ export default function SellScreen() {
                     );
                   }
 
-                  const isPrimaryAddSlot = images.length === 0 && index === 0;
+                  const isPrimaryAddSlot = totalPhotoCount === 0 && index === 0;
 
                   return (
                     <Pressable
@@ -1176,11 +1503,11 @@ export default function SellScreen() {
                         pressed && (isPrimaryAddSlot ? styles.photoSlotPrimaryAddPressed : styles.photoSlotEmptyPressed),
                       ]}
                       onPress={() => {
-                        if (images.length < MAX_LISTING_IMAGES) {
+                        if (totalPhotoCount < MAX_LISTING_IMAGES) {
                           void pickImages();
                         }
                       }}
-                      disabled={images.length >= MAX_LISTING_IMAGES}
+                      disabled={totalPhotoCount >= MAX_LISTING_IMAGES}
                     >
                       {isPrimaryAddSlot ? (
                         <View style={styles.photoSlotPrimaryAddContent}>
@@ -1399,7 +1726,11 @@ export default function SellScreen() {
               size="sm"
               onPress={handleSubmit}
               loading={submitLoading}
-              disabled={submitLoading || (dynamicAttributesPilotActive && dynamicLoading)}
+              disabled={
+                submitLoading ||
+                draftSaveLoading ||
+                (dynamicAttributesPilotActive && dynamicLoading)
+              }
               leftIcon={
                 submitLoading ? undefined : (
                   <Ionicons name="paper-plane" size={15} color={colors.surface} />
@@ -1409,16 +1740,26 @@ export default function SellScreen() {
             >
               {"Publier l'annonce"}
             </Button>
+            <Button
+              variant="secondary"
+              size="sm"
+              onPress={() => void handleSaveDraft()}
+              loading={draftSaveLoading}
+              disabled={submitLoading || draftSaveLoading}
+              style={styles.publishCta}
+            >
+              {DRAFT_LISTING_SAVE_ACTION}
+            </Button>
             <Pressable
               accessibilityRole="button"
               accessibilityLabel="Annuler"
               onPress={goBackOrHome}
-              disabled={submitLoading}
+              disabled={submitLoading || draftSaveLoading}
               hitSlop={{ top: 8, bottom: 8, left: 12, right: 12 }}
               style={({ pressed }) => [
                 styles.footerCancelPressable,
-                pressed && !submitLoading ? styles.footerCancelPressed : null,
-                submitLoading ? styles.footerCancelDisabled : null,
+                pressed && !submitLoading && !draftSaveLoading ? styles.footerCancelPressed : null,
+                submitLoading || draftSaveLoading ? styles.footerCancelDisabled : null,
               ]}
             >
               <Text style={styles.footerCancelText}>Annuler</Text>

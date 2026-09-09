@@ -20,6 +20,12 @@ export function applyListingSaleCycleInsert(args: {
 }): ListingSaleCycleTimestamps {
   void args.clientSoldAt;
   void args.clientSaleCycleStartedAt;
+  if (args.status === 'draft') {
+    return {
+      sold_at: null,
+      sale_cycle_started_at: null,
+    };
+  }
   const created = String(args.created_at ?? '').trim();
   return {
     sold_at: args.status === 'sold' ? args.now : null,
@@ -53,6 +59,9 @@ export function applyListingSaleCycleUpdate(args: {
     sale_cycle_started_at = args.now;
   } else if (args.oldStatus === 'sold' && args.newStatus === 'suspended') {
     sold_at = null;
+  } else if (args.oldStatus === 'draft' && args.newStatus === 'active') {
+    sold_at = null;
+    sale_cycle_started_at = args.now;
   }
 
   return { sold_at, sale_cycle_started_at };

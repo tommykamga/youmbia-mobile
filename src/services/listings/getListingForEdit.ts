@@ -1,9 +1,17 @@
 /**
  * Annonce à éditer : propriétaire uniquement, tout statut (aligné besoin édition mobile).
+ *
+ * Images : `listing_images.url` = PATH Storage (ex. userId/listingId/0.jpg), signé via bucket
+ * `listing-images`. Chargement images en requête dédiée (fiable vs embed nested).
  */
 
 import { supabase } from '@/lib/supabase';
-import { getSignedUrlsMap, toDisplayImageUrl } from '@/lib/listingImageUrl';
+import {
+  getSignedUrlsMap,
+  isListingImageHttpUrl,
+  resolveSingleListingImageUrl,
+  toDisplayImageUrl,
+} from '@/lib/listingImageUrl';
 import { normalizeListingSchemaFeatures } from '@/lib/listingSchemaFeatures';
 
 export type ListingForEdit = {
@@ -37,30 +45,68 @@ type ListingRow = {
   district?: string | null;
   urgent?: boolean | null;
   user_id: string | null;
-  listing_images: ListingImageRow[] | null;
 };
-
-function mapImageItems(
-  rows: ListingImageRow[] | null,
-  signedMap: Map<string, string>
-): { id: string; path: string; sort_order: number | null; displayUrl: string }[] {
-  if (!rows?.length) return [];
-  return [...rows]
-    .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
-    .map((img) => ({
-      id: String(img.id ?? '').trim(),
-      path: String(img.url ?? '').trim(),
-      sort_order: img.sort_order ?? null,
-      displayUrl: toDisplayImageUrl(img.url ?? '', signedMap),
-    }))
-    .filter((item) => item.id !== '' && item.path !== '' && item.displayUrl !== '');
-}
 
 export type GetListingForEditResult =
   | { data: ListingForEdit; error: null }
   | { data: null; error: { message: string } };
 
 const GENERIC_ERROR_MESSAGE = "Une erreur s'est produite. Réessayez plus tard.";
+
+function sortImageRows(rows: ListingImageRow[]): ListingImageRow[] {
+  return [...rows].sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
+}
+
+/**
+ * Mappe les lignes DB → items UI avec signed URL.
+ * Une image non signable est loguée et ignorée seule — on ne vide pas toute la liste.
+ */
+export async function mapListingImageRowsToEditItems(
+  rows: ListingImageRow[] | null | undefined
+): Promise<{ id: string; path: string; sort_order: number | null; displayUrl: string }[]> {
+  const sorted = sortImageRows(rows ?? []);
+  if (sorted.length === 0) return [];
+
+  const storagePaths = sorted
+    .map((img) => String(img.url ?? '').trim())
+    .filter((p) => p !== '' && !isListingImageHttpUrl(p));
+
+  const signedMap = await getSignedUrlsMap(storagePaths);
+
+  const items: { id: string; path: string; sort_order: number | null; displayUrl: string }[] = [];
+
+  for (const img of sorted) {
+    const id = String(img.id ?? '').trim();
+    const path = String(img.url ?? '').trim();
+    if (!id || !path) continue;
+
+    let displayUrl = toDisplayImageUrl(path, signedMap);
+    if (!displayUrl && isListingImageHttpUrl(path)) {
+      displayUrl = path;
+    }
+    if (!displayUrl) {
+      displayUrl = await resolveSingleListingImageUrl(path);
+    }
+    if (!displayUrl) {
+      if (__DEV__) {
+        console.warn('[DRAFT_RESUME] image non signée — conservée hors UI', {
+          imageId: id,
+          path,
+        });
+      }
+      continue;
+    }
+
+    items.push({
+      id,
+      path,
+      sort_order: img.sort_order ?? null,
+      displayUrl,
+    });
+  }
+
+  return items;
+}
 
 export async function getListingForEdit(id: string): Promise<GetListingForEditResult> {
   const {
@@ -72,12 +118,17 @@ export async function getListingForEdit(id: string): Promise<GetListingForEditRe
     return { data: null, error: { message: 'Non connecté' } };
   }
 
+  const listingId = String(id ?? '').trim();
+  if (!listingId) {
+    return { data: null, error: { message: 'Annonce introuvable ou accès refusé.' } };
+  }
+
   const { data: listingRow, error: listingError } = await supabase
     .from('listings')
     .select(
-      'id, title, price, city, description, category_id, status, shop_id, boosted, urgent, district, user_id, listing_images(id, url, sort_order)'
+      'id, title, price, city, description, category_id, status, shop_id, boosted, urgent, district, user_id'
     )
-    .eq('id', id)
+    .eq('id', listingId)
     .eq('user_id', user.id)
     .maybeSingle();
 
@@ -96,12 +147,36 @@ export async function getListingForEdit(id: string): Promise<GetListingForEditRe
   }
 
   const row = listingRow as unknown as ListingRow;
-  const paths = (row.listing_images ?? [])
-    .map((i) => String(i.url ?? '').trim())
-    .filter(Boolean);
-  const signedMap = await getSignedUrlsMap(paths);
+
+  // Requête dédiée : source de vérité images (évite embed nested vide / ordre instable).
+  const { data: imageRowsRaw, error: imagesError } = await supabase
+    .from('listing_images')
+    .select('id, url, sort_order')
+    .eq('listing_id', listingId)
+    .order('sort_order', { ascending: true });
+
+  if (imagesError && __DEV__) {
+    console.warn('[DRAFT_RESUME] listing_images query error', imagesError.message);
+  }
+
+  const dbImages = sortImageRows((imageRowsRaw ?? []) as ListingImageRow[]);
+
+  if (__DEV__) {
+    console.log('[DRAFT_RESUME] listingId', listingId);
+    console.log('[DRAFT_RESUME] dbImages count', dbImages.length);
+    console.log(
+      '[DRAFT_RESUME] storagePaths',
+      dbImages.map((img) => String(img.url ?? '').trim())
+    );
+  }
+
+  const imageItems = await mapListingImageRowsToEditItems(dbImages);
+
+  if (__DEV__) {
+    console.log('[DRAFT_RESUME] signedImages count', imageItems.length);
+  }
+
   const { boosted, district, urgent } = normalizeListingSchemaFeatures(row);
-  const imageItems = mapImageItems(row.listing_images, signedMap);
 
   const data: ListingForEdit = {
     id: row.id,

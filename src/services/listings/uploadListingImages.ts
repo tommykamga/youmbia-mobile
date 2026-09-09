@@ -11,10 +11,10 @@ import { compressListingPhotoForStorageUpload } from '@/lib/listingPhotoUploadCo
 const BUCKET = 'listing-images';
 const MAX_IMAGES_PER_LISTING = 4;
 
-/** Source photo : `uri` / `mimeType` optionnels (meilleure compression depuis fichier local). */
+/** Source photo : `base64` et/ou `uri` (iOS : base64 souvent absent → dérivé de l’uri). */
 export type ListingImageUploadInput = {
-  base64: string;
-  uri?: string;
+  base64?: string | null;
+  uri?: string | null;
   mimeType?: string | null;
 };
 
@@ -42,8 +42,10 @@ function getUploadErrorMessage(message: string, fallback: string): string {
 }
 
 /**
- * Chaque entrée : base64 (picker `base64: true`) + optionnellement `uri` / `mimeType` pour compression client (JPEG max 1200px) avant envoi Storage.
- * Chemins : userId/listingId/0.jpg, … puis lignes `listing_images`.
+ * Chaque entrée : base64 et/ou uri locale. Sur iOS physique, `ImagePicker.base64` peut être null :
+ * on dérive alors le JPEG via `uri` (ImageManipulator) avant Storage.
+ * Chemins : userId/listingId/{sortOrder}.jpg ; upsert Storage + insert/update `listing_images`
+ * (même sort_order = pas de doublon DB).
  */
 export async function uploadListingImages(
   listingId: string,
@@ -105,15 +107,17 @@ export async function uploadListingImages(
 
     for (let i = 0; i < images.length; i++) {
       const sortOrder = sortOrders[i]!;
-      const raw = images[i].base64?.replace(/^data:image\/\w+;base64,/, '') ?? '';
-      if (!raw) {
+      const rawInput = String(images[i].base64 ?? '').replace(/^data:image\/\w+;base64,/, '');
+      const uri = typeof images[i].uri === 'string' ? images[i].uri!.trim() : '';
+      if (!rawInput && !uri) {
         failedCount += 1;
         lastErrorMessage = "Certaines photos n'ont pas pu être préparées.";
         continue;
       }
+
       const { base64: prepared } = await compressListingPhotoForStorageUpload({
-        base64: raw,
-        uri: images[i].uri,
+        base64: rawInput,
+        uri: uri || undefined,
         mimeType: images[i].mimeType,
       });
       const base64 = prepared?.replace(/^data:image\/\w+;base64,/, '') ?? '';

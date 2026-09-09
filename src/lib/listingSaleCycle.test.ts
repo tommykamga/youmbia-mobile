@@ -37,9 +37,38 @@ describe('applyListingSaleCycleInsert', () => {
       sale_cycle_started_at: CREATED,
     });
   });
+  it('INSERT draft : pas de cycle de vente', () => {
+    expect(
+      applyListingSaleCycleInsert({
+        status: 'draft',
+        created_at: CREATED,
+        now: CREATED,
+        clientSoldAt: FORGED,
+        clientSaleCycleStartedAt: FORGED,
+      })
+    ).toEqual({
+      sold_at: null,
+      sale_cycle_started_at: null,
+    });
+  });
 });
 
 describe('applyListingSaleCycleUpdate', () => {
+  it('draft → active démarre le cycle à now (pas created_at du brouillon)', () => {
+    expect(
+      applyListingSaleCycleUpdate({
+        oldStatus: 'draft',
+        newStatus: 'active',
+        oldSoldAt: null,
+        oldSaleCycleStartedAt: null,
+        now: REACTIVATED,
+      })
+    ).toEqual({
+      sold_at: null,
+      sale_cycle_started_at: REACTIVATED,
+    });
+  });
+
   it('premier cycle active → sold : sold_at = now, cycle inchangé', () => {
     expect(
       applyListingSaleCycleUpdate({

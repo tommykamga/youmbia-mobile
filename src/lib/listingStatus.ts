@@ -1,6 +1,7 @@
 /**
  * Statuts annonce alignés sur l’enum Postgres `listing_status`.
  * `sold` est additif (TOM-99) : distinct de `hidden` (pause) et `suspended` (modération).
+ * `draft` est additif (TOM-98) : brouillon propriétaire uniquement, jamais discovery.
  */
 
 export const LISTING_STATUS = {
@@ -8,7 +9,18 @@ export const LISTING_STATUS = {
   hidden: 'hidden',
   suspended: 'suspended',
   sold: 'sold',
+  draft: 'draft',
 } as const;
+
+export const DRAFT_LISTING_SAVED_MESSAGE = 'Brouillon enregistré';
+export const DRAFT_LISTING_DELETE_CONFIRM_TITLE = 'Supprimer ce brouillon ?';
+export const DRAFT_LISTING_DELETE_CONFIRM_MESSAGE =
+  'Cette action est définitive. Vous ne pourrez plus reprendre ce brouillon.';
+export const DRAFT_LISTING_DELETE_CONFIRM_ACTION = 'Supprimer';
+export const DRAFT_LISTING_RESUME_ACTION = 'Reprendre';
+export const DRAFT_LISTING_SAVE_ACTION = 'Enregistrer comme brouillon';
+export const DRAFT_LISTING_SECTION_TITLE = 'Brouillons';
+export const DRAFT_LISTING_EMPTY_HINT = 'Aucun brouillon pour le moment.';
 
 export type ListingStatus = (typeof LISTING_STATUS)[keyof typeof LISTING_STATUS];
 
@@ -77,10 +89,14 @@ export function getSellerReactivateActionLabel(status: string | null | undefined
   return isSoldListingStatus(status) ? REACTIVATE_SOLD_CONFIRM_ACTION : REACTIVATE_HIDDEN_CONFIRM_ACTION;
 }
 
+export function isDraftListingStatus(status: string | null | undefined): boolean {
+  return normalizeListingStatus(status) === LISTING_STATUS.draft;
+}
+
 /**
  * Accès fiche détail côté app (sans élargir le SELECT public).
  * - active : tout viewer qui a lu la ligne
- * - sold : propriétaire uniquement
+ * - sold / draft : propriétaire uniquement
  * - hidden / suspended : pas de fiche publique
  */
 export function canViewerAccessListingDetail(options: {
@@ -89,7 +105,9 @@ export function canViewerAccessListingDetail(options: {
   viewerId: string | null | undefined;
 }): boolean {
   if (isDiscoveryListingStatus(options.status)) return true;
-  if (!isSoldListingStatus(options.status)) return false;
+  if (!isSoldListingStatus(options.status) && !isDraftListingStatus(options.status)) {
+    return false;
+  }
   const ownerId = String(options.ownerId ?? '').trim();
   const viewerId = String(options.viewerId ?? '').trim();
   return ownerId.length > 0 && viewerId.length > 0 && ownerId === viewerId;
@@ -101,6 +119,7 @@ export function getSellerListingStatusLabel(status: string | null | undefined): 
   if (normalized === LISTING_STATUS.sold) return 'Vendue';
   if (normalized === LISTING_STATUS.suspended) return 'Suspendue';
   if (normalized === LISTING_STATUS.hidden) return 'En pause';
+  if (normalized === LISTING_STATUS.draft) return 'Brouillon';
   return 'Hors ligne';
 }
 
@@ -109,6 +128,7 @@ export function isAllowedListingStatus(status: string): status is ListingStatus 
     status === LISTING_STATUS.active ||
     status === LISTING_STATUS.hidden ||
     status === LISTING_STATUS.suspended ||
-    status === LISTING_STATUS.sold
+    status === LISTING_STATUS.sold ||
+    status === LISTING_STATUS.draft
   );
 }

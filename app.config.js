@@ -4,7 +4,8 @@ const isDevelopment =
   process.env.APP_ENV === "development" ||
   process.env.EXPO_PUBLIC_APP_ENV === "development";
 
-module.exports = {
+module.exports = ({ config }) => ({
+  ...config,
   ...appJson.expo,
 
   name: isDevelopment ? "YOUMBIA Dev" : appJson.expo.name,
@@ -22,4 +23,4 @@ module.exports = {
       ? "com.youmbia.mobile.dev"
       : appJson.expo.android.package,
   },
-};
+});
