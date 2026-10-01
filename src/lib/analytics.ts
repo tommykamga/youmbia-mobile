@@ -105,6 +105,12 @@ export async function captureAuthSuccess(
   }
 }
 
+export function trackSignUpStarted(properties: {
+  signup_method: AuthMethod;
+}): void {
+  trackEvent('sign_up_started', properties);
+}
+
 export function trackSignUpCompleted(properties: {
   signup_method: AuthMethod;
   user_role: string;
@@ -150,11 +156,17 @@ export function trackListingSearched(properties: {
   search_query: string;
   category?: string | null;
   city?: string | null;
+  result_count?: number;
+  has_results?: boolean;
+  cache_hit?: boolean;
 }): void {
   trackEvent('listing_searched', {
     search_query: properties.search_query,
     category: properties.category ?? undefined,
     city: properties.city ?? undefined,
+    result_count: properties.result_count,
+    has_results: properties.has_results,
+    cache_hit: properties.cache_hit,
   });
 }
 
