@@ -159,6 +159,7 @@ export function trackListingSearched(properties: {
   result_count?: number;
   has_results?: boolean;
   cache_hit?: boolean;
+  search_outcome?: 'success' | 'empty' | 'error';
 }): void {
   trackEvent('listing_searched', {
     search_query: properties.search_query,
@@ -167,6 +168,7 @@ export function trackListingSearched(properties: {
     result_count: properties.result_count,
     has_results: properties.has_results,
     cache_hit: properties.cache_hit,
+    search_outcome: properties.search_outcome,
   });
 }
 
