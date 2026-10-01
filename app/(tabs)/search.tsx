@@ -262,14 +262,17 @@ export default function SearchScreen() {
       return;
     }
 
-    trackListingSearched({
-      search_query: trimmed,
-      category: categoryLabel,
-      city: searchCity,
-    });
-
     const cached = searchSessionPage1Cache.get(page1Key);
     if (cached) {
+      trackListingSearched({
+        search_query: trimmed,
+        category: categoryLabel,
+        city: searchCity,
+        result_count: cached.total,
+        has_results: !cached.empty,
+        cache_hit: true,
+        search_outcome: cached.empty ? 'empty' : 'success',
+      });
       setSubmittedQuery(trimmed);
       lastDisplayedPage1KeyRef.current = page1Key;
       if (cached.empty) {
@@ -306,12 +309,28 @@ export default function SearchScreen() {
     if (seq !== searchSeqRef.current) return;
 
     if (result.error) {
+      trackListingSearched({
+        search_query: trimmed,
+        category: categoryLabel,
+        city: searchCity,
+        cache_hit: false,
+        search_outcome: 'error',
+      });
       setState({ status: 'error', message: result.error.message });
       return;
     }
     const list = result.data ?? [];
     const total = result.total ?? 0;
     const empty = list.length === 0;
+    trackListingSearched({
+      search_query: trimmed,
+      category: categoryLabel,
+      city: searchCity,
+      result_count: total,
+      has_results: !empty,
+      cache_hit: false,
+      search_outcome: empty ? 'empty' : 'success',
+    });
     searchSessionPage1Cache.set(page1Key, {
       empty,
       data: list.slice(),
