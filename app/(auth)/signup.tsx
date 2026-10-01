@@ -10,6 +10,7 @@ import { replaceAfterSuccessfulAuth } from '@/lib/authPostNavigation';
 import { runGoogleOAuth, formatGoogleSignInUserMessage } from '@/lib/googleSignInMobile';
 import { runAppleOAuth, formatAppleSignInUserMessage } from '@/lib/appleSignInMobile';
 import { AppleSignInButton } from '@/features/auth/AppleSignInButton';
+import { trackSignUpStarted } from '@/lib/analytics';
 
 function getErrorMessage(error: { message: string }): string {
   const msg = error.message.toLowerCase();
@@ -64,6 +65,7 @@ export default function SignupScreen() {
       setError('Le mot de passe doit faire au moins 6 caractères.');
       return;
     }
+    trackSignUpStarted({ signup_method: 'email' });
     setLoading(true);
     try {
       const result = await signUp(trimmedEmail, password);
@@ -86,6 +88,7 @@ export default function SignupScreen() {
   const handleGoogleSignIn = async () => {
     setError(null);
     setSuccessMessage(null);
+    trackSignUpStarted({ signup_method: 'google' });
     setGoogleLoading(true);
     try {
       const result = await runGoogleOAuth();
@@ -104,6 +107,7 @@ export default function SignupScreen() {
   const handleAppleSignIn = async () => {
     setError(null);
     setSuccessMessage(null);
+    trackSignUpStarted({ signup_method: 'apple' });
     setAppleLoading(true);
     try {
       const result = await runAppleOAuth();
