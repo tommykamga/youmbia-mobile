@@ -17,6 +17,7 @@ const MIXPANEL_EU_SERVER_URL = 'https://api-eu.mixpanel.com';
 const SESSION_STARTED_AT_KEY = 'mixpanel_session_started_at';
 
 export type AnalyticsPlatform = 'ios' | 'android' | 'web';
+export type AnalyticsAppEnv = 'development' | 'preview' | 'production' | 'unknown';
 
 type MixpanelPrimitive = string | number | boolean;
 export type AnalyticsProperties = Record<string, MixpanelPrimitive | null | undefined>;
@@ -28,6 +29,12 @@ let sessionStartedAt: number | null = null;
 export function getAnalyticsPlatform(): AnalyticsPlatform {
   if (Platform.OS === 'ios' || Platform.OS === 'android') return Platform.OS;
   return 'web';
+}
+
+export function getAnalyticsAppEnv(): AnalyticsAppEnv {
+  const value = (process.env.EXPO_PUBLIC_APP_ENV ?? '').trim().toLowerCase();
+  if (value === 'development' || value === 'preview' || value === 'production') return value;
+  return 'unknown';
 }
 
 function compactProperties(
@@ -111,6 +118,7 @@ export async function initMixpanel(): Promise<Mixpanel | null> {
         {
           platform: getAnalyticsPlatform(),
           app_version: Constants.expoConfig?.version ?? 'unknown',
+          app_env: getAnalyticsAppEnv(),
         },
         MIXPANEL_EU_SERVER_URL
       );
@@ -120,6 +128,7 @@ export async function initMixpanel(): Promise<Mixpanel | null> {
       mixpanel.registerSuperProperties({
         platform: getAnalyticsPlatform(),
         app_version: Constants.expoConfig?.version ?? 'unknown',
+        app_env: getAnalyticsAppEnv(),
       });
       client = mixpanel;
       return mixpanel;
@@ -142,6 +151,7 @@ async function getClient(): Promise<Mixpanel | null> {
 export function trackEvent(eventName: string, properties?: AnalyticsProperties): void {
   const payload = compactProperties({
     platform: getAnalyticsPlatform(),
+    app_env: getAnalyticsAppEnv(),
     ...properties,
   });
   void getClient().then((mixpanel) => {
