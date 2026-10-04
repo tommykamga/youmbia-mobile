@@ -4,6 +4,7 @@
 
 import { captureAuthSuccess, trackSignOut } from '@/lib/analytics';
 import { supabase } from '@/lib/supabase';
+import { unregisterCurrentPushToken } from '@/services/notifications';
 import type { AuthError } from '@supabase/supabase-js';
 
 export type SignInResult =
@@ -100,6 +101,10 @@ export async function signOut(options?: {
   reason?: string;
 }): Promise<{ error: AuthError | null }> {
   await trackSignOut({ signed_out_reason: options?.reason ?? 'user_initiated' });
+  const pushCleanup = await unregisterCurrentPushToken();
+  if (!pushCleanup.ok) {
+    console.error('[auth/signout] push_token_cleanup_failed', pushCleanup.errorCode);
+  }
   const { error } = await supabase.auth.signOut();
   return { error: error ?? null };
 }

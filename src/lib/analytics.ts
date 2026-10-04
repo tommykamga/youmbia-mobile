@@ -345,6 +345,51 @@ export function trackSavedSearchNotificationOpened(properties: {
   });
 }
 
+export type PushPermissionAnalyticsStatus =
+  | 'granted'
+  | 'denied'
+  | 'blocked'
+  | 'undetermined'
+  | 'unavailable';
+
+export function trackPushPermissionChecked(status: PushPermissionAnalyticsStatus): void {
+  trackEvent('push_permission_checked', { permission_status: status });
+}
+
+export function trackPushPermissionGranted(): void {
+  trackEvent('push_permission_granted');
+}
+
+export function trackPushPermissionDenied(status: 'denied' | 'blocked'): void {
+  trackEvent('push_permission_denied', { permission_status: status });
+}
+
+export function trackPushTokenRegistrationStarted(source: 'manual' | 'sync'): void {
+  trackEvent('push_token_registration_started', { registration_source: source });
+}
+
+export function trackPushTokenRegistrationSucceeded(source: 'manual' | 'sync'): void {
+  trackEvent('push_token_registration_succeeded', { registration_source: source });
+}
+
+export function trackPushTokenRegistrationFailed(
+  source: 'manual' | 'sync',
+  errorCode: string
+): void {
+  trackEvent('push_token_registration_failed', {
+    registration_source: source,
+    error_code: errorCode,
+  });
+}
+
+export function trackPushNotificationReceived(type?: string | null): void {
+  trackEvent('push_notification_received', { notification_type: type ?? undefined });
+}
+
+export function trackPushNotificationOpened(type?: string | null): void {
+  trackEvent('push_notification_opened', { notification_type: type ?? undefined });
+}
+
 export function trackListingReported(properties: {
   listing_id: string;
   report_reason: string;
