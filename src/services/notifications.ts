@@ -23,7 +23,7 @@ const SEARCH_ROUTE_PREFIXES = ['/(tabs)/search', '/search'] as const;
 
 type NotificationData = Record<string, unknown>;
 type NotificationCooldownMap = Record<string, number>;
-type NotificationResponseLike = {
+export type NotificationResponseLike = {
   notification?: {
     request?: {
       identifier?: string | null;
@@ -892,6 +892,17 @@ export async function getLastNotificationResponseAsyncSafe(): Promise<Notificati
     return (await Notifications.getLastNotificationResponseAsync()) as NotificationResponseLike | null;
   } catch {
     return null;
+  }
+}
+
+export async function clearLastNotificationResponseAsyncSafe(): Promise<void> {
+  if (!isPushNotificationsAvailable()) return;
+  try {
+    const Notifications = await loadNotificationsModule();
+    if (!Notifications) return;
+    await Notifications.clearLastNotificationResponseAsync();
+  } catch {
+    // Clearing is best-effort; the in-memory coordinator still prevents replay.
   }
 }
 

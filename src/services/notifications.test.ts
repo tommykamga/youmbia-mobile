@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  clearLastNotificationResponseAsyncSafe,
   getPushActivationCardState,
   getPushPermissionSnapshot,
   getStoredPushToken,
@@ -24,6 +25,7 @@ const mocks = vi.hoisted(() => ({
   setNotificationChannelAsync: vi.fn(),
   addNotificationResponseReceivedListener: vi.fn(),
   addNotificationReceivedListener: vi.fn(),
+  clearLastNotificationResponseAsync: vi.fn(),
   trackPushPermissionChecked: vi.fn(),
   trackPushPermissionGranted: vi.fn(),
   trackPushPermissionDenied: vi.fn(),
@@ -56,6 +58,7 @@ vi.mock('expo-notifications', () => ({
   setNotificationChannelAsync: mocks.setNotificationChannelAsync,
   addNotificationResponseReceivedListener: mocks.addNotificationResponseReceivedListener,
   addNotificationReceivedListener: mocks.addNotificationReceivedListener,
+  clearLastNotificationResponseAsync: mocks.clearLastNotificationResponseAsync,
 }));
 
 vi.mock('react-native', () => ({
@@ -104,6 +107,7 @@ describe('push token registration', () => {
     mocks.requestPermissionsAsync.mockResolvedValue({ status: 'granted', canAskAgain: false });
     mocks.getExpoPushTokenAsync.mockResolvedValue({ data: TOKEN_A });
     mocks.setNotificationChannelAsync.mockResolvedValue(null);
+    mocks.clearLastNotificationResponseAsync.mockResolvedValue(undefined);
     mocks.rpc.mockResolvedValue({ error: null });
     mocks.openSettings.mockResolvedValue(undefined);
     mocks.platform.OS = 'ios';
@@ -164,6 +168,12 @@ describe('push token registration', () => {
   it('ouvre les réglages système pour une permission bloquée', async () => {
     await expect(openPushNotificationSettings()).resolves.toBe(true);
     expect(mocks.openSettings).toHaveBeenCalledTimes(1);
+  });
+
+  it('efface la dernière réponse native après consommation cold start', async () => {
+    await clearLastNotificationResponseAsyncSafe();
+
+    expect(mocks.clearLastNotificationResponseAsync).toHaveBeenCalledTimes(1);
   });
 
   it('permission refusée: ne récupère ni ne persiste de token', async () => {

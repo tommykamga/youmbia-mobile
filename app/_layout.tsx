@@ -1,4 +1,11 @@
-import { Stack, useGlobalSearchParams, usePathname, useRouter, useSegments } from 'expo-router';
+import {
+  Stack,
+  useGlobalSearchParams,
+  usePathname,
+  useRootNavigationState,
+  useRouter,
+  useSegments,
+} from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -26,6 +33,7 @@ import { getListingHrefFromUrl } from '@/lib/listingDeepLink';
 import {
   addNotificationReceivedListenerSafe,
   addNotificationResponseReceivedListenerSafe,
+  clearLastNotificationResponseAsyncSafe,
   getComparableRouteKey,
   getComparableTargetKey,
   getLastNotificationResponseAsyncSafe,
@@ -33,10 +41,16 @@ import {
   initializeNotifications,
   isPushNotificationsAvailable,
   syncPushTokenIfGranted,
+  type NotificationOpenMeta,
+  type NotificationResponseLike,
 } from '@/services/notifications';
 import { FavoritesProvider } from '@/context/FavoritesContext';
 import { AppUpdateGate } from '@/components/AppUpdateGate';
 import { startPushTokenSessionSync } from '@/services/pushSessionSync';
+import {
+  createDeferredNotificationOpenCoordinator,
+  type DeferredNotificationOpenCoordinator,
+} from '@/services/deferredNotificationOpen';
 
 /**
  * Polling sync notifications messages, actif quand l’app est au premier plan.
@@ -45,6 +59,12 @@ import { startPushTokenSessionSync } from '@/services/pushSessionSync';
 const MESSAGE_NOTIFICATIONS_POLL_MS = 45000;
 /** Délai avant le 1er sync messages pour ne pas concurrencer session + 1er rendu. */
 const STARTUP_NOTIFICATION_SYNC_DELAY_MS = 2500;
+
+type PendingNotificationOpen = {
+  identifier: string;
+  meta: NotificationOpenMeta;
+  source: 'cold_start' | 'listener';
+};
 
 export { ErrorBoundary } from 'expo-router';
 
@@ -82,16 +102,21 @@ function isProtectedSegment(segments: string[]): boolean {
 }
 
 function RootLayout() {
-  const [isAppReady, setIsAppReady] = useState(false);
+  const [isSessionReady, setIsSessionReady] = useState(false);
   const [isSplashAnimationComplete, setIsSplashAnimationComplete] = useState(false);
   const router = useRouter();
+  const rootNavigationState = useRootNavigationState();
   const segments = useSegments();
   const pathname = usePathname();
   const globalParams = useGlobalSearchParams();
   const lastHandledUrlRef = useRef<string | null>(null);
-  const lastHandledNotificationRef = useRef<string | null>(null);
   const pathnameRef = useRef(pathname);
   const routeKeyRef = useRef(getComparableRouteKey(pathname, globalParams));
+  const consumeNotificationRef = useRef<(notification: PendingNotificationOpen) => void>(() => {});
+  const notificationCoordinatorRef = useRef<
+    DeferredNotificationOpenCoordinator<PendingNotificationOpen> | null
+  >(null);
+  const isNavigationReady = Boolean(rootNavigationState?.key);
 
   useEffect(() => {
     pathnameRef.current = pathname;
@@ -102,27 +127,30 @@ function RootLayout() {
   }, [pathname, globalParams]);
 
   useEffect(() => {
-    async function prepare() {
-      try {
-        // Chargement parallèle des ressources critiques (ex: Session Supabase)
-        const [{ supabase }] = await Promise.all([
-          import('@/lib/supabase'),
-          initMixpanel(),
-        ]);
+    let active = true;
 
-        const { data } = await supabase.auth.getSession();
-        if (data.session?.user) {
-          await identifyCurrentUser(data.session.user);
-          setCrashReportingUser(data.session.user.id);
+    // Analytics is intentionally best-effort and never gates the first render.
+    void initMixpanel();
+
+    async function restoreSession() {
+      try {
+        const session = await getSession();
+        if (!active) return;
+        if (session?.user) {
+          setCrashReportingUser(session.user.id);
+          void identifyCurrentUser(session.user);
         }
       } catch (e) {
         console.warn('App preparation error:', e);
       } finally {
-        setIsAppReady(true);
+        if (active) setIsSessionReady(true);
       }
     }
 
-    prepare();
+    void restoreSession();
+    return () => {
+      active = false;
+    };
   }, []);
 
   // Auto-réparation profil : un seul listener (INITIAL_SESSION / SIGNED_IN / USER_UPDATED).
@@ -133,6 +161,15 @@ function RootLayout() {
 
   useEffect(() => {
     const unsubscribe = onAuthStateChange((event, session) => {
+      if (
+        event === 'INITIAL_SESSION' ||
+        event === 'SIGNED_IN' ||
+        event === 'SIGNED_OUT' ||
+        event === 'USER_UPDATED' ||
+        event === 'TOKEN_REFRESHED'
+      ) {
+        setIsSessionReady(true);
+      }
       if (session?.user && (event === 'SIGNED_IN' || event === 'INITIAL_SESSION')) {
         void identifyCurrentUser(session.user);
         setCrashReportingUser(session.user.id);
@@ -295,22 +332,12 @@ function RootLayout() {
 
   const handleNotificationResponse = useCallback(
     (
-      identifier: string | null | undefined,
       target: string | null,
       meta?: { type: string | null; listingId: string | null; savedSearchId: string | null }
     ) => {
-      const safeIdentifier = String(identifier ?? '').trim();
-      if (safeIdentifier && lastHandledNotificationRef.current === safeIdentifier) return;
       trackPushNotificationOpened(meta?.type);
-      if (!target) {
-        lastHandledNotificationRef.current = safeIdentifier || null;
-        return;
-      }
-      if (getComparableTargetKey(target) === routeKeyRef.current) {
-        lastHandledNotificationRef.current = safeIdentifier || target;
-        return;
-      }
-      lastHandledNotificationRef.current = safeIdentifier || target;
+      if (!target) return;
+      if (getComparableTargetKey(target) === routeKeyRef.current) return;
       if (meta?.type === 'saved_search_match') {
         trackSavedSearchNotificationOpened({
           listing_id: meta.listingId,
@@ -322,30 +349,81 @@ function RootLayout() {
     [router]
   );
 
+  const handleSplashFinished = useCallback(() => {
+    setIsSplashAnimationComplete(true);
+  }, []);
+
+  consumeNotificationRef.current = (notification) => {
+    handleNotificationResponse(notification.meta.target, notification.meta);
+  };
+
+  if (!notificationCoordinatorRef.current) {
+    notificationCoordinatorRef.current = createDeferredNotificationOpenCoordinator({
+      getKey: (notification: PendingNotificationOpen) =>
+        notification.identifier ||
+        `${notification.meta.type ?? 'unknown'}:${notification.meta.target ?? 'no-target'}`,
+      consume: (notification: PendingNotificationOpen) => {
+        consumeNotificationRef.current(notification);
+      },
+      onConsumed: (notification: PendingNotificationOpen) => {
+        if (notification.source === 'cold_start') {
+          void clearLastNotificationResponseAsyncSafe();
+        }
+      },
+      onDuplicate: (notification: PendingNotificationOpen) => {
+        if (notification.source === 'cold_start') {
+          void clearLastNotificationResponseAsyncSafe();
+        }
+      },
+      onError: (error) => {
+        console.error('[notifications] notification_open_failed', error);
+      },
+    });
+  }
+
+  useEffect(() => {
+    notificationCoordinatorRef.current?.setNavigationReady(isNavigationReady);
+  }, [isNavigationReady]);
+
+  useEffect(() => {
+    notificationCoordinatorRef.current?.setSessionReady(isSessionReady);
+  }, [isSessionReady]);
+
   useEffect(() => {
     let active = true;
     let subscription: { remove: () => void } | null = null;
     let receivedSubscription: { remove: () => void } | null = null;
 
-    getLastNotificationResponseAsyncSafe()
-      .then((initialResponse) => {
-        if (!active || !initialResponse) return;
-        const meta = getNotificationOpenMeta(initialResponse);
-        handleNotificationResponse(
-          initialResponse.notification?.request?.identifier,
-          meta.target,
-          meta
-        );
-      })
-      .catch(() => {});
+    const toPendingNotification = (
+      response: NotificationResponseLike,
+      source: PendingNotificationOpen['source']
+    ): PendingNotificationOpen => ({
+      identifier: String(response.notification?.request?.identifier ?? '').trim(),
+      meta: getNotificationOpenMeta(response),
+      source,
+    });
+
+    void notificationCoordinatorRef.current?.readColdStartOnce(async () => {
+      const initialResponse = await getLastNotificationResponseAsyncSafe();
+      if (!active || !initialResponse) return null;
+      try {
+        return toPendingNotification(initialResponse, 'cold_start');
+      } catch (error) {
+        // A malformed native response must not replay on every subsequent launch.
+        void clearLastNotificationResponseAsyncSafe();
+        throw error;
+      }
+    });
 
     void addNotificationResponseReceivedListenerSafe((response) => {
-      const meta = getNotificationOpenMeta(response);
-      handleNotificationResponse(
-        response.notification?.request?.identifier,
-        meta.target,
-        meta
-      );
+      if (!active) return;
+      try {
+        notificationCoordinatorRef.current?.enqueue(
+          toPendingNotification(response, 'listener')
+        );
+      } catch (error) {
+        console.error('[notifications] notification_response_invalid', error);
+      }
     }).then((listenerSubscription) => {
       if (!active) {
         listenerSubscription?.remove();
@@ -367,7 +445,7 @@ function RootLayout() {
       subscription?.remove();
       receivedSubscription?.remove();
     };
-  }, [handleNotificationResponse]);
+  }, []);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChange((_event, session) => {
@@ -388,17 +466,6 @@ function RootLayout() {
     });
     return unsubscribe;
   }, [router, segments]);
-
-  // Affiche le composant Splash tant que l'animation n'est pas complètement terminée,
-  // ce composant va gérer l'attente du préchargement de manière fluide.
-  if (!isSplashAnimationComplete) {
-    return (
-      <SplashScreenCustom
-        isAppReady={isAppReady}
-        onFinish={() => setIsSplashAnimationComplete(true)}
-      />
-    );
-  }
 
   return (
     <SafeAreaProvider>
@@ -427,6 +494,12 @@ function RootLayout() {
         </Stack>
         </FavoritesProvider>
       </AppUpdateGate>
+      {!isSplashAnimationComplete ? (
+        <SplashScreenCustom
+          isAppReady={isNavigationReady}
+          onFinish={handleSplashFinished}
+        />
+      ) : null}
     </SafeAreaProvider>
   );
 }
