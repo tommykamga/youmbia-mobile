@@ -914,6 +914,14 @@ export type Database = {
     };
     Views: Record<string, never>;
     Functions: {
+      claim_my_push_token: {
+        Args: {
+          p_expo_push_token: string;
+          p_platform: string;
+          p_previous_expo_push_token?: string | null;
+        };
+        Returns: undefined;
+      };
       get_my_seller_stats: {
         Args: Record<PropertyKey, never>;
         Returns: {

@@ -1,37 +1,48 @@
 import React, { useCallback, useState } from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { Linking, View, Text, StyleSheet } from 'react-native';
 import { useFocusEffect } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Button } from './Button';
 import {
-  getPushPermissionStatus,
-  getStoredPushToken,
+  getDetailedPushPermissionStatus,
   markPushPromptDismissed,
   registerForPushNotifications,
   shouldShowPushPrompt,
+  syncPushTokenIfGranted,
 } from '@/services/notifications';
+import { getSession } from '@/services/auth';
 import { colors, spacing, typography, fontWeights, radius } from '@/theme';
 
 export function NotificationsPromptCard() {
   const [visible, setVisible] = useState(false);
   const [loading, setLoading] = useState(false);
   const [feedback, setFeedback] = useState<string | null>(null);
+  const [needsSettings, setNeedsSettings] = useState(false);
 
   const refresh = useCallback(async () => {
-    const token = getStoredPushToken();
-    if (token) {
+    const session = await getSession();
+    if (!session?.user) {
       setVisible(false);
       setFeedback(null);
+      setNeedsSettings(false);
       return;
     }
 
-    const permissionStatus = await getPushPermissionStatus();
+    const permissionStatus = await getDetailedPushPermissionStatus();
     if (permissionStatus === 'granted') {
-      setVisible(false);
-      setFeedback(null);
+      const result = await syncPushTokenIfGranted();
+      if (result.ok && result.status === 'registered') {
+        setVisible(false);
+        setFeedback(null);
+        setNeedsSettings(false);
+      } else if (!result.ok) {
+        setFeedback("Impossible d'enregistrer les notifications. Réessayez.");
+        setVisible(true);
+      }
       return;
     }
 
+    setNeedsSettings(permissionStatus === 'blocked');
     setVisible(shouldShowPushPrompt());
   }, []);
 
@@ -49,10 +60,17 @@ export function NotificationsPromptCard() {
     if (result.ok) {
       setVisible(false);
       setFeedback(null);
+      setNeedsSettings(false);
       return;
     }
 
-    if (result.status === 'denied' || result.status === 'unavailable') {
+    setNeedsSettings(result.status === 'blocked');
+
+    if (
+      result.status === 'denied' ||
+      result.status === 'blocked' ||
+      result.status === 'unavailable'
+    ) {
       markPushPromptDismissed();
     }
     setFeedback(result.message);
@@ -62,6 +80,12 @@ export function NotificationsPromptCard() {
   const handleDismiss = useCallback(() => {
     markPushPromptDismissed();
     setVisible(false);
+  }, []);
+
+  const handleOpenSettings = useCallback(() => {
+    void Linking.openSettings().catch((error) => {
+      console.error('[notifications] open_settings_failed', error);
+    });
   }, []);
 
   if (!visible) return null;
@@ -78,8 +102,13 @@ export function NotificationsPromptCard() {
         </Text>
         {feedback ? <Text style={styles.feedback}>{feedback}</Text> : null}
         <View style={styles.actions}>
-          <Button variant="primary" size="sm" loading={loading} onPress={handleActivate}>
-            Activer
+          <Button
+            variant="primary"
+            size="sm"
+            loading={loading}
+            onPress={needsSettings ? handleOpenSettings : handleActivate}
+          >
+            {needsSettings ? 'Ouvrir les réglages' : 'Activer'}
           </Button>
           <Button variant="ghost" size="sm" onPress={handleDismiss} disabled={loading}>
             Plus tard

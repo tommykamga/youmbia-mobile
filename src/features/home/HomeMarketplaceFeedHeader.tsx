@@ -10,6 +10,7 @@ import {
   AppSectionHeader,
   appMarketplaceSurface,
   HomeCategoryStrip,
+  NotificationsPromptCard,
 } from '@/components';
 import {
   BoostedSection,
@@ -93,6 +94,12 @@ export function HomeMarketplaceFeedHeader({
 
   return (
     <View style={styles.headerRoot}>
+      {authState === 'user' ? (
+        <View style={sectionInsetStyle}>
+          <NotificationsPromptCard />
+        </View>
+      ) : null}
+
       <BoostedSection onVoirToutPress={onBoostedVoirTout} />
 
       <VerifiedShopsSection />

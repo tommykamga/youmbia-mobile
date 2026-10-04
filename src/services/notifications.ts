@@ -2,12 +2,22 @@ import 'expo-sqlite/localStorage/install';
 
 import Constants from 'expo-constants';
 import { Platform } from 'react-native';
+import {
+  trackPushNotificationReceived,
+  trackPushPermissionChecked,
+  trackPushPermissionDenied,
+  trackPushPermissionGranted,
+  trackPushTokenRegistrationFailed,
+  trackPushTokenRegistrationStarted,
+  trackPushTokenRegistrationSucceeded,
+} from '@/lib/analytics';
 import { getListingHrefFromUrl } from '@/lib/listingDeepLink';
 import { supabase } from '@/lib/supabase';
 
 const PUSH_TOKEN_STORAGE_KEY = 'youmbia.pushToken.v1';
 const PUSH_PERMISSION_ASKED_KEY = 'youmbia.pushPermissionAsked.v1';
 const PUSH_PROMPT_DISMISSED_KEY = 'youmbia.pushPromptDismissed.v1';
+const PUSH_PROMPT_DISMISS_COOLDOWN_MS = 24 * 60 * 60 * 1000;
 const NOTIFICATION_COOLDOWN_STORAGE_KEY = 'youmbia.notificationCooldowns.v1';
 const SEARCH_ROUTE_PREFIXES = ['/(tabs)/search', '/search'] as const;
 
@@ -27,7 +37,21 @@ type NotificationsModule = typeof import('expo-notifications');
 
 export type PushRegistrationResult =
   | { ok: true; status: 'granted'; token: string }
-  | { ok: false; status: 'denied' | 'unavailable' | 'error'; message: string };
+  | {
+      ok: false;
+      status: 'denied' | 'blocked' | 'unavailable' | 'unauthenticated' | 'error';
+      message: string;
+      errorCode?: string;
+    };
+
+export type PushTokenSyncResult =
+  | { ok: true; status: 'registered'; token: string }
+  | { ok: true; status: 'skipped'; reason: string }
+  | { ok: false; status: 'error'; errorCode: string; message: string };
+
+type PushTokenPersistenceResult =
+  | { ok: true; userId: string }
+  | { ok: false; errorCode: string; message: string };
 
 let notificationsInitialized = false;
 let notificationsInitializing = false;
@@ -44,7 +68,10 @@ export function isPushNotificationsAvailable(): boolean {
 async function loadNotificationsModule(): Promise<NotificationsModule | null> {
   if (!isPushNotificationsAvailable()) return null;
   if (!notificationsModulePromise) {
-    notificationsModulePromise = import('expo-notifications').catch(() => null);
+    notificationsModulePromise = import('expo-notifications').catch((error) => {
+      console.error('[notifications] module_load_failed', error);
+      return null;
+    });
   }
   return notificationsModulePromise;
 }
@@ -188,9 +215,11 @@ export function initializeNotifications(): void {
 
       if (Platform.OS === 'android') {
         Notifications.setNotificationChannelAsync('default', {
-          name: 'default',
-          importance: Notifications.AndroidImportance.DEFAULT,
-        }).catch(() => {});
+          name: 'Notifications YOUMBIA',
+          importance: Notifications.AndroidImportance.HIGH,
+        }).catch((error) => {
+          console.error('[notifications] channel_setup_failed', error);
+        });
       }
 
       notificationsInitialized = true;
@@ -210,7 +239,7 @@ export function hasAskedForPushPermission(): boolean {
 }
 
 export function markPushPromptDismissed(): void {
-  writeStorage(PUSH_PROMPT_DISMISSED_KEY, 'true');
+  writeStorage(PUSH_PROMPT_DISMISSED_KEY, String(Date.now()));
 }
 
 export function clearPushPromptDismissed(): void {
@@ -219,118 +248,216 @@ export function clearPushPromptDismissed(): void {
 
 export function shouldShowPushPrompt(): boolean {
   if (!isPushNotificationsAvailable()) return false;
-  if (getStoredPushToken()) return false;
-  return readStorage(PUSH_PROMPT_DISMISSED_KEY) !== 'true';
+  const dismissedAt = Number.parseInt(readStorage(PUSH_PROMPT_DISMISSED_KEY) ?? '', 10);
+  if (!Number.isFinite(dismissedAt)) return true;
+  return Date.now() - dismissedAt >= PUSH_PROMPT_DISMISS_COOLDOWN_MS;
 }
 
-export type DetailedPushPermission = 'granted' | 'denied' | 'undetermined' | 'unavailable';
+export type DetailedPushPermission =
+  | 'granted'
+  | 'denied'
+  | 'blocked'
+  | 'undetermined'
+  | 'unavailable';
+
+type PushPermissionSnapshot = {
+  status: DetailedPushPermission;
+  canAskAgain: boolean;
+};
+
+async function getPushPermissionSnapshot(): Promise<PushPermissionSnapshot> {
+  if (!isPushNotificationsAvailable()) {
+    return { status: 'unavailable', canAskAgain: false };
+  }
+
+  try {
+    const Notifications = await loadNotificationsModule();
+    if (!Notifications) return { status: 'unavailable', canAskAgain: false };
+    const settings = await Notifications.getPermissionsAsync();
+    if (settings.status === 'granted') return { status: 'granted', canAskAgain: false };
+    if (settings.status === 'undetermined') {
+      return { status: 'undetermined', canAskAgain: settings.canAskAgain !== false };
+    }
+    return settings.canAskAgain === false
+      ? { status: 'blocked', canAskAgain: false }
+      : { status: 'denied', canAskAgain: true };
+  } catch (error) {
+    console.error('[notifications] permission_check_failed', error);
+    return { status: 'unavailable', canAskAgain: false };
+  }
+}
 
 /**
- * Statut détaillé (3 états réels + unavailable), nécessaire pour l'UI d'activation :
+ * Statut détaillé, nécessaire pour l'UI d'activation :
  * - 'granted'      : permission accordée
  * - 'denied'       : refusée (proposer l'ouverture des réglages système)
+ * - 'blocked'      : refusée et non redemandable dans l'app
  * - 'undetermined' : jamais demandée (proposer le bouton d'activation)
  * - 'unavailable'  : Expo Go / non disponible (ne rien afficher)
  */
 export async function getDetailedPushPermissionStatus(): Promise<DetailedPushPermission> {
-  if (!isPushNotificationsAvailable()) return 'unavailable';
-  try {
-    const Notifications = await loadNotificationsModule();
-    if (!Notifications) return 'unavailable';
-    const settings = await Notifications.getPermissionsAsync();
-    if (settings.status === 'granted') return 'granted';
-    if (settings.status === 'undetermined') return 'undetermined';
-    return 'denied';
-  } catch {
-    return 'unavailable';
-  }
+  return (await getPushPermissionSnapshot()).status;
 }
 
 export async function getPushPermissionStatus(): Promise<'granted' | 'denied'> {
-  if (!isPushNotificationsAvailable()) {
-    return 'denied';
+  return (await getPushPermissionSnapshot()).status === 'granted' ? 'granted' : 'denied';
+}
+
+function getErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error ?? 'unknown_error');
+}
+
+/** Persiste le token pour l'utilisateur de la session Supabase réelle. */
+export async function persistPushTokenToServer(
+  token: string,
+  previousToken: string | null = getStoredPushToken()
+): Promise<PushTokenPersistenceResult> {
+  const safeToken = token.trim();
+  if (!safeToken) {
+    return { ok: false, errorCode: 'token_missing', message: 'Token push manquant' };
   }
+
   try {
-    const Notifications = await loadNotificationsModule();
-    if (!Notifications) return 'denied';
-    const settings = await Notifications.getPermissionsAsync();
-    return settings.status === 'granted' ? 'granted' : 'denied';
-  } catch {
-    return 'denied';
+    const {
+      data: { session },
+      error: sessionError,
+    } = await supabase.auth.getSession();
+    if (sessionError) {
+      return { ok: false, errorCode: 'session_lookup_failed', message: sessionError.message };
+    }
+    const user = session?.user;
+    if (!user) {
+      return { ok: false, errorCode: 'user_missing', message: 'Utilisateur non connecté' };
+    }
+
+    const { error } = await supabase.rpc('claim_my_push_token', {
+      p_expo_push_token: safeToken,
+      p_platform: Platform.OS,
+      p_previous_expo_push_token: previousToken?.trim() || null,
+    });
+
+    if (error) {
+      console.error('[notifications] token_claim_failed', error.message);
+      return { ok: false, errorCode: 'token_claim_failed', message: error.message };
+    }
+
+    return { ok: true, userId: user.id };
+  } catch (error) {
+    const message = getErrorMessage(error);
+    console.error('[notifications] token_persistence_exception', message);
+    return { ok: false, errorCode: 'token_persistence_exception', message };
   }
 }
 
-/**
- * Upsert best-effort du token Expo dans public.user_push_tokens (clé: expo_push_token).
- * - N'upsert pas si l'utilisateur n'est pas connecté.
- * - En cas d'échec : log __DEV__ uniquement, aucune erreur remontée, aucun blocage.
- */
-async function persistPushTokenToServer(token: string): Promise<void> {
+export async function unregisterCurrentPushToken(): Promise<
+  { ok: true } | { ok: false; errorCode: string; message: string }
+> {
+  const token = getStoredPushToken();
+  if (!token) return { ok: true };
+
   try {
     const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) return;
+      data: { session },
+      error: sessionError,
+    } = await supabase.auth.getSession();
+    if (sessionError) {
+      return { ok: false, errorCode: 'session_lookup_failed', message: sessionError.message };
+    }
+    if (!session?.user) {
+      removeStorage(PUSH_TOKEN_STORAGE_KEY);
+      return { ok: true };
+    }
 
-    const now = new Date().toISOString();
     const { error } = await supabase
       .from('user_push_tokens')
-      .upsert(
-        {
-          user_id: user.id,
-          expo_push_token: token,
-          platform: Platform.OS,
-          updated_at: now,
-          last_seen_at: now,
-        } as never,
-        { onConflict: 'expo_push_token' }
-      );
+      .delete()
+      .eq('user_id', session.user.id)
+      .eq('expo_push_token', token);
+    if (error) {
+      console.error('[notifications] token_unregister_failed', error.message);
+      return { ok: false, errorCode: 'token_unregister_failed', message: error.message };
+    }
 
-    if (error && typeof __DEV__ !== 'undefined' && __DEV__) {
-      console.warn('[notifications] persistPushTokenToServer failed:', error.message);
-    }
-  } catch (err) {
-    if (typeof __DEV__ !== 'undefined' && __DEV__) {
-      console.warn('[notifications] persistPushTokenToServer exception:', err);
-    }
+    removeStorage(PUSH_TOKEN_STORAGE_KEY);
+    return { ok: true };
+  } catch (error) {
+    const message = getErrorMessage(error);
+    console.error('[notifications] token_unregister_exception', message);
+    return { ok: false, errorCode: 'token_unregister_exception', message };
   }
 }
 
 /**
  * Sync silencieux au démarrage/login : si la permission notifications est DÉJÀ
- * accordée, récupère le token Expo et le (ré)upsert côté serveur. Ne demande JAMAIS
- * la permission et n'affiche aucun prompt. Best-effort : tout échec est log __DEV__
- * uniquement et ne bloque jamais l'app. Préserve le flux NotificationsPromptCard.
+ * accordée, récupère le token Expo et le réclame atomiquement côté serveur. Ne demande
+ * jamais la permission et n'affiche aucun prompt. Les erreurs sont retournées,
+ * journalisées et instrumentées sans bloquer l'app.
  */
-export async function syncPushTokenIfGranted(): Promise<void> {
+export async function syncPushTokenIfGranted(): Promise<PushTokenSyncResult> {
+  const source = 'sync' as const;
   try {
-    if (!isPushNotificationsAvailable() || !isRunningOnPhysicalDevice()) return;
+    if (!isPushNotificationsAvailable()) {
+      return { ok: true, status: 'skipped', reason: 'unavailable' };
+    }
+    if (!isRunningOnPhysicalDevice()) {
+      return { ok: true, status: 'skipped', reason: 'not_physical_device' };
+    }
 
     // Ne pas redemander : on n'agit que si la permission est déjà 'granted'.
-    const permissionStatus = await getPushPermissionStatus();
-    if (permissionStatus !== 'granted') return;
+    const permission = await getPushPermissionSnapshot();
+    trackPushPermissionChecked(permission.status);
+    if (permission.status !== 'granted') {
+      return { ok: true, status: 'skipped', reason: `permission_${permission.status}` };
+    }
+
+    trackPushTokenRegistrationStarted(source);
 
     initializeNotifications();
     const Notifications = await loadNotificationsModule();
-    if (!Notifications) return;
+    if (!Notifications) {
+      trackPushTokenRegistrationFailed(source, 'module_unavailable');
+      return { ok: false, status: 'error', errorCode: 'module_unavailable', message: 'Notifications indisponibles' };
+    }
 
     const projectId = getProjectId();
-    if (!projectId) return;
+    if (!projectId) {
+      trackPushTokenRegistrationFailed(source, 'project_id_missing');
+      return { ok: false, status: 'error', errorCode: 'project_id_missing', message: 'Projet Expo non configuré' };
+    }
 
+    const previousToken = getStoredPushToken();
     const tokenResponse = await Notifications.getExpoPushTokenAsync({ projectId });
     const token = String(tokenResponse.data ?? '').trim();
-    if (!token) return;
+    if (!token) {
+      trackPushTokenRegistrationFailed(source, 'token_missing');
+      return { ok: false, status: 'error', errorCode: 'token_missing', message: 'Token push manquant' };
+    }
+
+    const persisted = await persistPushTokenToServer(token, previousToken);
+    if (!persisted.ok) {
+      trackPushTokenRegistrationFailed(source, persisted.errorCode);
+      return {
+        ok: false,
+        status: 'error',
+        errorCode: persisted.errorCode,
+        message: persisted.message,
+      };
+    }
 
     writeStorage(PUSH_TOKEN_STORAGE_KEY, token);
-    await persistPushTokenToServer(token);
-  } catch (err) {
-    if (typeof __DEV__ !== 'undefined' && __DEV__) {
-      console.warn('[notifications] syncPushTokenIfGranted failed:', err);
-    }
+    clearPushPromptDismissed();
+    trackPushTokenRegistrationSucceeded(source);
+    return { ok: true, status: 'registered', token };
+  } catch (error) {
+    const message = getErrorMessage(error);
+    console.error('[notifications] token_sync_failed', message);
+    trackPushTokenRegistrationFailed(source, 'token_sync_failed');
+    return { ok: false, status: 'error', errorCode: 'token_sync_failed', message };
   }
 }
 
 export async function registerForPushNotifications(): Promise<PushRegistrationResult> {
+  const source = 'manual' as const;
   try {
     if (!isPushNotificationsAvailable()) {
       return {
@@ -344,44 +471,109 @@ export async function registerForPushNotifications(): Promise<PushRegistrationRe
       return { ok: false, status: 'unavailable', message: 'Notifications indisponibles' };
     }
 
+    const {
+      data: { session },
+      error: sessionError,
+    } = await supabase.auth.getSession();
+    if (sessionError || !session?.user) {
+      trackPushTokenRegistrationFailed(source, 'user_missing');
+      return {
+        ok: false,
+        status: 'unauthenticated',
+        errorCode: 'user_missing',
+        message: 'Connectez-vous pour activer les notifications',
+      };
+    }
+
     initializeNotifications();
     const Notifications = await loadNotificationsModule();
     if (!Notifications) {
       return { ok: false, status: 'error', message: "Impossible d'activer les notifications" };
     }
 
-    let permissionStatus = await getPushPermissionStatus();
-    if (permissionStatus !== 'granted') {
+    let permission = await getPushPermissionSnapshot();
+    trackPushPermissionChecked(permission.status);
+    if (permission.status !== 'granted' && permission.canAskAgain) {
       writeStorage(PUSH_PERMISSION_ASKED_KEY, 'true');
       const requested = await Notifications.requestPermissionsAsync();
-      permissionStatus = requested.status === 'granted' ? 'granted' : 'denied';
+      permission = requested.status === 'granted'
+        ? { status: 'granted', canAskAgain: false }
+        : requested.canAskAgain === false
+          ? { status: 'blocked', canAskAgain: false }
+          : { status: 'denied', canAskAgain: true };
     }
 
-    if (permissionStatus !== 'granted') {
-      return { ok: false, status: 'denied', message: 'Notifications indisponibles' };
+    if (permission.status !== 'granted') {
+      const deniedStatus = permission.status === 'blocked' ? 'blocked' : 'denied';
+      trackPushPermissionDenied(deniedStatus);
+      return {
+        ok: false,
+        status: deniedStatus,
+        errorCode: `permission_${deniedStatus}`,
+        message: deniedStatus === 'blocked'
+          ? 'Autorisez les notifications dans les réglages du téléphone'
+          : 'Notifications refusées',
+      };
+    }
+    trackPushPermissionGranted();
+    trackPushTokenRegistrationStarted(source);
+
+    if (Platform.OS === 'android') {
+      await Notifications.setNotificationChannelAsync('default', {
+        name: 'Notifications YOUMBIA',
+        importance: Notifications.AndroidImportance.HIGH,
+      });
     }
 
     const projectId = getProjectId();
     if (!projectId) {
-      return { ok: false, status: 'error', message: "Impossible d'activer les notifications" };
+      trackPushTokenRegistrationFailed(source, 'project_id_missing');
+      return {
+        ok: false,
+        status: 'error',
+        errorCode: 'project_id_missing',
+        message: "Impossible d'activer les notifications",
+      };
     }
 
+    const previousToken = getStoredPushToken();
     const tokenResponse = await Notifications.getExpoPushTokenAsync({ projectId });
     const token = String(tokenResponse.data ?? '').trim();
     if (!token) {
-      return { ok: false, status: 'error', message: "Impossible d'activer les notifications" };
+      trackPushTokenRegistrationFailed(source, 'token_missing');
+      return {
+        ok: false,
+        status: 'error',
+        errorCode: 'token_missing',
+        message: "Impossible d'activer les notifications",
+      };
+    }
+
+    const persisted = await persistPushTokenToServer(token, previousToken);
+    if (!persisted.ok) {
+      trackPushTokenRegistrationFailed(source, persisted.errorCode);
+      return {
+        ok: false,
+        status: 'error',
+        errorCode: persisted.errorCode,
+        message: "Impossible d'enregistrer les notifications. Réessayez.",
+      };
     }
 
     writeStorage(PUSH_TOKEN_STORAGE_KEY, token);
     clearPushPromptDismissed();
-
-    // Persistance serveur (best-effort) : nécessaire pour les push réels côté
-    // destinataire. N'interrompt jamais le flux et n'affiche aucune erreur.
-    void persistPushTokenToServer(token);
-
+    trackPushTokenRegistrationSucceeded(source);
     return { ok: true, status: 'granted', token };
-  } catch {
-    return { ok: false, status: 'error', message: "Impossible d'activer les notifications" };
+  } catch (error) {
+    const message = getErrorMessage(error);
+    console.error('[notifications] registration_failed', message);
+    trackPushTokenRegistrationFailed(source, 'registration_failed');
+    return {
+      ok: false,
+      status: 'error',
+      errorCode: 'registration_failed',
+      message: "Impossible d'activer les notifications",
+    };
   }
 }
 
@@ -407,6 +599,24 @@ export async function addNotificationResponseReceivedListenerSafe(
       listener(response as NotificationResponseLike);
     });
   } catch {
+    return null;
+  }
+}
+
+export async function addNotificationReceivedListenerSafe(): Promise<{
+  remove: () => void;
+} | null> {
+  if (!isPushNotificationsAvailable()) return null;
+  try {
+    const Notifications = await loadNotificationsModule();
+    if (!Notifications) return null;
+    return Notifications.addNotificationReceivedListener((notification) => {
+      const data = getSafeNotificationData(notification.request.content.data);
+      const type = typeof data.type === 'string' ? data.type.trim() : null;
+      trackPushNotificationReceived(type || null);
+    });
+  } catch (error) {
+    console.error('[notifications] received_listener_setup_failed', error);
     return null;
   }
 }

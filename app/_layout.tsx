@@ -12,6 +12,7 @@ import {
   identifyCurrentUser,
   initMixpanel,
   resetAnalytics,
+  trackPushNotificationOpened,
   trackSavedSearchNotificationOpened,
 } from '@/lib/analytics';
 import {
@@ -23,6 +24,7 @@ import { startProfileProvisioningOnAuth } from '@/services/profile';
 import { handleSupabaseAuthDeepLink } from '@/services/auth/handleSupabaseAuthDeepLink';
 import { getListingHrefFromUrl } from '@/lib/listingDeepLink';
 import {
+  addNotificationReceivedListenerSafe,
   addNotificationResponseReceivedListenerSafe,
   getComparableRouteKey,
   getComparableTargetKey,
@@ -34,6 +36,7 @@ import {
 } from '@/services/notifications';
 import { FavoritesProvider } from '@/context/FavoritesContext';
 import { AppUpdateGate } from '@/components/AppUpdateGate';
+import { startPushTokenSessionSync } from '@/services/pushSessionSync';
 
 /**
  * Polling sync notifications messages, actif quand l’app est au premier plan.
@@ -152,25 +155,7 @@ function RootLayout() {
   // permission ni afficher de prompt. Best-effort, non bloquant.
   useEffect(() => {
     if (!isPushNotificationsAvailable()) return;
-    let cancelled = false;
-
-    const trySync = async () => {
-      const session = await getSession();
-      if (cancelled || !session?.user) return;
-      void syncPushTokenIfGranted();
-    };
-    void trySync();
-
-    const unsubscribe = onAuthStateChange((event, session) => {
-      if (session?.user && (event === 'SIGNED_IN' || event === 'INITIAL_SESSION')) {
-        void syncPushTokenIfGranted();
-      }
-    });
-
-    return () => {
-      cancelled = true;
-      unsubscribe();
-    };
+    return startPushTokenSessionSync();
   }, []);
 
   useEffect(() => {
@@ -234,6 +219,7 @@ function RootLayout() {
         if (resumingFromBackground) {
           void (async () => {
             await runForegroundSnapshotResync();
+            await syncPushTokenIfGranted();
             if (!cancelled) startPolling();
           })();
         } else {
@@ -313,9 +299,13 @@ function RootLayout() {
       target: string | null,
       meta?: { type: string | null; listingId: string | null; savedSearchId: string | null }
     ) => {
-      if (!target) return;
       const safeIdentifier = String(identifier ?? '').trim();
       if (safeIdentifier && lastHandledNotificationRef.current === safeIdentifier) return;
+      trackPushNotificationOpened(meta?.type);
+      if (!target) {
+        lastHandledNotificationRef.current = safeIdentifier || null;
+        return;
+      }
       if (getComparableTargetKey(target) === routeKeyRef.current) {
         lastHandledNotificationRef.current = safeIdentifier || target;
         return;
@@ -335,6 +325,7 @@ function RootLayout() {
   useEffect(() => {
     let active = true;
     let subscription: { remove: () => void } | null = null;
+    let receivedSubscription: { remove: () => void } | null = null;
 
     getLastNotificationResponseAsyncSafe()
       .then((initialResponse) => {
@@ -363,9 +354,18 @@ function RootLayout() {
       subscription = listenerSubscription;
     });
 
+    void addNotificationReceivedListenerSafe().then((listenerSubscription) => {
+      if (!active) {
+        listenerSubscription?.remove();
+        return;
+      }
+      receivedSubscription = listenerSubscription;
+    });
+
     return () => {
       active = false;
       subscription?.remove();
+      receivedSubscription?.remove();
     };
   }, [handleNotificationResponse]);
 

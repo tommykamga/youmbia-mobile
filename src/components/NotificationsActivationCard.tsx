@@ -22,12 +22,14 @@ import { colors, spacing, typography, fontWeights, radius } from '@/theme';
 export function NotificationsActivationCard() {
   const [status, setStatus] = useState<DetailedPushPermission | null>(null);
   const [loading, setLoading] = useState(false);
+  const [feedback, setFeedback] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     const next = await getDetailedPushPermissionStatus();
     setStatus(next);
     if (next === 'granted') {
-      void syncPushTokenIfGranted();
+      const result = await syncPushTokenIfGranted();
+      setFeedback(result.ok ? null : "Impossible d'enregistrer les notifications. Réessayez.");
     }
   }, []);
 
@@ -40,7 +42,8 @@ export function NotificationsActivationCard() {
   const handleActivate = useCallback(async () => {
     setLoading(true);
     try {
-      await registerForPushNotifications();
+      const result = await registerForPushNotifications();
+      setFeedback(result.ok ? null : result.message);
     } finally {
       setLoading(false);
       void refresh();
@@ -51,11 +54,15 @@ export function NotificationsActivationCard() {
     void Linking.openSettings().catch(() => {});
   }, []);
 
-  if (status === null || status === 'granted' || status === 'unavailable') {
+  if (
+    status === null ||
+    status === 'unavailable' ||
+    (status === 'granted' && feedback === null)
+  ) {
     return null;
   }
 
-  if (status === 'denied') {
+  if (status === 'denied' || status === 'blocked') {
     return (
       <View style={styles.wrapper}>
         <View style={styles.card}>
@@ -67,6 +74,7 @@ export function NotificationsActivationCard() {
             <Text style={styles.message}>
               Activez-les dans les réglages de votre téléphone pour recevoir vos messages YOUMBIA.
             </Text>
+            {feedback ? <Text style={styles.feedback}>{feedback}</Text> : null}
             <View style={styles.actions}>
               <Button variant="ghost" size="sm" onPress={handleOpenSettings}>
                 Ouvrir les réglages
@@ -90,6 +98,7 @@ export function NotificationsActivationCard() {
           <Text style={styles.message}>
             Activez les notifications pour ne manquer aucune réponse à vos annonces.
           </Text>
+          {feedback ? <Text style={styles.feedback}>{feedback}</Text> : null}
           <View style={styles.actions}>
             <Button variant="primary" size="sm" loading={loading} onPress={handleActivate}>
               Activer les notifications
@@ -143,6 +152,11 @@ const styles = StyleSheet.create({
     ...typography.sm,
     color: colors.textMuted,
     marginTop: spacing.xs,
+  },
+  feedback: {
+    ...typography.xs,
+    color: colors.error,
+    marginTop: spacing.sm,
   },
   actions: {
     flexDirection: 'row',
