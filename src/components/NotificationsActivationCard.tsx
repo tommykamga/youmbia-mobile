@@ -1,36 +1,53 @@
 import React, { useCallback, useState } from 'react';
-import { View, Text, StyleSheet, Linking } from 'react-native';
+import { View, Text, StyleSheet } from 'react-native';
 import { useFocusEffect } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Button } from './Button';
 import {
-  getDetailedPushPermissionStatus,
+  getPushActivationCardState,
+  getPushPermissionSnapshot,
+  markPushPromptDismissed,
+  openPushNotificationSettings,
   registerForPushNotifications,
+  shouldShowPushPrompt,
   syncPushTokenIfGranted,
-  type DetailedPushPermission,
+  type PushPermissionSnapshot,
+  type PushRegistrationFailure,
 } from '@/services/notifications';
 import { colors, spacing, typography, fontWeights, radius } from '@/theme';
 
 /**
  * Point d'activation des notifications (écran Compte).
  * - granted      : masquée (resync silencieux du token).
- * - undetermined : carte premium "Activer les notifications".
- * - denied       : carte discrète "Ouvrir les réglages".
- * - unavailable  : masquée (Expo Go / non-device).
+ * - askable      : carte "Activer les notifications".
+ * - blocked      : carte "Ouvrir les réglages".
+ * - unavailable  : cause technique explicite, sans faux CTA d'activation.
  * N'affiche jamais de popup agressive et ne bloque jamais l'écran.
  */
 export function NotificationsActivationCard() {
-  const [status, setStatus] = useState<DetailedPushPermission | null>(null);
+  const [visible, setVisible] = useState(false);
+  const [permission, setPermission] = useState<PushPermissionSnapshot | null>(null);
   const [loading, setLoading] = useState(false);
-  const [feedback, setFeedback] = useState<string | null>(null);
+  const [failure, setFailure] = useState<PushRegistrationFailure | null>(null);
 
   const refresh = useCallback(async () => {
-    const next = await getDetailedPushPermissionStatus();
-    setStatus(next);
-    if (next === 'granted') {
+    const next = await getPushPermissionSnapshot();
+    setPermission(next);
+    setFailure(next.failure ?? null);
+    if (next.status === 'granted') {
       const result = await syncPushTokenIfGranted();
-      setFeedback(result.ok ? null : "Impossible d'enregistrer les notifications. Réessayez.");
+      if (result.ok && result.status === 'registered') {
+        setFailure(null);
+        setVisible(false);
+      } else if (!result.ok) {
+        setFailure(result);
+        setVisible(shouldShowPushPrompt());
+      } else {
+        setVisible(false);
+      }
+      return;
     }
+    setVisible(shouldShowPushPrompt());
   }, []);
 
   useFocusEffect(
@@ -43,65 +60,69 @@ export function NotificationsActivationCard() {
     setLoading(true);
     try {
       const result = await registerForPushNotifications();
-      setFeedback(result.ok ? null : result.message);
+      if (result.ok) {
+        setPermission({ status: 'granted', canAskAgain: false });
+        setFailure(null);
+        setVisible(false);
+        return;
+      }
+      setFailure(result);
+      setPermission(await getPushPermissionSnapshot());
+      setVisible(true);
     } finally {
       setLoading(false);
-      void refresh();
     }
-  }, [refresh]);
-
-  const handleOpenSettings = useCallback(() => {
-    void Linking.openSettings().catch(() => {});
   }, []);
 
-  if (
-    status === null ||
-    status === 'unavailable' ||
-    (status === 'granted' && feedback === null)
-  ) {
-    return null;
-  }
+  const handleOpenSettings = useCallback(() => {
+    void openPushNotificationSettings();
+  }, []);
 
-  if (status === 'denied' || status === 'blocked') {
-    return (
-      <View style={styles.wrapper}>
-        <View style={styles.card}>
-          <View style={styles.iconWrap}>
-            <Ionicons name="notifications-off-outline" size={20} color={colors.textSecondary} />
-          </View>
-          <View style={styles.body}>
-            <Text style={styles.title}>Notifications désactivées</Text>
-            <Text style={styles.message}>
-              Activez-les dans les réglages de votre téléphone pour recevoir vos messages YOUMBIA.
-            </Text>
-            {feedback ? <Text style={styles.feedback}>{feedback}</Text> : null}
-            <View style={styles.actions}>
-              <Button variant="ghost" size="sm" onPress={handleOpenSettings}>
-                Ouvrir les réglages
-              </Button>
-            </View>
-          </View>
-        </View>
-      </View>
-    );
-  }
+  const handleDismiss = useCallback(() => {
+    markPushPromptDismissed();
+    setVisible(false);
+  }, []);
 
-  // undetermined → carte premium
+  if (!visible) return null;
+
+  const cardState = getPushActivationCardState(permission, failure);
+  if (cardState.kind === 'hidden') return null;
+
+  const handlePrimaryAction =
+    cardState.primaryAction === 'settings' ? handleOpenSettings : handleActivate;
+  const primaryLabel =
+    cardState.primaryAction === 'settings'
+      ? 'Ouvrir les réglages'
+      : cardState.primaryAction === 'retry'
+        ? 'Réessayer'
+        : 'Activer';
+
   return (
     <View style={styles.wrapper}>
       <View style={styles.card}>
-        <View style={[styles.iconWrap, styles.iconWrapPrimary]}>
-          <Ionicons name="notifications-outline" size={20} color={colors.primary} />
+        <View
+          style={[
+            styles.iconWrap,
+            cardState.kind === 'activate' ? styles.iconWrapPrimary : null,
+          ]}
+        >
+          <Ionicons
+            name={cardState.kind === 'activate' ? 'notifications-outline' : 'notifications-off-outline'}
+            size={20}
+            color={cardState.kind === 'activate' ? colors.primary : colors.textSecondary}
+          />
         </View>
         <View style={styles.body}>
-          <Text style={styles.title}>Recevez vos messages instantanément</Text>
-          <Text style={styles.message}>
-            Activez les notifications pour ne manquer aucune réponse à vos annonces.
-          </Text>
-          {feedback ? <Text style={styles.feedback}>{feedback}</Text> : null}
+          <Text style={styles.title}>{cardState.title}</Text>
+          <Text style={styles.message}>{cardState.message}</Text>
           <View style={styles.actions}>
-            <Button variant="primary" size="sm" loading={loading} onPress={handleActivate}>
-              Activer les notifications
+            {cardState.primaryAction ? (
+              <Button variant="primary" size="sm" loading={loading} onPress={handlePrimaryAction}>
+                {primaryLabel}
+              </Button>
+            ) : null}
+            <Button variant="ghost" size="sm" onPress={handleDismiss} disabled={loading}>
+              Plus tard
             </Button>
           </View>
         </View>
@@ -152,11 +173,6 @@ const styles = StyleSheet.create({
     ...typography.sm,
     color: colors.textMuted,
     marginTop: spacing.xs,
-  },
-  feedback: {
-    ...typography.xs,
-    color: colors.error,
-    marginTop: spacing.sm,
   },
   actions: {
     flexDirection: 'row',

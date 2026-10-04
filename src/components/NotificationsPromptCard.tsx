@@ -1,14 +1,18 @@
 import React, { useCallback, useState } from 'react';
-import { Linking, View, Text, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet } from 'react-native';
 import { useFocusEffect } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Button } from './Button';
 import {
-  getDetailedPushPermissionStatus,
+  getPushActivationCardState,
+  getPushPermissionSnapshot,
   markPushPromptDismissed,
+  openPushNotificationSettings,
   registerForPushNotifications,
   shouldShowPushPrompt,
   syncPushTokenIfGranted,
+  type PushPermissionSnapshot,
+  type PushRegistrationFailure,
 } from '@/services/notifications';
 import { getSession } from '@/services/auth';
 import { colors, spacing, typography, fontWeights, radius } from '@/theme';
@@ -16,39 +20,41 @@ import { colors, spacing, typography, fontWeights, radius } from '@/theme';
 export function NotificationsPromptCard() {
   const [visible, setVisible] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [feedback, setFeedback] = useState<string | null>(null);
-  const [needsSettings, setNeedsSettings] = useState(false);
+  const [permission, setPermission] = useState<PushPermissionSnapshot | null>(null);
+  const [failure, setFailure] = useState<PushRegistrationFailure | null>(null);
 
   const refresh = useCallback(async () => {
     const session = await getSession();
     if (!session?.user) {
       setVisible(false);
-      setFeedback(null);
-      setNeedsSettings(false);
+      setPermission(null);
+      setFailure(null);
       return;
     }
 
-    const permissionStatus = await getDetailedPushPermissionStatus();
-    if (permissionStatus === 'granted') {
+    const nextPermission = await getPushPermissionSnapshot();
+    setPermission(nextPermission);
+    setFailure(nextPermission.failure ?? null);
+    if (nextPermission.status === 'granted') {
       const result = await syncPushTokenIfGranted();
       if (result.ok && result.status === 'registered') {
         setVisible(false);
-        setFeedback(null);
-        setNeedsSettings(false);
+        setFailure(null);
       } else if (!result.ok) {
-        setFeedback("Impossible d'enregistrer les notifications. Réessayez.");
-        setVisible(true);
+        setFailure(result);
+        setVisible(shouldShowPushPrompt());
+      } else {
+        setVisible(false);
       }
       return;
     }
 
-    setNeedsSettings(permissionStatus === 'blocked');
     setVisible(shouldShowPushPrompt());
   }, []);
 
   useFocusEffect(
     useCallback(() => {
-      refresh();
+      void refresh();
     }, [refresh])
   );
 
@@ -59,21 +65,13 @@ export function NotificationsPromptCard() {
 
     if (result.ok) {
       setVisible(false);
-      setFeedback(null);
-      setNeedsSettings(false);
+      setFailure(null);
+      setPermission({ status: 'granted', canAskAgain: false });
       return;
     }
 
-    setNeedsSettings(result.status === 'blocked');
-
-    if (
-      result.status === 'denied' ||
-      result.status === 'blocked' ||
-      result.status === 'unavailable'
-    ) {
-      markPushPromptDismissed();
-    }
-    setFeedback(result.message);
+    setFailure(result);
+    setPermission(await getPushPermissionSnapshot());
     setVisible(true);
   }, []);
 
@@ -83,33 +81,46 @@ export function NotificationsPromptCard() {
   }, []);
 
   const handleOpenSettings = useCallback(() => {
-    void Linking.openSettings().catch((error) => {
-      console.error('[notifications] open_settings_failed', error);
-    });
+    void openPushNotificationSettings();
   }, []);
 
   if (!visible) return null;
 
+  const cardState = getPushActivationCardState(permission, failure);
+  if (cardState.kind === 'hidden') return null;
+
+  const handlePrimaryAction =
+    cardState.primaryAction === 'settings' ? handleOpenSettings : handleActivate;
+  const primaryLabel =
+    cardState.primaryAction === 'settings'
+      ? 'Ouvrir les réglages'
+      : cardState.primaryAction === 'retry'
+        ? 'Réessayer'
+        : 'Activer';
+
   return (
     <View style={styles.card}>
       <View style={styles.iconWrap}>
-        <Ionicons name="notifications-outline" size={20} color={colors.primary} />
+        <Ionicons
+          name={cardState.kind === 'activate' ? 'notifications-outline' : 'notifications-off-outline'}
+          size={20}
+          color={cardState.kind === 'activate' ? colors.primary : colors.textSecondary}
+        />
       </View>
       <View style={styles.body}>
-        <Text style={styles.title}>Activez les notifications</Text>
-        <Text style={styles.message}>
-          Activez les notifications pour etre alerte des nouveaux messages et annonces.
-        </Text>
-        {feedback ? <Text style={styles.feedback}>{feedback}</Text> : null}
+        <Text style={styles.title}>{cardState.title}</Text>
+        <Text style={styles.message}>{cardState.message}</Text>
         <View style={styles.actions}>
-          <Button
-            variant="primary"
-            size="sm"
-            loading={loading}
-            onPress={needsSettings ? handleOpenSettings : handleActivate}
-          >
-            {needsSettings ? 'Ouvrir les réglages' : 'Activer'}
-          </Button>
+          {cardState.primaryAction ? (
+            <Button
+              variant="primary"
+              size="sm"
+              loading={loading}
+              onPress={handlePrimaryAction}
+            >
+              {primaryLabel}
+            </Button>
+          ) : null}
           <Button variant="ghost" size="sm" onPress={handleDismiss} disabled={loading}>
             Plus tard
           </Button>
@@ -152,11 +163,6 @@ const styles = StyleSheet.create({
     ...typography.sm,
     color: colors.textMuted,
     marginTop: spacing.xs,
-  },
-  feedback: {
-    ...typography.xs,
-    color: colors.textSecondary,
-    marginTop: spacing.sm,
   },
   actions: {
     flexDirection: 'row',

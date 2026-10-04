@@ -2,9 +2,14 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  getPushActivationCardState,
+  getPushPermissionSnapshot,
   getStoredPushToken,
+  markPushPromptDismissed,
+  openPushNotificationSettings,
   persistPushTokenToServer,
   registerForPushNotifications,
+  shouldShowPushPrompt,
   unregisterCurrentPushToken,
 } from './notifications';
 
@@ -26,18 +31,20 @@ const mocks = vi.hoisted(() => ({
   trackPushTokenRegistrationSucceeded: vi.fn(),
   trackPushTokenRegistrationFailed: vi.fn(),
   trackPushNotificationReceived: vi.fn(),
+  openSettings: vi.fn(),
+  platform: { OS: 'ios' },
+  constants: {
+    executionEnvironment: 'standalone',
+    appOwnership: null,
+    expoConfig: { extra: { eas: { projectId: 'test-project-id' as string | null } } },
+    easConfig: null,
+  },
 }));
 
 vi.mock('expo-sqlite/localStorage/install', () => ({}));
 
 vi.mock('expo-constants', () => ({
-  default: {
-    executionEnvironment: 'standalone',
-    appOwnership: null,
-    isDevice: true,
-    expoConfig: { extra: { eas: { projectId: 'test-project-id' } } },
-    easConfig: null,
-  },
+  default: mocks.constants,
 }));
 
 vi.mock('expo-notifications', () => ({
@@ -49,6 +56,11 @@ vi.mock('expo-notifications', () => ({
   setNotificationChannelAsync: mocks.setNotificationChannelAsync,
   addNotificationResponseReceivedListener: mocks.addNotificationResponseReceivedListener,
   addNotificationReceivedListener: mocks.addNotificationReceivedListener,
+}));
+
+vi.mock('react-native', () => ({
+  Linking: { openSettings: mocks.openSettings },
+  Platform: mocks.platform,
 }));
 
 vi.mock('@/lib/supabase', () => ({
@@ -79,6 +91,7 @@ function authenticatedSession() {
 
 describe('push token registration', () => {
   beforeEach(() => {
+    vi.useRealTimers();
     vi.clearAllMocks();
     const storage = new Map<string, string>();
     vi.stubGlobal('localStorage', {
@@ -92,6 +105,65 @@ describe('push token registration', () => {
     mocks.getExpoPushTokenAsync.mockResolvedValue({ data: TOKEN_A });
     mocks.setNotificationChannelAsync.mockResolvedValue(null);
     mocks.rpc.mockResolvedValue({ error: null });
+    mocks.openSettings.mockResolvedValue(undefined);
+    mocks.platform.OS = 'ios';
+    mocks.constants.expoConfig.extra.eas.projectId = 'test-project-id';
+  });
+
+  it('permission accordée et token enregistré: produit un état de carte masqué', async () => {
+    const result = await registerForPushNotifications();
+
+    expect(result.ok).toBe(true);
+    expect(
+      getPushActivationCardState({ status: 'granted', canAskAgain: false }, null)
+    ).toEqual({ kind: 'hidden' });
+  });
+
+  it('permission refusée mais redemandable: conserve le CTA Activer', async () => {
+    mocks.getPermissionsAsync.mockResolvedValue({ status: 'denied', canAskAgain: true });
+
+    const permission = await getPushPermissionSnapshot();
+
+    expect(permission).toEqual({ status: 'denied', canAskAgain: true });
+    expect(getPushActivationCardState(permission)).toMatchObject({
+      kind: 'activate',
+      primaryAction: 'activate',
+    });
+    expect(
+      getPushActivationCardState(permission, {
+        errorCode: 'permission_denied',
+        retryable: true,
+        message: "Les notifications n'ont pas été autorisées.",
+      })
+    ).toMatchObject({ kind: 'activate', primaryAction: 'activate' });
+  });
+
+  it('permission bloquée: expose uniquement le CTA Ouvrir les réglages', async () => {
+    mocks.getPermissionsAsync.mockResolvedValue({ status: 'denied', canAskAgain: false });
+
+    const permission = await getPushPermissionSnapshot();
+    const card = getPushActivationCardState(permission);
+
+    expect(permission).toEqual({ status: 'blocked', canAskAgain: false });
+    expect(card).toMatchObject({ kind: 'settings', primaryAction: 'settings' });
+  });
+
+  it('erreur native: ne retombe jamais sur un faux CTA Activer', () => {
+    const card = getPushActivationCardState(
+      { status: 'denied', canAskAgain: true },
+      {
+        errorCode: 'native_unavailable',
+        retryable: true,
+        message: 'native failure',
+      }
+    );
+
+    expect(card).toMatchObject({ kind: 'unavailable', primaryAction: 'retry' });
+  });
+
+  it('ouvre les réglages système pour une permission bloquée', async () => {
+    await expect(openPushNotificationSettings()).resolves.toBe(true);
+    expect(mocks.openSettings).toHaveBeenCalledTimes(1);
   });
 
   it('permission refusée: ne récupère ni ne persiste de token', async () => {
@@ -117,13 +189,63 @@ describe('push token registration', () => {
     expect(getStoredPushToken()).toBe(TOKEN_A);
   });
 
+  it('Android crée le canal HIGH avant de demander la permission', async () => {
+    mocks.platform.OS = 'android';
+    mocks.getPermissionsAsync.mockResolvedValue({ status: 'denied', canAskAgain: true });
+
+    const result = await registerForPushNotifications();
+
+    expect(result.ok).toBe(true);
+    expect(mocks.setNotificationChannelAsync).toHaveBeenCalledWith('default', {
+      name: 'Notifications YOUMBIA',
+      importance: 4,
+    });
+    expect(mocks.setNotificationChannelAsync.mock.invocationCallOrder[0]).toBeLessThan(
+      mocks.requestPermissionsAsync.mock.invocationCallOrder[0]
+    );
+  });
+
   it('token absent: retourne une erreur contrôlée sans persistance', async () => {
     mocks.getExpoPushTokenAsync.mockResolvedValue({ data: '' });
 
     const result = await registerForPushNotifications();
 
-    expect(result).toMatchObject({ ok: false, status: 'error', errorCode: 'token_missing' });
+    expect(result).toMatchObject({ ok: false, status: 'error', errorCode: 'expo_token_failed' });
     expect(mocks.rpc).not.toHaveBeenCalled();
+  });
+
+  it('projectId absent: expose une indisponibilité non retryable', async () => {
+    mocks.constants.expoConfig.extra.eas.projectId = null;
+
+    const result = await registerForPushNotifications();
+
+    expect(result).toMatchObject({
+      ok: false,
+      status: 'error',
+      errorCode: 'project_id_missing',
+      retryable: false,
+    });
+    expect(mocks.getExpoPushTokenAsync).not.toHaveBeenCalled();
+  });
+
+  it('échec FCM Android: retourne un diagnostic retryable dédié', async () => {
+    mocks.platform.OS = 'android';
+    mocks.getExpoPushTokenAsync.mockRejectedValue(
+      Object.assign(new Error('Firebase registration failed'), { code: 'E_REGISTRATION_FAILED' })
+    );
+
+    const result = await registerForPushNotifications();
+
+    expect(result).toMatchObject({
+      ok: false,
+      status: 'error',
+      errorCode: 'fcm_registration_failed',
+      retryable: true,
+    });
+    expect(mocks.trackPushTokenRegistrationFailed).toHaveBeenCalledWith(
+      'manual',
+      'fcm_registration_failed'
+    );
   });
 
   it('utilisateur absent: ne demande pas la permission et ne persiste rien', async () => {
@@ -162,16 +284,57 @@ describe('push token registration', () => {
   });
 
   it('échec Supabase: retourne une erreur observable et ne stocke pas le token', async () => {
-    mocks.rpc.mockResolvedValue({ error: { message: 'database unavailable' } });
+    mocks.rpc.mockResolvedValue({ error: { code: '08006', message: 'database unavailable' } });
 
     const result = await registerForPushNotifications();
 
-    expect(result).toMatchObject({ ok: false, status: 'error', errorCode: 'token_claim_failed' });
+    expect(result).toMatchObject({
+      ok: false,
+      status: 'error',
+      errorCode: 'supabase_persist_failed',
+      debugCode: '08006',
+    });
     expect(getStoredPushToken()).toBeNull();
     expect(mocks.trackPushTokenRegistrationFailed).toHaveBeenCalledWith(
       'manual',
-      'token_claim_failed'
+      'supabase_persist_failed'
     );
+  });
+
+  it('Plus tard masque la carte pendant 24 h puis la rend de nouveau éligible', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-10-04T08:00:00Z'));
+
+    markPushPromptDismissed();
+    expect(shouldShowPushPrompt()).toBe(false);
+
+    vi.advanceTimersByTime(24 * 60 * 60 * 1000);
+    expect(shouldShowPushPrompt()).toBe(true);
+    vi.useRealTimers();
+  });
+
+  it('un refus redemandable ne déclenche qu’une seule demande par action', async () => {
+    mocks.getPermissionsAsync.mockResolvedValue({ status: 'denied', canAskAgain: true });
+    mocks.requestPermissionsAsync.mockResolvedValue({ status: 'denied', canAskAgain: true });
+
+    const result = await registerForPushNotifications();
+
+    expect(result).toMatchObject({ ok: false, errorCode: 'permission_denied' });
+    expect(mocks.requestPermissionsAsync).toHaveBeenCalledTimes(1);
+    expect(mocks.getExpoPushTokenAsync).not.toHaveBeenCalled();
+  });
+
+  it('ne journalise ni n’envoie jamais le token complet en cas d’échec', async () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+    mocks.getExpoPushTokenAsync.mockRejectedValue(
+      Object.assign(new Error(`failed for ${TOKEN_A}`), { code: 'ERR_NOTIFICATIONS_SERVER_ERROR' })
+    );
+
+    await registerForPushNotifications();
+
+    expect(JSON.stringify(consoleError.mock.calls)).not.toContain(TOKEN_A);
+    expect(JSON.stringify(mocks.trackPushTokenRegistrationFailed.mock.calls)).not.toContain(TOKEN_A);
+    consoleError.mockRestore();
   });
 
   it('logout: supprime uniquement le token courant du compte avant de vider le stockage', async () => {

@@ -1,7 +1,7 @@
 import 'expo-sqlite/localStorage/install';
 
 import Constants from 'expo-constants';
-import { Platform } from 'react-native';
+import { Linking, Platform } from 'react-native';
 import {
   trackPushNotificationReceived,
   trackPushPermissionChecked,
@@ -35,19 +35,34 @@ type NotificationResponseLike = {
 };
 type NotificationsModule = typeof import('expo-notifications');
 
+export type PushRegistrationErrorCode =
+  | 'permission_denied'
+  | 'permission_blocked'
+  | 'native_unavailable'
+  | 'project_id_missing'
+  | 'fcm_registration_failed'
+  | 'expo_token_failed'
+  | 'supabase_persist_failed'
+  | 'unknown';
+
+export type PushRegistrationFailure = {
+  errorCode: PushRegistrationErrorCode;
+  debugCode?: string;
+  retryable: boolean;
+  message: string;
+};
+
 export type PushRegistrationResult =
   | { ok: true; status: 'granted'; token: string }
-  | {
+  | ({
       ok: false;
       status: 'denied' | 'blocked' | 'unavailable' | 'unauthenticated' | 'error';
-      message: string;
-      errorCode?: string;
-    };
+    } & PushRegistrationFailure);
 
 export type PushTokenSyncResult =
   | { ok: true; status: 'registered'; token: string }
   | { ok: true; status: 'skipped'; reason: string }
-  | { ok: false; status: 'error'; errorCode: string; message: string };
+  | ({ ok: false; status: 'error' } & PushRegistrationFailure);
 
 type PushTokenPersistenceResult =
   | { ok: true; userId: string }
@@ -56,20 +71,23 @@ type PushTokenPersistenceResult =
 let notificationsInitialized = false;
 let notificationsInitializing = false;
 let notificationsModulePromise: Promise<NotificationsModule | null> | null = null;
+let notificationsModuleError: unknown = null;
 
 function isExpoGoRuntime(): boolean {
   return Constants.executionEnvironment === 'storeClient' || Constants.appOwnership === 'expo';
 }
 
 export function isPushNotificationsAvailable(): boolean {
-  return !isExpoGoRuntime();
+  return Platform.OS !== 'web' && !isExpoGoRuntime();
 }
 
 async function loadNotificationsModule(): Promise<NotificationsModule | null> {
   if (!isPushNotificationsAvailable()) return null;
   if (!notificationsModulePromise) {
     notificationsModulePromise = import('expo-notifications').catch((error) => {
-      console.error('[notifications] module_load_failed', error);
+      notificationsModuleError = error;
+      logPushRuntimeFailure('module_load', 'native_unavailable', error);
+      notificationsModulePromise = null;
       return null;
     });
   }
@@ -83,10 +101,6 @@ function getProjectId(): string | null {
     null;
 
   return typeof easProjectId === 'string' && easProjectId.trim() ? easProjectId.trim() : null;
-}
-
-function isRunningOnPhysicalDevice(): boolean {
-  return Constants.isDevice === true;
 }
 
 function readStorage(key: string): string | null {
@@ -213,20 +227,25 @@ export function initializeNotifications(): void {
         }),
       });
 
-      if (Platform.OS === 'android') {
-        Notifications.setNotificationChannelAsync('default', {
-          name: 'Notifications YOUMBIA',
-          importance: Notifications.AndroidImportance.HIGH,
-        }).catch((error) => {
-          console.error('[notifications] channel_setup_failed', error);
-        });
-      }
+      void ensureAndroidNotificationChannel(Notifications).catch((error) => {
+        logPushRuntimeFailure('channel_setup', 'native_unavailable', error);
+      });
 
       notificationsInitialized = true;
     })
     .finally(() => {
       notificationsInitializing = false;
-    });
+  });
+}
+
+async function ensureAndroidNotificationChannel(
+  Notifications: NotificationsModule
+): Promise<void> {
+  if (Platform.OS !== 'android') return;
+  await Notifications.setNotificationChannelAsync('default', {
+    name: 'Notifications YOUMBIA',
+    importance: Notifications.AndroidImportance.HIGH,
+  });
 }
 
 export function getStoredPushToken(): string | null {
@@ -260,19 +279,100 @@ export type DetailedPushPermission =
   | 'undetermined'
   | 'unavailable';
 
-type PushPermissionSnapshot = {
+export type PushPermissionSnapshot = {
   status: DetailedPushPermission;
   canAskAgain: boolean;
+  failure?: PushRegistrationFailure;
 };
 
-async function getPushPermissionSnapshot(): Promise<PushPermissionSnapshot> {
+export type PushActivationCardState =
+  | { kind: 'hidden' }
+  | {
+      kind: 'activate' | 'settings' | 'unavailable' | 'error';
+      title: string;
+      message: string;
+      primaryAction: 'activate' | 'settings' | 'retry' | null;
+    };
+
+export function getPushActivationCardState(
+  permission: PushPermissionSnapshot | null,
+  failure: PushRegistrationFailure | null = null
+): PushActivationCardState {
+  if (!permission) return { kind: 'hidden' };
+
+  if (permission.status === 'blocked' || (!permission.canAskAgain && permission.status === 'denied')) {
+    return {
+      kind: 'settings',
+      title: 'Notifications désactivées',
+      message: 'Autorisez les notifications dans les réglages de votre téléphone.',
+      primaryAction: 'settings',
+    };
+  }
+
+  const technicalFailure = failure ?? permission.failure ?? null;
+  const hasTechnicalFailure =
+    technicalFailure !== null &&
+    technicalFailure.errorCode !== 'permission_denied' &&
+    technicalFailure.errorCode !== 'permission_blocked';
+  if (permission.status === 'unavailable' || hasTechnicalFailure) {
+    const unavailable =
+      permission.status === 'unavailable' ||
+      technicalFailure?.errorCode === 'native_unavailable' ||
+      technicalFailure?.errorCode === 'project_id_missing';
+    return {
+      kind: unavailable ? 'unavailable' : 'error',
+      title: unavailable ? 'Notifications indisponibles' : 'Activation impossible',
+      message: unavailable
+        ? 'Le service de notifications est indisponible sur cet appareil pour le moment.'
+        : "Impossible d'enregistrer les notifications. Réessayez.",
+      primaryAction: technicalFailure?.retryable ? 'retry' : null,
+    };
+  }
+
+  if (
+    permission.status === 'undetermined' ||
+    (permission.status === 'denied' && permission.canAskAgain)
+  ) {
+    return {
+      kind: 'activate',
+      title: 'Activez les notifications',
+      message: 'Activez les notifications pour ne manquer aucun message important.',
+      primaryAction: 'activate',
+    };
+  }
+
+  if (permission.status === 'granted') return { kind: 'hidden' };
+  return { kind: 'hidden' };
+}
+
+export async function getPushPermissionSnapshot(): Promise<PushPermissionSnapshot> {
   if (!isPushNotificationsAvailable()) {
-    return { status: 'unavailable', canAskAgain: false };
+    return {
+      status: 'unavailable',
+      canAskAgain: false,
+      failure: createPushFailure(
+        'native_unavailable',
+        'Les notifications ne sont pas disponibles dans cet environnement.',
+        false,
+        isExpoGoRuntime() ? 'expo_go' : 'unsupported_platform'
+      ),
+    };
   }
 
   try {
     const Notifications = await loadNotificationsModule();
-    if (!Notifications) return { status: 'unavailable', canAskAgain: false };
+    if (!Notifications) {
+      return {
+        status: 'unavailable',
+        canAskAgain: false,
+        failure: createPushFailure(
+          'native_unavailable',
+          'Le module natif de notifications est indisponible.',
+          false,
+          getErrorCode(notificationsModuleError) ?? 'module_unavailable'
+        ),
+      };
+    }
     const settings = await Notifications.getPermissionsAsync();
     if (settings.status === 'granted') return { status: 'granted', canAskAgain: false };
     if (settings.status === 'undetermined') {
@@ -282,18 +382,27 @@ async function getPushPermissionSnapshot(): Promise<PushPermissionSnapshot> {
       ? { status: 'blocked', canAskAgain: false }
       : { status: 'denied', canAskAgain: true };
   } catch (error) {
-    console.error('[notifications] permission_check_failed', error);
-    return { status: 'unavailable', canAskAgain: false };
+    logPushRuntimeFailure('permission_check', 'native_unavailable', error);
+    return {
+      status: 'unavailable',
+      canAskAgain: false,
+      failure: createPushFailure(
+        'native_unavailable',
+        'Impossible de vérifier les notifications sur cet appareil.',
+        true,
+        getErrorCode(error) ?? 'permission_check_failed'
+      ),
+    };
   }
 }
 
 /**
  * Statut détaillé, nécessaire pour l'UI d'activation :
  * - 'granted'      : permission accordée
- * - 'denied'       : refusée (proposer l'ouverture des réglages système)
+ * - 'denied'       : refusée mais encore redemandable dans l'app
  * - 'blocked'      : refusée et non redemandable dans l'app
  * - 'undetermined' : jamais demandée (proposer le bouton d'activation)
- * - 'unavailable'  : Expo Go / non disponible (ne rien afficher)
+ * - 'unavailable'  : environnement ou module natif indisponible
  */
 export async function getDetailedPushPermissionStatus(): Promise<DetailedPushPermission> {
   return (await getPushPermissionSnapshot()).status;
@@ -304,7 +413,81 @@ export async function getPushPermissionStatus(): Promise<'granted' | 'denied'> {
 }
 
 function getErrorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error ?? 'unknown_error');
+  if (error instanceof Error) return error.message;
+  if (error && typeof error === 'object') {
+    const message = (error as Record<string, unknown>).message;
+    if (typeof message === 'string' && message.trim()) return message.trim();
+  }
+  return String(error ?? 'unknown_error');
+}
+
+function getErrorField(error: unknown, field: string): string | null {
+  if (!error || typeof error !== 'object') return null;
+  const value = (error as Record<string, unknown>)[field];
+  return typeof value === 'string' && value.trim() ? value.trim() : null;
+}
+
+function getErrorCode(error: unknown): string | null {
+  return getErrorField(error, 'code');
+}
+
+function redactPushSecrets(value: string): string {
+  return value
+    .replace(/(?:Exponent|Expo)PushToken\[[^\]]+\]/g, '[redacted-expo-push-token]')
+    .replace(/[A-Za-z0-9_-]{80,}/g, '[redacted-long-token-value]');
+}
+
+function logPushRuntimeFailure(
+  stage: string,
+  errorCode: PushRegistrationErrorCode,
+  error: unknown
+): void {
+  console.error('[notifications] push_registration_runtime_failure', {
+    stage,
+    errorCode,
+    nativeCode: getErrorCode(error),
+    name: getErrorField(error, 'name'),
+    message: redactPushSecrets(getErrorMessage(error)),
+    details: redactPushSecrets(getErrorField(error, 'details') ?? ''),
+    hint: redactPushSecrets(getErrorField(error, 'hint') ?? ''),
+  });
+}
+
+function createPushFailure(
+  errorCode: PushRegistrationErrorCode,
+  message: string,
+  retryable: boolean,
+  debugCode?: string | null
+): PushRegistrationFailure {
+  return {
+    errorCode,
+    retryable,
+    message,
+    ...(debugCode ? { debugCode } : {}),
+  };
+}
+
+function classifyTokenRegistrationError(error: unknown): PushRegistrationErrorCode {
+  const code = getErrorCode(error);
+  const message = getErrorMessage(error);
+  if (code === 'ERR_UNAVAILABLE') return 'native_unavailable';
+  if (
+    Platform.OS === 'android' &&
+    (code === 'E_REGISTRATION_FAILED' || /firebase|\bfcm\b|messaging/i.test(message))
+  ) {
+    return 'fcm_registration_failed';
+  }
+  return 'expo_token_failed';
+}
+
+export async function openPushNotificationSettings(): Promise<boolean> {
+  try {
+    await Linking.openSettings();
+    return true;
+  } catch (error) {
+    logPushRuntimeFailure('open_settings', 'unknown', error);
+    return false;
+  }
 }
 
 /** Persiste le token pour l'utilisateur de la session Supabase réelle. */
@@ -337,14 +520,18 @@ export async function persistPushTokenToServer(
     });
 
     if (error) {
-      console.error('[notifications] token_claim_failed', error.message);
-      return { ok: false, errorCode: 'token_claim_failed', message: error.message };
+      logPushRuntimeFailure('supabase_rpc', 'supabase_persist_failed', error);
+      return {
+        ok: false,
+        errorCode: error.code || 'token_claim_failed',
+        message: error.message,
+      };
     }
 
     return { ok: true, userId: user.id };
   } catch (error) {
     const message = getErrorMessage(error);
-    console.error('[notifications] token_persistence_exception', message);
+    logPushRuntimeFailure('supabase_persist', 'supabase_persist_failed', error);
     return { ok: false, errorCode: 'token_persistence_exception', message };
   }
 }
@@ -374,7 +561,7 @@ export async function unregisterCurrentPushToken(): Promise<
       .eq('user_id', session.user.id)
       .eq('expo_push_token', token);
     if (error) {
-      console.error('[notifications] token_unregister_failed', error.message);
+      logPushRuntimeFailure('supabase_unregister', 'supabase_persist_failed', error);
       return { ok: false, errorCode: 'token_unregister_failed', message: error.message };
     }
 
@@ -382,7 +569,7 @@ export async function unregisterCurrentPushToken(): Promise<
     return { ok: true };
   } catch (error) {
     const message = getErrorMessage(error);
-    console.error('[notifications] token_unregister_exception', message);
+    logPushRuntimeFailure('supabase_unregister', 'supabase_persist_failed', error);
     return { ok: false, errorCode: 'token_unregister_exception', message };
   }
 }
@@ -399,9 +586,6 @@ export async function syncPushTokenIfGranted(): Promise<PushTokenSyncResult> {
     if (!isPushNotificationsAvailable()) {
       return { ok: true, status: 'skipped', reason: 'unavailable' };
     }
-    if (!isRunningOnPhysicalDevice()) {
-      return { ok: true, status: 'skipped', reason: 'not_physical_device' };
-    }
 
     // Ne pas redemander : on n'agit que si la permission est déjà 'granted'.
     const permission = await getPushPermissionSnapshot();
@@ -415,32 +599,73 @@ export async function syncPushTokenIfGranted(): Promise<PushTokenSyncResult> {
     initializeNotifications();
     const Notifications = await loadNotificationsModule();
     if (!Notifications) {
-      trackPushTokenRegistrationFailed(source, 'module_unavailable');
-      return { ok: false, status: 'error', errorCode: 'module_unavailable', message: 'Notifications indisponibles' };
+      const failure = createPushFailure(
+        'native_unavailable',
+        'Le module natif de notifications est indisponible.',
+        false,
+        getErrorCode(notificationsModuleError) ?? 'module_unavailable'
+      );
+      trackPushTokenRegistrationFailed(source, failure.errorCode);
+      return { ok: false, status: 'error', ...failure };
+    }
+
+    try {
+      await ensureAndroidNotificationChannel(Notifications);
+    } catch (error) {
+      const failure = createPushFailure(
+        'native_unavailable',
+        'Impossible de configurer les notifications sur cet appareil.',
+        true,
+        getErrorCode(error) ?? 'channel_setup_failed'
+      );
+      logPushRuntimeFailure('channel_setup', failure.errorCode, error);
+      trackPushTokenRegistrationFailed(source, failure.errorCode);
+      return { ok: false, status: 'error', ...failure };
     }
 
     const projectId = getProjectId();
     if (!projectId) {
-      trackPushTokenRegistrationFailed(source, 'project_id_missing');
-      return { ok: false, status: 'error', errorCode: 'project_id_missing', message: 'Projet Expo non configuré' };
+      const failure = createPushFailure(
+        'project_id_missing',
+        'Le projet de notifications est incomplet.',
+        false
+      );
+      trackPushTokenRegistrationFailed(source, failure.errorCode);
+      return { ok: false, status: 'error', ...failure };
     }
 
     const previousToken = getStoredPushToken();
-    const tokenResponse = await Notifications.getExpoPushTokenAsync({ projectId });
-    const token = String(tokenResponse.data ?? '').trim();
-    if (!token) {
-      trackPushTokenRegistrationFailed(source, 'token_missing');
-      return { ok: false, status: 'error', errorCode: 'token_missing', message: 'Token push manquant' };
+    let token: string;
+    try {
+      const tokenResponse = await Notifications.getExpoPushTokenAsync({ projectId });
+      token = String(tokenResponse.data ?? '').trim();
+      if (!token) throw new Error('empty_expo_push_token');
+    } catch (error) {
+      const errorCode = classifyTokenRegistrationError(error);
+      const failure = createPushFailure(
+        errorCode,
+        "Impossible d'obtenir le jeton de notifications.",
+        errorCode !== 'native_unavailable',
+        getErrorCode(error) ?? 'get_expo_push_token_failed'
+      );
+      logPushRuntimeFailure('expo_token', failure.errorCode, error);
+      trackPushTokenRegistrationFailed(source, failure.errorCode);
+      return { ok: false, status: 'error', ...failure };
     }
 
     const persisted = await persistPushTokenToServer(token, previousToken);
     if (!persisted.ok) {
-      trackPushTokenRegistrationFailed(source, persisted.errorCode);
+      const failure = createPushFailure(
+        'supabase_persist_failed',
+        "Impossible d'enregistrer les notifications. Réessayez.",
+        true,
+        persisted.errorCode
+      );
+      trackPushTokenRegistrationFailed(source, failure.errorCode);
       return {
         ok: false,
         status: 'error',
-        errorCode: persisted.errorCode,
-        message: persisted.message,
+        ...failure,
       };
     }
 
@@ -449,10 +674,15 @@ export async function syncPushTokenIfGranted(): Promise<PushTokenSyncResult> {
     trackPushTokenRegistrationSucceeded(source);
     return { ok: true, status: 'registered', token };
   } catch (error) {
-    const message = getErrorMessage(error);
-    console.error('[notifications] token_sync_failed', message);
-    trackPushTokenRegistrationFailed(source, 'token_sync_failed');
-    return { ok: false, status: 'error', errorCode: 'token_sync_failed', message };
+    const failure = createPushFailure(
+      'unknown',
+      "Impossible d'enregistrer les notifications. Réessayez.",
+      true,
+      getErrorCode(error) ?? 'token_sync_failed'
+    );
+    logPushRuntimeFailure('sync', failure.errorCode, error);
+    trackPushTokenRegistrationFailed(source, failure.errorCode);
+    return { ok: false, status: 'error', ...failure };
   }
 }
 
@@ -460,15 +690,18 @@ export async function registerForPushNotifications(): Promise<PushRegistrationRe
   const source = 'manual' as const;
   try {
     if (!isPushNotificationsAvailable()) {
+      const failure = createPushFailure(
+        'native_unavailable',
+        'Les notifications ne sont pas disponibles dans cet environnement.',
+        false,
+        isExpoGoRuntime() ? 'expo_go' : 'unsupported_platform'
+      );
+      trackPushTokenRegistrationFailed(source, failure.errorCode);
       return {
         ok: false,
         status: 'unavailable',
-        message: 'Notifications push indisponibles dans Expo Go. Utilisez un build de développement.',
+        ...failure,
       };
-    }
-
-    if (!isRunningOnPhysicalDevice()) {
-      return { ok: false, status: 'unavailable', message: 'Notifications indisponibles' };
     }
 
     const {
@@ -476,26 +709,80 @@ export async function registerForPushNotifications(): Promise<PushRegistrationRe
       error: sessionError,
     } = await supabase.auth.getSession();
     if (sessionError || !session?.user) {
-      trackPushTokenRegistrationFailed(source, 'user_missing');
+      const failure = createPushFailure(
+        'unknown',
+        'Connectez-vous pour activer les notifications.',
+        false,
+        sessionError?.code ?? 'user_missing'
+      );
+      if (sessionError) logPushRuntimeFailure('session_lookup', failure.errorCode, sessionError);
+      trackPushTokenRegistrationFailed(source, failure.errorCode);
       return {
         ok: false,
         status: 'unauthenticated',
-        errorCode: 'user_missing',
-        message: 'Connectez-vous pour activer les notifications',
+        ...failure,
       };
     }
 
     initializeNotifications();
     const Notifications = await loadNotificationsModule();
     if (!Notifications) {
-      return { ok: false, status: 'error', message: "Impossible d'activer les notifications" };
+      const failure = createPushFailure(
+        'native_unavailable',
+        'Le module natif de notifications est indisponible.',
+        false,
+        getErrorCode(notificationsModuleError) ?? 'module_unavailable'
+      );
+      trackPushTokenRegistrationFailed(source, failure.errorCode);
+      return { ok: false, status: 'unavailable', ...failure };
+    }
+
+    // Android 13+ n'affiche la permission qu'après la création d'un canal.
+    // Sur Android < 13, cette opération reste compatible et idempotente.
+    try {
+      await ensureAndroidNotificationChannel(Notifications);
+    } catch (error) {
+      const failure = createPushFailure(
+        'native_unavailable',
+        'Impossible de configurer les notifications sur cet appareil.',
+        true,
+        getErrorCode(error) ?? 'channel_setup_failed'
+      );
+      logPushRuntimeFailure('channel_setup', failure.errorCode, error);
+      trackPushTokenRegistrationFailed(source, failure.errorCode);
+      return { ok: false, status: 'unavailable', ...failure };
     }
 
     let permission = await getPushPermissionSnapshot();
     trackPushPermissionChecked(permission.status);
+    if (permission.status === 'unavailable') {
+      const failure =
+        permission.failure ??
+        createPushFailure(
+          'native_unavailable',
+          'Impossible de vérifier les notifications sur cet appareil.',
+          true,
+          'permission_check_failed'
+        );
+      trackPushTokenRegistrationFailed(source, failure.errorCode);
+      return { ok: false, status: 'unavailable', ...failure };
+    }
     if (permission.status !== 'granted' && permission.canAskAgain) {
       writeStorage(PUSH_PERMISSION_ASKED_KEY, 'true');
-      const requested = await Notifications.requestPermissionsAsync();
+      let requested;
+      try {
+        requested = await Notifications.requestPermissionsAsync();
+      } catch (error) {
+        const failure = createPushFailure(
+          'native_unavailable',
+          'Impossible de demander la permission de notifications.',
+          true,
+          getErrorCode(error) ?? 'permission_request_failed'
+        );
+        logPushRuntimeFailure('permission_request', failure.errorCode, error);
+        trackPushTokenRegistrationFailed(source, failure.errorCode);
+        return { ok: false, status: 'unavailable', ...failure };
+      }
       permission = requested.status === 'granted'
         ? { status: 'granted', canAskAgain: false }
         : requested.canAskAgain === false
@@ -506,57 +793,73 @@ export async function registerForPushNotifications(): Promise<PushRegistrationRe
     if (permission.status !== 'granted') {
       const deniedStatus = permission.status === 'blocked' ? 'blocked' : 'denied';
       trackPushPermissionDenied(deniedStatus);
+      const failure = createPushFailure(
+        deniedStatus === 'blocked' ? 'permission_blocked' : 'permission_denied',
+        deniedStatus === 'blocked'
+          ? 'Autorisez les notifications dans les réglages de votre téléphone.'
+          : "Les notifications n'ont pas été autorisées.",
+        deniedStatus !== 'blocked'
+      );
       return {
         ok: false,
         status: deniedStatus,
-        errorCode: `permission_${deniedStatus}`,
-        message: deniedStatus === 'blocked'
-          ? 'Autorisez les notifications dans les réglages du téléphone'
-          : 'Notifications refusées',
+        ...failure,
       };
     }
     trackPushPermissionGranted();
     trackPushTokenRegistrationStarted(source);
 
-    if (Platform.OS === 'android') {
-      await Notifications.setNotificationChannelAsync('default', {
-        name: 'Notifications YOUMBIA',
-        importance: Notifications.AndroidImportance.HIGH,
-      });
-    }
-
     const projectId = getProjectId();
     if (!projectId) {
-      trackPushTokenRegistrationFailed(source, 'project_id_missing');
+      const failure = createPushFailure(
+        'project_id_missing',
+        'Le projet de notifications est incomplet.',
+        false
+      );
+      trackPushTokenRegistrationFailed(source, failure.errorCode);
       return {
         ok: false,
         status: 'error',
-        errorCode: 'project_id_missing',
-        message: "Impossible d'activer les notifications",
+        ...failure,
       };
     }
 
     const previousToken = getStoredPushToken();
-    const tokenResponse = await Notifications.getExpoPushTokenAsync({ projectId });
-    const token = String(tokenResponse.data ?? '').trim();
-    if (!token) {
-      trackPushTokenRegistrationFailed(source, 'token_missing');
+    let token: string;
+    try {
+      const tokenResponse = await Notifications.getExpoPushTokenAsync({ projectId });
+      token = String(tokenResponse.data ?? '').trim();
+      if (!token) throw new Error('empty_expo_push_token');
+    } catch (error) {
+      const errorCode = classifyTokenRegistrationError(error);
+      const failure = createPushFailure(
+        errorCode,
+        "Impossible d'obtenir le jeton de notifications. Réessayez.",
+        errorCode !== 'native_unavailable',
+        getErrorCode(error) ?? 'get_expo_push_token_failed'
+      );
+      logPushRuntimeFailure('expo_token', failure.errorCode, error);
+      trackPushTokenRegistrationFailed(source, failure.errorCode);
       return {
         ok: false,
         status: 'error',
-        errorCode: 'token_missing',
-        message: "Impossible d'activer les notifications",
+        ...failure,
       };
     }
 
     const persisted = await persistPushTokenToServer(token, previousToken);
     if (!persisted.ok) {
-      trackPushTokenRegistrationFailed(source, persisted.errorCode);
+      const failure = createPushFailure(
+        'supabase_persist_failed',
+        "Impossible d'enregistrer les notifications. Réessayez.",
+        true,
+        persisted.errorCode
+      );
+      trackPushTokenRegistrationFailed(source, failure.errorCode);
       return {
         ok: false,
         status: 'error',
-        errorCode: persisted.errorCode,
-        message: "Impossible d'enregistrer les notifications. Réessayez.",
+        ...failure,
       };
     }
 
@@ -565,14 +868,18 @@ export async function registerForPushNotifications(): Promise<PushRegistrationRe
     trackPushTokenRegistrationSucceeded(source);
     return { ok: true, status: 'granted', token };
   } catch (error) {
-    const message = getErrorMessage(error);
-    console.error('[notifications] registration_failed', message);
-    trackPushTokenRegistrationFailed(source, 'registration_failed');
+    const failure = createPushFailure(
+      'unknown',
+      "Impossible d'activer les notifications. Réessayez.",
+      true,
+      getErrorCode(error) ?? 'registration_failed'
+    );
+    logPushRuntimeFailure('registration', failure.errorCode, error);
+    trackPushTokenRegistrationFailed(source, failure.errorCode);
     return {
       ok: false,
       status: 'error',
-      errorCode: 'registration_failed',
-      message: "Impossible d'activer les notifications",
+      ...failure,
     };
   }
 }
