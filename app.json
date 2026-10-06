@@ -10,7 +10,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.youmbia.mobile",
-      "buildNumber": "3",
+      "buildNumber": "4",
       "usesAppleSignIn": true,
       "associatedDomains": [
         "applinks:www.youmbia.com"
