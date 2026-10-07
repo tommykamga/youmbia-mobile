@@ -2,7 +2,7 @@
   "expo": {
     "name": "YOUMBIA",
     "slug": "youmbia-mobile",
-    "version": "4.6.0",
+    "version": "4.6.1",
     "orientation": "default",
     "icon": "./assets/images/icon.png",
     "scheme": "youmbiamobile",
@@ -10,7 +10,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.youmbia.mobile",
-      "buildNumber": "4",
+      "buildNumber": "5",
       "usesAppleSignIn": true,
       "associatedDomains": [
         "applinks:www.youmbia.com"
