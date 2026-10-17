@@ -23,6 +23,7 @@ CREATE TABLE IF NOT EXISTS auth.users (
   id uuid PRIMARY KEY,
   email text,
   created_at timestamptz DEFAULT now(),
+  email_confirmed_at timestamptz,
   raw_user_meta_data jsonb NOT NULL DEFAULT '{}'::jsonb
 );
 CREATE OR REPLACE FUNCTION auth.uid()

@@ -8,6 +8,7 @@
 import { createClient, type SupabaseClient } from '../_shared/supabaseClient.ts';
 import { resolveLifecycleProviderTransport } from '../_shared/providerTransport.ts';
 import {
+  lifecycleCampaignChannel,
   lifecycleCampaignSubject,
   renderLifecycleEmailHtml,
   renderLifecycleEmailText,
@@ -103,6 +104,7 @@ async function sendViaResend(args: {
   html: string;
   text: string;
   unsubUrl: string;
+  campaignId: CampaignId;
 }): Promise<ProviderResult> {
   if (args.dryRun) {
     return { kind: 'ok', messageId: `dry_run_${crypto.randomUUID()}` };
@@ -122,6 +124,23 @@ async function sendViaResend(args: {
     };
   }
 
+  const channel = lifecycleCampaignChannel(args.campaignId);
+  // Jamais category=transactional / auth / magic_link.
+  const providerHeaders: Record<string, string> =
+    channel === 'marketing'
+      ? {
+          'List-Unsubscribe': `<${args.unsubUrl}>`,
+          'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
+          Precedence: 'bulk',
+        }
+      : {};
+  const tags = [
+    { name: 'category', value: channel },
+    { name: 'channel', value: channel },
+    { name: 'campaign', value: args.campaignId },
+    { name: 'product', value: 'youmbia_lifecycle_p0' },
+  ];
+
   let requestLikelySent = false;
   try {
     const controller = new AbortController();
@@ -139,16 +158,8 @@ async function sendViaResend(args: {
         subject: args.subject,
         html: args.html,
         text: args.text,
-        headers: {
-          'List-Unsubscribe': `<${args.unsubUrl}>`,
-          'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
-          Precedence: 'bulk',
-        },
-        // Jamais category=transactional / auth / magic_link.
-        tags: [
-          { name: 'category', value: 'marketing' },
-          { name: 'product', value: 'youmbia_lifecycle_p0' },
-        ],
+        headers: providerHeaders,
+        tags,
       }),
       signal: controller.signal,
     });
@@ -282,12 +293,19 @@ Deno.serve(async (req) => {
       const recipient = String(elig.recipient_email ?? row.recipient_email);
       const ts = String(Math.floor(Date.now() / 1000));
       const sig = await hmacHex(HMAC_SECRET, `${row.user_id}|${recipient}|${ts}`);
-      const unsubUrl =
+      const unsubBase =
         `${PUBLIC_FUNCTIONS_BASE}/lifecycle-email-unsubscribe` +
         `?uid=${encodeURIComponent(row.user_id)}` +
         `&email=${encodeURIComponent(recipient)}` +
         `&ts=${encodeURIComponent(ts)}` +
         `&sig=${encodeURIComponent(sig)}`;
+      // List-Unsubscribe + lien principal = désinscription marketing globale.
+      const unsubUrl = `${unsubBase}&scope=marketing`;
+      // Option distincte pour abandoned_draft uniquement.
+      const draftRemindersOptOutUrl =
+        row.campaign_id === 'abandoned_draft_h24'
+          ? `${unsubBase}&scope=draft_reminders`
+          : null;
 
       const listingTitle =
         typeof row.metadata?.listing_title === 'string' ? row.metadata.listing_title : null;
@@ -306,6 +324,7 @@ Deno.serve(async (req) => {
         fullName: resolveLifecycleGreetingFirstName(profile?.full_name ?? null),
         cta: { href: cta.href, label: cta.label, enabled: cta.enabled },
         unsubscribeUrl: unsubUrl,
+        draftRemindersOptOutUrl,
         listingTitle,
         webFallbackUrl: cta.webFallbackUrl,
       };
@@ -323,6 +342,7 @@ Deno.serve(async (req) => {
         html,
         text,
         unsubUrl,
+        campaignId: row.campaign_id,
       });
 
       if (result.kind === 'ok' && dryRun) {

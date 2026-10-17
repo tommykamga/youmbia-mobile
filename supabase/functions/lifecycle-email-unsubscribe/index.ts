@@ -90,25 +90,37 @@ async function assertValidSignature(
   return null;
 }
 
-function confirmationPage(actionUrl: string): string {
+function confirmationPage(actionUrl: string, scope: string): string {
+  const isDraft = scope === 'draft_reminders';
+  const title = isDraft
+    ? 'Arrêter les rappels de brouillon'
+    : 'Confirmer la désinscription';
+  const body = isDraft
+    ? 'Vous êtes sur le point de refuser les rappels facultatifs liés à vos brouillons d’annonce (indépendamment des e-mails marketing).'
+    : 'Vous êtes sur le point de vous désinscrire des e-mails marketing YOUMBIA.';
+  const btn = isDraft ? 'Arrêter ces rappels' : 'Se désinscrire';
   return `<!DOCTYPE html><html lang="fr"><head><meta charset="utf-8"/><title>Désinscription YOUMBIA</title></head>
 <body style="font-family:Arial,sans-serif;background:#F8FAFC;color:#0F172A;padding:40px;text-align:center;">
-  <h1 style="color:#16A34A;">Confirmer la désinscription</h1>
-  <p>Vous êtes sur le point de vous désinscrire des e-mails marketing YOUMBIA.</p>
+  <h1 style="color:#16A34A;">${title}</h1>
+  <p>${body}</p>
   <form method="POST" action="${actionUrl}">
     <button type="submit" style="background:#16A34A;color:#fff;border:0;padding:12px 20px;border-radius:10px;font-size:16px;cursor:pointer;">
-      Se désinscrire
+      ${btn}
     </button>
   </form>
   <p style="margin-top:24px;"><a href="https://www.youmbia.com" style="color:#16A34A;">Retour au site</a></p>
 </body></html>`;
 }
 
-function successPage(): string {
+function successPage(scope: string): string {
+  const isDraft = scope === 'draft_reminders';
+  const msg = isDraft
+    ? 'Vous ne recevrez plus de rappels facultatifs pour vos brouillons d’annonce.'
+    : 'Vous ne recevrez plus les e-mails marketing YOUMBIA.';
   return `<!DOCTYPE html><html lang="fr"><head><meta charset="utf-8"/><title>Désinscription YOUMBIA</title></head>
 <body style="font-family:Arial,sans-serif;background:#F8FAFC;color:#0F172A;padding:40px;text-align:center;">
   <h1 style="color:#16A34A;">Désinscription confirmée</h1>
-  <p>Vous ne recevrez plus les e-mails marketing YOUMBIA.</p>
+  <p>${msg}</p>
   <p><a href="https://www.youmbia.com" style="color:#16A34A;">Retour au site</a></p>
 </body></html>`;
 }
@@ -128,13 +140,17 @@ Deno.serve(async (req) => {
 
   const url = new URL(req.url);
   const params = parseParams(url);
+  const scopeRaw = String(url.searchParams.get('scope') ?? 'marketing')
+    .trim()
+    .toLowerCase();
+  const scope = scopeRaw === 'draft_reminders' ? 'draft_reminders' : 'marketing';
   const sigError = await assertValidSignature(HMAC_SECRET, params);
   if (sigError) return sigError;
 
   // GET : aucune mutation (évite prefetch mail → unsub involontaire).
   if (req.method === 'GET') {
     const actionUrl = url.pathname + url.search;
-    return new Response(confirmationPage(actionUrl), {
+    return new Response(confirmationPage(actionUrl, scope), {
       status: 200,
       headers: { 'Content-Type': 'text/html; charset=utf-8' },
     });
@@ -145,11 +161,19 @@ Deno.serve(async (req) => {
   });
 
   const method = 'one_click_or_form';
-  const { data, error } = await admin.rpc('apply_lifecycle_unsubscribe', {
-    p_user_id: params.uid,
-    p_email: params.email,
-    p_method: method,
-  });
+  const rpc =
+    scope === 'draft_reminders'
+      ? admin.rpc('apply_lifecycle_draft_reminders_opt_out', {
+          p_user_id: params.uid,
+          p_method: method,
+        })
+      : admin.rpc('apply_lifecycle_unsubscribe', {
+          p_user_id: params.uid,
+          p_email: params.email,
+          p_method: method,
+        });
+
+  const { data, error } = await rpc;
 
   if (error || data !== true) {
     return json(500, { error: 'unsubscribe_failed' });
@@ -157,7 +181,7 @@ Deno.serve(async (req) => {
 
   const accept = String(req.headers.get('accept') ?? '');
   if (accept.includes('text/html')) {
-    return new Response(successPage(), {
+    return new Response(successPage(scope), {
       status: 200,
       headers: { 'Content-Type': 'text/html; charset=utf-8' },
     });

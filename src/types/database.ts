@@ -787,6 +787,7 @@ export type Database = {
           marketing_opt_in_at: string | null;
           marketing_opt_in_source: string | null;
           unsubscribed_at: string | null;
+          optional_draft_reminders_opt_out: boolean;
           updated_at: string;
         };
         Insert: {
@@ -795,6 +796,7 @@ export type Database = {
           marketing_opt_in_at?: string | null;
           marketing_opt_in_source?: string | null;
           unsubscribed_at?: string | null;
+          optional_draft_reminders_opt_out?: boolean;
           updated_at?: string;
         };
         Update: {
@@ -803,6 +805,7 @@ export type Database = {
           marketing_opt_in_at?: string | null;
           marketing_opt_in_source?: string | null;
           unsubscribed_at?: string | null;
+          optional_draft_reminders_opt_out?: boolean;
           updated_at?: string;
         };
         Relationships: [];

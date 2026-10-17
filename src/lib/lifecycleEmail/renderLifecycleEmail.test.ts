@@ -80,9 +80,10 @@ describe('renderLifecycleEmail (source envoi)', () => {
     }
   });
 
-  it('sujets / préheaders / CTA labels P0', () => {
-    expect(lifecycleCampaignSubject('welcome_h0')).toBe('Bienvenue sur YOUMBIA !');
-    expect(lifecycleCampaignPreheader('welcome_h0')).toContain('confiance');
+  it('sujets / préheaders / CTA labels service vs marketing', () => {
+    expect(lifecycleCampaignSubject('welcome_h0')).toBe('Votre compte YOUMBIA est créé');
+    expect(lifecycleCampaignPreheader('welcome_h0')).toContain('création');
+    expect(lifecycleCtaLabel('welcome_h0')).toBe('Ouvrir YOUMBIA');
     expect(lifecycleCtaLabel('first_listing_h24')).toBe('Publier gratuitement');
     expect(lifecycleCtaLabel('abandoned_draft_h24')).toBe('Reprendre mon brouillon');
   });
@@ -102,10 +103,25 @@ describe('renderLifecycleEmail (source envoi)', () => {
     });
     expect(pack.html).toContain(LIFECYCLE_BRAND.logoUrl);
     expect(pack.html).toContain(LIFECYCLE_BRAND.slogan);
-    expect(pack.html).toContain('Découvrir YOUMBIA');
-    expect(pack.html).toContain('Se désinscrire');
+    expect(pack.html).toContain('Ouvrir YOUMBIA');
+    expect(pack.html).toContain('E-mail de service');
+    expect(pack.html).toContain('création de votre compte');
+    expect(pack.html).not.toContain('Communication marketing');
     expect(pack.html).not.toContain('youmbiamobile://');
     expect(pack.preheader).toBe(lifecycleCampaignPreheader('welcome_h0'));
+    expect(pack.category).toBe('service');
+  });
+
+  it('first_listing reste marketing avec désinscription', () => {
+    const pack = buildLifecycleRenderedEmail({
+      campaignId: 'first_listing_h24',
+      fullName: 'Ada',
+      unsubscribeUrl: 'https://example.test/unsub',
+      dryRun: false,
+    });
+    expect(pack.category).toBe('marketing');
+    expect(pack.html).toContain('Communication marketing');
+    expect(pack.html).toContain('Se désinscrire');
   });
 
   it('brouillon sans titre : phrase générique', () => {
@@ -116,7 +132,7 @@ describe('renderLifecycleEmail (source envoi)', () => {
       cta: { href: 'https://www.youmbia.com/', label: 'Reprendre mon brouillon', enabled: true },
       unsubscribeUrl: 'https://example.test/unsub',
     });
-    expect(html).toContain('annonce en brouillon');
+    expect(html).toContain('brouillon d’annonce');
     expect(html).not.toContain('« <strong>');
   });
 });
