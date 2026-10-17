@@ -3,6 +3,7 @@ import {
   canAutoRetryStatus,
   claimLifecycleEmails,
   completeLifecycleClaim,
+  promoteStaleProviderClaims,
   type LifecycleOutboxRow,
 } from './claim';
 
@@ -83,5 +84,21 @@ describe('lifecycle claim', () => {
     const n = completeLifecycleClaim(store, 'other', ['1'], 'sent', '2026-10-17T12:00:00.000Z');
     expect(n).toBe(0);
     expect(store[0].status).toBe('processing');
+  });
+
+  it('ne reclaim pas un processing stale avec provider_message_id (anti double-send)', () => {
+    const store = [
+      row({
+        id: '1',
+        status: 'processing',
+        claim_id: 'old',
+        claimed_at: '2026-10-17T11:00:00.000Z',
+        provider_message_id: 're_already',
+        attempts: 1,
+      }),
+    ];
+    expect(claimLifecycleEmails(store, 'new', '2026-10-17T11:11:00.000Z', 10)).toHaveLength(0);
+    expect(promoteStaleProviderClaims(store, '2026-10-17T11:11:00.000Z')).toBe(1);
+    expect(store[0].status).toBe('uncertain');
   });
 });

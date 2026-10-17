@@ -81,35 +81,31 @@ function subjectFor(campaignId: CampaignId): string {
   return 'Votre brouillon vous attend sur YOUMBIA';
 }
 
+/** Aligné src/lib/lifecycleEmail/httpsRoutes.ts — CTA email toujours HTTPS. */
 function resolveCta(
   campaignId: CampaignId,
   dryRun: boolean,
   listingId: string | null
 ): { href: string | null; label: string; enabled: boolean } {
+  const home = `${WEB_ORIGIN}/`;
   if (campaignId === 'welcome_h0') {
-    return { href: `${WEB_ORIGIN}/`, label: 'Découvrir YOUMBIA', enabled: true };
+    return { href: home, label: 'Découvrir YOUMBIA', enabled: true };
   }
   if (campaignId === 'first_listing_h24') {
     if (dryRun) {
-      return {
-        href: null,
-        label: 'Publier une annonce',
-        enabled: false,
-      };
+      return { href: null, label: 'Publier une annonce', enabled: false };
     }
-    return { href: `${WEB_ORIGIN}/`, label: 'Publier une annonce', enabled: true };
+    return { href: home, label: 'Publier une annonce', enabled: true };
   }
+  // abandoned_draft_h24 — Universal Link /annonce/{id} si listing connu
   if (listingId && !dryRun) {
-    return {
-      href: `${WEB_ORIGIN}/`,
-      label: 'Ouvrir YOUMBIA',
-      enabled: true,
-    };
+    const annonce = `${WEB_ORIGIN}/annonce/${encodeURIComponent(listingId)}`;
+    return { href: annonce, label: 'Ouvrir YOUMBIA', enabled: true };
   }
   if (dryRun) {
     return { href: null, label: 'Reprendre mon brouillon', enabled: false };
   }
-  return { href: `${WEB_ORIGIN}/`, label: 'Ouvrir YOUMBIA', enabled: true };
+  return { href: home, label: 'Ouvrir YOUMBIA', enabled: true };
 }
 
 function renderHtml(args: {
@@ -152,6 +148,7 @@ function renderHtml(args: {
       <p style="font-size:14px;color:#475569;"><strong>L’équipe YOUMBIA</strong><br/>Le marché qui vous élève</p>
     </div>
     <p style="text-align:center;font-size:12px;color:#64748B;margin-top:16px;">
+      Communication marketing (pas un e-mail de connexion).
       <a href="${escapeHtml(args.unsubscribeUrl)}" style="color:#64748B;">Se désinscrire</a>
     </p>
   </div></body></html>`;
@@ -222,8 +219,13 @@ async function sendViaResend(args: {
         headers: {
           'List-Unsubscribe': `<${args.unsubUrl}>`,
           'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
+          Precedence: 'bulk',
         },
-        tags: [{ name: 'category', value: 'lifecycle' }],
+        // Jamais category=transactional / auth / magic_link.
+        tags: [
+          { name: 'category', value: 'marketing' },
+          { name: 'product', value: 'youmbia_lifecycle_p0' },
+        ],
       }),
       signal: controller.signal,
     });

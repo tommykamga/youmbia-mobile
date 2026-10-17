@@ -38,12 +38,37 @@ export function isLifecycleClaimable(row: LifecycleOutboxRow, nowMs: number): bo
     return Number.isFinite(scheduled) && scheduled <= nowMs;
   }
   if (row.status === 'processing') {
+    // Déjà accepté ESP → pas de reclaim (évite double envoi).
+    if (row.provider_message_id != null) return false;
     if (row.claim_id == null || row.claimed_at == null) return true;
     const claimedAt = Date.parse(row.claimed_at);
     if (!Number.isFinite(claimedAt)) return true;
     return nowMs - claimedAt > LIFECYCLE_CLAIM_STALE_MS;
   }
   return false;
+}
+
+/** Stale processing avec provider id → uncertain (miroir SQL Lot 02). */
+export function promoteStaleProviderClaims(
+  store: LifecycleOutboxRow[],
+  nowIso: string
+): number {
+  const nowMs = Date.parse(nowIso);
+  let n = 0;
+  for (const row of store) {
+    if (row.status !== 'processing') continue;
+    if (row.provider_message_id == null) continue;
+    const claimedAt = row.claimed_at ? Date.parse(row.claimed_at) : NaN;
+    const stale =
+      !Number.isFinite(claimedAt) || nowMs - claimedAt > LIFECYCLE_CLAIM_STALE_MS;
+    if (!stale) continue;
+    row.status = 'uncertain';
+    row.last_error = row.last_error ?? 'stale_claim_with_provider_id';
+    row.claim_id = null;
+    row.claimed_at = null;
+    n += 1;
+  }
+  return n;
 }
 
 /** Simulation UPDATE … FOR UPDATE SKIP LOCKED (premier writer gagne). */

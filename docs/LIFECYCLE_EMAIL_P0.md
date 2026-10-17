@@ -63,6 +63,13 @@ Fréquence : **≤ 1 email marketing `sent` / user / 7 jours** (enqueue + revali
 7. Given unsub signé, When GET/POST unsub, Then opt-in false + audit event.
 8. Given Magic Link / signup / reset sources Auth, When grep lifecycle, Then aucun import Auth Resend modifié.
 
+## Lot 02 (consentement minimal + templates + routes HTTPS)
+
+- Templates FR brandés + label **Communication marketing** (jamais Auth).
+- Routes HTTPS + fallback web ; scheme `youmbiamobile://` hors HTML email.
+- Capture consentement : checkbox signup (défaut off) + switch Paramètres.
+- `email_preferences` typé côté client ; opt-in uniquement explicite.
+
 ## Garde-fous post-killcritic
 
 - Kill switch défaut **`true`** (migration).

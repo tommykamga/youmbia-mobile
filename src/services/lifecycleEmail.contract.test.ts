@@ -6,6 +6,10 @@ const sql = readFileSync(
   resolve(process.cwd(), 'supabase/migrations/20261017150000_lifecycle_email_p0.sql'),
   'utf8'
 );
+const sqlLot02 = readFileSync(
+  resolve(process.cwd(), 'supabase/migrations/20261017160000_lifecycle_email_p0_lot02_guards.sql'),
+  'utf8'
+);
 const sendEdge = readFileSync(
   resolve(process.cwd(), 'supabase/functions/send-lifecycle-email/index.ts'),
   'utf8'
@@ -49,7 +53,7 @@ describe('lifecycle email P0 — contrat SQL / Edge', () => {
     );
   });
 
-  it('enqueue campagnes + fréquence 7j + claim SKIP LOCKED', () => {
+  it('enqueue campagnes + fréquence 7j + claim SKIP LOCKED + suppressions', () => {
     expect(sql).toMatch(/welcome_h0/);
     expect(sql).toMatch(/first_listing_h24/);
     expect(sql).toMatch(/abandoned_draft_h24/);
@@ -60,6 +64,29 @@ describe('lifecycle email P0 — contrat SQL / Edge', () => {
     expect(sql).toMatch(/revalidate_lifecycle_send_eligibility/);
     expect(sql).toMatch(/complete_lifecycle_email_claim/);
     expect(sql).toMatch(/p_outcome = 'uncertain'/);
+    expect(sql).toMatch(/lifecycle_email_is_suppressed/);
+    expect(sql).toMatch(/marketing_opt_in IS TRUE/);
+    expect(sql).toMatch(/coalesce\(prof\.is_banned, false\) = false/);
+    expect(sql).toMatch(/ON CONFLICT \(user_id, campaign_id, occurrence_key\) DO NOTHING/);
+    expect(sql).toMatch(/interval '10 minutes'/);
+    expect(sql).toMatch(/attempts >= max_attempts/);
+  });
+
+  it('consentement défaut false + revalidation au send', () => {
+    expect(sql).toMatch(/marketing_opt_in boolean NOT NULL DEFAULT false/);
+    expect(sql).toMatch(/VALUES \(NEW\.id, false\)/);
+    expect(sql).toMatch(/pref\.marketing_opt_in IS NOT TRUE OR pref\.unsubscribed_at IS NOT NULL/);
+    expect(sql).toMatch(/'no_consent'/);
+    expect(sql).toMatch(/'suppressed'/);
+    expect(sql).toMatch(/'frequency_cap'/);
+    expect(sql).toMatch(/'banned'/);
+  });
+
+  it('Lot 02 : metadata signup opt-in + claim refuse provider_message_id stale', () => {
+    expect(sqlLot02).toMatch(/marketing_opt_in', 'false'\)\) = 'true'/);
+    expect(sqlLot02).toMatch(/stale_claim_with_provider_id/);
+    expect(sqlLot02).toMatch(/o\.provider_message_id IS NULL/);
+    expect(sqlLot02).toMatch(/o\.provider_message_id IS NOT NULL/);
   });
 
   it('ne schedule cron que via SQL versionné (pas d’auth email)', () => {
@@ -83,6 +110,12 @@ describe('lifecycle email P0 — contrat SQL / Edge', () => {
     expect(sendEdge).not.toMatch(/getUser\(/);
     expect(sendEdge).toMatch(/unexpected_field/);
     expect(sendEdge).toMatch(/List-Unsubscribe/);
+    expect(sendEdge).toMatch(/category', value: 'marketing'/);
+    expect(sendEdge).not.toMatch(/category', value: 'transactional'/);
+    expect(sendEdge).not.toMatch(/category', value: 'auth'/);
+    expect(sendEdge).toMatch(/Communication marketing/);
+    expect(sendEdge).toMatch(/Precedence: 'bulk'/);
+    expect(sendEdge).toMatch(/\/annonce\/\$\{encodeURIComponent\(listingId\)\}/);
   });
 
   it('Edge unsub : GET non mutatif ; POST applique ; webhook signature invalide → 401', () => {
