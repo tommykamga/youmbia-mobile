@@ -130,16 +130,17 @@ describe('lifecycle email P0 — contrat SQL / Edge', () => {
     expect(sendEdge).not.toMatch(/getUser\(/);
     expect(sendEdge).toMatch(/unexpected_field/);
     expect(sendEdge).toMatch(/List-Unsubscribe/);
-    expect(sendEdge).toMatch(/category', value: 'marketing'/);
+    expect(sendEdge).toMatch(/lifecycleCampaignChannel/);
+    expect(sendEdge).toMatch(/name: 'category', value: channel/);
     expect(sendEdge).not.toMatch(/category', value: 'transactional'/);
     expect(sendEdge).not.toMatch(/category', value: 'auth'/);
     expect(sendEdge).toMatch(/Precedence: 'bulk'/);
-    // Copy marketing dans _shared/lifecycleTemplates (rendu commun)
     const templatesShared = readFileSync(
       resolve(process.cwd(), 'supabase/functions/_shared/lifecycleTemplates.ts'),
       'utf8'
     );
     expect(templatesShared).toMatch(/Communication marketing/);
+    expect(templatesShared).toMatch(/E-mail de service/);
     expect(templatesShared).toMatch(/Achetez\. Vendez\. En confiance\./);
     expect(sendEdge).toMatch(/lifecycleTemplates/);
     expect(sendEdge).toMatch(/renderLifecycleEmailHtml/);
@@ -155,6 +156,8 @@ describe('lifecycle email P0 — contrat SQL / Edge', () => {
     expect(unsubEdge).toMatch(/Confirmer la désinscription/);
     expect(unsubEdge).toMatch(/req\.method === 'GET'/);
     expect(unsubEdge).toMatch(/apply_lifecycle_unsubscribe/);
+    expect(unsubEdge).toMatch(/apply_lifecycle_draft_reminders_opt_out/);
+    expect(unsubEdge).toMatch(/draft_reminders/);
     const getIdx = unsubEdge.indexOf("if (req.method === 'GET')");
     const applyIdx = unsubEdge.indexOf('apply_lifecycle_unsubscribe');
     expect(getIdx).toBeGreaterThan(-1);
@@ -163,6 +166,28 @@ describe('lifecycle email P0 — contrat SQL / Edge', () => {
     expect(webhookEdge).toMatch(/invalid_signature/);
     expect(webhookEdge).toMatch(/email_suppressions/);
     expect(webhookEdge).toMatch(/hard_bounce/);
+  });
+
+  it('migration service vs marketing : welcome service, draft marketing + cutoff', () => {
+    const svc = readFileSync(
+      resolve(
+        process.cwd(),
+        'supabase/migrations/20261017220000_lifecycle_service_vs_marketing.sql'
+      ),
+      'utf8'
+    );
+    expect(svc).toMatch(/lifecycle_service_cutoff/);
+    expect(svc).toMatch(/lifecycle_email_campaign_channel/);
+    expect(svc).toMatch(/lifecycle_email_is_hard_suppressed/);
+    expect(svc).toMatch(/optional_draft_reminders_opt_out/);
+    expect(svc).toMatch(/pre_cutoff_no_retroactive/);
+    expect(svc).toMatch(/channel', 'service'/);
+    expect(svc).toMatch(/WHEN 'welcome_h0' THEN 'service'/);
+    expect(svc).toMatch(/WHEN 'abandoned_draft_h24' THEN 'marketing'/);
+    expect(svc).toMatch(/apply_lifecycle_draft_reminders_opt_out/);
+    // Pas de forçage consentement historique
+    expect(svc).not.toMatch(/marketing_opt_in\s*=\s*true/);
+    expect(svc).not.toMatch(/SET value = 'false' WHERE key = 'lifecycle_email_kill_switch'/);
   });
 });
 

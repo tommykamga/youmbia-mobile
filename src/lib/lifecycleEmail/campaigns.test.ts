@@ -3,95 +3,152 @@ import {
   isEligibleAbandonedDraft,
   isEligibleFirstListing,
   isEligibleWelcome,
+  lifecycleCampaignChannel,
   type LifecycleEligibilityInput,
 } from './campaigns';
+
+const CUTOFF = Date.parse('2026-10-17T20:00:00.000Z');
 
 const base = (over: Partial<LifecycleEligibilityInput> = {}): LifecycleEligibilityInput => ({
   preferences: { marketing_opt_in: true, unsubscribed_at: null },
   isBanned: false,
   email: 'user@example.com',
   suppressed: false,
+  hardSuppressed: false,
   killSwitch: false,
   hasSentWithinFrequencyCap: false,
-  accountCreatedAtMs: Date.parse('2026-10-01T00:00:00.000Z'),
+  accountCreatedAtMs: Date.parse('2026-10-17T21:00:00.000Z'),
+  serviceCutoffMs: CUTOFF,
   hasEverPublishedListing: false,
   draft: null,
-  nowMs: Date.parse('2026-10-17T12:00:00.000Z'),
+  nowMs: Date.parse('2026-10-18T12:00:00.000Z'),
   ...over,
 });
 
-describe('lifecycle eligibility', () => {
-  it('refuse welcome sans consentement', () => {
+describe('lifecycle eligibility service vs marketing', () => {
+  it('welcome = service ; other = marketing', () => {
+    expect(lifecycleCampaignChannel('welcome_h0')).toBe('service');
+    expect(lifecycleCampaignChannel('first_listing_h24')).toBe('marketing');
+    expect(lifecycleCampaignChannel('abandoned_draft_h24')).toBe('marketing');
+  });
+
+  it('welcome service : OK sans opt-in marketing', () => {
     expect(
       isEligibleWelcome(
         base({ preferences: { marketing_opt_in: false, unsubscribed_at: null } })
       )
-    ).toEqual({ ok: false, reason: 'no_consent' });
+    ).toEqual({ ok: true });
   });
 
-  it('refuse si désinscrit', () => {
+  it('welcome : ancien compte pré-cutoff → aucune rétroactivité', () => {
+    expect(
+      isEligibleWelcome(
+        base({ accountCreatedAtMs: Date.parse('2026-10-01T00:00:00.000Z') })
+      )
+    ).toEqual({ ok: false, reason: 'pre_cutoff_no_retroactive' });
+  });
+
+  it('welcome : unsub marketing (suppressed) n’bloque pas ; hard bounce oui', () => {
     expect(
       isEligibleWelcome(
         base({
           preferences: {
-            marketing_opt_in: true,
-            unsubscribed_at: '2026-10-10T00:00:00.000Z',
+            marketing_opt_in: false,
+            unsubscribed_at: '2026-10-18T00:00:00.000Z',
           },
+          suppressed: true,
+          hardSuppressed: false,
         })
       )
-    ).toEqual({ ok: false, reason: 'no_consent' });
+    ).toEqual({ ok: true });
+    expect(isEligibleWelcome(base({ hardSuppressed: true })).reason).toBe('suppressed');
   });
 
-  it('refuse banni / suppressed / kill switch / fréquence', () => {
+  it('welcome : kill / banned / no email', () => {
     expect(isEligibleWelcome(base({ isBanned: true })).reason).toBe('banned');
-    expect(isEligibleWelcome(base({ suppressed: true })).reason).toBe('suppressed');
     expect(isEligibleWelcome(base({ killSwitch: true })).reason).toBe('kill_switch');
-    expect(isEligibleWelcome(base({ hasSentWithinFrequencyCap: true })).reason).toBe(
-      'frequency_cap'
-    );
+    expect(isEligibleWelcome(base({ email: null })).reason).toBe('no_email');
   });
 
-  it('accepte welcome avec consentement valide', () => {
-    expect(isEligibleWelcome(base())).toEqual({ ok: true });
+  it('welcome : fréquence marketing n’applique pas', () => {
+    expect(isEligibleWelcome(base({ hasSentWithinFrequencyCap: true }))).toEqual({
+      ok: true,
+    });
+  });
+
+  it('first_listing sans opt-in → bloqué', () => {
+    expect(
+      isEligibleFirstListing(
+        base({ preferences: { marketing_opt_in: false, unsubscribed_at: null } })
+      )
+    ).toEqual({ ok: false, reason: 'no_consent' });
   });
 
   it('first_listing exige 24h et aucune publication', () => {
     expect(
       isEligibleFirstListing(
         base({
-          accountCreatedAtMs: Date.parse('2026-10-17T00:00:00.000Z'),
-          nowMs: Date.parse('2026-10-17T12:00:00.000Z'),
+          accountCreatedAtMs: Date.parse('2026-10-18T00:00:00.000Z'),
+          nowMs: Date.parse('2026-10-18T12:00:00.000Z'),
         })
       ).reason
     ).toBe('too_early');
     expect(
-      isEligibleFirstListing(base({ hasEverPublishedListing: true })).reason
+      isEligibleFirstListing(
+        base({
+          accountCreatedAtMs: Date.parse('2026-10-16T00:00:00.000Z'),
+          hasEverPublishedListing: true,
+        })
+      ).reason
     ).toBe('already_published');
-    expect(isEligibleFirstListing(base())).toEqual({ ok: true });
+    expect(
+      isEligibleFirstListing(
+        base({ accountCreatedAtMs: Date.parse('2026-10-16T00:00:00.000Z') })
+      )
+    ).toEqual({ ok: true });
   });
 
-  it('abandoned_draft exige draft vieux de 24h non publié', () => {
+  it('abandoned_draft : marketing + opposition draft + cutoff', () => {
     expect(isEligibleAbandonedDraft(base()).reason).toBe('draft_not_eligible');
     expect(
       isEligibleAbandonedDraft(
         base({
+          preferences: {
+            marketing_opt_in: true,
+            unsubscribed_at: null,
+            optional_draft_reminders_opt_out: true,
+          },
           draft: {
             listingId: 'l1',
             status: 'draft',
-            updatedAtMs: Date.parse('2026-10-17T00:00:00.000Z'),
+            updatedAtMs: Date.parse('2026-10-16T00:00:00.000Z'),
+            createdAtMs: Date.parse('2026-10-17T21:00:00.000Z'),
             lastPublishedAt: null,
           },
-          nowMs: Date.parse('2026-10-17T12:00:00.000Z'),
         })
       ).reason
-    ).toBe('too_early');
+    ).toBe('draft_reminders_opt_out');
     expect(
       isEligibleAbandonedDraft(
         base({
           draft: {
             listingId: 'l1',
             status: 'draft',
-            updatedAtMs: Date.parse('2026-10-15T00:00:00.000Z'),
+            updatedAtMs: Date.parse('2026-10-16T00:00:00.000Z'),
+            createdAtMs: Date.parse('2026-10-01T00:00:00.000Z'),
+            lastPublishedAt: null,
+          },
+        })
+      ).reason
+    ).toBe('pre_cutoff_no_retroactive');
+    expect(
+      isEligibleAbandonedDraft(
+        base({
+          draft: {
+            listingId: 'l1',
+            status: 'draft',
+            updatedAtMs: Date.parse('2026-10-16T00:00:00.000Z'),
+            createdAtMs: Date.parse('2026-10-17T21:00:00.000Z'),
             lastPublishedAt: null,
           },
         })

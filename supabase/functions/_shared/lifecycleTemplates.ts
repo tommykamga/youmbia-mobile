@@ -44,16 +44,22 @@ export function escapeLifecycleHtml(value: string): string {
     .replace(/"/g, '&quot;');
 }
 
+export function lifecycleCampaignChannel(
+  campaignId: LifecycleRenderCampaignId
+): 'service' | 'marketing' {
+  return campaignId === 'welcome_h0' ? 'service' : 'marketing';
+}
+
 export function lifecycleCampaignSubject(
   campaignId: LifecycleRenderCampaignId
 ): string {
   switch (campaignId) {
     case 'welcome_h0':
-      return 'Bienvenue sur YOUMBIA !';
+      return 'Votre compte YOUMBIA est créé';
     case 'first_listing_h24':
       return 'Et si vous publiiez votre première annonce ?';
     case 'abandoned_draft_h24':
-      return 'Votre annonce est presque prête !';
+      return 'Votre brouillon d’annonce est toujours en attente';
     default: {
       const _exhaustive: never = campaignId;
       return _exhaustive;
@@ -66,11 +72,11 @@ export function lifecycleCampaignPreheader(
 ): string {
   switch (campaignId) {
     case 'welcome_h0':
-      return 'Achetez, vendez et faites de bonnes affaires en toute confiance.';
+      return 'Confirmation de création de votre compte YOUMBIA.';
     case 'first_listing_h24':
       return 'Sur YOUMBIA, publier votre annonce est gratuit.';
     case 'abandoned_draft_h24':
-      return 'Reprenez votre brouillon et finalisez votre publication.';
+      return 'Votre brouillon est toujours enregistré dans votre compte.';
     default: {
       const _exhaustive: never = campaignId;
       return _exhaustive;
@@ -81,7 +87,7 @@ export function lifecycleCampaignPreheader(
 export function lifecycleCtaLabel(campaignId: LifecycleRenderCampaignId): string {
   switch (campaignId) {
     case 'welcome_h0':
-      return 'Découvrir YOUMBIA';
+      return 'Ouvrir YOUMBIA';
     case 'first_listing_h24':
       return 'Publier gratuitement';
     case 'abandoned_draft_h24':
@@ -190,8 +196,8 @@ function bodyParagraphsHtml(
 ): string {
   switch (campaignId) {
     case 'welcome_h0':
-      return `<p style="font-size:16px;line-height:1.6;margin:0 0 14px;">Bienvenue sur <strong>YOUMBIA</strong>, votre marketplace pour acheter et vendre facilement au Cameroun.</p>
-      <p style="font-size:16px;line-height:1.6;margin:0 0 16px;">Découvrez les annonces près de chez vous, échangez avec les vendeurs et trouvez votre prochaine bonne affaire.</p>`;
+      return `<p style="font-size:16px;line-height:1.6;margin:0 0 14px;">Votre compte <strong>YOUMBIA</strong> a bien été créé.</p>
+      <p style="font-size:16px;line-height:1.6;margin:0 0 16px;">Vous pouvez vous connecter à l’application pour gérer votre profil, consulter les annonces et publier lorsque vous le souhaitez.</p>`;
     case 'first_listing_h24':
       return `<p style="font-size:16px;line-height:1.6;margin:0 0 14px;">Vous avez rejoint YOUMBIA, mais vous n’avez pas encore publié votre première annonce.</p>
       <p style="font-size:16px;line-height:1.6;margin:0 0 14px;">Téléphone, vêtements, véhicule, service ou autre bien : donnez de la visibilité à ce que vous souhaitez vendre.</p>
@@ -200,10 +206,10 @@ function bodyParagraphsHtml(
       const title = String(listingTitle ?? '').trim();
       const lead =
         title && title !== 'Brouillon'
-          ? `Votre annonce « <strong>${escapeLifecycleHtml(title)}</strong> » attend encore sa publication sur YOUMBIA.`
-          : 'Votre annonce en brouillon attend encore sa publication sur YOUMBIA.';
+          ? `Votre brouillon « <strong>${escapeLifecycleHtml(title)}</strong> » est toujours enregistré dans votre compte YOUMBIA et n’a pas encore été publié.`
+          : 'Votre brouillon d’annonce est toujours enregistré dans votre compte YOUMBIA et n’a pas encore été publié.';
       return `<p style="font-size:16px;line-height:1.6;margin:0 0 14px;">${lead}</p>
-      <p style="font-size:16px;line-height:1.6;margin:0 0 16px;">Il ne vous reste qu’à terminer les informations manquantes pour la proposer aux acheteurs. Ouvrez l’application YOUMBIA pour reprendre votre brouillon.</p>`;
+      <p style="font-size:16px;line-height:1.6;margin:0 0 16px;">Ouvrez l’application YOUMBIA pour le reprendre ou le supprimer.</p>`;
     }
     default: {
       const _exhaustive: never = campaignId;
@@ -219,9 +225,9 @@ function bodyParagraphsText(
   switch (campaignId) {
     case 'welcome_h0':
       return [
-        'Bienvenue sur YOUMBIA, votre marketplace pour acheter et vendre facilement au Cameroun.',
+        'Votre compte YOUMBIA a bien été créé.',
         '',
-        'Découvrez les annonces près de chez vous, échangez avec les vendeurs et trouvez votre prochaine bonne affaire.',
+        'Vous pouvez vous connecter à l’application pour gérer votre profil, consulter les annonces et publier lorsque vous le souhaitez.',
       ].join('\n');
     case 'first_listing_h24':
       return [
@@ -235,12 +241,12 @@ function bodyParagraphsText(
       const title = String(listingTitle ?? '').trim();
       const lead =
         title && title !== 'Brouillon'
-          ? `Votre annonce « ${title} » attend encore sa publication sur YOUMBIA.`
-          : 'Votre annonce en brouillon attend encore sa publication sur YOUMBIA.';
+          ? `Votre brouillon « ${title} » est toujours enregistré dans votre compte YOUMBIA et n’a pas encore été publié.`
+          : 'Votre brouillon d’annonce est toujours enregistré dans votre compte YOUMBIA et n’a pas encore été publié.';
       return [
         lead,
         '',
-        'Il ne vous reste qu’à terminer les informations manquantes pour la proposer aux acheteurs. Ouvrez l’application YOUMBIA pour reprendre votre brouillon.',
+        'Ouvrez l’application YOUMBIA pour le reprendre ou le supprimer.',
       ].join('\n');
     }
     default: {
@@ -255,7 +261,21 @@ export function renderLifecycleEmailHtml(input: LifecycleRenderInput): string {
     LIFECYCLE_BRAND;
   const subject = lifecycleCampaignSubject(input.campaignId);
   const preheader = lifecycleCampaignPreheader(input.campaignId);
+  const channel = lifecycleCampaignChannel(input.campaignId);
   const fallback = input.webFallbackUrl?.trim() || `${webOrigin}/`;
+  const channelLabel =
+    channel === 'service' ? 'E-mail de service' : 'Communication marketing';
+  const footerHtml =
+    channel === 'service'
+      ? `<p style="text-align:center;font-size:12px;line-height:1.5;color:${muted};margin:16px 8px 0;max-width:640px;">
+          Cet e-mail confirme la <strong>création de votre compte</strong> YOUMBIA
+          (e-mail de service, pas un e-mail de connexion ni marketing).
+        </p>`
+      : `<p style="text-align:center;font-size:12px;line-height:1.5;color:${muted};margin:16px 8px 0;max-width:640px;">
+          Cet e-mail est une communication <strong>marketing</strong> YOUMBIA (pas un e-mail de connexion ni de sécurité).
+          Vous le recevez car vous avez accepté les communications marketing.
+          <a href="${escapeLifecycleHtml(input.unsubscribeUrl)}" style="color:${muted};">Se désinscrire</a>
+        </p>`;
 
   const ctaBlock =
     input.cta.enabled && input.cta.href
@@ -292,7 +312,7 @@ export function renderLifecycleEmailHtml(input: LifecycleRenderInput): string {
                 <img src="${logoUrl}" alt="YOUMBIA" width="180" height="46" style="height:46px;max-width:180px;border:0;display:inline-block;"/>
               </div>
               <p style="text-align:center;font-size:13px;letter-spacing:0.04em;color:${muted};margin:0 0 8px;">${escapeLifecycleHtml(slogan)}</p>
-              <p style="text-align:center;font-size:11px;letter-spacing:0.08em;text-transform:uppercase;color:${muted};margin:0 0 20px;">Communication marketing</p>
+              <p style="text-align:center;font-size:11px;letter-spacing:0.08em;text-transform:uppercase;color:${muted};margin:0 0 20px;">${channelLabel}</p>
               <p style="font-size:16px;line-height:1.6;margin:0 0 16px;">${greeting(input.fullName)}</p>
               ${bodyParagraphsHtml(input.campaignId, input.listingTitle)}
               ${ctaBlock}
@@ -306,11 +326,7 @@ export function renderLifecycleEmailHtml(input: LifecycleRenderInput): string {
             </td>
           </tr>
         </table>
-        <p style="text-align:center;font-size:12px;line-height:1.5;color:${muted};margin:16px 8px 0;max-width:640px;">
-          Cet e-mail est une communication <strong>marketing</strong> YOUMBIA (pas un e-mail de connexion ni de sécurité).
-          Vous le recevez car vous avez accepté les communications marketing.
-          <a href="${escapeLifecycleHtml(input.unsubscribeUrl)}" style="color:${muted};">Se désinscrire</a>
-        </p>
+        ${footerHtml}
       </td>
     </tr>
   </table>
@@ -320,6 +336,7 @@ export function renderLifecycleEmailHtml(input: LifecycleRenderInput): string {
 
 export function renderLifecycleEmailText(input: LifecycleRenderInput): string {
   const subject = lifecycleCampaignSubject(input.campaignId);
+  const channel = lifecycleCampaignChannel(input.campaignId);
   const fallback = input.webFallbackUrl?.trim() || `${LIFECYCLE_BRAND.webOrigin}/`;
   const greet = greeting(input.fullName);
   const lines = [
@@ -328,15 +345,18 @@ export function renderLifecycleEmailText(input: LifecycleRenderInput): string {
     bodyParagraphsText(input.campaignId, input.listingTitle),
     '',
     `— ${LIFECYCLE_BRAND.slogan} —`,
-    'Communication marketing YOUMBIA (pas un e-mail de connexion)',
+    channel === 'service'
+      ? 'E-mail de service YOUMBIA (création de compte — pas marketing ni connexion)'
+      : 'Communication marketing YOUMBIA (pas un e-mail de connexion)',
     '',
   ];
   if (input.cta.enabled && input.cta.href) {
     lines.push(`${input.cta.label} : ${input.cta.href}`, '');
   }
   lines.push(`Ouvrir YOUMBIA : ${fallback}`, '');
-  lines.push(`Se désinscrire : ${input.unsubscribeUrl}`);
-  // subject unused in body but useful for callers
+  if (channel === 'marketing') {
+    lines.push(`Se désinscrire : ${input.unsubscribeUrl}`);
+  }
   void subject;
   return lines.join('\n');
 }

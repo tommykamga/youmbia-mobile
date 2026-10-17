@@ -1,15 +1,16 @@
 /**
- * Templates HTML FR brandés YOUMBIA — catégorie marketing uniquement.
+ * Templates HTML FR brandés YOUMBIA — canal service ou marketing selon campagne.
  * Rendu : `renderLifecycleEmail.ts` (miroir Edge `_shared/lifecycleTemplates.ts`).
  */
 
 import { type LifecycleCampaignId } from './campaigns';
 import type { LifecycleCta } from './cta';
 import {
-  assertLifecycleIsMarketing,
+  assertLifecycleCategoryAllowed,
   buildLifecycleProviderHeaders,
   buildLifecycleResendTags,
-  LIFECYCLE_EMAIL_CATEGORY,
+  resolveLifecycleEmailCategory,
+  type LifecycleEmailCategory,
 } from './emailCategory';
 import {
   lifecycleCampaignPreheader,
@@ -30,7 +31,7 @@ export type LifecycleTemplateInput = {
 };
 
 export type LifecycleRenderedEmail = {
-  category: typeof LIFECYCLE_EMAIL_CATEGORY;
+  category: LifecycleEmailCategory;
   campaignId: LifecycleCampaignId;
   subject: string;
   preheader: string;
@@ -56,16 +57,18 @@ function toRenderInput(input: LifecycleTemplateInput): LifecycleRenderInput {
 }
 
 export function renderLifecycleEmailHtml(input: LifecycleTemplateInput): string {
-  assertLifecycleIsMarketing(LIFECYCLE_EMAIL_CATEGORY);
+  const category = resolveLifecycleEmailCategory(input.campaignId);
+  assertLifecycleCategoryAllowed(category);
   return renderHtmlCore(toRenderInput(input));
 }
 
 export function renderLifecycleEmailText(input: LifecycleTemplateInput): string {
-  assertLifecycleIsMarketing(LIFECYCLE_EMAIL_CATEGORY);
+  const category = resolveLifecycleEmailCategory(input.campaignId);
+  assertLifecycleCategoryAllowed(category);
   return renderTextCore(toRenderInput(input));
 }
 
-/** Package complet prêt pour le worker (mocks / Resend marketing). */
+/** Package complet prêt pour le worker (mocks / Resend). */
 export function buildLifecycleRenderedEmail(args: {
   campaignId: LifecycleCampaignId;
   fullName?: string | null;
@@ -74,7 +77,7 @@ export function buildLifecycleRenderedEmail(args: {
   listingId?: string | null;
   dryRun?: boolean;
 }): LifecycleRenderedEmail {
-  void args.listingId; // reprise brouillon = app ; pas d’URL publique draft
+  void args.listingId;
   const route = resolveLifecycleRenderCta(args.campaignId, { dryRun: args.dryRun });
   const cta: LifecycleCta = {
     href: route.href,
@@ -90,14 +93,15 @@ export function buildLifecycleRenderedEmail(args: {
     listingTitle: args.listingTitle,
     webFallbackUrl: route.webFallbackUrl,
   };
+  const category = resolveLifecycleEmailCategory(args.campaignId);
   return {
-    category: LIFECYCLE_EMAIL_CATEGORY,
+    category,
     campaignId: args.campaignId,
     subject: lifecycleCampaignSubject(args.campaignId),
     preheader: lifecycleCampaignPreheader(args.campaignId),
     html: renderLifecycleEmailHtml(input),
     text: renderLifecycleEmailText(input),
-    headers: buildLifecycleProviderHeaders(args.unsubscribeUrl),
+    headers: buildLifecycleProviderHeaders(args.unsubscribeUrl, category),
     tags: buildLifecycleResendTags(args.campaignId),
   };
 }
