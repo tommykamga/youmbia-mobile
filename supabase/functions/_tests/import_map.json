@@ -1,0 +1,5 @@
+{
+  "imports": {
+    "../_shared/supabaseClient.ts": "./mocks/supabase_js_mock.ts"
+  }
+}

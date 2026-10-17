@@ -780,6 +780,33 @@ export type Database = {
         };
         Relationships: [];
       };
+      email_preferences: {
+        Row: {
+          user_id: string;
+          marketing_opt_in: boolean;
+          marketing_opt_in_at: string | null;
+          marketing_opt_in_source: string | null;
+          unsubscribed_at: string | null;
+          updated_at: string;
+        };
+        Insert: {
+          user_id: string;
+          marketing_opt_in?: boolean;
+          marketing_opt_in_at?: string | null;
+          marketing_opt_in_source?: string | null;
+          unsubscribed_at?: string | null;
+          updated_at?: string;
+        };
+        Update: {
+          user_id?: string;
+          marketing_opt_in?: boolean;
+          marketing_opt_in_at?: string | null;
+          marketing_opt_in_source?: string | null;
+          unsubscribed_at?: string | null;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
       saved_searches: {
         Row: {
           id: string;

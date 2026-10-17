@@ -11,6 +11,7 @@ import { runGoogleOAuth, formatGoogleSignInUserMessage } from '@/lib/googleSignI
 import { runAppleOAuth, formatAppleSignInUserMessage } from '@/lib/appleSignInMobile';
 import { AppleSignInButton } from '@/features/auth/AppleSignInButton';
 import { trackSignUpStarted } from '@/lib/analytics';
+import { setMarketingEmailOptIn } from '@/services/emailPreferences';
 
 function getErrorMessage(error: { message: string }): string {
   const msg = error.message.toLowerCase();
@@ -35,8 +36,15 @@ export default function SignupScreen() {
   
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  /** Opt-in marketing explicite — défaut false (jamais coché par défaut). */
+  const [marketingOptIn, setMarketingOptIn] = useState(false);
 
   const isAnyLoading = loading || googleLoading || appleLoading;
+
+  const applyMarketingPreferenceIfNeeded = async () => {
+    if (!marketingOptIn) return;
+    await setMarketingEmailOptIn(true, 'signup');
+  };
 
   useEffect(() => {
     let mounted = true;
@@ -68,12 +76,18 @@ export default function SignupScreen() {
     trackSignUpStarted({ signup_method: 'email' });
     setLoading(true);
     try {
-      const result = await signUp(trimmedEmail, password);
+      const result = await signUp(trimmedEmail, password, {
+        marketingOptIn,
+      });
       if (result.ok) {
         if (result.requiresEmailConfirmation) {
-          setSuccessMessage('Compte créé avec succès ! Vérifiez votre boîte mail pour confirmer votre inscription avant de vous connecter.');
+          // Opt-in déjà porté dans user_metadata → trigger email_preferences à la création.
+          setSuccessMessage(
+            'Compte créé avec succès ! Vérifiez votre boîte mail pour confirmer votre inscription avant de vous connecter.'
+          );
           return;
         }
+        await applyMarketingPreferenceIfNeeded();
         replaceAfterSuccessfulAuth(router, params.redirect, params.contact);
       } else {
         setError(getErrorMessage(result.error));
@@ -93,6 +107,7 @@ export default function SignupScreen() {
     try {
       const result = await runGoogleOAuth();
       if (result.ok) {
+        await applyMarketingPreferenceIfNeeded();
         replaceAfterSuccessfulAuth(router, params.redirect, params.contact);
       } else {
         setError(formatGoogleSignInUserMessage(undefined, result));
@@ -112,6 +127,7 @@ export default function SignupScreen() {
     try {
       const result = await runAppleOAuth();
       if (result.ok) {
+        await applyMarketingPreferenceIfNeeded();
         replaceAfterSuccessfulAuth(router, params.redirect, params.contact);
       } else if (result.error.message !== 'Connexion annulée') {
         setError(formatAppleSignInUserMessage(undefined, result));
@@ -178,6 +194,24 @@ export default function SignupScreen() {
             secureTextEntry
             editable={!isAnyLoading}
           />
+
+          <Pressable
+            accessibilityRole="checkbox"
+            accessibilityState={{ checked: marketingOptIn }}
+            onPress={() => setMarketingOptIn((v) => !v)}
+            disabled={isAnyLoading}
+            style={styles.consentRow}
+            hitSlop={8}
+          >
+            <View style={[styles.checkbox, marketingOptIn && styles.checkboxChecked]}>
+              {marketingOptIn ? (
+                <Ionicons name="checkmark" size={14} color="#fff" />
+              ) : null}
+            </View>
+            <Text style={styles.consentText}>
+              J’accepte de recevoir des e-mails marketing YOUMBIA (annonces, rappels). Les e-mails de connexion et de sécurité restent séparés. Vous pourrez vous désinscrire à tout moment.
+            </Text>
+          </Pressable>
 
           <AppButton
             onPress={handleSubmit}
@@ -269,6 +303,32 @@ const styles = StyleSheet.create({
   },
   form: {
     gap: ui.spacing.lg,
+  },
+  consentRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: ui.spacing.sm,
+  },
+  checkbox: {
+    width: 22,
+    height: 22,
+    borderRadius: 6,
+    borderWidth: 1.5,
+    borderColor: ui.colors.borderLight,
+    backgroundColor: '#fff',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 2,
+  },
+  checkboxChecked: {
+    backgroundColor: ui.colors.primary,
+    borderColor: ui.colors.primary,
+  },
+  consentText: {
+    flex: 1,
+    ...ui.typography.caption,
+    color: ui.colors.textSecondary,
+    lineHeight: 18,
   },
   btnPrimaryMargin: {
     marginTop: ui.spacing.xs,
