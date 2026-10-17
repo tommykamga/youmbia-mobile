@@ -3,9 +3,9 @@
 | Champ | Valeur |
 |-------|--------|
 | Date | 2026-10-17 |
-| SHA | `11e231c4b9c65af9859dd71c38ab8db47d5d0c92` |
+| SHA | `3675465eb162c18b26d27b47510200f560ff617e` (tip ; tip d’entrée 05B `11e231c`) |
 | PR | [#17](https://github.com/tommykamga/youmbia-mobile/pull/17) (Draft) |
-| CI | `lint-typecheck-test-doctor` **SUCCESS** (run 39055999730) |
+| CI | `lint-typecheck-test-doctor` **SUCCESS** (runs 39055999730, 39056113394) |
 | Autorisation | push + Draft PR uniquement |
 | Merge / deploy / email | **NON** |
 
