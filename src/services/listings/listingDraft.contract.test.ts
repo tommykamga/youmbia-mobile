@@ -333,6 +333,17 @@ describe('TOM-98 Lot A — brouillons d’annonces', () => {
     expect(mine).toMatch(/deleteListing/);
   });
 
+  it('7b) info préalable rappels brouillon + ack à l’enregistrement', () => {
+    const sell = read('app/sell/index.tsx');
+    const status = read('src/lib/listingStatus.ts');
+    const settings = read('app/account/settings.tsx');
+    expect(status).toMatch(/DRAFT_REMINDERS_NOTICE/);
+    expect(sell).toMatch(/DRAFT_REMINDERS_NOTICE/);
+    expect(sell).toMatch(/acknowledgeDraftRemindersNotice/);
+    expect(settings).toMatch(/setDraftRemindersAllowed/);
+    expect(settings).toMatch(/Rappels de brouillon/);
+  });
+
   it('8) publication draft = même id (UPDATE status), pas un second insert', () => {
     const publish = read('src/services/listings/publishListingDraft.ts');
     expect(publish).toMatch(/\.update\(/);

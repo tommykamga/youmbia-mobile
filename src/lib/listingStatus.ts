@@ -21,6 +21,11 @@ export const DRAFT_LISTING_RESUME_ACTION = 'Reprendre';
 export const DRAFT_LISTING_SAVE_ACTION = 'Enregistrer comme brouillon';
 export const DRAFT_LISTING_SECTION_TITLE = 'Brouillons';
 export const DRAFT_LISTING_EMPTY_HINT = 'Aucun brouillon pour le moment.';
+/** Information préalable — rappels facultatifs de brouillon (opposition dans Paramètres). */
+export const DRAFT_REMINDERS_NOTICE =
+  'Après enregistrement, YOUMBIA peut vous envoyer un rappel facultatif par e-mail si le brouillon reste non publié. Finalité : vous permettre de le reprendre ou de le supprimer. Vous pouvez vous y opposer à tout moment dans Paramètres.';
+export const DRAFT_LISTING_SAVED_SUBTITLE =
+  'Vous pourrez le reprendre depuis Mes annonces. Un rappel e-mail facultatif peut être envoyé ; opposition dans Paramètres.';
 
 export type ListingStatus = (typeof LISTING_STATUS)[keyof typeof LISTING_STATUS];
 

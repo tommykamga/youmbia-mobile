@@ -38,7 +38,10 @@ import { consumeListingPublishDuplicateDraft } from '@/lib/listingPublishDraft';
 import {
   DRAFT_LISTING_SAVE_ACTION,
   DRAFT_LISTING_SAVED_MESSAGE,
+  DRAFT_LISTING_SAVED_SUBTITLE,
+  DRAFT_REMINDERS_NOTICE,
 } from '@/lib/listingStatus';
+import { acknowledgeDraftRemindersNotice } from '@/services/emailPreferences';
 import {
   filterUploadableListingPhotos,
   isPersistedListingImageId,
@@ -912,8 +915,9 @@ export default function SellScreen() {
         }
       }
 
+      void acknowledgeDraftRemindersNotice();
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      Alert.alert(DRAFT_LISTING_SAVED_MESSAGE, 'Vous pourrez le reprendre depuis Mes annonces.', [
+      Alert.alert(DRAFT_LISTING_SAVED_MESSAGE, DRAFT_LISTING_SAVED_SUBTITLE, [
         { text: 'Continuer', style: 'cancel' },
         {
           text: 'Mes annonces',
@@ -1803,6 +1807,7 @@ export default function SellScreen() {
             >
               {"Publier l'annonce"}
             </Button>
+            <Text style={styles.draftRemindersNotice}>{DRAFT_REMINDERS_NOTICE}</Text>
             <Button
               variant="secondary"
               size="sm"
@@ -2311,6 +2316,12 @@ const styles = StyleSheet.create({
   subcategoryChipTextSelected: {
     color: colors.primary,
     fontWeight: fontWeights.semibold,
+  },
+  draftRemindersNotice: {
+    ...typography.xs,
+    color: colors.textMuted,
+    lineHeight: 16,
+    marginBottom: spacing.xs,
   },
   publishCta: {
     width: '100%',
