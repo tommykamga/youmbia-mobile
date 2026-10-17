@@ -37,6 +37,7 @@ import {
 import { consumeListingPublishDuplicateDraft } from '@/lib/listingPublishDraft';
 import {
   DRAFT_LISTING_SAVE_ACTION,
+  DRAFT_LISTING_SAVED_ACK_FAILED_SUBTITLE,
   DRAFT_LISTING_SAVED_MESSAGE,
   DRAFT_LISTING_SAVED_SUBTITLE,
   DRAFT_REMINDERS_NOTICE,
@@ -915,15 +916,22 @@ export default function SellScreen() {
         }
       }
 
-      void acknowledgeDraftRemindersNotice();
+      const ackResult = await acknowledgeDraftRemindersNotice();
+      const ackOk =
+        ackResult.error == null &&
+        ackResult.data?.draft_reminders_notice_acknowledged_at != null;
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      Alert.alert(DRAFT_LISTING_SAVED_MESSAGE, DRAFT_LISTING_SAVED_SUBTITLE, [
-        { text: 'Continuer', style: 'cancel' },
-        {
-          text: 'Mes annonces',
-          onPress: () => router.push('/account/listings' as Href),
-        },
-      ]);
+      Alert.alert(
+        DRAFT_LISTING_SAVED_MESSAGE,
+        ackOk ? DRAFT_LISTING_SAVED_SUBTITLE : DRAFT_LISTING_SAVED_ACK_FAILED_SUBTITLE,
+        [
+          { text: 'Continuer', style: 'cancel' },
+          {
+            text: 'Mes annonces',
+            onPress: () => router.push('/account/listings' as Href),
+          },
+        ]
+      );
     } catch (e) {
       setSubmitError(e instanceof Error ? e.message : "Impossible d'enregistrer le brouillon");
     } finally {

@@ -5,11 +5,18 @@
 DO $$
 DECLARE
   u_hist uuid := gen_random_uuid();
+  u_a uuid := gen_random_uuid();
+  u_b uuid := gen_random_uuid();
   draft_new uuid := gen_random_uuid();
   draft_old uuid := gen_random_uuid();
   n int;
   cutoff timestamptz;
   ack_at timestamptz;
+  ack_a timestamptz;
+  ack_b timestamptz;
+  mkt_before boolean;
+  mkt_after boolean;
+  raised boolean;
 BEGIN
   cutoff := public.lifecycle_email_service_cutoff();
   UPDATE public.app_runtime_flags SET value = 'false' WHERE key = 'lifecycle_email_kill_switch';
@@ -32,6 +39,17 @@ BEGIN
       AND column_name = 'draft_reminders_notice_acknowledged_at'
   ) THEN
     RAISE EXCEPTION 'FAIL: draft_reminders_notice_acknowledged_at column missing';
+  END IF;
+
+  -- Signature stricte : pas de surcharge (uuid)
+  IF EXISTS (
+    SELECT 1 FROM pg_proc p
+    JOIN pg_namespace n ON n.oid = p.pronamespace
+    WHERE n.nspname = 'public'
+      AND p.proname = 'acknowledge_lifecycle_draft_reminders_notice'
+      AND pg_get_function_identity_arguments(p.oid) = 'uuid'
+  ) THEN
+    RAISE EXCEPTION 'FAIL: acknowledge_lifecycle_draft_reminders_notice(uuid) must be dropped';
   END IF;
 
   -- Compte historique (pré-cutoff) + opt-in marketing + nouveau brouillon post-cutoff
@@ -71,16 +89,76 @@ BEGIN
     RAISE EXCEPTION 'FAIL: pre-cutoff draft must stay excluded (no mass retro)';
   END IF;
 
-  -- Ack notice (service_role context in harness)
-  PERFORM public.acknowledge_lifecycle_draft_reminders_notice(u_hist);
-  SELECT draft_reminders_notice_acknowledged_at INTO ack_at
+  -- Sécurité : identité absente refusée
+  PERFORM set_config('request.jwt.claim.sub', '', true);
+  raised := false;
+  BEGIN
+    PERFORM public.acknowledge_lifecycle_draft_reminders_notice();
+  EXCEPTION
+    WHEN insufficient_privilege THEN
+      raised := true;
+    WHEN OTHERS THEN
+      IF SQLERRM ILIKE '%unauthenticated%' OR SQLSTATE = '42501' THEN
+        raised := true;
+      ELSE
+        RAISE;
+      END IF;
+  END;
+  IF NOT raised THEN
+    RAISE EXCEPTION 'FAIL: missing identity must be refused';
+  END IF;
+
+  -- Utilisateurs A / B pour isolation
+  INSERT INTO auth.users (id, email, created_at, email_confirmed_at, raw_user_meta_data)
+  VALUES
+    (u_a, 'ack-a@example.test', now(), now(), '{}'::jsonb),
+    (u_b, 'ack-b@example.test', now(), now(), '{}'::jsonb);
+  INSERT INTO public.email_preferences (user_id, marketing_opt_in)
+  VALUES (u_a, true), (u_b, true)
+  ON CONFLICT (user_id) DO UPDATE
+  SET marketing_opt_in = EXCLUDED.marketing_opt_in, unsubscribed_at = NULL;
+  INSERT INTO public.profiles (id, full_name, is_banned)
+  VALUES (u_a, 'A', false), (u_b, 'B', false)
+  ON CONFLICT (id) DO UPDATE SET is_banned = false;
+
+  SELECT marketing_opt_in INTO mkt_before FROM public.email_preferences WHERE user_id = u_a;
+
+  -- Utilisateur légitime A autorisé
+  PERFORM set_config('request.jwt.claim.sub', u_a::text, true);
+  PERFORM public.acknowledge_lifecycle_draft_reminders_notice();
+  SELECT draft_reminders_notice_acknowledged_at, marketing_opt_in
+    INTO ack_a, mkt_after
+  FROM public.email_preferences WHERE user_id = u_a;
+  IF ack_a IS NULL THEN
+    RAISE EXCEPTION 'FAIL: legitimate user ack not persisted';
+  END IF;
+  IF mkt_after IS DISTINCT FROM mkt_before THEN
+    RAISE EXCEPTION 'FAIL: ack must not modify marketing_opt_in';
+  END IF;
+
+  -- A ne peut pas écrire pour B (pas de p_user_id : JWT A n’affecte que A)
+  SELECT draft_reminders_notice_acknowledged_at INTO ack_b
+  FROM public.email_preferences WHERE user_id = u_b;
+  IF ack_b IS NOT NULL THEN
+    RAISE EXCEPTION 'FAIL: user A must not acknowledge for user B';
+  END IF;
+
+  -- Compte historique : ack sous son JWT + pas d’écrasement marketing
+  SELECT marketing_opt_in INTO mkt_before FROM public.email_preferences WHERE user_id = u_hist;
+  PERFORM set_config('request.jwt.claim.sub', u_hist::text, true);
+  PERFORM public.acknowledge_lifecycle_draft_reminders_notice();
+  SELECT draft_reminders_notice_acknowledged_at, marketing_opt_in
+    INTO ack_at, mkt_after
   FROM public.email_preferences WHERE user_id = u_hist;
   IF ack_at IS NULL THEN
     RAISE EXCEPTION 'FAIL: ack notice not persisted';
   END IF;
+  IF mkt_after IS DISTINCT FROM mkt_before THEN
+    RAISE EXCEPTION 'FAIL: hist ack must not modify marketing_opt_in';
+  END IF;
 
   -- Idempotence ack : horodatage conservé
-  PERFORM public.acknowledge_lifecycle_draft_reminders_notice(u_hist);
+  PERFORM public.acknowledge_lifecycle_draft_reminders_notice();
   IF (
     SELECT draft_reminders_notice_acknowledged_at FROM public.email_preferences WHERE user_id = u_hist
   ) IS DISTINCT FROM ack_at THEN
@@ -92,10 +170,12 @@ BEGIN
     RAISE EXCEPTION 'FAIL: draft channel must stay marketing while service flag OFF';
   END IF;
 
-  -- first_listing inchangé : sans opt-in, pas d’enqueue (smoke via helper déjà couvert ailleurs)
   IF public.lifecycle_email_campaign_channel('first_listing_h24') IS DISTINCT FROM 'marketing' THEN
     RAISE EXCEPTION 'FAIL: first_listing channel regress';
   END IF;
+
+  -- Nettoyage JWT harness
+  PERFORM set_config('request.jwt.claim.sub', '', true);
 
   RAISE NOTICE 'PASS lifecycle_draft_reminders_prep_tests (enqueue_delta=% )', n;
 END

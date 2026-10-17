@@ -46,30 +46,26 @@ REVOKE ALL ON FUNCTION public.lifecycle_draft_reminders_as_service_enabled() FRO
 REVOKE ALL ON FUNCTION public.lifecycle_draft_reminders_as_service_enabled() FROM authenticated;
 GRANT EXECUTE ON FUNCTION public.lifecycle_draft_reminders_as_service_enabled() TO service_role;
 
--- Ack notice (service_role / authenticated via RLS update own)
-CREATE OR REPLACE FUNCTION public.acknowledge_lifecycle_draft_reminders_notice(
-  p_user_id uuid
-)
+-- Ack notice : identité exclusivement via auth.uid() (aucun argument utilisateur).
+DROP FUNCTION IF EXISTS public.acknowledge_lifecycle_draft_reminders_notice(uuid);
+CREATE OR REPLACE FUNCTION public.acknowledge_lifecycle_draft_reminders_notice()
 RETURNS boolean
 LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = ''
 AS $$
+DECLARE
+  v_uid uuid := (SELECT auth.uid());
 BEGIN
-  IF p_user_id IS NULL THEN
-    RETURN false;
-  END IF;
-  -- Authenticated (JWT) : uniquement soi-même.
-  -- Sans JWT (service_role / harness local) : auth.uid() NULL → autorisé.
-  IF coalesce((SELECT auth.uid()), p_user_id) IS DISTINCT FROM p_user_id THEN
-    RAISE EXCEPTION 'acknowledge_lifecycle_draft_reminders_notice: forbidden'
+  IF v_uid IS NULL THEN
+    RAISE EXCEPTION 'acknowledge_lifecycle_draft_reminders_notice: unauthenticated'
       USING ERRCODE = '42501';
   END IF;
-  -- Ne remplace jamais un ack existant (première information conservée).
+  -- Ne remplace jamais un ack existant. Ne touche jamais marketing_opt_in en UPDATE.
   INSERT INTO public.email_preferences (
     user_id, marketing_opt_in, draft_reminders_notice_acknowledged_at
   )
-  VALUES (p_user_id, false, pg_catalog.now())
+  VALUES (v_uid, false, pg_catalog.now())
   ON CONFLICT (user_id) DO UPDATE
   SET
     draft_reminders_notice_acknowledged_at = coalesce(
@@ -82,10 +78,10 @@ BEGIN
 END;
 $$;
 
-REVOKE ALL ON FUNCTION public.acknowledge_lifecycle_draft_reminders_notice(uuid) FROM PUBLIC;
-REVOKE ALL ON FUNCTION public.acknowledge_lifecycle_draft_reminders_notice(uuid) FROM anon;
-GRANT EXECUTE ON FUNCTION public.acknowledge_lifecycle_draft_reminders_notice(uuid) TO authenticated;
-GRANT EXECUTE ON FUNCTION public.acknowledge_lifecycle_draft_reminders_notice(uuid) TO service_role;
+REVOKE ALL ON FUNCTION public.acknowledge_lifecycle_draft_reminders_notice() FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.acknowledge_lifecycle_draft_reminders_notice() FROM anon;
+REVOKE ALL ON FUNCTION public.acknowledge_lifecycle_draft_reminders_notice() FROM service_role;
+GRANT EXECUTE ON FUNCTION public.acknowledge_lifecycle_draft_reminders_notice() TO authenticated;
 
 -- Enqueue abandoned_draft : clarifier commentaires métier uniquement.
 -- Éligibilité ACTIVE reste marketing_opt_in (service flag OFF).

@@ -197,6 +197,7 @@ export async function setDraftRemindersAllowed(
 
 /**
  * Enregistre l’information préalable sur les rappels brouillon (idempotent).
+ * Identité côté SQL via auth.uid() uniquement — pas de p_user_id.
  * N’active aucun envoi et ne force aucun consentement marketing.
  */
 export async function acknowledgeDraftRemindersNotice(): Promise<EmailPreferencesResult> {
@@ -206,13 +207,22 @@ export async function acknowledgeDraftRemindersNotice(): Promise<EmailPreference
   }
 
   const { error: rpcError } = await supabase.rpc(
-    'acknowledge_lifecycle_draft_reminders_notice',
-    { p_user_id: auth.userId }
+    'acknowledge_lifecycle_draft_reminders_notice'
   );
 
   if (rpcError) {
     return { data: null, error: { message: mapError(rpcError.message) } };
   }
 
-  return getEmailPreferences();
+  const prefs = await getEmailPreferences();
+  if (prefs.error) {
+    return prefs;
+  }
+  if (!prefs.data.draft_reminders_notice_acknowledged_at) {
+    return {
+      data: null,
+      error: { message: GENERIC_ERROR },
+    };
+  }
+  return prefs;
 }

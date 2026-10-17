@@ -1047,9 +1047,7 @@ export type Database = {
         Returns: number;
       };
       acknowledge_lifecycle_draft_reminders_notice: {
-        Args: {
-          p_user_id: string;
-        };
+        Args: Record<PropertyKey, never>;
         Returns: boolean;
       };
     };

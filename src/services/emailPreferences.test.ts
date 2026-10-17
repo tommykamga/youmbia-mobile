@@ -145,7 +145,7 @@ describe('emailPreferences', () => {
     expect(mocks.upsert).not.toHaveBeenCalled();
   });
 
-  it('ack notice appelle le RPC dédié', async () => {
+  it('ack notice appelle le RPC sans p_user_id et vérifie la persistance', async () => {
     mocks.getSession.mockResolvedValue({
       data: { session: { user: { id: 'user-1' } } },
       error: null,
@@ -166,9 +166,39 @@ describe('emailPreferences', () => {
     const result = await acknowledgeDraftRemindersNotice();
     expect(result.error).toBeNull();
     expect(result.data?.draft_reminders_notice_acknowledged_at).toBeTruthy();
-    expect(mocks.rpc).toHaveBeenCalledWith(
-      'acknowledge_lifecycle_draft_reminders_notice',
-      { p_user_id: 'user-1' }
-    );
+    expect(mocks.rpc).toHaveBeenCalledWith('acknowledge_lifecycle_draft_reminders_notice');
+    expect(mocks.rpc.mock.calls[0]).toHaveLength(1);
+  });
+
+  it('ack notice échoue si la persistance n’est pas vérifiable', async () => {
+    mocks.getSession.mockResolvedValue({
+      data: { session: { user: { id: 'user-1' } } },
+      error: null,
+    });
+    mocks.rpc.mockResolvedValue({ data: true, error: null });
+    mocks.maybeSingle.mockResolvedValue({
+      data: {
+        marketing_opt_in: false,
+        marketing_opt_in_at: null,
+        marketing_opt_in_source: null,
+        unsubscribed_at: null,
+        optional_draft_reminders_opt_out: false,
+        draft_reminders_notice_acknowledged_at: null,
+      },
+      error: null,
+    });
+    const { acknowledgeDraftRemindersNotice } = await import('./emailPreferences');
+    const result = await acknowledgeDraftRemindersNotice();
+    expect(result.data).toBeNull();
+    expect(result.error?.message).toBeTruthy();
+  });
+
+  it('ack refuse sans session', async () => {
+    mocks.getSession.mockResolvedValue({ data: { session: null }, error: null });
+    const { acknowledgeDraftRemindersNotice } = await import('./emailPreferences');
+    const result = await acknowledgeDraftRemindersNotice();
+    expect(result.data).toBeNull();
+    expect(result.error?.message).toMatch(/Connexion/);
+    expect(mocks.rpc).not.toHaveBeenCalled();
   });
 });

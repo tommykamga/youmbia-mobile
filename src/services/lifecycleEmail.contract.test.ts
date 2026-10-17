@@ -207,6 +207,15 @@ describe('lifecycle email P0 — contrat SQL / Edge', () => {
     expect(prep).toMatch(/VALUES \('lifecycle_draft_reminders_as_service', 'false'\)/);
     expect(prep).toMatch(/draft_reminders_notice_acknowledged_at/);
     expect(prep).toMatch(/acknowledge_lifecycle_draft_reminders_notice/);
+    expect(prep).toMatch(/DROP FUNCTION IF EXISTS public\.acknowledge_lifecycle_draft_reminders_notice\(uuid\)/);
+    expect(prep).toMatch(
+      /CREATE OR REPLACE FUNCTION public\.acknowledge_lifecycle_draft_reminders_notice\(\)/
+    );
+    expect(prep).toMatch(/v_uid uuid := \(SELECT auth\.uid\(\)\)/);
+    expect(prep).toMatch(/unauthenticated/);
+    expect(prep).not.toMatch(
+      /acknowledge_lifecycle_draft_reminders_notice\s*\(\s*p_user_id/
+    );
     expect(prep).toMatch(/lifecycle_draft_reminders_as_service_enabled/);
     expect(prep).toMatch(/pref\.marketing_opt_in IS TRUE/);
     expect(prep).toMatch(/l\.created_at >= v_cutoff/);
