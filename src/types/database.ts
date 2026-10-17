@@ -788,6 +788,7 @@ export type Database = {
           marketing_opt_in_source: string | null;
           unsubscribed_at: string | null;
           optional_draft_reminders_opt_out: boolean;
+          draft_reminders_notice_acknowledged_at: string | null;
           updated_at: string;
         };
         Insert: {
@@ -797,6 +798,7 @@ export type Database = {
           marketing_opt_in_source?: string | null;
           unsubscribed_at?: string | null;
           optional_draft_reminders_opt_out?: boolean;
+          draft_reminders_notice_acknowledged_at?: string | null;
           updated_at?: string;
         };
         Update: {
@@ -806,6 +808,7 @@ export type Database = {
           marketing_opt_in_source?: string | null;
           unsubscribed_at?: string | null;
           optional_draft_reminders_opt_out?: boolean;
+          draft_reminders_notice_acknowledged_at?: string | null;
           updated_at?: string;
         };
         Relationships: [];
@@ -1042,6 +1045,10 @@ export type Database = {
           p_outcome: string;
         };
         Returns: number;
+      };
+      acknowledge_lifecycle_draft_reminders_notice: {
+        Args: Record<PropertyKey, never>;
+        Returns: boolean;
       };
     };
     Enums: {

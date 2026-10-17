@@ -1,5 +1,5 @@
 /**
- * Paramètres – logout, préférences email marketing (minimal), app info.
+ * Paramètres – logout, préférences email marketing + opposition rappels brouillon.
  */
 import React, { useCallback, useEffect, useState } from 'react';
 import { View, Text, StyleSheet, Switch, ActivityIndicator } from 'react-native';
@@ -9,6 +9,7 @@ import { Screen, AppHeader, Button } from '@/components';
 import { signOut } from '@/services/auth';
 import {
   getEmailPreferences,
+  setDraftRemindersAllowed,
   setMarketingEmailOptIn,
 } from '@/services/emailPreferences';
 import { captureSentryTestException } from '@/lib/sentry';
@@ -18,8 +19,10 @@ export default function AccountSettingsScreen() {
   const router = useRouter();
   const [signingOut, setSigningOut] = useState(false);
   const [marketingOptIn, setMarketingOptIn] = useState(false);
+  const [draftRemindersAllowed, setDraftRemindersAllowedState] = useState(true);
   const [prefsLoading, setPrefsLoading] = useState(true);
   const [prefsSaving, setPrefsSaving] = useState(false);
+  const [draftSaving, setDraftSaving] = useState(false);
   const [prefsError, setPrefsError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -31,9 +34,11 @@ export default function AccountSettingsScreen() {
       if (result.error) {
         setPrefsError(result.error.message);
         setMarketingOptIn(false);
+        setDraftRemindersAllowedState(true);
       } else {
         setPrefsError(null);
         setMarketingOptIn(result.data.marketing_opt_in);
+        setDraftRemindersAllowedState(!result.data.optional_draft_reminders_opt_out);
       }
       setPrefsLoading(false);
     })();
@@ -54,6 +59,18 @@ export default function AccountSettingsScreen() {
     setPrefsSaving(false);
   }, []);
 
+  const handleDraftRemindersToggle = useCallback(async (next: boolean) => {
+    setDraftSaving(true);
+    setPrefsError(null);
+    setDraftRemindersAllowedState(next);
+    const result = await setDraftRemindersAllowed(next);
+    if (result.error) {
+      setDraftRemindersAllowedState(!next);
+      setPrefsError(result.error.message);
+    }
+    setDraftSaving(false);
+  }, []);
+
   const handleLogout = useCallback(async () => {
     setSigningOut(true);
     const { error } = await signOut();
@@ -65,6 +82,7 @@ export default function AccountSettingsScreen() {
 
   const appName = Constants.expoConfig?.name ?? 'YOUMBIA Mobile';
   const appVersion = Constants.expoConfig?.version ?? '1.0.0';
+  const prefsBusy = prefsSaving || draftSaving || signingOut;
 
   return (
     <Screen scroll={false} safe={false}>
@@ -84,10 +102,32 @@ export default function AccountSettingsScreen() {
                 <Switch
                   value={marketingOptIn}
                   onValueChange={handleMarketingToggle}
-                  disabled={prefsSaving || signingOut}
+                  disabled={prefsBusy}
                   trackColor={{ false: colors.border, true: colors.primaryLight }}
                   thumbColor={marketingOptIn ? colors.primary : colors.textTertiary}
                   accessibilityLabel="Recevoir les e-mails marketing"
+                />
+              )}
+            </View>
+          </View>
+
+          <View style={styles.prefsBlock}>
+            <Text style={styles.prefsTitle}>Rappels de brouillon</Text>
+            <Text style={styles.prefsHint}>
+              Rappels facultatifs lorsqu’un brouillon d’annonce reste non publié. Opposition indépendante des e-mails marketing.
+            </Text>
+            <View style={styles.prefsRow}>
+              <Text style={styles.prefsLabel}>Recevoir les rappels de brouillon</Text>
+              {prefsLoading ? (
+                <ActivityIndicator color={colors.primary} />
+              ) : (
+                <Switch
+                  value={draftRemindersAllowed}
+                  onValueChange={handleDraftRemindersToggle}
+                  disabled={prefsBusy}
+                  trackColor={{ false: colors.border, true: colors.primaryLight }}
+                  thumbColor={draftRemindersAllowed ? colors.primary : colors.textTertiary}
+                  accessibilityLabel="Recevoir les rappels de brouillon"
                 />
               )}
             </View>

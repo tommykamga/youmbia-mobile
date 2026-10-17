@@ -194,6 +194,39 @@ describe('lifecycle email P0 — contrat SQL / Edge', () => {
     expect(svc).not.toMatch(/marketing_opt_in\s*=\s*true/);
     expect(svc).not.toMatch(/SET value = 'false' WHERE key = 'lifecycle_email_kill_switch'/);
   });
+
+  it('migration prep draft reminders : flag OFF, ack, pas de canal service activé', () => {
+    const prep = readFileSync(
+      resolve(
+        process.cwd(),
+        'supabase/migrations/20261018010000_lifecycle_draft_reminders_prep.sql'
+      ),
+      'utf8'
+    );
+    expect(prep).toMatch(/lifecycle_draft_reminders_as_service/);
+    expect(prep).toMatch(/VALUES \('lifecycle_draft_reminders_as_service', 'false'\)/);
+    expect(prep).toMatch(/draft_reminders_notice_acknowledged_at/);
+    expect(prep).toMatch(/acknowledge_lifecycle_draft_reminders_notice/);
+    expect(prep).toMatch(/DROP FUNCTION IF EXISTS public\.acknowledge_lifecycle_draft_reminders_notice\(uuid\)/);
+    expect(prep).toMatch(
+      /CREATE OR REPLACE FUNCTION public\.acknowledge_lifecycle_draft_reminders_notice\(\)/
+    );
+    expect(prep).toMatch(/v_uid uuid := \(SELECT auth\.uid\(\)\)/);
+    expect(prep).toMatch(/unauthenticated/);
+    expect(prep).not.toMatch(
+      /acknowledge_lifecycle_draft_reminders_notice\s*\(\s*p_user_id/
+    );
+    expect(prep).toMatch(/lifecycle_draft_reminders_as_service_enabled/);
+    expect(prep).toMatch(/pref\.marketing_opt_in IS TRUE/);
+    expect(prep).toMatch(/l\.created_at >= v_cutoff/);
+    expect(prep).toMatch(/optional_draft_reminders_opt_out IS NOT TRUE/);
+    expect(prep).toMatch(/channel', 'marketing'/);
+    expect(prep).not.toMatch(/VALUES \('lifecycle_draft_reminders_as_service', 'true'\)/);
+    expect(prep).not.toMatch(/marketing_opt_in\s*=\s*true/);
+    expect(prep).not.toMatch(/SET value = 'false' WHERE key = 'lifecycle_email_kill_switch'/);
+    const draftBlock = prep.slice(prep.indexOf('-- C) abandoned_draft_h24'));
+    expect(draftBlock).not.toMatch(/u\.created_at\s*>=/);
+  });
 });
 
 describe('lifecycle email P0 — isolation Auth (non-régression)', () => {

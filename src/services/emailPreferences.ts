@@ -1,6 +1,6 @@
 /**
- * Consentement marketing email — capture minimale.
- * Défaut DB = false. Ne touche pas Auth / Magic Link.
+ * Préférences email — marketing + opposition rappels brouillon.
+ * Défaut marketing = false. Ne touche pas Auth / Magic Link.
  */
 
 import { supabase } from '@/lib/supabase';
@@ -10,6 +10,8 @@ export type EmailPreferences = {
   marketing_opt_in_at: string | null;
   marketing_opt_in_source: string | null;
   unsubscribed_at: string | null;
+  optional_draft_reminders_opt_out: boolean;
+  draft_reminders_notice_acknowledged_at: string | null;
 };
 
 export type EmailPreferencesResult =
@@ -18,6 +20,9 @@ export type EmailPreferencesResult =
 
 const GENERIC_ERROR = 'Impossible de mettre à jour vos préférences email';
 
+const PREFS_SELECT =
+  'marketing_opt_in, marketing_opt_in_at, marketing_opt_in_source, unsubscribed_at, optional_draft_reminders_opt_out, draft_reminders_notice_acknowledged_at';
+
 function mapError(message: string): string {
   const msg = message.toLowerCase();
   if (msg.includes('network') || msg.includes('fetch')) return 'Réseau indisponible';
@@ -25,17 +30,45 @@ function mapError(message: string): string {
   return GENERIC_ERROR;
 }
 
-export async function getEmailPreferences(): Promise<EmailPreferencesResult> {
+function mapRow(data: {
+  marketing_opt_in?: boolean | null;
+  marketing_opt_in_at?: string | null;
+  marketing_opt_in_source?: string | null;
+  unsubscribed_at?: string | null;
+  optional_draft_reminders_opt_out?: boolean | null;
+  draft_reminders_notice_acknowledged_at?: string | null;
+}): EmailPreferences {
+  return {
+    marketing_opt_in: data.marketing_opt_in === true,
+    marketing_opt_in_at: data.marketing_opt_in_at ?? null,
+    marketing_opt_in_source: data.marketing_opt_in_source ?? null,
+    unsubscribed_at: data.unsubscribed_at ?? null,
+    optional_draft_reminders_opt_out: data.optional_draft_reminders_opt_out === true,
+    draft_reminders_notice_acknowledged_at:
+      data.draft_reminders_notice_acknowledged_at ?? null,
+  };
+}
+
+async function requireUserId(): Promise<
+  { userId: string; error: null } | { userId: null; error: { message: string } }
+> {
   const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
   if (sessionError || !sessionData.session?.user?.id) {
-    return { data: null, error: { message: 'Connexion requise' } };
+    return { userId: null, error: { message: 'Connexion requise' } };
   }
-  const userId = sessionData.session.user.id;
+  return { userId: sessionData.session.user.id, error: null };
+}
+
+export async function getEmailPreferences(): Promise<EmailPreferencesResult> {
+  const auth = await requireUserId();
+  if (auth.error || !auth.userId) {
+    return { data: null, error: auth.error ?? { message: 'Connexion requise' } };
+  }
 
   const { data, error } = await supabase
     .from('email_preferences')
-    .select('marketing_opt_in, marketing_opt_in_at, marketing_opt_in_source, unsubscribed_at')
-    .eq('user_id', userId)
+    .select(PREFS_SELECT)
+    .eq('user_id', auth.userId)
     .maybeSingle();
 
   if (error) {
@@ -49,41 +82,34 @@ export async function getEmailPreferences(): Promise<EmailPreferencesResult> {
         marketing_opt_in_at: null,
         marketing_opt_in_source: null,
         unsubscribed_at: null,
+        optional_draft_reminders_opt_out: false,
+        draft_reminders_notice_acknowledged_at: null,
       },
       error: null,
     };
   }
 
-  return {
-    data: {
-      marketing_opt_in: data.marketing_opt_in === true,
-      marketing_opt_in_at: data.marketing_opt_in_at ?? null,
-      marketing_opt_in_source: data.marketing_opt_in_source ?? null,
-      unsubscribed_at: data.unsubscribed_at ?? null,
-    },
-    error: null,
-  };
+  return { data: mapRow(data), error: null };
 }
 
 /**
  * Opt-in explicite uniquement si optedIn === true.
  * Opt-out : marketing_opt_in=false + unsubscribed_at.
- * Jamais d’opt-in implicite.
+ * Jamais d’opt-in implicite. Ne touche pas optional_draft_reminders_opt_out.
  */
 export async function setMarketingEmailOptIn(
   optedIn: boolean,
   source: 'signup' | 'settings' | 'unsubscribe'
 ): Promise<EmailPreferencesResult> {
-  const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
-  if (sessionError || !sessionData.session?.user?.id) {
-    return { data: null, error: { message: 'Connexion requise' } };
+  const auth = await requireUserId();
+  if (auth.error || !auth.userId) {
+    return { data: null, error: auth.error ?? { message: 'Connexion requise' } };
   }
-  const userId = sessionData.session.user.id;
   const nowIso = new Date().toISOString();
 
   const payload = optedIn
     ? {
-        user_id: userId,
+        user_id: auth.userId,
         marketing_opt_in: true,
         marketing_opt_in_at: nowIso,
         marketing_opt_in_source: source,
@@ -91,7 +117,7 @@ export async function setMarketingEmailOptIn(
         updated_at: nowIso,
       }
     : {
-        user_id: userId,
+        user_id: auth.userId,
         marketing_opt_in: false,
         marketing_opt_in_at: null,
         marketing_opt_in_source: source,
@@ -102,7 +128,7 @@ export async function setMarketingEmailOptIn(
   const { data, error } = await supabase
     .from('email_preferences')
     .upsert(payload, { onConflict: 'user_id' })
-    .select('marketing_opt_in, marketing_opt_in_at, marketing_opt_in_source, unsubscribed_at')
+    .select(PREFS_SELECT)
     .single();
 
   if (error || !data) {
@@ -112,13 +138,91 @@ export async function setMarketingEmailOptIn(
     };
   }
 
-  return {
-    data: {
-      marketing_opt_in: data.marketing_opt_in === true,
-      marketing_opt_in_at: data.marketing_opt_in_at ?? null,
-      marketing_opt_in_source: data.marketing_opt_in_source ?? null,
-      unsubscribed_at: data.unsubscribed_at ?? null,
-    },
-    error: null,
-  };
+  return { data: mapRow(data), error: null };
+}
+
+/**
+ * Opposition spécifique aux rappels de brouillon (indépendante du marketing).
+ * `allowed=true` → opt_out false ; `allowed=false` → opt_out true.
+ * Ne modifie jamais marketing_opt_in.
+ */
+export async function setDraftRemindersAllowed(
+  allowed: boolean
+): Promise<EmailPreferencesResult> {
+  const auth = await requireUserId();
+  if (auth.error || !auth.userId) {
+    return { data: null, error: auth.error ?? { message: 'Connexion requise' } };
+  }
+  const nowIso = new Date().toISOString();
+  const optOut = !allowed;
+
+  const { data: updated, error: updateError } = await supabase
+    .from('email_preferences')
+    .update({
+      optional_draft_reminders_opt_out: optOut,
+      updated_at: nowIso,
+    })
+    .eq('user_id', auth.userId)
+    .select(PREFS_SELECT)
+    .maybeSingle();
+
+  if (updateError) {
+    return { data: null, error: { message: mapError(updateError.message) } };
+  }
+
+  if (updated) {
+    return { data: mapRow(updated), error: null };
+  }
+
+  const { data: inserted, error: insertError } = await supabase
+    .from('email_preferences')
+    .insert({
+      user_id: auth.userId,
+      marketing_opt_in: false,
+      optional_draft_reminders_opt_out: optOut,
+      updated_at: nowIso,
+    })
+    .select(PREFS_SELECT)
+    .single();
+
+  if (insertError || !inserted) {
+    return {
+      data: null,
+      error: { message: mapError(insertError?.message ?? GENERIC_ERROR) },
+    };
+  }
+
+  return { data: mapRow(inserted), error: null };
+}
+
+/**
+ * Enregistre l’information préalable sur les rappels brouillon (idempotent).
+ * Identité côté SQL via auth.uid() uniquement — pas de p_user_id.
+ * N’active aucun envoi et ne force aucun consentement marketing.
+ */
+export async function acknowledgeDraftRemindersNotice(): Promise<EmailPreferencesResult> {
+  const auth = await requireUserId();
+  if (auth.error || !auth.userId) {
+    return { data: null, error: auth.error ?? { message: 'Connexion requise' } };
+  }
+
+  const { error: rpcError } = await supabase.rpc(
+    'acknowledge_lifecycle_draft_reminders_notice'
+  );
+
+  if (rpcError) {
+    return { data: null, error: { message: mapError(rpcError.message) } };
+  }
+
+  const prefs = await getEmailPreferences();
+  if (prefs.error) {
+    return prefs;
+  }
+  if (!prefs.data.draft_reminders_notice_acknowledged_at) {
+    return {
+      data: null,
+      error: { message: GENERIC_ERROR },
+    };
+  }
+  return prefs;
 }

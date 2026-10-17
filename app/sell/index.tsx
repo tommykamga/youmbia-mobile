@@ -37,8 +37,12 @@ import {
 import { consumeListingPublishDuplicateDraft } from '@/lib/listingPublishDraft';
 import {
   DRAFT_LISTING_SAVE_ACTION,
+  DRAFT_LISTING_SAVED_ACK_FAILED_SUBTITLE,
   DRAFT_LISTING_SAVED_MESSAGE,
+  DRAFT_LISTING_SAVED_SUBTITLE,
+  DRAFT_REMINDERS_NOTICE,
 } from '@/lib/listingStatus';
+import { acknowledgeDraftRemindersNotice } from '@/services/emailPreferences';
 import {
   filterUploadableListingPhotos,
   isPersistedListingImageId,
@@ -912,14 +916,22 @@ export default function SellScreen() {
         }
       }
 
+      const ackResult = await acknowledgeDraftRemindersNotice();
+      const ackOk =
+        ackResult.error == null &&
+        ackResult.data?.draft_reminders_notice_acknowledged_at != null;
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      Alert.alert(DRAFT_LISTING_SAVED_MESSAGE, 'Vous pourrez le reprendre depuis Mes annonces.', [
-        { text: 'Continuer', style: 'cancel' },
-        {
-          text: 'Mes annonces',
-          onPress: () => router.push('/account/listings' as Href),
-        },
-      ]);
+      Alert.alert(
+        DRAFT_LISTING_SAVED_MESSAGE,
+        ackOk ? DRAFT_LISTING_SAVED_SUBTITLE : DRAFT_LISTING_SAVED_ACK_FAILED_SUBTITLE,
+        [
+          { text: 'Continuer', style: 'cancel' },
+          {
+            text: 'Mes annonces',
+            onPress: () => router.push('/account/listings' as Href),
+          },
+        ]
+      );
     } catch (e) {
       setSubmitError(e instanceof Error ? e.message : "Impossible d'enregistrer le brouillon");
     } finally {
@@ -1803,6 +1815,7 @@ export default function SellScreen() {
             >
               {"Publier l'annonce"}
             </Button>
+            <Text style={styles.draftRemindersNotice}>{DRAFT_REMINDERS_NOTICE}</Text>
             <Button
               variant="secondary"
               size="sm"
@@ -2311,6 +2324,12 @@ const styles = StyleSheet.create({
   subcategoryChipTextSelected: {
     color: colors.primary,
     fontWeight: fontWeights.semibold,
+  },
+  draftRemindersNotice: {
+    ...typography.xs,
+    color: colors.textMuted,
+    lineHeight: 16,
+    marginBottom: spacing.xs,
   },
   publishCta: {
     width: '100%',
