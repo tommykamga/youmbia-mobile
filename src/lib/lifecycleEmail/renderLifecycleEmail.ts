@@ -112,8 +112,74 @@ export function resolveLifecycleRenderCta(
   return { href: home, label, enabled: true, webFallbackUrl: home };
 }
 
+/**
+ * Jetons / libellés non utilisables comme prénom de salutation
+ * (rôles, marque, placeholders — jamais affichés tels quels).
+ */
+const LIFECYCLE_UNRELIABLE_NAME_TOKENS = new Set([
+  'admin',
+  'administrator',
+  'administrateur',
+  'youmbia',
+  'support',
+  'test',
+  'user',
+  'utilisateur',
+  'vendeur',
+  'moderator',
+  'moderateur',
+  'root',
+  'null',
+  'undefined',
+  'anonymous',
+  'anonyme',
+  'guest',
+  'invite',
+  'invité',
+  'apple',
+]);
+
+function normalizeLifecycleNameToken(token: string): string {
+  return token
+    .normalize('NFD')
+    .replace(/\p{M}/gu, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, '');
+}
+
+/**
+ * Prénom de salutation à partir de `profiles.full_name`.
+ * - Prend le premier jeton fiable d’un nom complet (« Marina Solange » → « Marina »).
+ * - Rejette les valeurs admin / marque / génériques (« Admin YOUMBIA » → null).
+ * - Aucun prénom codé en dur.
+ */
+export function resolveLifecycleGreetingFirstName(
+  fullName?: string | null
+): string | null {
+  const raw = String(fullName ?? '')
+    .trim()
+    .replace(/\s+/g, ' ');
+  if (!raw) return null;
+  if (raw.includes('@')) return null;
+
+  const tokens = raw.split(' ').filter(Boolean);
+  if (tokens.length === 0) return null;
+
+  for (const token of tokens) {
+    const normalized = normalizeLifecycleNameToken(token);
+    if (!normalized) continue;
+    if (LIFECYCLE_UNRELIABLE_NAME_TOKENS.has(normalized)) return null;
+  }
+
+  const first = tokens[0];
+  if (!/^[\p{L}][\p{L}'’\-]*$/u.test(first)) return null;
+  if (first.length < 2 || first.length > 40) return null;
+
+  return first;
+}
+
 function greeting(fullName?: string | null): string {
-  const name = String(fullName ?? '').trim();
+  const name = resolveLifecycleGreetingFirstName(fullName);
   if (name) return `Bonjour ${escapeLifecycleHtml(name)},`;
   return 'Bonjour,';
 }
@@ -255,9 +321,7 @@ export function renderLifecycleEmailHtml(input: LifecycleRenderInput): string {
 export function renderLifecycleEmailText(input: LifecycleRenderInput): string {
   const subject = lifecycleCampaignSubject(input.campaignId);
   const fallback = input.webFallbackUrl?.trim() || `${LIFECYCLE_BRAND.webOrigin}/`;
-  const greet = String(input.fullName ?? '').trim()
-    ? `Bonjour ${String(input.fullName).trim()},`
-    : 'Bonjour,';
+  const greet = greeting(input.fullName);
   const lines = [
     greet,
     '',

@@ -11,6 +11,7 @@ import {
   lifecycleCampaignSubject,
   renderLifecycleEmailHtml,
   renderLifecycleEmailText,
+  resolveLifecycleGreetingFirstName,
   resolveLifecycleRenderCta,
 } from '../_shared/lifecycleTemplates.ts';
 
@@ -291,6 +292,8 @@ Deno.serve(async (req) => {
       const listingTitle =
         typeof row.metadata?.listing_title === 'string' ? row.metadata.listing_title : null;
 
+      // Source prénom : profiles.full_name uniquement (pas de first_name dédié).
+      // Filtrage admin/générique dans resolveLifecycleGreetingFirstName.
       const { data: profile } = await admin
         .from('profiles')
         .select('full_name')
@@ -300,7 +303,7 @@ Deno.serve(async (req) => {
       const cta = resolveLifecycleRenderCta(row.campaign_id, { dryRun });
       const renderInput = {
         campaignId: row.campaign_id,
-        fullName: profile?.full_name ?? null,
+        fullName: resolveLifecycleGreetingFirstName(profile?.full_name ?? null),
         cta: { href: cta.href, label: cta.label, enabled: cta.enabled },
         unsubscribeUrl: unsubUrl,
         listingTitle,
