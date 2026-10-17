@@ -6,7 +6,7 @@
 |-------|--------|
 | Branche | `feat/lifecycle-email-p0` |
 | Baseline entrée | `29993fbe267cb67d9628bfbe0055c2a28b247d73` |
-| SHA RC | `57af51782eef1f8b22bdb98d26e31db318aa996c` |
+| SHA RC | `181af0416ca9f9d133fdf2b36cc29affe8140970` |
 | Base | `origin/main` |
 | Niveau | **L4** |
 | Skills | orchestrator, security, qa-gate, release, killcritic, project-memory |
