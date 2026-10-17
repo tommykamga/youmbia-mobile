@@ -6,7 +6,7 @@
 |-------|--------|
 | Branche | `feat/lifecycle-email-p0` |
 | Baseline entrée | `29993fbe267cb67d9628bfbe0055c2a28b247d73` |
-| SHA RC | `181af0416ca9f9d133fdf2b36cc29affe8140970` |
+| SHA RC | tip `feat/lifecycle-email-p0` (voir `git rev-parse HEAD`) |
 | Base | `origin/main` |
 | Niveau | **L4** |
 | Skills | orchestrator, security, qa-gate, release, killcritic, project-memory |

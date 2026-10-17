@@ -6,8 +6,8 @@
 |-------|--------|
 | Date | 2026-10-17 |
 | Branche | `feat/lifecycle-email-p0` |
-| HEAD | `181af0416ca9f9d133fdf2b36cc29affe8140970` |
-| Empreinte tree | `0aa0bb79680931d41286eb6e5894c039f742cb5e` |
+| HEAD | tip branche (consulter `git rev-parse HEAD`) |
+| Empreinte tree | consulter `git write-tree` |
 | Statut chantier | **Release Candidate Lifecycle Email P0** — PR prête, push en attente GO |
 
 ## Confirmé
