@@ -1,9 +1,12 @@
 /**
- * Routes HTTPS lifecycle — web primaire + fallback ; App Links si chemin vérifié.
- * Scheme mobile : youmbiamobile (app.json). Ne pas confondre avec Auth /auth/confirm.
+ * Routes HTTPS lifecycle — web primaire + fallback.
+ * Scheme mobile youmbiamobile hors HTML email.
+ *
+ * CTA brouillon : jamais /annonce/{id} (page publique ≠ éditeur /sell?draftId=).
  */
 
 import type { LifecycleCampaignId } from './campaigns';
+import { resolveLifecycleRenderCta } from './renderLifecycleEmail';
 
 export const YOUMBIA_WEB_ORIGIN = 'https://www.youmbia.com';
 export const YOUMBIA_MOBILE_SCHEME = 'youmbiamobile';
@@ -50,88 +53,28 @@ export function isVerifiedCtaHref(href: string | null | undefined): boolean {
   }
 }
 
-function homeHttps(): string {
-  return `${YOUMBIA_WEB_ORIGIN}/`;
-}
-
-function mobileHomeScheme(): string {
-  return `${YOUMBIA_MOBILE_SCHEME}://home`;
-}
-
 export function resolveLifecycleHttpsRoute(
   campaignId: LifecycleCampaignId,
   options?: { dryRun?: boolean; listingId?: string | null }
 ): LifecycleHttpsRoute {
-  const dryRun = options?.dryRun === true;
-  const listingId = options?.listingId?.trim() || null;
-  const webHome = homeHttps();
-
-  if (campaignId === 'welcome_h0') {
-    return {
-      campaignId,
-      httpsUrl: webHome,
-      opensInAppViaHttps: isVerifiedCtaHref(webHome),
-      webFallbackUrl: webHome,
-      mobileSchemeUrl: mobileHomeScheme(),
-      ctaEnabled: true,
-    };
-  }
-
+  void options?.listingId;
+  const cta = resolveLifecycleRenderCta(campaignId, { dryRun: options?.dryRun });
+  const home = `${YOUMBIA_WEB_ORIGIN}/`;
+  let mobileSchemeUrl: string | null = `${YOUMBIA_MOBILE_SCHEME}://home`;
   if (campaignId === 'first_listing_h24') {
-    if (dryRun) {
-      return {
-        campaignId,
-        httpsUrl: webHome,
-        opensInAppViaHttps: false,
-        webFallbackUrl: webHome,
-        mobileSchemeUrl: `${YOUMBIA_MOBILE_SCHEME}://sell`,
-        ctaEnabled: false,
-        reasonDisabled: 'cta_path_unverified_for_sell',
-      };
-    }
-    return {
-      campaignId,
-      httpsUrl: webHome,
-      opensInAppViaHttps: isVerifiedCtaHref(webHome),
-      webFallbackUrl: webHome,
-      mobileSchemeUrl: `${YOUMBIA_MOBILE_SCHEME}://sell`,
-      ctaEnabled: true,
-    };
+    mobileSchemeUrl = `${YOUMBIA_MOBILE_SCHEME}://sell`;
+  } else if (campaignId === 'abandoned_draft_h24') {
+    // Reprise réelle = /sell?draftId= dans l’app (pas d’équivalent HTTPS public).
+    mobileSchemeUrl = `${YOUMBIA_MOBILE_SCHEME}://sell`;
   }
-
-  if (listingId) {
-    const annonceUrl = `${YOUMBIA_WEB_ORIGIN}/annonce/${encodeURIComponent(listingId)}`;
-    if (isVerifiedCtaHref(annonceUrl) && !dryRun) {
-      return {
-        campaignId,
-        httpsUrl: annonceUrl,
-        opensInAppViaHttps: true,
-        webFallbackUrl: annonceUrl,
-        mobileSchemeUrl: `${YOUMBIA_MOBILE_SCHEME}://annonce/${listingId}`,
-        ctaEnabled: true,
-      };
-    }
-  }
-
-  if (dryRun) {
-    return {
-      campaignId,
-      httpsUrl: webHome,
-      opensInAppViaHttps: false,
-      webFallbackUrl: webHome,
-      mobileSchemeUrl: mobileHomeScheme(),
-      ctaEnabled: false,
-      reasonDisabled: 'cta_path_unverified_for_draft_edit',
-    };
-  }
-
   return {
     campaignId,
-    httpsUrl: webHome,
-    opensInAppViaHttps: isVerifiedCtaHref(webHome),
-    webFallbackUrl: webHome,
-    mobileSchemeUrl: mobileHomeScheme(),
-    ctaEnabled: true,
+    httpsUrl: cta.href ?? home,
+    opensInAppViaHttps: isVerifiedCtaHref(cta.href),
+    webFallbackUrl: cta.webFallbackUrl,
+    mobileSchemeUrl,
+    ctaEnabled: cta.enabled,
+    reasonDisabled: cta.enabled ? undefined : 'cta_path_unverified_or_dry_run',
   };
 }
 

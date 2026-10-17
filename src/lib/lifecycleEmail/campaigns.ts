@@ -116,13 +116,14 @@ export function isEligibleAbandonedDraft(input: LifecycleEligibilityInput): {
 }
 
 export function campaignSubject(campaignId: LifecycleCampaignId): string {
+  // Aligné renderLifecycleEmail.lifecycleCampaignSubject (source HTML).
   switch (campaignId) {
     case 'welcome_h0':
-      return 'Bienvenue sur YOUMBIA';
+      return 'Bienvenue sur YOUMBIA !';
     case 'first_listing_h24':
-      return 'Publiez votre première annonce sur YOUMBIA';
+      return 'Et si vous publiiez votre première annonce ?';
     case 'abandoned_draft_h24':
-      return 'Votre brouillon vous attend sur YOUMBIA';
+      return 'Votre annonce est presque prête !';
     default: {
       const _exhaustive: never = campaignId;
       return _exhaustive;

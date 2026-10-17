@@ -133,9 +133,18 @@ describe('lifecycle email P0 — contrat SQL / Edge', () => {
     expect(sendEdge).toMatch(/category', value: 'marketing'/);
     expect(sendEdge).not.toMatch(/category', value: 'transactional'/);
     expect(sendEdge).not.toMatch(/category', value: 'auth'/);
-    expect(sendEdge).toMatch(/Communication marketing/);
     expect(sendEdge).toMatch(/Precedence: 'bulk'/);
-    expect(sendEdge).toMatch(/\/annonce\/\$\{encodeURIComponent\(listingId\)\}/);
+    // Copy marketing dans _shared/lifecycleTemplates (rendu commun)
+    const templatesShared = readFileSync(
+      resolve(process.cwd(), 'supabase/functions/_shared/lifecycleTemplates.ts'),
+      'utf8'
+    );
+    expect(templatesShared).toMatch(/Communication marketing/);
+    expect(templatesShared).toMatch(/Achetez\. Vendez\. En confiance\./);
+    expect(sendEdge).toMatch(/lifecycleTemplates/);
+    expect(sendEdge).toMatch(/renderLifecycleEmailHtml/);
+    // Pas de CTA brouillon vers /annonce (page publique ≠ reprise)
+    expect(sendEdge).not.toMatch(/\/annonce\/\$\{encodeURIComponent\(listingId\)\}/);
     // Pas de fallback silencieux vers api.resend.com dans le fetch (baseUrl résolu)
     expect(sendEdge).not.toMatch(/Deno\.env\.get\('LIFECYCLE_RESEND_BASE_URL'\) \?\? 'https:\/\/api\.resend\.com'/);
   });

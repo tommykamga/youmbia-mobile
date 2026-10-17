@@ -7,12 +7,12 @@
 
 import { createClient, type SupabaseClient } from '../_shared/supabaseClient.ts';
 import { resolveLifecycleProviderTransport } from '../_shared/providerTransport.ts';
-
-const BRAND_GREEN = '#16A34A';
-const BRAND_NAVY = '#0F172A';
-const BG = '#F8FAFC';
-const LOGO = 'https://www.youmbia.com/brand/youmbia-logo-header.svg';
-const WEB_ORIGIN = 'https://www.youmbia.com';
+import {
+  lifecycleCampaignSubject,
+  renderLifecycleEmailHtml,
+  renderLifecycleEmailText,
+  resolveLifecycleRenderCta,
+} from '../_shared/lifecycleTemplates.ts';
 
 type CampaignId = 'welcome_h0' | 'first_listing_h24' | 'abandoned_draft_h24';
 
@@ -56,14 +56,6 @@ function secretsEqual(left: string, right: string): boolean {
   return mismatch === 0;
 }
 
-function escapeHtml(value: string): string {
-  return value
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
-}
-
 async function hmacHex(secret: string, message: string): Promise<string> {
   const key = await crypto.subtle.importKey(
     'raw',
@@ -74,85 +66,6 @@ async function hmacHex(secret: string, message: string): Promise<string> {
   );
   const sig = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(message));
   return [...new Uint8Array(sig)].map((b) => b.toString(16).padStart(2, '0')).join('');
-}
-
-function subjectFor(campaignId: CampaignId): string {
-  if (campaignId === 'welcome_h0') return 'Bienvenue sur YOUMBIA';
-  if (campaignId === 'first_listing_h24') return 'Publiez votre première annonce sur YOUMBIA';
-  return 'Votre brouillon vous attend sur YOUMBIA';
-}
-
-/** Aligné src/lib/lifecycleEmail/httpsRoutes.ts — CTA email toujours HTTPS. */
-function resolveCta(
-  campaignId: CampaignId,
-  dryRun: boolean,
-  listingId: string | null
-): { href: string | null; label: string; enabled: boolean } {
-  const home = `${WEB_ORIGIN}/`;
-  if (campaignId === 'welcome_h0') {
-    return { href: home, label: 'Découvrir YOUMBIA', enabled: true };
-  }
-  if (campaignId === 'first_listing_h24') {
-    if (dryRun) {
-      return { href: null, label: 'Publier une annonce', enabled: false };
-    }
-    return { href: home, label: 'Publier une annonce', enabled: true };
-  }
-  // abandoned_draft_h24 — Universal Link /annonce/{id} si listing connu
-  if (listingId && !dryRun) {
-    const annonce = `${WEB_ORIGIN}/annonce/${encodeURIComponent(listingId)}`;
-    return { href: annonce, label: 'Ouvrir YOUMBIA', enabled: true };
-  }
-  if (dryRun) {
-    return { href: null, label: 'Reprendre mon brouillon', enabled: false };
-  }
-  return { href: home, label: 'Ouvrir YOUMBIA', enabled: true };
-}
-
-function renderHtml(args: {
-  campaignId: CampaignId;
-  fullName: string | null;
-  cta: { href: string | null; label: string; enabled: boolean };
-  unsubscribeUrl: string;
-  listingTitle: string | null;
-}): string {
-  const subject = subjectFor(args.campaignId);
-  const name = (args.fullName ?? '').trim();
-  const greet = name ? `Bonjour ${escapeHtml(name)},` : 'Bonjour,';
-  let body =
-    'Bienvenue sur YOUMBIA, le marché qui vous élève. Explorez les annonces près de chez vous.';
-  if (args.campaignId === 'first_listing_h24') {
-    body =
-      'Vous n’avez pas encore publié d’annonce. En quelques minutes, mettez en avant un article et rejoignez la communauté.';
-  } else if (args.campaignId === 'abandoned_draft_h24') {
-    const title = (args.listingTitle ?? '').trim();
-    body =
-      title && title !== 'Brouillon'
-        ? `Votre brouillon « ${escapeHtml(title)} » est toujours en attente. Reprenez-le pour le publier.`
-        : 'Votre brouillon d’annonce est toujours en attente. Reprenez-le pour le publier.';
-  }
-  const ctaBlock =
-    args.cta.enabled && args.cta.href
-      ? `<div style="text-align:center;margin:28px 0;">
-        <a href="${escapeHtml(args.cta.href)}" style="background:${BRAND_GREEN};color:#fff;text-decoration:none;padding:14px 24px;border-radius:10px;font-weight:bold;font-size:16px;display:inline-block;">${escapeHtml(args.cta.label)}</a>
-      </div>`
-      : '';
-
-  return `<!DOCTYPE html><html lang="fr"><body style="margin:0;padding:0;background:${BG};font-family:Arial,sans-serif;color:${BRAND_NAVY};">
-  <div style="max-width:640px;margin:0 auto;padding:28px 16px;">
-    <div style="background:#fff;border-radius:18px;padding:32px;border:1px solid #E2E8F0;">
-      <div style="text-align:center;margin-bottom:28px;"><img src="${LOGO}" alt="YOUMBIA" style="height:46px;max-width:180px;"/></div>
-      <p style="font-size:16px;line-height:1.6;">${greet}</p>
-      <h1 style="font-size:22px;color:${BRAND_GREEN};">${escapeHtml(subject)}</h1>
-      <p style="font-size:16px;line-height:1.6;">${body}</p>
-      ${ctaBlock}
-      <p style="font-size:14px;color:#475569;"><strong>L’équipe YOUMBIA</strong><br/>Le marché qui vous élève</p>
-    </div>
-    <p style="text-align:center;font-size:12px;color:#64748B;margin-top:16px;">
-      Communication marketing (pas un e-mail de connexion).
-      <a href="${escapeHtml(args.unsubscribeUrl)}" style="color:#64748B;">Se désinscrire</a>
-    </p>
-  </div></body></html>`;
 }
 
 async function completeClaim(
@@ -375,10 +288,6 @@ Deno.serve(async (req) => {
         `&ts=${encodeURIComponent(ts)}` +
         `&sig=${encodeURIComponent(sig)}`;
 
-      const listingId =
-        typeof row.metadata?.listing_id === 'string'
-          ? row.metadata.listing_id
-          : row.occurrence_key || null;
       const listingTitle =
         typeof row.metadata?.listing_title === 'string' ? row.metadata.listing_title : null;
 
@@ -388,15 +297,18 @@ Deno.serve(async (req) => {
         .eq('id', row.user_id)
         .maybeSingle();
 
-      const cta = resolveCta(row.campaign_id, dryRun, listingId);
-      const html = renderHtml({
+      const cta = resolveLifecycleRenderCta(row.campaign_id, { dryRun });
+      const renderInput = {
         campaignId: row.campaign_id,
         fullName: profile?.full_name ?? null,
-        cta,
+        cta: { href: cta.href, label: cta.label, enabled: cta.enabled },
         unsubscribeUrl: unsubUrl,
         listingTitle,
-      });
-      const text = `${subjectFor(row.campaign_id)}\n\nSe désinscrire : ${unsubUrl}`;
+        webFallbackUrl: cta.webFallbackUrl,
+      };
+      const html = renderLifecycleEmailHtml(renderInput);
+      const text = renderLifecycleEmailText(renderInput);
+      const subject = lifecycleCampaignSubject(row.campaign_id);
 
       const result = await sendViaResend({
         dryRun,
@@ -404,7 +316,7 @@ Deno.serve(async (req) => {
         baseUrl: providerBaseUrl,
         from: FROM_EMAIL,
         to: recipient,
-        subject: subjectFor(row.campaign_id),
+        subject,
         html,
         text,
         unsubUrl,

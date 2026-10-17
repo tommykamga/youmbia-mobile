@@ -1,15 +1,18 @@
 /**
- * CTA HTTPS lifecycle — façade sur httpsRoutes.
+ * CTA HTTPS lifecycle — façade sur renderLifecycleEmail + httpsRoutes.
  */
 
 import type { LifecycleCampaignId } from './campaigns';
 import {
   isVerifiedCtaHref,
   isVerifiedUniversalLinkPath,
-  resolveLifecycleHttpsRoute,
   VERIFIED_UNIVERSAL_LINK_PREFIXES,
   YOUMBIA_WEB_ORIGIN,
 } from './httpsRoutes';
+import {
+  lifecycleCtaLabel,
+  resolveLifecycleRenderCta,
+} from './renderLifecycleEmail';
 
 export {
   isVerifiedCtaHref,
@@ -25,22 +28,17 @@ export type LifecycleCta = {
   reasonDisabled?: string;
 };
 
-function labelFor(campaignId: LifecycleCampaignId): string {
-  if (campaignId === 'welcome_h0') return 'Découvrir YOUMBIA';
-  if (campaignId === 'first_listing_h24') return 'Publier une annonce';
-  return 'Ouvrir YOUMBIA';
-}
-
 export function resolveCampaignCta(
   campaignId: LifecycleCampaignId,
   options?: { dryRun?: boolean; listingId?: string | null }
 ): LifecycleCta {
-  const route = resolveLifecycleHttpsRoute(campaignId, options);
+  void options?.listingId;
+  const route = resolveLifecycleRenderCta(campaignId, { dryRun: options?.dryRun });
   return {
-    href: route.ctaEnabled ? route.httpsUrl : null,
-    label: labelFor(campaignId),
-    enabled: route.ctaEnabled,
-    reasonDisabled: route.reasonDisabled,
+    href: route.href,
+    label: route.label || lifecycleCtaLabel(campaignId),
+    enabled: route.enabled,
+    reasonDisabled: route.enabled ? undefined : 'cta_path_unverified_or_dry_run',
   };
 }
 

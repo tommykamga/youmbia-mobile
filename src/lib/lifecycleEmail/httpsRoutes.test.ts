@@ -30,15 +30,16 @@ describe('lifecycle HTTPS routes + fallback', () => {
     expect(assertEmailCtaIsHttps(route.httpsUrl)).toBe(true);
   });
 
-  it('abandoned_draft avec listing : HTTPS /annonce vérifié', () => {
+  it('abandoned_draft : HTTPS home (pas /annonce — reprise = app /sell)', () => {
     const id = '11111111-1111-4111-8111-111111111111';
     const route = resolveLifecycleHttpsRoute('abandoned_draft_h24', {
       dryRun: false,
       listingId: id,
     });
-    expect(route.httpsUrl).toContain(`/annonce/${id}`);
-    expect(route.opensInAppViaHttps).toBe(true);
+    expect(route.httpsUrl).toBe('https://www.youmbia.com/');
+    expect(route.httpsUrl).not.toContain('/annonce/');
     expect(route.ctaEnabled).toBe(true);
+    expect(route.mobileSchemeUrl).toContain('sell');
   });
 
   it('rejette les CTA email non-HTTPS', () => {
