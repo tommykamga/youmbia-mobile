@@ -161,4 +161,17 @@ describe('lifecycle email P0 — isolation Auth (non-régression)', () => {
     expect(sendEdge).not.toMatch(/getResend\(/);
     expect(sendEdge).toMatch(/LIFECYCLE_RESEND_API_KEY/);
   });
+
+  it('garde baseline marketplace avant INSERT categories (pas de stub)', () => {
+    const baselineGuard = readFileSync(
+      resolve(
+        process.cwd(),
+        'supabase/migrations/20260514100000_require_marketplace_baseline.sql'
+      ),
+      'utf8'
+    );
+    expect(baselineGuard).toMatch(/baseline_schema_missing/);
+    expect(baselineGuard).toMatch(/to_regclass\('public\.categories'\)/);
+    expect(baselineGuard).not.toMatch(/CREATE TABLE[\s\S]*categories/i);
+  });
 });
