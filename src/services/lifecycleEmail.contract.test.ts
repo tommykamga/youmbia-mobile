@@ -103,6 +103,10 @@ describe('lifecycle email P0 — contrat SQL / Edge', () => {
     expect(sendEdge).toMatch(/X-Lifecycle-Email-Dispatch-Secret/);
     expect(sendEdge).toMatch(/LIFECYCLE_EMAIL_ALLOW_LIVE/);
     expect(sendEdge).toMatch(/LIFECYCLE_EMAIL_DRY_RUN/);
+    expect(sendEdge).toMatch(/LIFECYCLE_EMAIL_TRANSPORT/);
+    expect(sendEdge).toMatch(/LIFECYCLE_EMAIL_ISOLATION/);
+    expect(sendEdge).toMatch(/resolveLifecycleProviderTransport/);
+    expect(sendEdge).toMatch(/provider_transport_blocked/);
     expect(sendEdge).toMatch(/defer_lifecycle_email_after_dry_run/);
     expect(sendEdge).toMatch(/dry_run_deferred/);
     expect(sendEdge).toMatch(/claim_lifecycle_emails/);
@@ -119,6 +123,8 @@ describe('lifecycle email P0 — contrat SQL / Edge', () => {
     expect(sendEdge).toMatch(/Communication marketing/);
     expect(sendEdge).toMatch(/Precedence: 'bulk'/);
     expect(sendEdge).toMatch(/\/annonce\/\$\{encodeURIComponent\(listingId\)\}/);
+    // Pas de fallback silencieux vers api.resend.com dans le fetch (baseUrl résolu)
+    expect(sendEdge).not.toMatch(/Deno\.env\.get\('LIFECYCLE_RESEND_BASE_URL'\) \?\? 'https:\/\/api\.resend\.com'/);
   });
 
   it('Edge unsub : GET non mutatif ; POST applique ; webhook signature invalide → 401', () => {

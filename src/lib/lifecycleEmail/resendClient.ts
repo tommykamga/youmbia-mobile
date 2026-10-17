@@ -4,6 +4,11 @@
  */
 
 import {
+  isAllowedMockBaseUrl,
+  isRealResendHostname,
+  resolveLifecycleProviderTransport,
+} from './providerTransport';
+import {
   isRetryableHttpStatus,
   resultFromTransportFailure,
   type ProviderSendResult,
@@ -25,18 +30,56 @@ export type LifecycleResendClientOptions = {
   dryRun?: boolean;
   fetchImpl?: typeof fetch;
   baseUrl?: string;
+  /** mock | live — requis si dryRun=false */
+  transport?: 'mock' | 'live';
+  isolation?: string;
+  liveProvider?: boolean;
 };
 
 export function createLifecycleResendClient(options: LifecycleResendClientOptions) {
-  const baseUrl = options.baseUrl ?? 'https://api.resend.com';
   const fetchImpl = options.fetchImpl ?? fetch;
+  const resolved = resolveLifecycleProviderTransport({
+    allowLive: options.dryRun ? 'false' : 'true',
+    dryRun: options.dryRun ? 'true' : 'false',
+    transport: options.dryRun ? 'dry_run' : (options.transport ?? ''),
+    isolation: options.isolation ?? '',
+    baseUrl: options.baseUrl ?? '',
+    liveProvider: options.liveProvider ? 'true' : '',
+  });
 
   return {
     async sendEmail(input: LifecycleResendSendInput): Promise<ProviderSendResult> {
-      if (options.dryRun) {
+      if (resolved.mode === 'dry_run') {
         return {
           kind: 'ok',
           messageId: `dry_run_${Date.now()}`,
+        };
+      }
+
+      if (resolved.mode === 'blocked') {
+        return {
+          kind: 'rejected',
+          status: 403,
+          error: resolved.error,
+          retryable: false,
+        };
+      }
+
+      const baseUrl = resolved.baseUrl;
+      if (resolved.mode === 'mock' && !isAllowedMockBaseUrl(baseUrl)) {
+        return {
+          kind: 'rejected',
+          status: 403,
+          error: 'mock_base_url_not_allowed',
+          retryable: false,
+        };
+      }
+      if (resolved.mode === 'mock' && isRealResendHostname(new URL(baseUrl).hostname)) {
+        return {
+          kind: 'rejected',
+          status: 403,
+          error: 'real_resend_blocked_in_mock_or_test',
+          retryable: false,
         };
       }
 

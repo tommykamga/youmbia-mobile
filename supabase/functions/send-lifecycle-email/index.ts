@@ -6,6 +6,7 @@
 // Isolation Auth : n’utilise pas les templates Supabase Auth ni le pipeline Resend web d’auth.
 
 import { createClient, type SupabaseClient } from '../_shared/supabaseClient.ts';
+import { resolveLifecycleProviderTransport } from '../_shared/providerTransport.ts';
 
 const BRAND_GREEN = '#16A34A';
 const BRAND_NAVY = '#0F172A';
@@ -181,6 +182,7 @@ type ProviderResult =
 async function sendViaResend(args: {
   dryRun: boolean;
   apiKey: string;
+  baseUrl: string | null;
   from: string;
   to: string;
   subject: string;
@@ -190,6 +192,13 @@ async function sendViaResend(args: {
 }): Promise<ProviderResult> {
   if (args.dryRun) {
     return { kind: 'ok', messageId: `dry_run_${crypto.randomUUID()}` };
+  }
+  if (!args.baseUrl) {
+    return {
+      kind: 'rejected',
+      retryable: false,
+      error: 'provider_transport_blocked',
+    };
   }
   if (!args.apiKey || args.apiKey.startsWith('mock_') || args.apiKey === 'test') {
     return {
@@ -204,10 +213,7 @@ async function sendViaResend(args: {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 15_000);
     requestLikelySent = true;
-    const resendBase = (
-      Deno.env.get('LIFECYCLE_RESEND_BASE_URL') ?? 'https://api.resend.com'
-    ).replace(/\/$/, '');
-    const resp = await fetch(`${resendBase}/emails`, {
+    const resp = await fetch(`${args.baseUrl}/emails`, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${args.apiKey}`,
@@ -263,16 +269,25 @@ Deno.serve(async (req) => {
   const PUBLIC_FUNCTIONS_BASE =
     Deno.env.get('LIFECYCLE_PUBLIC_FUNCTIONS_BASE') ??
     `${SUPABASE_URL.replace(/\/$/, '')}/functions/v1`;
-  // Envoi live uniquement si ALLOW_LIVE=true explicite. Sinon dry-run (aucun Resend réel).
-  const allowLive =
-    String(Deno.env.get('LIFECYCLE_EMAIL_ALLOW_LIVE') ?? '').toLowerCase() === 'true';
-  const dryRunEnv =
-    String(Deno.env.get('LIFECYCLE_EMAIL_DRY_RUN') ?? '').toLowerCase() === 'true' ||
-    String(Deno.env.get('DRY_RUN') ?? '').toLowerCase() === 'true';
-  const dryRun = !allowLive || dryRunEnv;
+  // Fail-closed : dry_run par défaut ; mock|live uniquement via LIFECYCLE_EMAIL_TRANSPORT.
+  const transport = resolveLifecycleProviderTransport({
+    allowLive: Deno.env.get('LIFECYCLE_EMAIL_ALLOW_LIVE') ?? '',
+    dryRun: Deno.env.get('LIFECYCLE_EMAIL_DRY_RUN') ?? '',
+    dryRunAlias: Deno.env.get('DRY_RUN') ?? '',
+    transport: Deno.env.get('LIFECYCLE_EMAIL_TRANSPORT') ?? '',
+    isolation: Deno.env.get('LIFECYCLE_EMAIL_ISOLATION') ?? '',
+    baseUrl: Deno.env.get('LIFECYCLE_RESEND_BASE_URL') ?? '',
+    liveProvider: Deno.env.get('LIFECYCLE_EMAIL_LIVE_PROVIDER') ?? '',
+  });
+  const dryRun = transport.mode === 'dry_run';
+  const providerBaseUrl =
+    transport.mode === 'mock' || transport.mode === 'live' ? transport.baseUrl : null;
 
   if (!SUPABASE_URL || !SERVICE_ROLE_KEY || !DISPATCH_SECRET || !HMAC_SECRET) {
     return json(500, { error: 'server_misconfigured' });
+  }
+  if (transport.mode === 'blocked') {
+    return json(500, { error: 'provider_transport_blocked', detail: transport.error });
   }
 
   const provided = String(req.headers.get('X-Lifecycle-Email-Dispatch-Secret') ?? '').trim();
@@ -386,6 +401,7 @@ Deno.serve(async (req) => {
       const result = await sendViaResend({
         dryRun,
         apiKey: RESEND_API_KEY,
+        baseUrl: providerBaseUrl,
         from: FROM_EMAIL,
         to: recipient,
         subject: subjectFor(row.campaign_id),
@@ -457,6 +473,7 @@ Deno.serve(async (req) => {
   return json(200, {
     ok: true,
     dry_run: dryRun,
+    transport: transport.mode,
     claimed: claimed.length,
     sent,
     skipped,
