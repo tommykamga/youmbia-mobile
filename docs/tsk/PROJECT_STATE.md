@@ -8,7 +8,7 @@
 | Branche | `feat/lifecycle-email-p0` |
 | HEAD | tip branche (consulter `git rev-parse HEAD`) |
 | Empreinte tree | consulter `git write-tree` |
-| Statut chantier | **Release Candidate Lifecycle Email P0** — PR prête, push en attente GO |
+| Statut chantier | **Release Candidate Lifecycle Email P0** — Draft PR #17 ouverte, CI verte — merge en attente GO |
 
 ## Confirmé
 
