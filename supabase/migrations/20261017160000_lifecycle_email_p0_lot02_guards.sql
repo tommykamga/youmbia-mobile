@@ -127,3 +127,46 @@ REVOKE ALL ON FUNCTION public.claim_lifecycle_emails(uuid, integer) FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.claim_lifecycle_emails(uuid, integer) FROM anon;
 REVOKE ALL ON FUNCTION public.claim_lifecycle_emails(uuid, integer) FROM authenticated;
 GRANT EXECUTE ON FUNCTION public.claim_lifecycle_emails(uuid, integer) TO service_role;
+
+-- Dry-run : remet pending mais schedule loin → pas de boucle cron, occurrence non consommée.
+CREATE OR REPLACE FUNCTION public.defer_lifecycle_email_after_dry_run(
+  p_claim_id uuid,
+  p_outbox_ids uuid[],
+  p_mock_id text DEFAULT NULL
+)
+RETURNS integer
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+  updated integer := 0;
+BEGIN
+  IF p_claim_id IS NULL
+     OR p_outbox_ids IS NULL
+     OR coalesce(array_length(p_outbox_ids, 1), 0) = 0 THEN
+    RETURN 0;
+  END IF;
+
+  UPDATE public.lifecycle_email_outbox AS o
+  SET
+    status = 'pending',
+    claim_id = NULL,
+    claimed_at = NULL,
+    last_error = 'dry_run_deferred',
+    scheduled_for = pg_catalog.now() + interval '100 years',
+    metadata = coalesce(o.metadata, '{}'::jsonb)
+      || jsonb_build_object('dry_run_mock_id', p_mock_id)
+  WHERE o.id = ANY (p_outbox_ids)
+    AND o.claim_id = p_claim_id
+    AND o.status = 'processing';
+
+  GET DIAGNOSTICS updated = ROW_COUNT;
+  RETURN updated;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.defer_lifecycle_email_after_dry_run(uuid, uuid[], text) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.defer_lifecycle_email_after_dry_run(uuid, uuid[], text) FROM anon;
+REVOKE ALL ON FUNCTION public.defer_lifecycle_email_after_dry_run(uuid, uuid[], text) FROM authenticated;
+GRANT EXECUTE ON FUNCTION public.defer_lifecycle_email_after_dry_run(uuid, uuid[], text) TO service_role;

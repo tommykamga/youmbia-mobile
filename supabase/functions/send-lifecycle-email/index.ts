@@ -392,21 +392,28 @@ Deno.serve(async (req) => {
       });
 
       if (result.kind === 'ok' && dryRun) {
-        // Dry-run : pas de statut `sent` (ne brûle pas la fréquence 7j / ne simule pas un envoi réel).
-        await completeClaim(
-          admin,
-          claimId,
-          [row.id],
-          'skipped',
-          result.messageId,
-          'dry_run_no_live_send'
-        );
+        // Dry-run : defer (pending + scheduled_for +100y) — occurrence non brûlée, pas de boucle cron.
+        const { error: deferError } = await admin.rpc('defer_lifecycle_email_after_dry_run', {
+          p_claim_id: claimId,
+          p_outbox_ids: [row.id],
+          p_mock_id: result.messageId,
+        });
+        if (deferError) {
+          await completeClaim(
+            admin,
+            claimId,
+            [row.id],
+            'released',
+            null,
+            'dry_run_defer_failed'
+          );
+        }
         await admin.rpc('log_lifecycle_email_event', {
           p_outbox_id: row.id,
           p_user_id: row.user_id,
           p_campaign_id: row.campaign_id,
           p_event_type: 'skipped',
-          p_payload: { reason: 'dry_run_no_live_send', mock_id: result.messageId },
+          p_payload: { reason: 'dry_run_deferred', mock_id: result.messageId },
         });
         skipped += 1;
       } else if (result.kind === 'ok') {

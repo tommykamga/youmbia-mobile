@@ -82,11 +82,13 @@ describe('lifecycle email P0 — contrat SQL / Edge', () => {
     expect(sql).toMatch(/'banned'/);
   });
 
-  it('Lot 02 : metadata signup opt-in + claim refuse provider_message_id stale', () => {
+  it('Lot 02 : metadata signup opt-in + claim refuse provider_message_id stale + dry_run defer', () => {
     expect(sqlLot02).toMatch(/marketing_opt_in', 'false'\)\) = 'true'/);
     expect(sqlLot02).toMatch(/stale_claim_with_provider_id/);
     expect(sqlLot02).toMatch(/o\.provider_message_id IS NULL/);
     expect(sqlLot02).toMatch(/o\.provider_message_id IS NOT NULL/);
+    expect(sqlLot02).toMatch(/defer_lifecycle_email_after_dry_run/);
+    expect(sqlLot02).toMatch(/interval '100 years'/);
   });
 
   it('ne schedule cron que via SQL versionné (pas d’auth email)', () => {
@@ -101,7 +103,8 @@ describe('lifecycle email P0 — contrat SQL / Edge', () => {
     expect(sendEdge).toMatch(/X-Lifecycle-Email-Dispatch-Secret/);
     expect(sendEdge).toMatch(/LIFECYCLE_EMAIL_ALLOW_LIVE/);
     expect(sendEdge).toMatch(/LIFECYCLE_EMAIL_DRY_RUN/);
-    expect(sendEdge).toMatch(/dry_run_no_live_send/);
+    expect(sendEdge).toMatch(/defer_lifecycle_email_after_dry_run/);
+    expect(sendEdge).toMatch(/dry_run_deferred/);
     expect(sendEdge).toMatch(/claim_lifecycle_emails/);
     expect(sendEdge).toMatch(/revalidate_lifecycle_send_eligibility/);
     expect(sendEdge).toMatch(/uncertain/);

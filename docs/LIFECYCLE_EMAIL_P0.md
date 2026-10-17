@@ -73,9 +73,10 @@ Fréquence : **≤ 1 email marketing `sent` / user / 7 jours** (enqueue + revali
 ## Garde-fous post-killcritic
 
 - Kill switch défaut **`true`** (migration).
-- Send : live uniquement si `LIFECYCLE_EMAIL_ALLOW_LIVE=true` ; sinon dry-run → `skipped` / `dry_run_no_live_send`.
+- Send : live uniquement si `LIFECYCLE_EMAIL_ALLOW_LIVE=true` ; sinon dry-run → `defer_lifecycle_email_after_dry_run` (pending + schedule +100y, pas de boucle).
 - Unsub : **GET = page** (pas de mutation) ; **POST = apply**.
 - Deploy Edge publics : `--no-verify-jwt` à documenter au GO staging (non versionné ici).
+- Lot 03 : preuves SQL locales via `./scripts/run-lifecycle-p0-sql-integration.sh` (stubs ≠ cloud).
 
 ## Contrat de contrôle QA (avant exécution)
 
