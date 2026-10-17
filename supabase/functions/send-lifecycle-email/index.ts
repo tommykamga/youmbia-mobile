@@ -5,7 +5,7 @@
 // Mode DRY_RUN / LIFECYCLE_EMAIL_DRY_RUN=true : aucun appel Resend réel.
 // Isolation Auth : n’utilise pas les templates Supabase Auth ni le pipeline Resend web d’auth.
 
-import { createClient, type SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2.99.3';
+import { createClient, type SupabaseClient } from '../_shared/supabaseClient.ts';
 
 const BRAND_GREEN = '#16A34A';
 const BRAND_NAVY = '#0F172A';
@@ -204,7 +204,10 @@ async function sendViaResend(args: {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 15_000);
     requestLikelySent = true;
-    const resp = await fetch('https://api.resend.com/emails', {
+    const resendBase = (
+      Deno.env.get('LIFECYCLE_RESEND_BASE_URL') ?? 'https://api.resend.com'
+    ).replace(/\/$/, '');
+    const resp = await fetch(`${resendBase}/emails`, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${args.apiKey}`,

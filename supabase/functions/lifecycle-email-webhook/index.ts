@@ -2,7 +2,7 @@
 // Public (--no-verify-jwt). Vérifie signature Svix/Resend avant toute mutation.
 // Hard bounce / complaint → email_suppressions. Ne touche pas Auth.
 
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.99.3';
+import { createClient } from '../_shared/supabaseClient.ts';
 
 const json = (status: number, payload: Record<string, unknown>) =>
   new Response(JSON.stringify(payload), {

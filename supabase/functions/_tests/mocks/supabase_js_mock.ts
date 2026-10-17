@@ -113,3 +113,5 @@ export function createClient(_url: string, _key: string, _opts?: unknown) {
     },
   };
 }
+
+export type SupabaseClient = ReturnType<typeof createClient>;
