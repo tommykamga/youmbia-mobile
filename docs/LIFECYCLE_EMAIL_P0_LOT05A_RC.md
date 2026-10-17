@@ -6,7 +6,7 @@
 |-------|--------|
 | Branche | `feat/lifecycle-email-p0` |
 | Baseline entrée | `29993fbe267cb67d9628bfbe0055c2a28b247d73` |
-| SHA RC (après correctif fail-closed) | *voir `git rev-parse HEAD` après commit 05A* |
+| SHA RC | `57af51782eef1f8b22bdb98d26e31db318aa996c` |
 | Base | `origin/main` |
 | Niveau | **L4** |
 | Skills | orchestrator, security, qa-gate, release, killcritic, project-memory |
@@ -33,7 +33,7 @@
 8. `97fd5b9` test — Lot 04B SQL E2E + edge blocker  
 9. `496ee63` fix — Lot 04C offline Edge + mock E2E  
 10. `29993fb` fix — Lot 04D fail-closed + internal-only  
-11. *(05A)* docs/RC + kill switch fail-closed migration  
+11.  docs/RC + kill switch fail-closed migration  
 
 ## Revue finale (synthèse)
 
