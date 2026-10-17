@@ -19,6 +19,7 @@ const base = (over: Partial<LifecycleEligibilityInput> = {}): LifecycleEligibili
   hasSentWithinFrequencyCap: false,
   accountCreatedAtMs: Date.parse('2026-10-17T21:00:00.000Z'),
   serviceCutoffMs: CUTOFF,
+  emailConfirmed: true,
   hasEverPublishedListing: false,
   draft: null,
   nowMs: Date.parse('2026-10-18T12:00:00.000Z'),
@@ -74,6 +75,15 @@ describe('lifecycle eligibility service vs marketing', () => {
     expect(isEligibleWelcome(base({ hasSentWithinFrequencyCap: true }))).toEqual({
       ok: true,
     });
+  });
+
+  it('welcome : adresse non confirmée → bloqué', () => {
+    expect(isEligibleWelcome(base({ emailConfirmed: false })).reason).toBe(
+      'email_not_confirmed'
+    );
+    expect(isEligibleWelcome(base({ emailConfirmed: undefined })).reason).toBe(
+      'email_not_confirmed'
+    );
   });
 
   it('first_listing sans opt-in → bloqué', () => {

@@ -205,6 +205,7 @@ DECLARE
   prof public.profiles%ROWTYPE;
   v_email text;
   v_created_at timestamptz;
+  v_email_confirmed_at timestamptz;
   v_channel text;
   v_published boolean;
   v_draft_ok boolean;
@@ -223,7 +224,8 @@ BEGIN
     RETURN;
   END IF;
 
-  SELECT u.email, u.created_at INTO v_email, v_created_at
+  SELECT u.email, u.created_at, u.email_confirmed_at
+  INTO v_email, v_created_at, v_email_confirmed_at
   FROM auth.users AS u
   WHERE u.id = o.user_id;
 
@@ -276,6 +278,11 @@ BEGIN
   IF o.campaign_id = 'welcome_h0' THEN
     IF v_created_at IS NULL OR v_created_at < v_cutoff THEN
       RETURN QUERY SELECT false, 'pre_cutoff_no_retroactive', v_email, o.user_id, o.campaign_id, o.occurrence_key, o.metadata;
+      RETURN;
+    END IF;
+    -- Ne pas confirmer un compte à une adresse non vérifiée.
+    IF v_email_confirmed_at IS NULL THEN
+      RETURN QUERY SELECT false, 'email_not_confirmed', v_email, o.user_id, o.campaign_id, o.occurrence_key, o.metadata;
       RETURN;
     END IF;
   END IF;
@@ -347,6 +354,7 @@ BEGIN
     LEFT JOIN public.profiles AS prof ON prof.id = u.id
     WHERE u.email IS NOT NULL
       AND length(btrim(u.email)) > 0
+      AND u.email_confirmed_at IS NOT NULL
       AND u.created_at >= v_cutoff
       AND u.created_at <= pg_catalog.now()
       AND coalesce(prof.is_banned, false) = false
@@ -492,10 +500,9 @@ GRANT EXECUTE ON FUNCTION public.enqueue_lifecycle_emails() TO service_role;
 -- ---------------------------------------------------------------------------
 -- Neutraliser les pending rétroactifs (ne touche JAMAIS status=sent)
 -- ---------------------------------------------------------------------------
+-- Pas de colonne updated_at sur lifecycle_email_outbox : statut seul.
 UPDATE public.lifecycle_email_outbox AS o
-SET
-  status = 'skipped',
-  updated_at = pg_catalog.now()
+SET status = 'skipped'
 FROM auth.users AS u
 WHERE o.user_id = u.id
   AND o.campaign_id = 'welcome_h0'
@@ -503,9 +510,7 @@ WHERE o.user_id = u.id
   AND u.created_at < public.lifecycle_email_service_cutoff();
 
 UPDATE public.lifecycle_email_outbox AS o
-SET
-  status = 'skipped',
-  updated_at = pg_catalog.now()
+SET status = 'skipped'
 FROM public.listings AS l
 WHERE o.campaign_id = 'abandoned_draft_h24'
   AND o.status IN ('pending', 'processing')

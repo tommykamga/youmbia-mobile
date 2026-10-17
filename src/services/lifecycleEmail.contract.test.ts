@@ -185,6 +185,11 @@ describe('lifecycle email P0 — contrat SQL / Edge', () => {
     expect(svc).toMatch(/WHEN 'welcome_h0' THEN 'service'/);
     expect(svc).toMatch(/WHEN 'abandoned_draft_h24' THEN 'marketing'/);
     expect(svc).toMatch(/apply_lifecycle_draft_reminders_opt_out/);
+    expect(svc).toMatch(/email_confirmed_at IS NOT NULL/);
+    expect(svc).toMatch(/email_not_confirmed/);
+    // Pas d’updated_at sur outbox (colonne absente)
+    expect(svc).not.toMatch(/SET\s+status = 'skipped',\s*updated_at/);
+    expect(svc).toMatch(/SET status = 'skipped'/);
     // Pas de forçage consentement historique
     expect(svc).not.toMatch(/marketing_opt_in\s*=\s*true/);
     expect(svc).not.toMatch(/SET value = 'false' WHERE key = 'lifecycle_email_kill_switch'/);

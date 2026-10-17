@@ -38,6 +38,15 @@ Colonne `email_preferences.optional_draft_reminders_opt_out` (défaut `false`).
 RPC `apply_lifecycle_draft_reminders_opt_out` + Edge unsub `?scope=draft_reminders`.  
 N’écrit **pas** `marketing_opt_in=true` et n’ajoute pas de suppression `unsub` hard.
 
+Pour `abandoned_draft_h24` :
+- **List-Unsubscribe** + lien principal → désinscription **marketing globale** (`scope=marketing`).
+- Lien distinct « Arrêter les rappels de brouillon » → opposition spécifique (`scope=draft_reminders`).
+
+## Confirmation d’adresse (welcome service)
+
+`auth.users.email_confirmed_at IS NOT NULL` requis à l’enqueue et à la revalidation.  
+Raison skip : `email_not_confirmed`. Évite de confirmer un compte actif à une adresse non vérifiée.
+
 ## Tags Resend
 
 - Welcome : `category=service`, `channel=service`

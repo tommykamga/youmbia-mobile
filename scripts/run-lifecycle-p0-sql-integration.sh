@@ -46,7 +46,8 @@ psql -h "$HOST" -p "$PORT" -d "$DB" -v ON_ERROR_STOP=1 \
 
 for mig in \
   "$ROOT/supabase/migrations/20261017150000_lifecycle_email_p0.sql" \
-  "$ROOT/supabase/migrations/20261017160000_lifecycle_email_p0_lot02_guards.sql"
+  "$ROOT/supabase/migrations/20261017160000_lifecycle_email_p0_lot02_guards.sql" \
+  "$ROOT/supabase/migrations/20261017170000_lifecycle_email_kill_switch_fail_closed.sql"
 do
   base="$(basename "$mig")"
   echo "==> Migration $base (CREATE EXTENSION pg_net/pg_cron stripés → stubs)"
@@ -57,9 +58,17 @@ do
   psql -h "$HOST" -p "$PORT" -d "$DB" -v ON_ERROR_STOP=1 -f "$TMP/$base"
 done
 
-echo "==> Tests d’intégration"
+echo "==> Tests d’intégration P0 (schéma pré-évolution)"
 psql -h "$HOST" -p "$PORT" -d "$DB" -v ON_ERROR_STOP=1 \
   -f "$ROOT/supabase/scripts/lifecycle_p0_integration_tests.sql"
+
+echo "==> Migration service vs marketing (représentative prod)"
+MIG_SVC="$ROOT/supabase/migrations/20261017220000_lifecycle_service_vs_marketing.sql"
+psql -h "$HOST" -p "$PORT" -d "$DB" -v ON_ERROR_STOP=1 -f "$MIG_SVC"
+
+echo "==> Tests service vs marketing"
+psql -h "$HOST" -p "$PORT" -d "$DB" -v ON_ERROR_STOP=1 \
+  -f "$ROOT/supabase/scripts/lifecycle_service_vs_marketing_tests.sql"
 
 # Hygiène : kill switch ON en fin de run
 psql -h "$HOST" -p "$PORT" -d "$DB" -v ON_ERROR_STOP=1 \

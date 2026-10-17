@@ -48,6 +48,8 @@ export type LifecycleEligibilityInput = {
   accountCreatedAtMs: number;
   /** Cutoff anti-rétroactif (ms). Obligatoire pour welcome / drafts post-évolution. */
   serviceCutoffMs: number;
+  /** Adresse confirmée (auth.users.email_confirmed_at). Requis pour welcome service. */
+  emailConfirmed?: boolean;
   hasEverPublishedListing: boolean;
   draft?: {
     listingId: string;
@@ -117,6 +119,9 @@ export function isEligibleWelcome(input: LifecycleEligibilityInput): {
   }
   if (input.accountCreatedAtMs < input.serviceCutoffMs) {
     return { ok: false, reason: 'pre_cutoff_no_retroactive' };
+  }
+  if (input.emailConfirmed !== true) {
+    return { ok: false, reason: 'email_not_confirmed' };
   }
   return { ok: true };
 }

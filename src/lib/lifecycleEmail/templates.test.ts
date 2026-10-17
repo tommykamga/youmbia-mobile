@@ -31,7 +31,11 @@ describe('lifecycle templates FR brandés', () => {
     const pack = buildLifecycleRenderedEmail({
       campaignId,
       fullName: 'Ada',
-      unsubscribeUrl: 'https://example.test/unsub',
+      unsubscribeUrl: 'https://example.test/unsub?scope=marketing',
+      draftRemindersOptOutUrl:
+        campaignId === 'abandoned_draft_h24'
+          ? 'https://example.test/unsub?scope=draft_reminders'
+          : null,
       listingTitle: campaignId === 'abandoned_draft_h24' ? 'Vélo ville' : null,
       listingId:
         campaignId === 'abandoned_draft_h24'
@@ -44,12 +48,17 @@ describe('lifecycle templates FR brandés', () => {
     expect(pack.html).toContain('YOUMBIA');
     expect(pack.html).toContain('#16A34A');
     expect(pack.html).toContain('Communication marketing');
-    expect(pack.html).toContain('Se désinscrire');
+    expect(pack.html).toContain('Se désinscrire des e-mails marketing');
     expect(pack.html).not.toContain('magic link');
     expect(pack.html).not.toContain('youmbiamobile://');
     expect(pack.text).toContain('marketing');
     expect(pack.tags.some((t) => t.value === 'marketing')).toBe(true);
-    expect(pack.headers['List-Unsubscribe']).toContain('https://example.test/unsub');
+    expect(pack.headers['List-Unsubscribe']).toContain('scope=marketing');
+    if (campaignId === 'abandoned_draft_h24') {
+      expect(pack.html).toContain('Arrêter les rappels de brouillon');
+      expect(pack.html).toContain('scope=draft_reminders');
+      expect(pack.text).toContain('Arrêter les rappels de brouillon');
+    }
   });
 
   it('dry-run first_listing : pas de bouton CTA, fallback HTTPS présent', () => {

@@ -31,7 +31,13 @@ export type LifecycleRenderInput = {
   campaignId: LifecycleRenderCampaignId;
   fullName?: string | null;
   cta: LifecycleRenderCta;
+  /** Désinscription marketing globale (List-Unsubscribe + lien principal). */
   unsubscribeUrl: string;
+  /**
+   * Opposition spécifique aux rappels de brouillon (option distincte).
+   * Présent uniquement pour `abandoned_draft_h24`.
+   */
+  draftRemindersOptOutUrl?: string | null;
   listingTitle?: string | null;
   webFallbackUrl?: string | null;
 };
@@ -265,6 +271,11 @@ export function renderLifecycleEmailHtml(input: LifecycleRenderInput): string {
   const fallback = input.webFallbackUrl?.trim() || `${webOrigin}/`;
   const channelLabel =
     channel === 'service' ? 'E-mail de service' : 'Communication marketing';
+  const draftOptOut = String(input.draftRemindersOptOutUrl ?? '').trim();
+  const draftOptOutHtml =
+    input.campaignId === 'abandoned_draft_h24' && draftOptOut
+      ? ` · <a href="${escapeLifecycleHtml(draftOptOut)}" style="color:${muted};">Arrêter les rappels de brouillon</a>`
+      : '';
   const footerHtml =
     channel === 'service'
       ? `<p style="text-align:center;font-size:12px;line-height:1.5;color:${muted};margin:16px 8px 0;max-width:640px;">
@@ -274,7 +285,7 @@ export function renderLifecycleEmailHtml(input: LifecycleRenderInput): string {
       : `<p style="text-align:center;font-size:12px;line-height:1.5;color:${muted};margin:16px 8px 0;max-width:640px;">
           Cet e-mail est une communication <strong>marketing</strong> YOUMBIA (pas un e-mail de connexion ni de sécurité).
           Vous le recevez car vous avez accepté les communications marketing.
-          <a href="${escapeLifecycleHtml(input.unsubscribeUrl)}" style="color:${muted};">Se désinscrire</a>
+          <a href="${escapeLifecycleHtml(input.unsubscribeUrl)}" style="color:${muted};">Se désinscrire des e-mails marketing</a>${draftOptOutHtml}
         </p>`;
 
   const ctaBlock =
@@ -355,7 +366,11 @@ export function renderLifecycleEmailText(input: LifecycleRenderInput): string {
   }
   lines.push(`Ouvrir YOUMBIA : ${fallback}`, '');
   if (channel === 'marketing') {
-    lines.push(`Se désinscrire : ${input.unsubscribeUrl}`);
+    lines.push(`Se désinscrire des e-mails marketing : ${input.unsubscribeUrl}`);
+    const draftOptOutText = String(input.draftRemindersOptOutUrl ?? '').trim();
+    if (input.campaignId === 'abandoned_draft_h24' && draftOptOutText) {
+      lines.push(`Arrêter les rappels de brouillon : ${draftOptOutText}`);
+    }
   }
   void subject;
   return lines.join('\n');

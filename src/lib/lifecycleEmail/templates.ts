@@ -26,6 +26,7 @@ export type LifecycleTemplateInput = {
   fullName?: string | null;
   cta: LifecycleCta;
   unsubscribeUrl: string;
+  draftRemindersOptOutUrl?: string | null;
   listingTitle?: string | null;
   webFallbackUrl?: string | null;
 };
@@ -51,6 +52,7 @@ function toRenderInput(input: LifecycleTemplateInput): LifecycleRenderInput {
       enabled: input.cta.enabled,
     },
     unsubscribeUrl: input.unsubscribeUrl,
+    draftRemindersOptOutUrl: input.draftRemindersOptOutUrl,
     listingTitle: input.listingTitle,
     webFallbackUrl: input.webFallbackUrl,
   };
@@ -73,6 +75,7 @@ export function buildLifecycleRenderedEmail(args: {
   campaignId: LifecycleCampaignId;
   fullName?: string | null;
   unsubscribeUrl: string;
+  draftRemindersOptOutUrl?: string | null;
   listingTitle?: string | null;
   listingId?: string | null;
   dryRun?: boolean;
@@ -90,6 +93,7 @@ export function buildLifecycleRenderedEmail(args: {
     fullName: args.fullName,
     cta,
     unsubscribeUrl: args.unsubscribeUrl,
+    draftRemindersOptOutUrl: args.draftRemindersOptOutUrl,
     listingTitle: args.listingTitle,
     webFallbackUrl: route.webFallbackUrl,
   };

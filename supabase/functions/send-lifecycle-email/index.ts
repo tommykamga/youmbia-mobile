@@ -293,17 +293,19 @@ Deno.serve(async (req) => {
       const recipient = String(elig.recipient_email ?? row.recipient_email);
       const ts = String(Math.floor(Date.now() / 1000));
       const sig = await hmacHex(HMAC_SECRET, `${row.user_id}|${recipient}|${ts}`);
-      // Brouillon : opposition spécifique (indépendante du marketing).
-      // Autres marketing : désinscription marketing classique.
-      const unsubScope =
-        row.campaign_id === 'abandoned_draft_h24' ? 'draft_reminders' : 'marketing';
-      const unsubUrl =
+      const unsubBase =
         `${PUBLIC_FUNCTIONS_BASE}/lifecycle-email-unsubscribe` +
         `?uid=${encodeURIComponent(row.user_id)}` +
         `&email=${encodeURIComponent(recipient)}` +
         `&ts=${encodeURIComponent(ts)}` +
-        `&sig=${encodeURIComponent(sig)}` +
-        `&scope=${encodeURIComponent(unsubScope)}`;
+        `&sig=${encodeURIComponent(sig)}`;
+      // List-Unsubscribe + lien principal = désinscription marketing globale.
+      const unsubUrl = `${unsubBase}&scope=marketing`;
+      // Option distincte pour abandoned_draft uniquement.
+      const draftRemindersOptOutUrl =
+        row.campaign_id === 'abandoned_draft_h24'
+          ? `${unsubBase}&scope=draft_reminders`
+          : null;
 
       const listingTitle =
         typeof row.metadata?.listing_title === 'string' ? row.metadata.listing_title : null;
@@ -322,6 +324,7 @@ Deno.serve(async (req) => {
         fullName: resolveLifecycleGreetingFirstName(profile?.full_name ?? null),
         cta: { href: cta.href, label: cta.label, enabled: cta.enabled },
         unsubscribeUrl: unsubUrl,
+        draftRemindersOptOutUrl,
         listingTitle,
         webFallbackUrl: cta.webFallbackUrl,
       };
