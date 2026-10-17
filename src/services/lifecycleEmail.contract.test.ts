@@ -99,6 +99,19 @@ describe('lifecycle email P0 — contrat SQL / Edge', () => {
     expect(sql).not.toMatch(/generateLink/);
   });
 
+  it('kill switch fail-closed si flag absent (Lot 05A)', () => {
+    const failClosed = readFileSync(
+      resolve(
+        process.cwd(),
+        'supabase/migrations/20261017170000_lifecycle_email_kill_switch_fail_closed.sql'
+      ),
+      'utf8'
+    );
+    expect(failClosed).toMatch(/coalesce\(/);
+    expect(failClosed).toMatch(/true\s*\)\s*;/);
+    expect(failClosed).not.toMatch(/coalesce\(\s*\([\s\S]*?\),\s*false\s*\)/);
+  });
+
   it('Edge send : secret header, dry-run safe-by-default, pas de JWT user, uncertain', () => {
     expect(sendEdge).toMatch(/X-Lifecycle-Email-Dispatch-Secret/);
     expect(sendEdge).toMatch(/LIFECYCLE_EMAIL_ALLOW_LIVE/);

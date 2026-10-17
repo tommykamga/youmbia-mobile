@@ -58,7 +58,9 @@ Ces tests HTTP Deno **ne prouvent pas** la compatibilité complète du runtime D
 1. Bootstrap marketplace (Option A baseline doc) **ou** restore scrubbed schema-only.
 2. Appliquer migrations mobile chronologiques (garde → … → lifecycle 150000/160000).
 3. Vault secrets staging (`lifecycle_email_functions_url`, `lifecycle_email_dispatch_secret`).
-4. Deploy EF : `send-lifecycle-email`, `lifecycle-email-unsubscribe`, `lifecycle-email-webhook` (`--no-verify-jwt` pour unsub/webhook publics).
+4. Deploy EF : `send-lifecycle-email`, `lifecycle-email-unsubscribe`, `lifecycle-email-webhook`.
+   - **`--no-verify-jwt` pour les trois** (pg_net n’envoie que `X-Lifecycle-Email-Dispatch-Secret` vers send ; unsub/webhook sont publics HMAC/Svix).
+   - Alternative send : garder verify_jwt et ajouter `Authorization: Bearer <service_role>` dans `net.http_post` — ne pas laisser les deux désalignés.
 5. Seed **fictif** : 2–3 users test, prefs opt-in, 1 draft — aucun email réel.
 6. Tests : enqueue/claim dry-run ; unsub HMAC ; webhook signature ; kill switch ON bloque.
 7. Revue killcritic staging ; seulement alors envisager kill switch OFF + ALLOW_LIVE sur GO send.
