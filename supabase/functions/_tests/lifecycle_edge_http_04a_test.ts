@@ -295,7 +295,7 @@ Deno.test('webhook: signature invalide → 401 ; bounce → suppression', async 
   Deno.env.delete('LIFECYCLE_RESEND_WEBHOOK_SECRET_PREV');
   const body = JSON.stringify({
     type: 'email.bounced',
-    data: { to: 'Bounce@Example.TEST', bounce: { type: 'hard' }, email_id: 're_x' },
+    data: { from: 'YOUMBIA <no-reply@youmbia.com>', tags: { product: 'youmbia_lifecycle_p0' }, to: 'Bounce@Example.TEST', bounce: { type: 'Permanent' }, email_id: 're_x' },
   });
   const bad = await fetch('http://127.0.0.1:18773/', {
     method: 'POST',
@@ -332,7 +332,7 @@ Deno.test('webhook dual: PREV (Free) valide ; primary (Pro) valide ; sans header
 
   const body = JSON.stringify({
     type: 'email.bounced',
-    data: { to: 'dual@example.test', bounce: { type: 'hard' }, email_id: 're_dual' },
+    data: { from: 'YOUMBIA <no-reply@youmbia.com>', tags: { product: 'youmbia_lifecycle_p0' }, to: 'dual@example.test', bounce: { type: 'Permanent' }, email_id: 're_dual' },
   });
 
   const noHdr = await fetch('http://127.0.0.1:18773/', { method: 'POST', body });
@@ -355,7 +355,7 @@ Deno.test('webhook dual: PREV (Free) valide ; primary (Pro) valide ; sans header
 
   const complaintBody = JSON.stringify({
     type: 'email.complained',
-    data: { to: 'comp@example.test', email_id: 're_c' },
+    data: { from: 'YOUMBIA <no-reply@youmbia.com>', tags: { product: 'youmbia_lifecycle_p0' }, to: 'comp@example.test', email_id: 're_c' },
   });
   const idPro = 'msg_pro';
   const sigPro = await svixSign(WHSEC_RAW, idPro, ts, complaintBody);
@@ -381,7 +381,7 @@ Deno.test('webhook: primary absent → 500 ; PREV seul ne suffit pas', async () 
   Deno.env.set('LIFECYCLE_RESEND_WEBHOOK_SECRET_PREV', WHSEC);
   const body = JSON.stringify({
     type: 'email.bounced',
-    data: { to: 'x@y.z', bounce: { type: 'hard' } },
+    data: { from: 'YOUMBIA <no-reply@youmbia.com>', tags: { product: 'youmbia_lifecycle_p0' }, to: 'x@y.z', bounce: { type: 'Permanent' } },
   });
   const id = 'msg_noprimary';
   const ts = String(Math.floor(Date.now() / 1000));
@@ -405,7 +405,7 @@ Deno.test('webhook: échec DB upsert → 500 (pas de succès trompeur)', async (
   resetMockState({ failSuppressionUpsert: true });
   const body = JSON.stringify({
     type: 'email.bounced',
-    data: { to: 'dbfail@example.test', bounce: { type: 'hard' }, email_id: 're_db' },
+    data: { from: 'YOUMBIA <no-reply@youmbia.com>', tags: { product: 'youmbia_lifecycle_p0' }, to: 'dbfail@example.test', bounce: { type: 'Permanent' }, email_id: 're_db' },
   });
   const id = 'msg_db';
   const ts = String(Math.floor(Date.now() / 1000));
@@ -428,7 +428,7 @@ Deno.test('webhook: événement dupliqué → suppression stable (idempotent)', 
   resetMockState();
   const body = JSON.stringify({
     type: 'email.bounced',
-    data: { to: 'dup@example.test', bounce: { type: 'hard' }, email_id: 're_dup' },
+    data: { from: 'YOUMBIA <no-reply@youmbia.com>', tags: { product: 'youmbia_lifecycle_p0' }, to: 'dup@example.test', bounce: { type: 'Permanent' }, email_id: 're_dup' },
   });
   const ts = String(Math.floor(Date.now() / 1000));
   for (const id of ['msg_d1', 'msg_d2']) {
@@ -446,6 +446,29 @@ Deno.test('webhook: événement dupliqué → suppression stable (idempotent)', 
   }
   assertEquals(mockState.suppressions.get('dup@example.test'), 'hard_bounce');
   assertEquals(mockState.events.filter((e) => e.p_event_type === 'bounced').length, 2);
+});
+
+
+Deno.test('webhook: foreign app and transient bounce cannot alter suppressions', async () => {
+  resetMockState();
+  const examples = [
+    { type: 'email.bounced', data: { from: 'Other <mailer@stepward.app>', tags: { product: 'other' }, to: ['other@example.test'], email_id: 'outside_1', bounce: { type: 'Permanent' } } },
+    { type: 'email.complained', data: { from: 'YOUMBIA <no-reply@youmbia.com>', tags: { product: 'other' }, to: ['other@example.test'], email_id: 'outside_2' } },
+    { type: 'email.bounced', data: { from: 'YOUMBIA <no-reply@youmbia.com>', tags: { product: 'youmbia_lifecycle_p0' }, to: ['soft@example.test'], email_id: 'own_soft', bounce: { type: 'Transient' } } },
+  ];
+  for (const [i, event] of examples.entries()) {
+    const body = JSON.stringify(event);
+    const id = 'msg_scope_' + i;
+    const ts = String(Math.floor(Date.now() / 1000));
+    const signature = await svixSign(WHSEC_RAW, id, ts, body);
+    const resp = await fetch('http://127.0.0.1:18773/', {
+      method: 'POST',
+      headers: { 'svix-id': id, 'svix-timestamp': ts, 'svix-signature': signature },
+      body,
+    });
+    assertEquals(resp.status, 200);
+  }
+  assertEquals(mockState.suppressions.size, 0);
 });
 
 Deno.test('templates HTTPS subjects (source send)', async () => {

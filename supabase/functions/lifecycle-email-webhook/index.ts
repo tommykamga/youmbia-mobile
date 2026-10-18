@@ -175,6 +175,8 @@ Deno.serve(async (req) => {
     type?: string;
     data?: {
       email_id?: string;
+      from?: string;
+      tags?: Record<string, string>;
       to?: string[] | string;
       bounce?: { type?: string };
     };
@@ -192,13 +194,26 @@ Deno.serve(async (req) => {
     : String(emailRaw ?? '').trim().toLowerCase();
   const providerMessageId = event.data?.email_id ?? null;
 
+  // Resend webhooks are team-wide. Ignore other applications/domains (fail closed).
+  // Lifecycle sendViaResend always supplies this product tag and one of these From addresses.
+  if (type === 'email.bounced' || type === 'email.complained') {
+    const rawFrom = String(event.data?.from ?? '').trim().toLowerCase();
+    const from = rawFrom.match(/<([^<>]+)>/)?.[1]?.trim() ?? rawFrom;
+    const senderAllowed =
+      from === 'no-reply@youmbia.com' || from === 'no-reply@mail.youmbia.com';
+    if (!senderAllowed || event.data?.tags?.product !== 'youmbia_lifecycle_p0') {
+      return json(200, { ok: true, handled: 'ignored_foreign' });
+    }
+  }
+
   const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
     auth: { autoRefreshToken: false, persistSession: false },
   });
 
   if (type === 'email.bounced') {
-    const bounceType = String(event.data?.bounce?.type ?? 'hard').toLowerCase();
-    if (bounceType !== 'soft' && email) {
+    const bounceType = String(event.data?.bounce?.type ?? '').toLowerCase();
+    // Resend: Permanent = hard, Transient = soft, Undetermined = review manually.
+    if ((bounceType === 'permanent' || bounceType === 'hard') && email) {
       const { error: upsertError } = await admin.from('email_suppressions').upsert(
         {
           email,

@@ -112,6 +112,8 @@ export type ResendWebhookEvent = {
   type: string;
   data?: {
     email_id?: string;
+    from?: string;
+    tags?: Record<string, string>;
     to?: string[] | string;
     bounce?: { type?: string };
   };
@@ -129,10 +131,19 @@ export function mapResendWebhookToSuppression(event: ResendWebhookEvent): {
     : String(emailRaw ?? '').trim().toLowerCase();
   const providerMessageId = event.data?.email_id ?? null;
   const type = String(event.type ?? '');
+  if (type === 'email.bounced' || type === 'email.complained') {
+    const rawFrom = String(event.data?.from ?? '').trim().toLowerCase();
+    const from = rawFrom.match(/<([^<>]+)>/)?.[1]?.trim() ?? rawFrom;
+    const isLifecycleFrom =
+      from === 'no-reply@youmbia.com' || from === 'no-reply@mail.youmbia.com';
+    if (!isLifecycleFrom || event.data?.tags?.product !== 'youmbia_lifecycle_p0') {
+      return { suppress: false, reason: null, email: email || null, providerMessageId };
+    }
+  }
 
   if (type === 'email.bounced') {
-    const bounceType = String(event.data?.bounce?.type ?? 'hard').toLowerCase();
-    if (bounceType === 'soft') {
+    const bounceType = String(event.data?.bounce?.type ?? '').toLowerCase();
+    if (bounceType !== 'permanent' && bounceType !== 'hard') {
       return { suppress: false, reason: null, email: email || null, providerMessageId };
     }
     return {
