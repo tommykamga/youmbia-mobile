@@ -1,8 +1,11 @@
 // Edge Function: lifecycle-email-webhook
 // Public (--no-verify-jwt). Vérifie signature Svix/Resend avant toute mutation.
+// Dual-secret temporaire : LIFECYCLE_RESEND_WEBHOOK_SECRET (+ _PREV optionnel).
 // Hard bounce / complaint → email_suppressions. Ne touche pas Auth.
 
 import { createClient } from '../_shared/supabaseClient.ts';
+
+const WEBHOOK_MAX_SKEW_MS = 5 * 60 * 1000;
 
 const json = (status: number, payload: Record<string, unknown>) =>
   new Response(JSON.stringify(payload), {
@@ -41,19 +44,32 @@ function decodeBase64(input: string): Uint8Array {
   return out;
 }
 
+function normalizeWebhookSecrets(secrets: (string | null | undefined)[]): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const raw of secrets) {
+    const s = typeof raw === 'string' ? raw.trim() : '';
+    if (!s || seen.has(s)) continue;
+    seen.add(s);
+    out.push(s);
+  }
+  return out;
+}
+
 async function verifySvixSignature(args: {
   secret: string;
   rawBody: string;
   svixId: string;
   svixTimestamp: string;
   svixSignature: string;
+  nowMs?: number;
 }): Promise<boolean> {
-  const { secret, rawBody, svixId, svixTimestamp, svixSignature } = args;
+  const { secret, rawBody, svixId, svixTimestamp, svixSignature, nowMs = Date.now() } = args;
   if (!secret || !svixId || !svixTimestamp || !svixSignature) return false;
 
   const ts = Number(svixTimestamp);
   if (!Number.isFinite(ts)) return false;
-  if (Math.abs(Date.now() - ts * 1000) > 5 * 60 * 1000) return false;
+  if (Math.abs(nowMs - ts * 1000) > WEBHOOK_MAX_SKEW_MS) return false;
 
   let keyBytes: Uint8Array;
   if (secret.startsWith('whsec_')) {
@@ -94,6 +110,32 @@ async function verifySvixSignature(args: {
   return false;
 }
 
+/** Chaque secret est vérifié cryptographiquement ; PREV vide = ignoré (pas de bypass). */
+async function verifySvixSignatureAny(args: {
+  secrets: (string | null | undefined)[];
+  rawBody: string;
+  svixId: string;
+  svixTimestamp: string;
+  svixSignature: string;
+}): Promise<boolean> {
+  const secrets = normalizeWebhookSecrets(args.secrets);
+  if (secrets.length === 0) return false;
+  for (const secret of secrets) {
+    if (
+      await verifySvixSignature({
+        secret,
+        rawBody: args.rawBody,
+        svixId: args.svixId,
+        svixTimestamp: args.svixTimestamp,
+        svixSignature: args.svixSignature,
+      })
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
 Deno.serve(async (req) => {
   if (req.method !== 'POST') {
     return json(405, { error: 'method_not_allowed' });
@@ -101,8 +143,10 @@ Deno.serve(async (req) => {
 
   const SUPABASE_URL = Deno.env.get('SUPABASE_URL') ?? '';
   const SERVICE_ROLE_KEY = readDefaultSecretKey();
-  const WEBHOOK_SECRET = Deno.env.get('LIFECYCLE_RESEND_WEBHOOK_SECRET') ?? '';
+  const WEBHOOK_SECRET = (Deno.env.get('LIFECYCLE_RESEND_WEBHOOK_SECRET') ?? '').trim();
+  const WEBHOOK_SECRET_PREV = (Deno.env.get('LIFECYCLE_RESEND_WEBHOOK_SECRET_PREV') ?? '').trim();
 
+  // Secret principal obligatoire ; PREV optionnel (fenêtre dual Free/Pro).
   if (!SUPABASE_URL || !SERVICE_ROLE_KEY || !WEBHOOK_SECRET) {
     return json(500, { error: 'server_misconfigured' });
   }
@@ -112,8 +156,12 @@ Deno.serve(async (req) => {
   const svixTimestamp = String(req.headers.get('svix-timestamp') ?? '').trim();
   const svixSignature = String(req.headers.get('svix-signature') ?? '').trim();
 
-  const valid = await verifySvixSignature({
-    secret: WEBHOOK_SECRET,
+  if (!svixId || !svixTimestamp || !svixSignature) {
+    return json(401, { error: 'invalid_signature' });
+  }
+
+  const valid = await verifySvixSignatureAny({
+    secrets: [WEBHOOK_SECRET, WEBHOOK_SECRET_PREV],
     rawBody,
     svixId,
     svixTimestamp,
@@ -151,7 +199,7 @@ Deno.serve(async (req) => {
   if (type === 'email.bounced') {
     const bounceType = String(event.data?.bounce?.type ?? 'hard').toLowerCase();
     if (bounceType !== 'soft' && email) {
-      await admin.from('email_suppressions').upsert(
+      const { error: upsertError } = await admin.from('email_suppressions').upsert(
         {
           email,
           reason: 'hard_bounce',
@@ -159,19 +207,25 @@ Deno.serve(async (req) => {
         },
         { onConflict: 'email' }
       );
-      await admin.rpc('log_lifecycle_email_event', {
+      if (upsertError) {
+        return json(500, { error: 'db_error' });
+      }
+      const { error: logError } = await admin.rpc('log_lifecycle_email_event', {
         p_outbox_id: null,
         p_user_id: null,
         p_campaign_id: null,
         p_event_type: 'bounced',
         p_payload: { email, provider_message_id: providerMessageId },
       });
+      if (logError) {
+        return json(500, { error: 'db_error' });
+      }
     }
     return json(200, { ok: true, handled: 'bounce' });
   }
 
   if (type === 'email.complained' && email) {
-    await admin.from('email_suppressions').upsert(
+    const { error: upsertError } = await admin.from('email_suppressions').upsert(
       {
         email,
         reason: 'complaint',
@@ -179,13 +233,19 @@ Deno.serve(async (req) => {
       },
       { onConflict: 'email' }
     );
-    await admin.rpc('log_lifecycle_email_event', {
+    if (upsertError) {
+      return json(500, { error: 'db_error' });
+    }
+    const { error: logError } = await admin.rpc('log_lifecycle_email_event', {
       p_outbox_id: null,
       p_user_id: null,
       p_campaign_id: null,
       p_event_type: 'complained',
       p_payload: { email, provider_message_id: providerMessageId },
     });
+    if (logError) {
+      return json(500, { error: 'db_error' });
+    }
     return json(200, { ok: true, handled: 'complaint' });
   }
 

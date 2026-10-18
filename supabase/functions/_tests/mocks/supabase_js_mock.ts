@@ -13,6 +13,10 @@ export type MockDbState = {
   events: Array<Record<string, unknown>>;
   profiles: Map<string, { full_name: string | null }>;
   lastRpc: string[];
+  /** Force upsert email_suppressions → error (tests webhook DB fail). */
+  failSuppressionUpsert: boolean;
+  /** Force log_lifecycle_email_event → error. */
+  failLogEvent: boolean;
 };
 
 export const mockState: MockDbState = {
@@ -23,6 +27,8 @@ export const mockState: MockDbState = {
   events: [],
   profiles: new Map(),
   lastRpc: [],
+  failSuppressionUpsert: false,
+  failLogEvent: false,
 };
 
 export function resetMockState(partial?: Partial<MockDbState>) {
@@ -33,6 +39,8 @@ export function resetMockState(partial?: Partial<MockDbState>) {
   mockState.events = [];
   mockState.profiles = partial?.profiles ?? new Map();
   mockState.lastRpc = [];
+  mockState.failSuppressionUpsert = partial?.failSuppressionUpsert ?? false;
+  mockState.failLogEvent = partial?.failLogEvent ?? false;
 }
 
 function ok(data: unknown): RpcResult {
@@ -73,6 +81,7 @@ export function createClient(_url: string, _key: string, _opts?: unknown) {
       if (name === 'complete_lifecycle_email_claim') return ok(true);
       if (name === 'defer_lifecycle_email_after_dry_run') return ok(true);
       if (name === 'log_lifecycle_email_event') {
+        if (mockState.failLogEvent) return err('log_event_failed');
         mockState.events.push(args);
         return ok(null);
       }
@@ -104,6 +113,9 @@ export function createClient(_url: string, _key: string, _opts?: unknown) {
         },
         upsert(row: Record<string, unknown>, _opts?: unknown) {
           if (table === 'email_suppressions') {
+            if (mockState.failSuppressionUpsert) {
+              return Promise.resolve({ data: null, error: { message: 'upsert_failed' } });
+            }
             const email = String(row.email ?? '').toLowerCase();
             mockState.suppressions.set(email, String(row.reason ?? ''));
           }

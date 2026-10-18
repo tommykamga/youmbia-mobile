@@ -292,6 +292,7 @@ Deno.test('unsubscribe: GET non mutatif + POST applique', async () => {
 
 Deno.test('webhook: signature invalide → 401 ; bounce → suppression', async () => {
   resetMockState();
+  Deno.env.delete('LIFECYCLE_RESEND_WEBHOOK_SECRET_PREV');
   const body = JSON.stringify({
     type: 'email.bounced',
     data: { to: 'Bounce@Example.TEST', bounce: { type: 'hard' }, email_id: 're_x' },
@@ -321,6 +322,130 @@ Deno.test('webhook: signature invalide → 401 ; bounce → suppression', async 
   });
   assertEquals(okRes.status, 200);
   assertEquals(mockState.suppressions.get('bounce@example.test'), 'hard_bounce');
+});
+
+Deno.test('webhook dual: PREV (Free) valide ; primary (Pro) valide ; sans headers → 401', async () => {
+  resetMockState();
+  const WHSEC_PREV_RAW = btoa('lot04a-webhook-prev-secret!');
+  const WHSEC_PREV = `whsec_${WHSEC_PREV_RAW}`;
+  Deno.env.set('LIFECYCLE_RESEND_WEBHOOK_SECRET_PREV', WHSEC_PREV);
+
+  const body = JSON.stringify({
+    type: 'email.bounced',
+    data: { to: 'dual@example.test', bounce: { type: 'hard' }, email_id: 're_dual' },
+  });
+
+  const noHdr = await fetch('http://127.0.0.1:18773/', { method: 'POST', body });
+  assertEquals(noHdr.status, 401);
+
+  const idPrev = 'msg_prev';
+  const ts = String(Math.floor(Date.now() / 1000));
+  const sigPrev = await svixSign(WHSEC_PREV_RAW, idPrev, ts, body);
+  const prevRes = await fetch('http://127.0.0.1:18773/', {
+    method: 'POST',
+    headers: {
+      'svix-id': idPrev,
+      'svix-timestamp': ts,
+      'svix-signature': sigPrev,
+    },
+    body,
+  });
+  assertEquals(prevRes.status, 200);
+  assertEquals(mockState.suppressions.get('dual@example.test'), 'hard_bounce');
+
+  const complaintBody = JSON.stringify({
+    type: 'email.complained',
+    data: { to: 'comp@example.test', email_id: 're_c' },
+  });
+  const idPro = 'msg_pro';
+  const sigPro = await svixSign(WHSEC_RAW, idPro, ts, complaintBody);
+  const proRes = await fetch('http://127.0.0.1:18773/', {
+    method: 'POST',
+    headers: {
+      'svix-id': idPro,
+      'svix-timestamp': ts,
+      'svix-signature': sigPro,
+    },
+    body: complaintBody,
+  });
+  assertEquals(proRes.status, 200);
+  assertEquals(mockState.suppressions.get('comp@example.test'), 'complaint');
+
+  Deno.env.delete('LIFECYCLE_RESEND_WEBHOOK_SECRET_PREV');
+});
+
+Deno.test('webhook: primary absent → 500 ; PREV seul ne suffit pas', async () => {
+  resetMockState();
+  const saved = Deno.env.get('LIFECYCLE_RESEND_WEBHOOK_SECRET') ?? '';
+  Deno.env.delete('LIFECYCLE_RESEND_WEBHOOK_SECRET');
+  Deno.env.set('LIFECYCLE_RESEND_WEBHOOK_SECRET_PREV', WHSEC);
+  const body = JSON.stringify({
+    type: 'email.bounced',
+    data: { to: 'x@y.z', bounce: { type: 'hard' } },
+  });
+  const id = 'msg_noprimary';
+  const ts = String(Math.floor(Date.now() / 1000));
+  const sig = await svixSign(WHSEC_RAW, id, ts, body);
+  const res = await fetch('http://127.0.0.1:18773/', {
+    method: 'POST',
+    headers: {
+      'svix-id': id,
+      'svix-timestamp': ts,
+      'svix-signature': sig,
+    },
+    body,
+  });
+  assertEquals(res.status, 500);
+  assertEquals((await res.json()).error, 'server_misconfigured');
+  Deno.env.set('LIFECYCLE_RESEND_WEBHOOK_SECRET', saved);
+  Deno.env.delete('LIFECYCLE_RESEND_WEBHOOK_SECRET_PREV');
+});
+
+Deno.test('webhook: échec DB upsert → 500 (pas de succès trompeur)', async () => {
+  resetMockState({ failSuppressionUpsert: true });
+  const body = JSON.stringify({
+    type: 'email.bounced',
+    data: { to: 'dbfail@example.test', bounce: { type: 'hard' }, email_id: 're_db' },
+  });
+  const id = 'msg_db';
+  const ts = String(Math.floor(Date.now() / 1000));
+  const sig = await svixSign(WHSEC_RAW, id, ts, body);
+  const res = await fetch('http://127.0.0.1:18773/', {
+    method: 'POST',
+    headers: {
+      'svix-id': id,
+      'svix-timestamp': ts,
+      'svix-signature': sig,
+    },
+    body,
+  });
+  assertEquals(res.status, 500);
+  assertEquals((await res.json()).error, 'db_error');
+  assertEquals(mockState.suppressions.has('dbfail@example.test'), false);
+});
+
+Deno.test('webhook: événement dupliqué → suppression stable (idempotent)', async () => {
+  resetMockState();
+  const body = JSON.stringify({
+    type: 'email.bounced',
+    data: { to: 'dup@example.test', bounce: { type: 'hard' }, email_id: 're_dup' },
+  });
+  const ts = String(Math.floor(Date.now() / 1000));
+  for (const id of ['msg_d1', 'msg_d2']) {
+    const sig = await svixSign(WHSEC_RAW, id, ts, body);
+    const res = await fetch('http://127.0.0.1:18773/', {
+      method: 'POST',
+      headers: {
+        'svix-id': id,
+        'svix-timestamp': ts,
+        'svix-signature': sig,
+      },
+      body,
+    });
+    assertEquals(res.status, 200);
+  }
+  assertEquals(mockState.suppressions.get('dup@example.test'), 'hard_bounce');
+  assertEquals(mockState.events.filter((e) => e.p_event_type === 'bounced').length, 2);
 });
 
 Deno.test('templates HTTPS subjects (source send)', async () => {
