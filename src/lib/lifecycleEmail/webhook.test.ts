@@ -158,7 +158,7 @@ describe('lifecycle webhook dual-signature', () => {
     expect(
       mapResendWebhookToSuppression({
         type: 'email.bounced',
-        data: { to: 'A@B.C', bounce: { type: 'hard' }, email_id: 're_1' },
+        data: { from: 'YOUMBIA <no-reply@youmbia.com>', tags: { product: 'youmbia_lifecycle_p0' }, to: 'A@B.C', bounce: { type: 'Permanent' }, email_id: 're_1' },
       })
     ).toMatchObject({ suppress: true, reason: 'hard_bounce', email: 'a@b.c' });
   });
@@ -167,7 +167,7 @@ describe('lifecycle webhook dual-signature', () => {
     expect(
       mapResendWebhookToSuppression({
         type: 'email.complained',
-        data: { to: ['x@y.z'] },
+        data: { from: 'YOUMBIA <no-reply@youmbia.com>', tags: { product: 'youmbia_lifecycle_p0' }, to: ['x@y.z'] },
       })
     ).toMatchObject({ suppress: true, reason: 'complaint', email: 'x@y.z' });
   });
@@ -176,9 +176,25 @@ describe('lifecycle webhook dual-signature', () => {
     expect(
       mapResendWebhookToSuppression({
         type: 'email.bounced',
-        data: { to: 'a@b.c', bounce: { type: 'soft' } },
+        data: { from: 'YOUMBIA <no-reply@youmbia.com>', tags: { product: 'youmbia_lifecycle_p0' }, to: 'a@b.c', bounce: { type: 'Transient' } },
       }).suppress
     ).toBe(false);
+  });
+
+  it('Resend team-shared webhook: foreign sender or tags never suppress', () => {
+    const data = { from: 'Other <mailer@stepward.app>', tags: { product: 'other' }, to: 'shared@example.test', bounce: { type: 'Permanent' } };
+    expect(mapResendWebhookToSuppression({ type: 'email.bounced', data }).suppress).toBe(false);
+    expect(mapResendWebhookToSuppression({ type: 'email.complained', data }).suppress).toBe(false);
+    expect(mapResendWebhookToSuppression({ type: 'email.bounced', data: { ...data, from: 'YOUMBIA <no-reply@youmbia.com>' } }).suppress).toBe(false);
+  });
+
+  it('Transient and Undetermined bounces do not create hard suppressions', () => {
+    for (const bounceType of ['Transient', 'Undetermined']) {
+      expect(mapResendWebhookToSuppression({
+        type: 'email.bounced',
+        data: { from: 'YOUMBIA <no-reply@youmbia.com>', tags: { product: 'youmbia_lifecycle_p0' }, to: 'soft@example.test', bounce: { type: bounceType } },
+      }).suppress).toBe(false);
+    }
   });
 
   it('signature single-secret historique inchangée', () => {
@@ -205,7 +221,7 @@ describe('lifecycle webhook dual-signature', () => {
   it('11 — mapping idempotent (doublon event) : même suppression', () => {
     const event = {
       type: 'email.bounced' as const,
-      data: { to: 'dup@example.test', bounce: { type: 'hard' }, email_id: 're_dup' },
+      data: { from: 'YOUMBIA <no-reply@youmbia.com>', tags: { product: 'youmbia_lifecycle_p0' }, to: 'dup@example.test', bounce: { type: 'Permanent' }, email_id: 're_dup' },
     };
     const a = mapResendWebhookToSuppression(event);
     const b = mapResendWebhookToSuppression(event);
