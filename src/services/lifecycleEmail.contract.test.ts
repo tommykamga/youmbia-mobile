@@ -195,6 +195,28 @@ describe('lifecycle email P0 — contrat SQL / Edge', () => {
     expect(svc).not.toMatch(/SET value = 'false' WHERE key = 'lifecycle_email_kill_switch'/);
   });
 
+  it('migration email factory : consentement vérifiable + flags OFF + campagnes', () => {
+    const factory = readFileSync(
+      resolve(
+        process.cwd(),
+        'supabase/migrations/20261018160000_lifecycle_email_factory.sql'
+      ),
+      'utf8'
+    );
+    expect(factory).toMatch(/lifecycle_has_verifiable_marketing_consent/);
+    expect(factory).toMatch(/migration_initiale_youmbia_2026_10_18/);
+    expect(factory).toMatch(/lifecycle_marketing_campaigns_enabled', 'false'/);
+    expect(factory).toMatch(/reactivation_j15/);
+    expect(factory).toMatch(/app_download/);
+    expect(factory).toMatch(/weekly_discovery/);
+    expect(factory).toMatch(/seller_activation/);
+    expect(factory).toMatch(/listing_published_service/);
+    expect(factory).toMatch(/enqueue_listing_published_service_event/);
+    expect(factory).toMatch(/no_verifiable_consent/);
+    expect(factory).not.toMatch(/marketing_opt_in\s*=\s*true/);
+    expect(factory).not.toMatch(/SET value = 'false' WHERE key = 'lifecycle_email_kill_switch'/);
+  });
+
   it('migration prep draft reminders : flag OFF, ack, pas de canal service activé', () => {
     const prep = readFileSync(
       resolve(

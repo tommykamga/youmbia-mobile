@@ -30,8 +30,11 @@ CREATE TABLE IF NOT EXISTS auth.users (
   email text,
   created_at timestamptz NOT NULL DEFAULT now(),
   email_confirmed_at timestamptz,
+  last_sign_in_at timestamptz,
   raw_user_meta_data jsonb NOT NULL DEFAULT '{}'::jsonb
 );
+
+ALTER TABLE auth.users ADD COLUMN IF NOT EXISTS last_sign_in_at timestamptz;
 
 CREATE OR REPLACE FUNCTION auth.uid()
 RETURNS uuid
@@ -63,10 +66,23 @@ CREATE TABLE IF NOT EXISTS public.listings (
   user_id uuid REFERENCES auth.users(id) ON DELETE SET NULL,
   title text NOT NULL DEFAULT 'Brouillon',
   price integer NOT NULL DEFAULT 0,
+  city text,
   status public.listing_status NOT NULL DEFAULT 'draft',
   last_published_at timestamptz,
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now()
+);
+
+ALTER TABLE public.listings ADD COLUMN IF NOT EXISTS city text;
+
+CREATE TABLE IF NOT EXISTS public.user_push_tokens (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  expo_push_token text NOT NULL,
+  platform text,
+  last_seen_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (expo_push_token)
 );
 
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;

@@ -57,15 +57,19 @@ export function resolveLifecycleHttpsRoute(
   campaignId: LifecycleCampaignId,
   options?: { dryRun?: boolean; listingId?: string | null }
 ): LifecycleHttpsRoute {
-  void options?.listingId;
-  const cta = resolveLifecycleRenderCta(campaignId, { dryRun: options?.dryRun });
+  const cta = resolveLifecycleRenderCta(campaignId, {
+    dryRun: options?.dryRun,
+    listingId: options?.listingId,
+  });
   const home = `${YOUMBIA_WEB_ORIGIN}/`;
   let mobileSchemeUrl: string | null = `${YOUMBIA_MOBILE_SCHEME}://home`;
-  if (campaignId === 'first_listing_h24') {
+  if (campaignId === 'first_listing_h24' || campaignId === 'seller_activation') {
     mobileSchemeUrl = `${YOUMBIA_MOBILE_SCHEME}://sell`;
   } else if (campaignId === 'abandoned_draft_h24') {
     // Reprise réelle = /sell?draftId= dans l’app (pas d’équivalent HTTPS public).
     mobileSchemeUrl = `${YOUMBIA_MOBILE_SCHEME}://sell`;
+  } else if (campaignId === 'listing_published_service' && options?.listingId) {
+    mobileSchemeUrl = `${YOUMBIA_MOBILE_SCHEME}://annonce/${options.listingId}`;
   }
   return {
     campaignId,

@@ -26,7 +26,9 @@ describe('lifecycle templates FR brandés', () => {
   });
 
   it.each(
-    LIFECYCLE_CAMPAIGN_IDS.filter((id) => id !== 'welcome_h0')
+    LIFECYCLE_CAMPAIGN_IDS.filter(
+      (id) => id !== 'welcome_h0' && id !== 'listing_published_service'
+    )
   )('rend %s avec marque YOUMBIA, marketing et unsub', (campaignId) => {
     const pack = buildLifecycleRenderedEmail({
       campaignId,
@@ -59,6 +61,27 @@ describe('lifecycle templates FR brandés', () => {
       expect(pack.html).toContain('scope=draft_reminders');
       expect(pack.text).toContain('Arrêter les rappels de brouillon');
     }
+  });
+
+  it('rend listing_published_service en canal service (pas unsub marketing)', () => {
+    const pack = buildLifecycleRenderedEmail({
+      campaignId: 'listing_published_service',
+      fullName: 'Ada',
+      unsubscribeUrl: 'https://example.test/unsub',
+      listingTitle: 'iPhone 13',
+      listingCity: 'Douala',
+      listingId: '11111111-1111-4111-8111-111111111111',
+      dryRun: false,
+    });
+    expect(pack.category).toBe('service');
+    expect(pack.subject).toContain('publiée');
+    expect(pack.html).toContain('iPhone 13');
+    expect(pack.html).toContain('Douala');
+    expect(pack.html).toContain('/annonce/');
+    expect(pack.html).toContain('E-mail de service');
+    expect(pack.html).not.toContain('Communication marketing');
+    expect(pack.html).not.toContain('Se désinscrire');
+    expect(pack.headers['List-Unsubscribe']).toBeUndefined();
   });
 
   it('dry-run first_listing : pas de bouton CTA, fallback HTTPS présent', () => {

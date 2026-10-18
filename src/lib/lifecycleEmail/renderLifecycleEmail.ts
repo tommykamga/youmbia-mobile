@@ -6,7 +6,12 @@
 export type LifecycleRenderCampaignId =
   | 'welcome_h0'
   | 'first_listing_h24'
-  | 'abandoned_draft_h24';
+  | 'abandoned_draft_h24'
+  | 'reactivation_j15'
+  | 'app_download'
+  | 'weekly_discovery'
+  | 'seller_activation'
+  | 'listing_published_service';
 
 export const LIFECYCLE_BRAND = {
   green: '#16A34A',
@@ -27,6 +32,11 @@ export type LifecycleRenderCta = {
   enabled: boolean;
 };
 
+export type LifecycleDiscoveryListing = {
+  title: string;
+  city?: string | null;
+};
+
 export type LifecycleRenderInput = {
   campaignId: LifecycleRenderCampaignId;
   fullName?: string | null;
@@ -39,6 +49,8 @@ export type LifecycleRenderInput = {
    */
   draftRemindersOptOutUrl?: string | null;
   listingTitle?: string | null;
+  listingCity?: string | null;
+  discoveryListings?: LifecycleDiscoveryListing[] | null;
   webFallbackUrl?: string | null;
 };
 
@@ -53,7 +65,10 @@ export function escapeLifecycleHtml(value: string): string {
 export function lifecycleCampaignChannel(
   campaignId: LifecycleRenderCampaignId
 ): 'service' | 'marketing' {
-  return campaignId === 'welcome_h0' ? 'service' : 'marketing';
+  if (campaignId === 'welcome_h0' || campaignId === 'listing_published_service') {
+    return 'service';
+  }
+  return 'marketing';
 }
 
 export function lifecycleCampaignSubject(
@@ -66,6 +81,16 @@ export function lifecycleCampaignSubject(
       return 'Et si vous publiiez votre première annonce ?';
     case 'abandoned_draft_h24':
       return 'Votre brouillon d’annonce est toujours en attente';
+    case 'reactivation_j15':
+      return 'Ça fait un moment ! On se retrouve sur YOUMBIA ?';
+    case 'app_download':
+      return 'Retrouvez YOUMBIA sur votre téléphone';
+    case 'weekly_discovery':
+      return 'Découvrez les nouvelles annonces sur YOUMBIA';
+    case 'seller_activation':
+      return 'Votre prochain acheteur est peut-être sur YOUMBIA';
+    case 'listing_published_service':
+      return 'Votre annonce est publiée sur YOUMBIA';
     default: {
       const _exhaustive: never = campaignId;
       return _exhaustive;
@@ -83,6 +108,16 @@ export function lifecycleCampaignPreheader(
       return 'Sur YOUMBIA, publier votre annonce est gratuit.';
     case 'abandoned_draft_h24':
       return 'Votre brouillon est toujours enregistré dans votre compte.';
+    case 'reactivation_j15':
+      return 'La communauté YOUMBIA vous attend.';
+    case 'app_download':
+      return 'Accédez à YOUMBIA depuis votre téléphone.';
+    case 'weekly_discovery':
+      return 'Une sélection d’annonces réellement disponibles.';
+    case 'seller_activation':
+      return 'Publiez votre annonce quand vous êtes prêt.';
+    case 'listing_published_service':
+      return 'Confirmation de publication de votre annonce.';
     default: {
       const _exhaustive: never = campaignId;
       return _exhaustive;
@@ -98,6 +133,16 @@ export function lifecycleCtaLabel(campaignId: LifecycleRenderCampaignId): string
       return 'Publier gratuitement';
     case 'abandoned_draft_h24':
       return 'Reprendre mon brouillon';
+    case 'reactivation_j15':
+      return 'Découvrir YOUMBIA';
+    case 'app_download':
+      return 'Télécharger l’application';
+    case 'weekly_discovery':
+      return 'Explorer les annonces';
+    case 'seller_activation':
+      return 'Créer mon annonce';
+    case 'listing_published_service':
+      return 'Voir mon annonce';
     default: {
       const _exhaustive: never = campaignId;
       return _exhaustive;
@@ -106,20 +151,26 @@ export function lifecycleCtaLabel(campaignId: LifecycleRenderCampaignId): string
 }
 
 /**
- * Routes CTA HTTPS réelles.
- * - welcome / first_listing → www.youmbia.com/ (seul chemin web vérifié pour découverte / publish)
- * - abandoned_draft → JAMAIS /annonce/{id} (page publique ≠ reprise brouillon app /sell?draftId=)
- *   → accueil web ; reprise éditeur = app mobile uniquement pour l’instant.
+ * Routes CTA HTTPS réelles (domaines / chemins vérifiés uniquement).
+ * Pas d’URL App Store / Play inventées — absentes du dépôt.
  */
 export function resolveLifecycleRenderCta(
   campaignId: LifecycleRenderCampaignId,
-  options?: { dryRun?: boolean }
+  options?: { dryRun?: boolean; listingId?: string | null }
 ): LifecycleRenderCta & { webFallbackUrl: string } {
   const home = `${LIFECYCLE_BRAND.webOrigin}/`;
   const label = lifecycleCtaLabel(campaignId);
-  if (options?.dryRun === true && campaignId !== 'welcome_h0') {
-    // Dry-run : bouton désactivé pour chemins non entièrement vérifiés hors welcome.
+  const serviceOk =
+    campaignId === 'welcome_h0' || campaignId === 'listing_published_service';
+  if (options?.dryRun === true && !serviceOk) {
     return { href: null, label, enabled: false, webFallbackUrl: home };
+  }
+  if (campaignId === 'listing_published_service') {
+    const id = String(options?.listingId ?? '').trim();
+    if (id) {
+      const href = `${LIFECYCLE_BRAND.webOrigin}/annonce/${encodeURIComponent(id)}`;
+      return { href, label, enabled: true, webFallbackUrl: home };
+    }
   }
   return { href: home, label, enabled: true, webFallbackUrl: home };
 }
@@ -198,7 +249,9 @@ function greeting(fullName?: string | null): string {
 
 function bodyParagraphsHtml(
   campaignId: LifecycleRenderCampaignId,
-  listingTitle?: string | null
+  listingTitle?: string | null,
+  listingCity?: string | null,
+  discoveryListings?: LifecycleDiscoveryListing[] | null
 ): string {
   switch (campaignId) {
     case 'welcome_h0':
@@ -217,6 +270,44 @@ function bodyParagraphsHtml(
       return `<p style="font-size:16px;line-height:1.6;margin:0 0 14px;">${lead}</p>
       <p style="font-size:16px;line-height:1.6;margin:0 0 16px;">Ouvrez l’application YOUMBIA pour le reprendre ou le supprimer.</p>`;
     }
+    case 'reactivation_j15':
+      return `<p style="font-size:16px;line-height:1.6;margin:0 0 14px;">Ça fait un moment que l’on ne vous a pas vu sur <strong>YOUMBIA</strong>.</p>
+      <p style="font-size:16px;line-height:1.6;margin:0 0 16px;">La communauté est toujours là : annonces du quotidien, scènes urbaines et échanges entre voisins. Revenez quand vous voulez.</p>`;
+    case 'app_download':
+      return `<p style="font-size:16px;line-height:1.6;margin:0 0 14px;">Retrouvez <strong>YOUMBIA</strong> sur votre téléphone pour consulter et publier plus facilement.</p>
+      <p style="font-size:16px;line-height:1.6;margin:0 0 16px;">Ouvrez le site YOUMBIA depuis votre smartphone pour accéder à l’expérience mobile. Aucune affirmation d’installation n’est faite ici.</p>`;
+    case 'weekly_discovery': {
+      const items = Array.isArray(discoveryListings) ? discoveryListings : [];
+      const rows = items
+        .slice(0, 3)
+        .map((it) => {
+          const t = escapeLifecycleHtml(String(it.title ?? '').trim() || 'Annonce');
+          const c = String(it.city ?? '').trim();
+          const city = c ? ` — ${escapeLifecycleHtml(c)}` : '';
+          return `<li style="margin:0 0 8px;">${t}${city}</li>`;
+        })
+        .join('');
+      const listHtml = rows
+        ? `<ul style="font-size:16px;line-height:1.6;margin:0 0 16px;padding-left:20px;">${rows}</ul>`
+        : `<p style="font-size:16px;line-height:1.6;margin:0 0 16px;">Explorez les annonces actives actuellement disponibles sur YOUMBIA.</p>`;
+      return `<p style="font-size:16px;line-height:1.6;margin:0 0 14px;">Découvrez une sélection d’annonces <strong>réellement disponibles</strong> sur YOUMBIA.</p>${listHtml}`;
+    }
+    case 'seller_activation':
+      return `<p style="font-size:16px;line-height:1.6;margin:0 0 14px;">Sur YOUMBIA, des acheteurs consultent chaque jour des annonces entre particuliers.</p>
+      <p style="font-size:16px;line-height:1.6;margin:0 0 16px;">Quand vous êtes prêt, créez votre annonce. Aucun résultat commercial n’est promis.</p>`;
+    case 'listing_published_service': {
+      const title = String(listingTitle ?? '').trim();
+      const city = String(listingCity ?? '').trim();
+      const titleLine = title
+        ? `« <strong>${escapeLifecycleHtml(title)}</strong> »`
+        : 'votre annonce';
+      const cityLine = city
+        ? `<p style="font-size:16px;line-height:1.6;margin:0 0 14px;">Ville : ${escapeLifecycleHtml(city)}.</p>`
+        : '';
+      return `<p style="font-size:16px;line-height:1.6;margin:0 0 14px;">Votre annonce ${titleLine} est maintenant publiée sur YOUMBIA.</p>
+      ${cityLine}
+      <p style="font-size:16px;line-height:1.6;margin:0 0 16px;">Vous pouvez la consulter via le lien ci-dessous et la gérer depuis l’application YOUMBIA.</p>`;
+    }
     default: {
       const _exhaustive: never = campaignId;
       return _exhaustive;
@@ -226,7 +317,9 @@ function bodyParagraphsHtml(
 
 function bodyParagraphsText(
   campaignId: LifecycleRenderCampaignId,
-  listingTitle?: string | null
+  listingTitle?: string | null,
+  listingCity?: string | null,
+  discoveryListings?: LifecycleDiscoveryListing[] | null
 ): string {
   switch (campaignId) {
     case 'welcome_h0':
@@ -255,6 +348,47 @@ function bodyParagraphsText(
         'Ouvrez l’application YOUMBIA pour le reprendre ou le supprimer.',
       ].join('\n');
     }
+    case 'reactivation_j15':
+      return [
+        'Ça fait un moment que l’on ne vous a pas vu sur YOUMBIA.',
+        '',
+        'La communauté est toujours là : annonces du quotidien et échanges entre voisins. Revenez quand vous voulez.',
+      ].join('\n');
+    case 'app_download':
+      return [
+        'Retrouvez YOUMBIA sur votre téléphone pour consulter et publier plus facilement.',
+        '',
+        'Ouvrez le site YOUMBIA depuis votre smartphone pour accéder à l’expérience mobile. Aucune affirmation d’installation n’est faite ici.',
+      ].join('\n');
+    case 'weekly_discovery': {
+      const items = Array.isArray(discoveryListings) ? discoveryListings : [];
+      const lines = items.slice(0, 3).map((it) => {
+        const t = String(it.title ?? '').trim() || 'Annonce';
+        const c = String(it.city ?? '').trim();
+        return c ? `- ${t} (${c})` : `- ${t}`;
+      });
+      return [
+        'Découvrez une sélection d’annonces réellement disponibles sur YOUMBIA.',
+        '',
+        ...(lines.length ? lines : ['Explorez les annonces actives sur YOUMBIA.']),
+      ].join('\n');
+    }
+    case 'seller_activation':
+      return [
+        'Sur YOUMBIA, des acheteurs consultent chaque jour des annonces entre particuliers.',
+        '',
+        'Quand vous êtes prêt, créez votre annonce. Aucun résultat commercial n’est promis.',
+      ].join('\n');
+    case 'listing_published_service': {
+      const title = String(listingTitle ?? '').trim();
+      const city = String(listingCity ?? '').trim();
+      const titleLine = title ? `« ${title} »` : 'votre annonce';
+      return [
+        `Votre annonce ${titleLine} est maintenant publiée sur YOUMBIA.`,
+        city ? `Ville : ${city}.` : '',
+        'Vous pouvez la consulter via le lien et la gérer depuis l’application YOUMBIA.',
+      ].filter(Boolean).join('\n');
+    }
     default: {
       const _exhaustive: never = campaignId;
       return _exhaustive;
@@ -276,11 +410,14 @@ export function renderLifecycleEmailHtml(input: LifecycleRenderInput): string {
     input.campaignId === 'abandoned_draft_h24' && draftOptOut
       ? ` · <a href="${escapeLifecycleHtml(draftOptOut)}" style="color:${muted};">Arrêter les rappels de brouillon</a>`
       : '';
+  const serviceFooter =
+    input.campaignId === 'listing_published_service'
+      ? `Cet e-mail confirme la <strong>publication de votre annonce</strong> YOUMBIA (e-mail de service, pas marketing).`
+      : `Cet e-mail confirme la <strong>création de votre compte</strong> YOUMBIA (e-mail de service, pas un e-mail de connexion ni marketing).`;
   const footerHtml =
     channel === 'service'
       ? `<p style="text-align:center;font-size:12px;line-height:1.5;color:${muted};margin:16px 8px 0;max-width:640px;">
-          Cet e-mail confirme la <strong>création de votre compte</strong> YOUMBIA
-          (e-mail de service, pas un e-mail de connexion ni marketing).
+          ${serviceFooter}
         </p>`
       : `<p style="text-align:center;font-size:12px;line-height:1.5;color:${muted};margin:16px 8px 0;max-width:640px;">
           Cet e-mail est une communication <strong>marketing</strong> YOUMBIA (pas un e-mail de connexion ni de sécurité).
@@ -325,7 +462,7 @@ export function renderLifecycleEmailHtml(input: LifecycleRenderInput): string {
               <p style="text-align:center;font-size:13px;letter-spacing:0.04em;color:${muted};margin:0 0 8px;">${escapeLifecycleHtml(slogan)}</p>
               <p style="text-align:center;font-size:11px;letter-spacing:0.08em;text-transform:uppercase;color:${muted};margin:0 0 20px;">${channelLabel}</p>
               <p style="font-size:16px;line-height:1.6;margin:0 0 16px;">${greeting(input.fullName)}</p>
-              ${bodyParagraphsHtml(input.campaignId, input.listingTitle)}
+              ${bodyParagraphsHtml(input.campaignId, input.listingTitle, input.listingCity, input.discoveryListings)}
               ${ctaBlock}
               <div style="border-top:1px solid ${border};padding-top:18px;margin-top:24px;">
                 <p style="margin:0;font-size:14px;line-height:1.5;color:${bodyMuted};">
@@ -353,11 +490,13 @@ export function renderLifecycleEmailText(input: LifecycleRenderInput): string {
   const lines = [
     greet,
     '',
-    bodyParagraphsText(input.campaignId, input.listingTitle),
+    bodyParagraphsText(input.campaignId, input.listingTitle, input.listingCity, input.discoveryListings),
     '',
     `— ${LIFECYCLE_BRAND.slogan} —`,
     channel === 'service'
-      ? 'E-mail de service YOUMBIA (création de compte — pas marketing ni connexion)'
+      ? input.campaignId === 'listing_published_service'
+        ? 'E-mail de service YOUMBIA (publication d’annonce — pas marketing ni connexion)'
+        : 'E-mail de service YOUMBIA (création de compte — pas marketing ni connexion)'
       : 'Communication marketing YOUMBIA (pas un e-mail de connexion)',
     '',
   ];
