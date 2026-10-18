@@ -10,7 +10,11 @@ import {
 const CUTOFF = Date.parse('2026-10-17T20:00:00.000Z');
 
 const base = (over: Partial<LifecycleEligibilityInput> = {}): LifecycleEligibilityInput => ({
-  preferences: { marketing_opt_in: true, unsubscribed_at: null },
+  preferences: {
+    marketing_opt_in: true,
+    unsubscribed_at: null,
+    marketing_opt_in_source: 'signup',
+  },
   isBanned: false,
   email: 'user@example.com',
   suppressed: false,
@@ -29,8 +33,10 @@ const base = (over: Partial<LifecycleEligibilityInput> = {}): LifecycleEligibili
 describe('lifecycle eligibility service vs marketing', () => {
   it('welcome = service ; other = marketing', () => {
     expect(lifecycleCampaignChannel('welcome_h0')).toBe('service');
+    expect(lifecycleCampaignChannel('listing_published_service')).toBe('service');
     expect(lifecycleCampaignChannel('first_listing_h24')).toBe('marketing');
     expect(lifecycleCampaignChannel('abandoned_draft_h24')).toBe('marketing');
+    expect(lifecycleCampaignChannel('reactivation_j15')).toBe('marketing');
   });
 
   it('welcome service : OK sans opt-in marketing', () => {
@@ -91,7 +97,21 @@ describe('lifecycle eligibility service vs marketing', () => {
       isEligibleFirstListing(
         base({ preferences: { marketing_opt_in: false, unsubscribed_at: null } })
       )
-    ).toEqual({ ok: false, reason: 'no_consent' });
+    ).toEqual({ ok: false, reason: 'no_verifiable_consent' });
+  });
+
+  it('first_listing : source migration groupée → bloqué', () => {
+    expect(
+      isEligibleFirstListing(
+        base({
+          preferences: {
+            marketing_opt_in: true,
+            unsubscribed_at: null,
+            marketing_opt_in_source: 'migration_initiale_youmbia_2026_10_18',
+          },
+        })
+      ).reason
+    ).toBe('no_verifiable_consent');
   });
 
   it('first_listing exige 24h et aucune publication', () => {
@@ -126,6 +146,7 @@ describe('lifecycle eligibility service vs marketing', () => {
           preferences: {
             marketing_opt_in: true,
             unsubscribed_at: null,
+            marketing_opt_in_source: 'signup',
             optional_draft_reminders_opt_out: true,
           },
           draft: {

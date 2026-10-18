@@ -78,6 +78,14 @@ echo "==> Tests prep draft reminders"
 psql -h "$HOST" -p "$PORT" -d "$DB" -v ON_ERROR_STOP=1 \
   -f "$ROOT/supabase/scripts/lifecycle_draft_reminders_prep_tests.sql"
 
+echo "==> Migration email factory"
+MIG_FACTORY="$ROOT/supabase/migrations/20261018160000_lifecycle_email_factory.sql"
+psql -h "$HOST" -p "$PORT" -d "$DB" -v ON_ERROR_STOP=1 -f "$MIG_FACTORY"
+
+echo "==> Tests email factory"
+psql -h "$HOST" -p "$PORT" -d "$DB" -v ON_ERROR_STOP=1 \
+  -f "$ROOT/supabase/scripts/lifecycle_email_factory_tests.sql"
+
 # Hygiène : kill switch ON en fin de run
 psql -h "$HOST" -p "$PORT" -d "$DB" -v ON_ERROR_STOP=1 \
   -c "UPDATE public.app_runtime_flags SET value = 'true' WHERE key = 'lifecycle_email_kill_switch';"

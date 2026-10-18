@@ -16,7 +16,15 @@ import {
   resolveLifecycleRenderCta,
 } from '../_shared/lifecycleTemplates.ts';
 
-type CampaignId = 'welcome_h0' | 'first_listing_h24' | 'abandoned_draft_h24';
+type CampaignId =
+  | 'welcome_h0'
+  | 'first_listing_h24'
+  | 'abandoned_draft_h24'
+  | 'reactivation_j15'
+  | 'app_download'
+  | 'weekly_discovery'
+  | 'seller_activation'
+  | 'listing_published_service';
 
 type ClaimedRow = {
   id: string;
@@ -309,6 +317,30 @@ Deno.serve(async (req) => {
 
       const listingTitle =
         typeof row.metadata?.listing_title === 'string' ? row.metadata.listing_title : null;
+      const listingCity =
+        typeof row.metadata?.listing_city === 'string' ? row.metadata.listing_city : null;
+      const listingId =
+        typeof row.metadata?.listing_id === 'string'
+          ? row.metadata.listing_id
+          : row.campaign_id === 'listing_published_service' ||
+              row.campaign_id === 'abandoned_draft_h24'
+            ? row.occurrence_key
+            : null;
+      const discoveryRaw = row.metadata?.listings;
+      const discoveryListings = Array.isArray(discoveryRaw)
+        ? discoveryRaw
+            .map((it) => {
+              if (!it || typeof it !== 'object') return null;
+              const rec = it as Record<string, unknown>;
+              const title = typeof rec.title === 'string' ? rec.title.trim() : '';
+              if (!title) return null;
+              return {
+                title,
+                city: typeof rec.city === 'string' ? rec.city : null,
+              };
+            })
+            .filter((x): x is { title: string; city: string | null } => x != null)
+        : null;
 
       // Source prénom : profiles.full_name uniquement (pas de first_name dédié).
       // Filtrage admin/générique dans resolveLifecycleGreetingFirstName.
@@ -318,14 +350,21 @@ Deno.serve(async (req) => {
         .eq('id', row.user_id)
         .maybeSingle();
 
-      const cta = resolveLifecycleRenderCta(row.campaign_id, { dryRun });
+      const cta = resolveLifecycleRenderCta(row.campaign_id, {
+        dryRun,
+        listingId,
+      });
+      const channel = lifecycleCampaignChannel(row.campaign_id);
       const renderInput = {
         campaignId: row.campaign_id,
         fullName: resolveLifecycleGreetingFirstName(profile?.full_name ?? null),
         cta: { href: cta.href, label: cta.label, enabled: cta.enabled },
-        unsubscribeUrl: unsubUrl,
-        draftRemindersOptOutUrl,
+        // Service : pas de désinscription marketing dans le rendu.
+        unsubscribeUrl: channel === 'service' ? '' : unsubUrl,
+        draftRemindersOptOutUrl: channel === 'service' ? null : draftRemindersOptOutUrl,
         listingTitle,
+        listingCity,
+        discoveryListings,
         webFallbackUrl: cta.webFallbackUrl,
       };
       const html = renderLifecycleEmailHtml(renderInput);

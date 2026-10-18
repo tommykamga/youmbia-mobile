@@ -20,6 +20,12 @@ describe('email category separation service vs marketing', () => {
     expect(resolveLifecycleEmailCategory('abandoned_draft_h24')).toBe(
       LIFECYCLE_EMAIL_CATEGORY_MARKETING
     );
+    expect(resolveLifecycleEmailCategory('listing_published_service')).toBe(
+      LIFECYCLE_EMAIL_CATEGORY_SERVICE
+    );
+    expect(resolveLifecycleEmailCategory('weekly_discovery')).toBe(
+      LIFECYCLE_EMAIL_CATEGORY_MARKETING
+    );
   });
 
   it('autorise service et marketing ; refuse Auth', () => {

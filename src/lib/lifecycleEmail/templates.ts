@@ -18,6 +18,7 @@ import {
   renderLifecycleEmailHtml as renderHtmlCore,
   renderLifecycleEmailText as renderTextCore,
   resolveLifecycleRenderCta,
+  type LifecycleDiscoveryListing,
   type LifecycleRenderInput,
 } from './renderLifecycleEmail';
 
@@ -28,6 +29,8 @@ export type LifecycleTemplateInput = {
   unsubscribeUrl: string;
   draftRemindersOptOutUrl?: string | null;
   listingTitle?: string | null;
+  listingCity?: string | null;
+  discoveryListings?: LifecycleDiscoveryListing[] | null;
   webFallbackUrl?: string | null;
 };
 
@@ -54,6 +57,8 @@ function toRenderInput(input: LifecycleTemplateInput): LifecycleRenderInput {
     unsubscribeUrl: input.unsubscribeUrl,
     draftRemindersOptOutUrl: input.draftRemindersOptOutUrl,
     listingTitle: input.listingTitle,
+    listingCity: input.listingCity,
+    discoveryListings: input.discoveryListings,
     webFallbackUrl: input.webFallbackUrl,
   };
 }
@@ -77,11 +82,15 @@ export function buildLifecycleRenderedEmail(args: {
   unsubscribeUrl: string;
   draftRemindersOptOutUrl?: string | null;
   listingTitle?: string | null;
+  listingCity?: string | null;
+  discoveryListings?: LifecycleDiscoveryListing[] | null;
   listingId?: string | null;
   dryRun?: boolean;
 }): LifecycleRenderedEmail {
-  void args.listingId;
-  const route = resolveLifecycleRenderCta(args.campaignId, { dryRun: args.dryRun });
+  const route = resolveLifecycleRenderCta(args.campaignId, {
+    dryRun: args.dryRun,
+    listingId: args.listingId,
+  });
   const cta: LifecycleCta = {
     href: route.href,
     label: route.label,
@@ -95,6 +104,8 @@ export function buildLifecycleRenderedEmail(args: {
     unsubscribeUrl: args.unsubscribeUrl,
     draftRemindersOptOutUrl: args.draftRemindersOptOutUrl,
     listingTitle: args.listingTitle,
+    listingCity: args.listingCity,
+    discoveryListings: args.discoveryListings,
     webFallbackUrl: route.webFallbackUrl,
   };
   const category = resolveLifecycleEmailCategory(args.campaignId);

@@ -39,7 +39,12 @@ export function isTransactionalCategory(value: string | null | undefined): boole
 export function resolveLifecycleEmailCategory(
   campaignId: LifecycleCampaignId | string
 ): LifecycleEmailCategory {
-  if (campaignId === 'welcome_h0') return LIFECYCLE_EMAIL_CATEGORY_SERVICE;
+  if (
+    campaignId === 'welcome_h0' ||
+    campaignId === 'listing_published_service'
+  ) {
+    return LIFECYCLE_EMAIL_CATEGORY_SERVICE;
+  }
   return LIFECYCLE_EMAIL_CATEGORY_MARKETING;
 }
 
