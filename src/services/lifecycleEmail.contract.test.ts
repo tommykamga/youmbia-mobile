@@ -163,9 +163,14 @@ describe('lifecycle email P0 — contrat SQL / Edge', () => {
     expect(getIdx).toBeGreaterThan(-1);
     expect(applyIdx).toBeGreaterThan(getIdx);
     expect(webhookEdge).toMatch(/LIFECYCLE_RESEND_WEBHOOK_SECRET/);
+    expect(webhookEdge).toMatch(/LIFECYCLE_RESEND_WEBHOOK_SECRET_PREV/);
+    expect(webhookEdge).toMatch(/verifySvixSignatureAny/);
     expect(webhookEdge).toMatch(/invalid_signature/);
     expect(webhookEdge).toMatch(/email_suppressions/);
     expect(webhookEdge).toMatch(/hard_bounce/);
+    expect(webhookEdge).toMatch(/db_error/);
+    expect(webhookEdge).not.toMatch(/console\.(log|info|debug|warn|error)\([^)]*WEBHOOK_SECRET/);
+    expect(webhookEdge).not.toMatch(/console\.(log|info|debug|warn|error)\([^)]*svixSignature/);
   });
 
   it('migration service vs marketing : welcome service, draft marketing + cutoff', () => {

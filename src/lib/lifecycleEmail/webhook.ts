@@ -1,9 +1,25 @@
 /**
  * Vérification signature webhook Resend (Svix-compatible, simplifiée pour tests).
  * Production Edge : même contrat (timestamp + signatures v1).
+ * Dual-secret temporaire : primary (LIFECYCLE_RESEND_WEBHOOK_SECRET) + prev optionnel.
  */
 
 import { createHmac, timingSafeEqual } from 'node:crypto';
+
+export const LIFECYCLE_WEBHOOK_MAX_SKEW_MS = 5 * 60 * 1000;
+
+/** Normalise une liste de secrets : trim, ignore vides, déduplique (ordre conservé). */
+export function normalizeWebhookSecrets(secrets: (string | null | undefined)[]): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const raw of secrets) {
+    const s = typeof raw === 'string' ? raw.trim() : '';
+    if (!s || seen.has(s)) continue;
+    seen.add(s);
+    out.push(s);
+  }
+  return out;
+}
 
 export function verifyResendWebhookSignature(args: {
   secret: string;
@@ -21,7 +37,7 @@ export function verifyResendWebhookSignature(args: {
     svixTimestamp,
     svixSignature,
     nowMs = Date.now(),
-    maxSkewMs = 5 * 60 * 1000,
+    maxSkewMs = LIFECYCLE_WEBHOOK_MAX_SKEW_MS,
   } = args;
 
   if (!secret || !svixId || !svixTimestamp || !svixSignature) return false;
@@ -53,6 +69,40 @@ export function verifyResendWebhookSignature(args: {
       }
     } catch {
       /* ignore */
+    }
+  }
+  return false;
+}
+
+/**
+ * Accepte si au moins un secret de la liste valide cryptographiquement la signature.
+ * Ne court-circuite pas la vérif HMAC : chaque secret candidat est vérifié entièrement.
+ * Ne loggue jamais secrets ni signatures.
+ */
+export function verifyResendWebhookSignatureAny(args: {
+  secrets: (string | null | undefined)[];
+  rawBody: string;
+  svixId: string;
+  svixTimestamp: string;
+  svixSignature: string;
+  nowMs?: number;
+  maxSkewMs?: number;
+}): boolean {
+  const secrets = normalizeWebhookSecrets(args.secrets);
+  if (secrets.length === 0) return false;
+  for (const secret of secrets) {
+    if (
+      verifyResendWebhookSignature({
+        secret,
+        rawBody: args.rawBody,
+        svixId: args.svixId,
+        svixTimestamp: args.svixTimestamp,
+        svixSignature: args.svixSignature,
+        nowMs: args.nowMs,
+        maxSkewMs: args.maxSkewMs,
+      })
+    ) {
+      return true;
     }
   }
   return false;

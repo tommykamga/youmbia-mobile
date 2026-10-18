@@ -90,6 +90,13 @@ async function hmacHex(secret: string, message: string): Promise<string> {
   return [...new Uint8Array(sig)].map((b) => b.toString(16).padStart(2, '0')).join('');
 }
 
+Deno.test('webhook Edge source: dual-secret PREV + db_error gates', () => {
+  assert(webhookSrc.includes('LIFECYCLE_RESEND_WEBHOOK_SECRET_PREV'));
+  assert(webhookSrc.includes('verifySvixSignatureAny'));
+  assert(webhookSrc.includes("error: 'db_error'"));
+  assert(webhookSrc.includes('WEBHOOK_MAX_SKEW_MS'));
+});
+
 Deno.test('webhook: signature Svix valide acceptée, invalide rejetée', async () => {
   const rawSecret = btoa('super-secret-webhook-key!!');
   const secret = `whsec_${rawSecret}`;
