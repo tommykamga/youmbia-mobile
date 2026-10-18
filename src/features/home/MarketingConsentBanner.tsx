@@ -64,7 +64,7 @@ export function MarketingConsentBanner() {
     <View style={styles.panel} accessibilityRole="summary">
       <Text style={styles.title}>Recevez les nouveautés YOUMBIA par e-mail ?</Text>
       <Text style={styles.description}>
-        Avec votre accord, recevez des sélections d'annonces, rappels et nouveautés YOUMBIA.
+        Avec votre accord, recevez des sélections d’annonces, rappels et nouveautés YOUMBIA.
         Désinscription possible à tout moment. Les e-mails de sécurité restent séparés.
       </Text>
       {error ? <Text style={styles.error} accessibilityRole="alert">{error}</Text> : null}
@@ -76,7 +76,7 @@ export function MarketingConsentBanner() {
           accessibilityLabel="J'accepte les e-mails marketing YOUMBIA"
           style={[styles.accept, saving && styles.disabled]}
         >
-          {saving ? <ActivityIndicator color="#fff" /> : <Text style={styles.acceptText}>Oui, j'accepte</Text>}
+          {saving ? <ActivityIndicator color="#fff" /> : <Text style={styles.acceptText}>Oui, j’accepte</Text>}
         </Pressable>
         <Pressable
           onPress={dismiss}
