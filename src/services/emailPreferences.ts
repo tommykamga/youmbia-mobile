@@ -99,7 +99,7 @@ export async function getEmailPreferences(): Promise<EmailPreferencesResult> {
  */
 export async function setMarketingEmailOptIn(
   optedIn: boolean,
-  source: 'signup' | 'settings' | 'unsubscribe'
+  source: 'signup' | 'settings' | 'unsubscribe' | 'mobile_home_prompt'
 ): Promise<EmailPreferencesResult> {
   const auth = await requireUserId();
   if (auth.error || !auth.userId) {

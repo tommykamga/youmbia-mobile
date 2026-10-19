@@ -51,6 +51,7 @@ import { formatPrice } from '@/lib/format';
 import type { PublicListing } from '@/services/listings';
 import { colors, spacing, typography, fontWeights, radius } from '@/theme';
 import { getSession } from '@/services/auth';
+import { MarketingConsentBanner } from '@/features/home/MarketingConsentBanner';
 import { buildAuthGateHref } from '@/lib/authGateNavigation';
 import { useResponsiveLayout, getScrollBottomReserveForTabBar } from '@/lib/responsiveLayout';
 import { trackListingSearched, trackRecentSearchSelected } from '@/lib/analytics';
@@ -1429,6 +1430,7 @@ export default function SearchScreen() {
                 unreadCount={0}
                 searchTabLayout
               />
+              <MarketingConsentBanner />
               <View
                 style={[
                   styles.searchStripMarketplace,
