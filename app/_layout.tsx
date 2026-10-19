@@ -30,6 +30,7 @@ import {
 import { startProfileProvisioningOnAuth } from '@/services/profile';
 import { handleSupabaseAuthDeepLink } from '@/services/auth/handleSupabaseAuthDeepLink';
 import { getListingHrefFromUrl } from '@/lib/listingDeepLink';
+import { getShopHrefFromUrl } from '@/lib/shopDeepLink';
 import {
   addNotificationReceivedListenerSafe,
   addNotificationResponseReceivedListenerSafe,
@@ -297,7 +298,7 @@ function RootLayout() {
         return;
       }
 
-      const target = getListingHrefFromUrl(raw);
+      const target = getListingHrefFromUrl(raw) ?? getShopHrefFromUrl(raw);
       if (!target) return;
       if (raw && lastHandledUrlRef.current === raw) return;
       if (getComparableTargetKey(target) === routeKeyRef.current) {

@@ -290,7 +290,10 @@ export default function ShopScreen() {
     return (
       <Screen noPadding safe={false}>
         <AppHeader title="Boutique" showBack />
-        <EmptyState title="Boutique indisponible" message={state.message} />
+        <EmptyState title="Impossible de charger la boutique" message={state.message} />
+        <Button onPress={() => void loadShop()} style={{ marginHorizontal: spacing.lg }}>
+          Réessayer
+        </Button>
       </Screen>
     );
   }
