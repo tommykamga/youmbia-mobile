@@ -39,7 +39,7 @@ import {
   getComparableTargetKey,
   getLastNotificationResponseAsyncSafe,
   getNotificationOpenMeta,
-  initializeNotifications,
+  initializeNotificationsAsync,
   isPushNotificationsAvailable,
   syncPushTokenIfGranted,
   type NotificationOpenMeta,
@@ -185,7 +185,7 @@ function RootLayout() {
 
   useEffect(() => {
     if (!isPushNotificationsAvailable()) return;
-    initializeNotifications();
+    void initializeNotificationsAsync();
   }, []);
 
   // Persiste côté serveur le token push d'un utilisateur ayant DÉJÀ accordé la

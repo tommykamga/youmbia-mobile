@@ -15,8 +15,14 @@ import { buildLoginHref, buildPostAuthHref } from '@/lib/authRedirect';
 import { isSellerContactAction } from '@/lib/sellerContact';
 
 const YOUMBIA_AUTH_HOSTS = new Set(['www.youmbia.com', 'youmbia.com']);
+/** Entrée e-mail Supabase (templates) — App Links Android + AASA iOS (PR Web #11). */
 const MAGIC_LINK_CONFIRM_PATH = '/auth/confirm';
-const MAGIC_LINK_TYPE = 'magiclink';
+/**
+ * Callback Web unique (OTP / session). Les e-mails Web et le 307 depuis /auth/confirm
+ * aboutissent ici ; le mobile doit pouvoir finaliser sans passer par le navigateur.
+ */
+const MAGIC_LINK_CALLBACK_PATH = '/auth/callback';
+const MAGIC_LINK_OTP_TYPES = new Set(['magiclink', 'email']);
 
 /** Aligné sur @supabase/auth-js parseParametersFromURL (fragment + query). */
 export function parseParametersFromURL(href: string): Record<string, string> {
@@ -69,18 +75,28 @@ function normalizePathname(pathname: string): string {
   return pathname.replace(/\/+$/, '') || '/';
 }
 
+function isYoumbiaHttpsAuthHost(parsed: URL): boolean {
+  return (
+    parsed.protocol === 'https:' && YOUMBIA_AUTH_HOSTS.has(parsed.hostname.toLowerCase())
+  );
+}
+
 /**
- * URL HTTPS YOUMBIA uniquement, chemin /auth/confirm (lien e-mail Magic Link).
- * Rejette tout hôte externe ou autre chemin.
+ * URL HTTPS YOUMBIA Magic Link : `/auth/confirm` (entrée e-mail) ou `/auth/callback`
+ * avec `token_hash` (callback Web / 307). Rejette tout hôte externe.
  */
 export function isYoumbiaMagicLinkConfirmUrl(url: string | null | undefined): boolean {
   const raw = String(url ?? '').trim();
   if (!raw) return false;
   try {
     const parsed = new URL(raw);
-    if (parsed.protocol !== 'https:') return false;
-    if (!YOUMBIA_AUTH_HOSTS.has(parsed.hostname.toLowerCase())) return false;
-    return normalizePathname(parsed.pathname).toLowerCase() === MAGIC_LINK_CONFIRM_PATH;
+    if (!isYoumbiaHttpsAuthHost(parsed)) return false;
+    const path = normalizePathname(parsed.pathname).toLowerCase();
+    if (path === MAGIC_LINK_CONFIRM_PATH) return true;
+    if (path !== MAGIC_LINK_CALLBACK_PATH) return false;
+    // Callback : uniquement les OTP e-mail (pas OAuth `code` seul).
+    const params = parseParametersFromURL(raw);
+    return Boolean((params.token_hash ?? '').trim());
   } catch {
     return false;
   }
@@ -239,7 +255,7 @@ async function finalizeMagicLinkConfirm(
   const recovery = buildAuthRecoveryHref(ctx.redirect, ctx.contact);
 
   const type = (params.type ?? '').trim().toLowerCase();
-  if (type !== MAGIC_LINK_TYPE) {
+  if (!MAGIC_LINK_OTP_TYPES.has(type)) {
     markConsumed(dedupKey);
     warnAuthDeepLink('Magic Link: type non supporté pour ce flux');
     return {
@@ -260,12 +276,14 @@ async function finalizeMagicLinkConfirm(
     };
   }
 
+  // Aligner verifyOtp sur le `type` URL (magiclink | email), comme le callback Web.
+  const otpType = type === 'email' ? 'email' : 'magiclink';
+
   try {
     const { data, error } = await supabase.auth.verifyOtp({
-      type: 'magiclink',
+      type: otpType,
       token_hash: tokenHash,
     });
-
     if (error) {
       markConsumed(dedupKey);
       const expired = isExpiredOrUsedOtpError(error);

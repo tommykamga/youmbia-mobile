@@ -83,6 +83,16 @@
               "scheme": "https",
               "host": "youmbia.com",
               "pathPrefix": "/auth/confirm"
+            },
+            {
+              "scheme": "https",
+              "host": "www.youmbia.com",
+              "pathPrefix": "/auth/callback"
+            },
+            {
+              "scheme": "https",
+              "host": "youmbia.com",
+              "pathPrefix": "/auth/callback"
             }
           ]
         }

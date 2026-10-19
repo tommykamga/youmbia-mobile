@@ -79,7 +79,7 @@ describe('handleSupabaseAuthDeepLink — Magic Link HTTPS', () => {
     expect(mocks.captureAuthSuccess).toHaveBeenCalledWith(sessionUser, { method: 'email' });
   });
 
-  it('reconnaît uniquement /auth/confirm HTTPS sur hôtes YOUMBIA', async () => {
+  it('reconnaît /auth/confirm et /auth/callback HTTPS sur hôtes YOUMBIA', async () => {
     const mod = await loadHandler();
     expect(mod.isYoumbiaMagicLinkConfirmUrl(VALID_MAGIC)).toBe(true);
     expect(
@@ -92,6 +92,14 @@ describe('handleSupabaseAuthDeepLink — Magic Link HTTPS', () => {
     ).toBe(true);
     expect(
       mod.isYoumbiaMagicLinkConfirmUrl(
+        `https://www.youmbia.com/auth/callback?token_hash=${FAKE_TOKEN}&type=magiclink`
+      )
+    ).toBe(true);
+    expect(
+      mod.isYoumbiaMagicLinkConfirmUrl('https://www.youmbia.com/auth/callback')
+    ).toBe(false);
+    expect(
+      mod.isYoumbiaMagicLinkConfirmUrl(
         'http://www.youmbia.com/auth/confirm?token_hash=x&type=magiclink'
       )
     ).toBe(false);
@@ -100,6 +108,43 @@ describe('handleSupabaseAuthDeepLink — Magic Link HTTPS', () => {
         'https://www.youmbia.com/annonce/abc?token_hash=x&type=magiclink'
       )
     ).toBe(false);
+  });
+
+  it('finalise un Magic Link via /auth/callback (307 Web) sans exposer le token', async () => {
+    const mod = await loadHandler();
+    const sessionUser = { id: 'user-1' };
+    mocks.verifyOtp.mockResolvedValue({
+      data: { session: { user: sessionUser } },
+      error: null,
+    });
+
+    const callbackUrl = `https://www.youmbia.com/auth/callback?token_hash=${FAKE_TOKEN}&type=magiclink`;
+    const result = await mod.handleSupabaseAuthDeepLink(callbackUrl);
+
+    expect(mocks.verifyOtp).toHaveBeenCalledWith({
+      type: 'magiclink',
+      token_hash: FAKE_TOKEN,
+    });
+    expect(result).toEqual({ consumed: true, navigateTo: '/(tabs)/home' });
+    expect(JSON.stringify(result)).not.toContain(FAKE_TOKEN);
+  });
+
+  it('accepte type=email (aligné client Web magic-login)', async () => {
+    const mod = await loadHandler();
+    mocks.verifyOtp.mockResolvedValue({
+      data: { session: { user: { id: 'user-1' } } },
+      error: null,
+    });
+
+    const result = await mod.handleSupabaseAuthDeepLink(
+      `https://www.youmbia.com/auth/confirm?token_hash=${FAKE_TOKEN}&type=email`
+    );
+
+    expect(mocks.verifyOtp).toHaveBeenCalledWith({
+      type: 'email',
+      token_hash: FAKE_TOKEN,
+    });
+    expect(result.consumed).toBe(true);
   });
 
   it('rejette une URL malformée (non URL) sans appeler verifyOtp', async () => {
@@ -131,7 +176,7 @@ describe('handleSupabaseAuthDeepLink — Magic Link HTTPS', () => {
     expect(mocks.verifyOtp).not.toHaveBeenCalled();
   });
 
-  it('rejette un type autre que magiclink', async () => {
+  it('rejette un type autre que magiclink/email', async () => {
     const mod = await loadHandler();
     const result = await mod.handleSupabaseAuthDeepLink(
       `https://www.youmbia.com/auth/confirm?token_hash=${FAKE_TOKEN}&type=recovery`
