@@ -62,6 +62,16 @@
               "scheme": "https",
               "host": "youmbia.com",
               "pathPrefix": "/annonce"
+            },
+            {
+              "scheme": "https",
+              "host": "www.youmbia.com",
+              "pathPrefix": "/shop"
+            },
+            {
+              "scheme": "https",
+              "host": "youmbia.com",
+              "pathPrefix": "/shop"
             }
           ]
         }
