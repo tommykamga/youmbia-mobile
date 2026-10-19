@@ -13,7 +13,8 @@
       "buildNumber": "5",
       "usesAppleSignIn": true,
       "associatedDomains": [
-        "applinks:www.youmbia.com"
+        "applinks:www.youmbia.com",
+        "applinks:youmbia.com"
       ],
       "splash": {
         "image": "./assets/images/splash.png",
@@ -72,6 +73,16 @@
               "scheme": "https",
               "host": "youmbia.com",
               "pathPrefix": "/shop"
+            },
+            {
+              "scheme": "https",
+              "host": "www.youmbia.com",
+              "pathPrefix": "/auth/confirm"
+            },
+            {
+              "scheme": "https",
+              "host": "youmbia.com",
+              "pathPrefix": "/auth/confirm"
             }
           ]
         }
