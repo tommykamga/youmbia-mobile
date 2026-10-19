@@ -30,6 +30,8 @@ export function getShopHrefFromUrl(rawUrl: string | null | undefined): string | 
     }
 
     if (url.protocol === 'youmbiamobile:') {
+      // Ne jamais traiter le chemin d'un hôte arbitraire comme lien boutique.
+      if (url.hostname && url.hostname.toLowerCase() !== 'shop') return null;
       const path = url.hostname.toLowerCase() === 'shop'
         ? `/shop${url.pathname}`
         : url.pathname;
