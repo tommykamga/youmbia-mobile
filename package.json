@@ -13,12 +13,14 @@
     "android": "expo run:android",
     "ios": "expo run:ios",
     "web": "expo start --web",
-    "eas-build-pre-install": "node scripts/prepare-google-services.js",
+    "eas-build-pre-install": "node scripts/prepare-google-services.js && node scripts/sync-android-app-links.mjs && node scripts/assert-android-app-links.mjs",
     "postinstall": "node scripts/postinstall-expo-modules-core.js",
     "lint": "eslint .",
     "lint:expo": "expo lint",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run --passWithNoTests"
+    "test": "vitest run --passWithNoTests",
+    "sync:android-app-links": "node scripts/sync-android-app-links.mjs",
+    "assert:android-app-links": "node scripts/assert-android-app-links.mjs"
   },
   "dependencies": {
     "@react-native-async-storage/async-storage": "2.2.0",
