@@ -19,7 +19,7 @@ BEGIN
   FROM pg_policies
   WHERE schemaname = 'public' AND tablename = 'shops'
     AND policyname = 'shops_select_public'
-    AND cmd = 'SELECT' AND roles = ARRAY['public'];
+    AND cmd = 'SELECT' AND roles = ARRAY['public']::name[];
 
   IF v_public_qual IS DISTINCT FROM 'true' THEN
     RAISE EXCEPTION 'TOM-104: shops_select_public modifiée; revue requise (policy drift)';
@@ -29,7 +29,7 @@ BEGIN
     SELECT 1 FROM pg_policies
     WHERE schemaname = 'public' AND tablename = 'shops'
       AND policyname = 'shops_select_owner' AND cmd = 'SELECT'
-      AND roles = ARRAY['authenticated']
+      AND roles = ARRAY['authenticated']::name[]
       AND qual = '(owner_id = auth.uid())'
   ) THEN
     RAISE EXCEPTION 'TOM-104: shops_select_owner absente ou modifiée; STOP';
