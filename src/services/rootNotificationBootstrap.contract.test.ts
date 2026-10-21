@@ -27,4 +27,9 @@ describe('root notification bootstrap contract', () => {
     expect(layout).toMatch(/readColdStartOnce/);
     expect(layout).toMatch(/clearLastNotificationResponseAsyncSafe/);
   });
+
+  it('initialise le handler notifications de façon awaitable au boot', () => {
+    expect(layout).toMatch(/initializeNotificationsAsync/);
+    expect(layout).toMatch(/void initializeNotificationsAsync\(\)/);
+  });
 });
