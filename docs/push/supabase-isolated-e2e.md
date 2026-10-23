@@ -4,6 +4,8 @@
 
 **PASS AVEC RÉSERVES pour le backend isolé ; NO-GO production.** Le passage technique à une recette physique dédiée est possible après un GO explicite pour les appareils/builds et envois réels de test. Aucune réception Android/iOS n'est prouvée ici.
 
+Le préflight de recette physique du 23 octobre 2026 est documenté dans [physical-qa-preflight.md](./physical-qa-preflight.md) : NO-GO tant que les environnements EAS ciblent Supabase production et qu'aucun appareil n'est disponible.
+
 Référence initiale : `0a9d961aac1a6555f7982e04abdfa3089bfeff25`, branche `feat/ymb-transactional-push-p0-p1`, worktree `/private/tmp/youmbia-transactional-push`. Rapports précédents disponibles et lus. Release `codex/release-4.6.2`, HEAD `b5e2196`, index et trois dossiers Lifecycle non suivis conservés. Aucune opération Git sur main/TOM-104, aucun push ni PR.
 
 Contrat avant exécution : identité locale obligatoire avant mutation, migration vierge puis baseline sourcée, upgrade avec données fictives, Auth/PostgREST/Edge réels, Expo HTTP simulé, RLS/ACL natifs, concurrence, tickets/receipts/retries/timeouts/logout, pg_cron/Vault/pg_net réels, lint/TypeScript/Deno/Vitest et revue des procédures. Skills repris : tsk-orchestrator, supabase, tsk-security, tsk-build, tsk-qa-gate ; diagnostic avant/après sur les défauts reproduits. Aucune délégation.
