@@ -12,7 +12,7 @@
 //   (évite qu'un tiers déclenche des push arbitraires).
 // - Payload V1 sans contenu sensible (corps du message non inclus).
 
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.98.0';
 
 const EXPO_PUSH_ENDPOINT = 'https://exp.host/--/api/v2/push/send';
 
@@ -93,6 +93,15 @@ Deno.serve(async (req) => {
 
   if (convError) return json(500, { error: 'conversation_lookup_failed' });
   if (!conversation) return json(404, { error: 'conversation_not_found' });
+
+  if (message.sender_id !== conversation.buyer_id && message.sender_id !== conversation.seller_id) {
+    return json(403, { error: 'sender_not_participant' });
+  }
+
+  // Server-wide cutover also protects old installed clients. Fail closed if migration is absent.
+  const { data: outboxEnabled, error: configError } = await admin.rpc('transactional_message_push_enabled');
+  if (configError) return json(503, { error: 'push_config_unavailable' });
+  if (outboxEnabled) return json(200, { ok: true, skipped: 'server_outbox_enabled' });
 
   const receiverId =
     message.sender_id === conversation.buyer_id ? conversation.seller_id : conversation.buyer_id;

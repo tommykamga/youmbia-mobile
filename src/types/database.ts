@@ -911,6 +911,12 @@ export type Database = {
           },
         ];
       };
+      transactional_push_preferences: {
+        Row: { user_id: string; favorites_enabled: boolean };
+        Insert: { user_id: string; favorites_enabled?: boolean };
+        Update: { user_id?: string; favorites_enabled?: boolean };
+        Relationships: [];
+      };
       user_push_tokens: {
         Row: {
           id: string;

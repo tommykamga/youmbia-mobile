@@ -5,6 +5,7 @@ import {
   clearLastNotificationResponseAsyncSafe,
   getPushActivationCardState,
   getPushPermissionSnapshot,
+  getNotificationNavigationTarget,
   getStoredPushToken,
   markPushPromptDismissed,
   openPushNotificationSettings,
@@ -12,6 +13,7 @@ import {
   registerForPushNotifications,
   shouldShowPushPrompt,
   unregisterCurrentPushToken,
+  syncPushTokenIfGranted,
 } from './notifications';
 
 const mocks = vi.hoisted(() => ({
@@ -378,5 +380,24 @@ describe('claim_my_push_token migration', () => {
     expect(sql).toMatch(/REVOKE ALL .* FROM PUBLIC/);
     expect(sql).toMatch(/GRANT EXECUTE .* TO authenticated/);
     expect(sql).not.toMatch(/TO anon/);
+  });
+});
+
+describe('transactional push navigation and permission revocation', () => {
+  it('opens generic server message and favorite destinations', () => {
+    expect(getNotificationNavigationTarget({ notification: { request: { content: { data: { type: 'conversation_message', conversationId: USER_ID } } } } })).toBe(`/conversation/${USER_ID}`);
+    expect(getNotificationNavigationTarget({ notification: { request: { content: { data: { type: 'listing_favorite', listingId: USER_ID } } } } })).toBe(`/listing/${USER_ID}`);
+  });
+  it('unregisters a previously registered token when the permission is revoked without prompting', async () => {
+    const finalEq = vi.fn().mockResolvedValue({ error: null });
+    mocks.from.mockReturnValue({ delete: () => ({ eq: () => ({ eq: finalEq }) }) });
+    await registerForPushNotifications();
+    mocks.requestPermissionsAsync.mockClear();
+    mocks.getPermissionsAsync.mockResolvedValue({ status: 'denied', canAskAgain: false });
+    const result = await syncPushTokenIfGranted();
+    expect(result).toMatchObject({ ok: true, status: 'skipped' });
+    expect(finalEq).toHaveBeenCalledWith('expo_push_token', TOKEN_A);
+    expect(getStoredPushToken()).toBeNull();
+    expect(mocks.requestPermissionsAsync).not.toHaveBeenCalled();
   });
 });

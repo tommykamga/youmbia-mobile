@@ -1,0 +1,57 @@
+{
+  "version": "5",
+  "remote": {
+    "https://esm.sh/@supabase/supabase-js@2.98.0": "7c91584aa8d7c3b272be04122a907e00a7028a20d0eaf5e40b2eb1eed10f06b3"
+  },
+  "workspace": {
+    "packageJson": {
+      "dependencies": [
+        "npm:@react-native-async-storage/async-storage@2.2.0",
+        "npm:@react-navigation/native@^7.1.8",
+        "npm:@sentry/react-native@7.2",
+        "npm:@supabase/supabase-js@^2.98.0",
+        "npm:@types/react@~19.1.10",
+        "npm:base64-arraybuffer@^1.0.2",
+        "npm:eslint-config-expo@10.0",
+        "npm:eslint@9",
+        "npm:expo-apple-authentication@~8.0.8",
+        "npm:expo-auth-session@~7.0.11",
+        "npm:expo-clipboard@~8.0.8",
+        "npm:expo-constants@~18.0.13",
+        "npm:expo-dev-client@~6.0.21",
+        "npm:expo-haptics@~15.0.8",
+        "npm:expo-image-manipulator@~14.0.8",
+        "npm:expo-image-picker@~17.0.11",
+        "npm:expo-image@~3.0.11",
+        "npm:expo-linear-gradient@~15.0.8",
+        "npm:expo-linking@~8.0.12",
+        "npm:expo-notifications@~0.32.17",
+        "npm:expo-router@~6.0.23",
+        "npm:expo-splash-screen@~31.0.13",
+        "npm:expo-sqlite@~16.0.10",
+        "npm:expo-status-bar@~3.0.9",
+        "npm:expo-web-browser@~15.0.11",
+        "npm:expo@~54.0.34",
+        "npm:mixpanel-react-native@^3.6.0",
+        "npm:react-dom@19.1.0",
+        "npm:react-native-qrcode-svg@^6.3.21",
+        "npm:react-native-reanimated@~4.1.1",
+        "npm:react-native-safe-area-context@~5.6.2",
+        "npm:react-native-screens@4.16",
+        "npm:react-native-svg@15.12.1",
+        "npm:react-native-url-polyfill@3",
+        "npm:react-native-web@0.21",
+        "npm:react-native-webview@13.15.0",
+        "npm:react-native-worklets@0.5.1",
+        "npm:react-native@0.81.5",
+        "npm:react@19.1.0",
+        "npm:typescript@~5.9.2",
+        "npm:vitest@^3.2.4"
+      ],
+      "overrides": {
+        "expo-constants": "~18.0.13",
+        "expo-web-browser": "~15.0.11"
+      }
+    }
+  }
+}
