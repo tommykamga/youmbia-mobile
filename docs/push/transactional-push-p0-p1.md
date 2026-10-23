@@ -1,5 +1,7 @@
 # Notifications transactionnelles P0/P1 — préparation locale, 23 octobre 2026
 
+Validation Supabase locale exécutée : [rapport E2E](supabase-isolated-e2e.md). Backend/Edge/PostgREST, upgrade et cron testés avec Expo simulé ; appareils physiques non testés.
+
 Mise à jour corrective : [audit sécurité des conversations](conversation-security-audit.md). Le correctif local d’identité et les tests associés remplacent la réserve initiale sur les participants ; les validations Supabase isolé et physiques restent à faire.
 
 ## Périmètre et préflight
@@ -63,7 +65,7 @@ Comparer les alertes recherches sauvegardées avant/après (foreground/backgroun
 1. Revue du diff et du schéma sur un environnement isolé représentatif ; rejouer tests SQL/RLS et inspection advisors. Résoudre les risques d'intégrité des conversations et tester les builds RC : cette branche part volontairement du main stable.
 2. Obtenir autorisation distincte pour chaque migration distante, déploiement et envoi réel. Appliquer seulement la nouvelle migration revue ; flags restent OFF. Ne pas appliquer en bloc les migrations main non déployées (dont shops PR26).
 3. Déployer l'ancienne fonction avec son verrou de bascule **avant** tout flag ON. Vérifier que le mode OFF préserve les messages legacy. Déployer le nouveau dispatcher OFF. Configurer EXPO_ACCESS_TOKEN côté serveur si la sécurité renforcée Expo est active.
-4. Configurer un secret aléatoire dédié identique dans Deno et Vault (`transactional_push_dispatch_secret`), plus l'URL Vault `transactional_push_dispatch_url`. Aucun secret en Git/mobile. Le script `supabase/operations/transactional_push_scheduler.sql` crée le cron chaque minute **inactif** ; exécution uniquement après autorisation. pg_cron/pg_net/Vault requis ; script non testé avec leurs extensions réelles ici.
+4. Configurer un secret aléatoire dédié identique dans Deno et Vault (`transactional_push_dispatch_secret`), plus l'URL Vault `transactional_push_dispatch_url`. Aucun secret en Git/mobile. Le script `supabase/operations/transactional_push_scheduler.sql` crée le cron chaque minute **inactif** ; exécution uniquement après autorisation. pg_cron/pg_net/Vault requis ; script testé depuis sur Supabase local. Configurer la cible owner-only `push_private.dispatch_target.url` de cet environnement, identique à celle du Vault ; le cron reste OFF.
 5. Sur environnement de recette, activer worker et cron, messages seulement, favoris OFF. Attendre la fin des invocations legacy en vol avant le passage ON ; fenêtre contrôlée et aucun rejeu manuel. Vérifier les appareils et le Web ; surveiller erreurs, warnings d'enqueue, backlog, uncertain, receipts manquants, credentials et DNR. L'ancien appel mobile devient un no-op serveur quand messages_enabled=true.
 6. Après recette et autorisation production, répéter P0 sur une fenêtre de faible trafic ; observer, puis autoriser séparément P1. Le déploiement global n'a pas de ciblage cohortes intégré : canary sur environnement séparé, puis bascule P0/P1 distincte. Préférences indépendantes du marketing, défaut favoris autorisé sous permission OS.
 7. Définir SLO et seuils avant activation : backlog plus de cinq minutes, hausse de uncertain/failed/enqueue warnings ou retour doublons ⇒ stopper worker et investiguer. Prévoir une purge administrative documentée des événements terminaux >30 jours, jamais des claims actifs ; pas de purge automatique incluse.
@@ -76,7 +78,7 @@ Pour revenir au legacy, attendre les invocations actives, traiter accepted/uncer
 
 ## Risques et écarts explicites
 
-- NO-GO activation tant que QA Android/iOS et répétition sur Supabase isolé représentatif ne passent pas. PostgreSQL local différent de la version distante ; fixtures partielles, pas un test de migration de tout le projet. Scheduler pg_net/cron/Vault préparé mais non exécuté.
+- NO-GO activation tant que QA Android/iOS et répétition sur Supabase isolé représentatif ne passent pas. PostgreSQL local différent de la version distante ; fixtures partielles, pas un test de migration de tout le projet. Scheduler pg_net/cron/Vault exécuté depuis en local, voir rapport E2E.
 - Intégrité des conversations : réserve initiale corrigée localement par `20261023202544_conversation_identity_security.sql` (création validée et identités immuables). Tests avec rôles authentifiés et concurrence dans l’audit complémentaire ; production inchangée.
 - Une erreur d'enqueue est volontairement non bloquante : notification perdue possible ; alerte sur le warning générique nécessaire. Unicité SQL n'est pas une garantie de livraison ni d'exactly-once chez Expo/FCM/APNs.
 - Timeout = uncertain sans retry : choix anti-doublon, pertes possibles. 429/5xx retriés selon recommandations Expo, sans garantie absolue contre un fournisseur ayant accepté avant erreur.

@@ -1,5 +1,7 @@
 # YOUMBIA — sécurité conversations et push, 23 octobre 2026
 
+Validation suivante exécutée : [Supabase isolé E2E](supabase-isolated-e2e.md). Les limites ci-dessous décrivent la session corrective initiale ; le rapport suivant documente les contrôles natifs réellement exécutés.
+
 ## Périmètre, préflight et contrat
 
 Correction L3 sur `feat/ymb-transactional-push-p0-p1`, worktree `/private/tmp/youmbia-transactional-push`, référence `610da38b3b74192da051697013b3e47146938453`, base `250edc2`. Rapport temporaire initial et documentation disponibles, lus. Les 20 fichiers du commit initial ont été examinés, notamment l'outbox, les fonctions Edge, les permissions et les fixtures. Checkout release `codex/release-4.6.2` à `b5e2196` préservé avec ses trois dossiers Lifecycle non suivis ; checkout Web inspecté en lecture seule, aucune modification.

@@ -63,7 +63,7 @@ export async function sendMessage(
 
   await supabase
     .from('conversations')
-    .update({ updated_at: new Date().toISOString() } as never)
+    .update({ last_message_at: new Date().toISOString() } as never)
     .eq('id', conversationId);
 
   // Compatibility wake-up for the legacy path (OFF-by-default rollout).

@@ -1,0 +1,21 @@
+{
+  "webRef": "c0de541",
+  "files": [
+    "supabase/schema.sql",
+    "supabase/rls.sql",
+    "supabase/migrations/2026_03_01_listings_moderation_status.sql",
+    "supabase/migrations/2026_03_01_reports_harden.sql",
+    "supabase/migrations/2026_03_01_trust_reports.sql",
+    "supabase/migrations/2026_03_02_profiles_trust_system.sql",
+    "supabase/migrations/2026_03_02_profiles_owner_update_rls.sql",
+    "supabase/migrations/2026_03_02_rls_real_mode_ready.sql",
+    "supabase/migrations/2026_03_08_favorites.sql",
+    "supabase/migrations/2026_03_09_conversations_messages.sql",
+    "supabase/migrations/2026_03_10_profiles_is_banned.sql",
+    "supabase/migrations/2026_03_13_profiles_phone_verified.sql",
+    "supabase/migrations/2026_03_14_listings_brand_model_condition.sql",
+    "supabase/migrations/2026_03_17_listings_is_category_suspicious.sql",
+    "supabase/migrations/2026_taxonomy_mode_beaute_branch.sql"
+  ],
+  "excluded": "No admin-user grant/delete migration, user seed, backup, COPY data, .env or production secret. This sourced bootstrap is representative, not the complete production history."
+}

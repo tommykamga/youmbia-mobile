@@ -17,6 +17,7 @@ FILES = [
     'supabase/migrations/20261023200527_transactional_push_outbox.sql',
     'supabase/tests/conversation_security_repro.sql',
     'supabase/migrations/20261023202544_conversation_identity_security.sql',
+    'supabase/migrations/20261023205854_explicit_push_token_grants.sql',
     'supabase/tests/conversation_security.sql',
     'supabase/tests/transactional_push.sql',
 ]
