@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
-import { authorized, dispatch, payload, type Delivery, type Store } from '../../supabase/functions/dispatch-transactional-push/worker';
+import { dispatch, payload, type Delivery, type Store } from '../../supabase/functions/dispatch-transactional-push/worker';
+
+import { authorized } from '../../supabase/functions/dispatch-transactional-push/request';
 
 const row: Delivery = { delivery_id: 'delivery', claim: 'lease', attempt: 1, kind: 'message',
   target_id: 'conversation', source_id: 'message', first_contact: false, expo_push_token: 'ExpoPushToken[test]' };

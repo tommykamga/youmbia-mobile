@@ -26,13 +26,7 @@ export function payload(row: Delivery) {
     sound: 'default', channelId: 'default', priority: 'high',
   };
 }
-export function authorized(request: Request, secret: string | undefined): boolean {
-  const supplied = request.headers.get('x-transactional-push-secret') ?? '';
-  if (!secret || secret.length < 32 || supplied.length !== secret.length) return false;
-  let difference = 0;
-  for (let i = 0; i < secret.length; i++) difference |= supplied.charCodeAt(i) ^ secret.charCodeAt(i);
-  return difference === 0;
-}
+
 const later = (now: number, seconds: number) => new Date(now + seconds * 1000).toISOString();
 const knownErrors = new Set(['DeviceNotRegistered', 'MessageTooBig', 'MessageRateExceeded', 'MismatchSenderId', 'InvalidCredentials']);
 type Ticket = { status?: string; id?: string; details?: { error?: string } };

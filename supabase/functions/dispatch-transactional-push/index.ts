@@ -1,11 +1,10 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.98.0';
-import { authorized, dispatch, type Store } from './worker.ts';
+import { dispatch, type Store } from './worker.ts';
 
-Deno.serve(async (req) => {
-  if (req.method !== 'POST') return new Response(null, { status: 405 });
-  if (!authorized(req, Deno.env.get('TRANSACTIONAL_PUSH_DISPATCH_SECRET'))) return new Response(null, { status: 401 });
-  // Independent emergency stop. Must be explicitly enabled after deployment approval.
-  if (Deno.env.get('TRANSACTIONAL_PUSH_WORKER_ENABLED') !== 'true') return Response.json({ skipped: 'disabled' });
+import { handleDispatchRequest } from './request.ts';
+
+Deno.serve((req) => handleDispatchRequest(req, Deno.env.get('TRANSACTIONAL_PUSH_DISPATCH_SECRET'),
+  Deno.env.get('TRANSACTIONAL_PUSH_WORKER_ENABLED') === 'true', async () => {
   const url = Deno.env.get('SUPABASE_URL');
   const key = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
   if (!url || !key) return Response.json({ error: 'server_misconfigured' }, { status: 500 });
@@ -40,4 +39,4 @@ Deno.serve(async (req) => {
     console.error('transactional_push_worker_failed');
     return Response.json({ error: 'dispatch_failed' }, { status: 500 });
   }
-});
+}));

@@ -2,7 +2,9 @@
 begin;
 create function pg_temp.assert(ok boolean,label text) returns void language plpgsql as $$begin if ok is distinct from true then raise exception 'FAIL: %',label; end if; end$$;
 insert into auth.users values ('00000000-0000-0000-0000-000000000001'),('00000000-0000-0000-0000-000000000002'),('00000000-0000-0000-0000-000000000003');
-insert into conversations values('10000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-000000000002');
+insert into listings values('20000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-000000000002','active');
+set local request.jwt.claim.sub='00000000-0000-0000-0000-000000000001';
+insert into conversations(id,listing_id,buyer_id,seller_id) values('10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-000000000002');
 insert into messages(conversation_id,sender_id,body) values('10000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-000000000001','private');
 select pg_temp.assert((select count(*)=0 from transactional_push_events),'OFF by default');
 delete from messages;
@@ -26,7 +28,6 @@ select pg_temp.assert((select count(*)=0 from claim_transactional_push()),'claim
 update transactional_push_deliveries set claimed_at=now()-interval '6 minutes';
 select * from claim_transactional_push();
 select pg_temp.assert((select bool_and(state='uncertain') from transactional_push_deliveries),'expired lease never retried');
-insert into listings values('20000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-000000000002','active');
 insert into favorites(listing_id,user_id) values('20000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-000000000002');
 select pg_temp.assert((select count(*)=0 from transactional_push_events where kind='favorite'),'self favorite skipped');
 insert into favorites(listing_id,user_id) values('20000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-000000000001');

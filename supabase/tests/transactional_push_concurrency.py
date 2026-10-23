@@ -4,7 +4,7 @@ Usage: python3 supabase/tests/transactional_push_concurrency.py
 import subprocess
 import time
 
-BASE = ['psql', '-X', '-h', '/private/tmp', '-p', '55439', '-d', 'postgres', '-v', 'ON_ERROR_STOP=1', '-At']
+BASE = ['psql', '-X', '-h', '/private/tmp', '-p', '55439', '-d', 'ymb_conversation_security', '-v', 'ON_ERROR_STOP=1', '-At']
 def sql(statement):
     return subprocess.check_output(BASE + ['-c', statement], text=True).strip()
 
@@ -20,10 +20,12 @@ def concurrent(a, b):
 
 try:
     sql("""insert into auth.users values ('00000000-0000-0000-0000-000000000001'),('00000000-0000-0000-0000-000000000002');
-    insert into conversations values('10000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-000000000002');
+    insert into listings values('20000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-000000000002','active');
+    set request.jwt.claim.sub='00000000-0000-0000-0000-000000000001';
+    insert into conversations(id,listing_id,buyer_id,seller_id) values('10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-000000000002');
     update transactional_push_config set messages_enabled=true;
     insert into user_push_tokens(user_id,expo_push_token) values('00000000-0000-0000-0000-000000000002','ExpoPushToken[synthetic]');""")
-    insert = "insert into messages(conversation_id,sender_id) values('10000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-000000000001');"
+    insert = "insert into messages(conversation_id,sender_id,body) values('10000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-000000000001','synthetic');"
     concurrent('begin; ' + insert + ' select pg_sleep(1); commit;', insert)
     assert sql('select count(*) from transactional_push_events where first_contact') == '1'
     assert sql('select count(*) from transactional_push_events') == '2'
@@ -33,5 +35,5 @@ try:
     print('PASS concurrent first contact and SKIP LOCKED claims: one first contact, no duplicate delivery')
 finally:
     sql("""delete from transactional_push_deliveries; delete from transactional_push_events;
-    delete from messages; delete from conversations; delete from user_push_tokens; delete from auth.users;
+    delete from messages; delete from conversations; delete from user_push_tokens; delete from listings; delete from auth.users;
     update transactional_push_config set messages_enabled=false,favorites_enabled=false;""")

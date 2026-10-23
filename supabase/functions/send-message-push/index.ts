@@ -14,6 +14,8 @@
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.98.0';
 
+import { parseMessagePushRequest } from '../_shared/messagePushRequest.ts';
+
 const EXPO_PUSH_ENDPOINT = 'https://exp.host/--/api/v2/push/send';
 
 type ExpoPushMessage = {
@@ -46,12 +48,12 @@ Deno.serve(async (req) => {
   let messageId = '';
   try {
     const body = await req.json();
-    messageId = String(body?.message_id ?? '').trim();
+    messageId = parseMessagePushRequest(body) ?? '';
   } catch {
     return json(400, { error: 'invalid_body' });
   }
   if (!messageId) {
-    return json(400, { error: 'missing_message_id' });
+    return json(400, { error: 'invalid_message_request' });
   }
 
   // Client privilégié (service_role) pour les lectures/écritures serveur.
@@ -59,30 +61,20 @@ Deno.serve(async (req) => {
     auth: { autoRefreshToken: false, persistSession: false },
   });
 
-  // 1. Charger le message.
-  const { data: message, error: messageError } = await admin
-    .from('messages')
-    .select('id, conversation_id, sender_id')
-    .eq('id', messageId)
-    .maybeSingle();
-
-  if (messageError) return json(500, { error: 'message_lookup_failed' });
-  if (!message) return json(404, { error: 'message_not_found' });
-
-  // 2. Vérifier que l'appelant (JWT) est bien l'expéditeur du message.
+  // Authenticate before privileged lookups: no message-existence oracle for anonymous callers.
   const authHeader = req.headers.get('Authorization') ?? '';
-  if (ANON_KEY && authHeader.startsWith('Bearer ')) {
-    const authed = createClient(SUPABASE_URL, ANON_KEY, {
-      global: { headers: { Authorization: authHeader } },
-      auth: { autoRefreshToken: false, persistSession: false },
-    });
-    const { data: caller } = await authed.auth.getUser();
-    if (!caller?.user || caller.user.id !== message.sender_id) {
-      return json(403, { error: 'forbidden' });
-    }
-  } else {
-    return json(401, { error: 'unauthorized' });
-  }
+  if (!ANON_KEY || !authHeader.startsWith('Bearer ')) return json(401, { error: 'unauthorized' });
+  const authed = createClient(SUPABASE_URL, ANON_KEY, {
+    global: { headers: { Authorization: authHeader } },
+    auth: { autoRefreshToken: false, persistSession: false },
+  });
+  const { data: caller, error: callerError } = await authed.auth.getUser();
+  if (callerError || !caller?.user) return json(401, { error: 'unauthorized' });
+  const { data: message, error: messageError } = await admin
+    .from('messages').select('id, conversation_id, sender_id')
+    .eq('id', messageId).eq('sender_id', caller.user.id).maybeSingle();
+  if (messageError) return json(500, { error: 'message_lookup_failed' });
+  if (!message) return json(403, { error: 'forbidden' });
 
   // 3. Charger la conversation et déterminer le destinataire.
   const { data: conversation, error: convError } = await admin
@@ -114,14 +106,15 @@ Deno.serve(async (req) => {
   // 4. Récupérer les tokens actifs du destinataire.
   const { data: tokenRows, error: tokensError } = await admin
     .from('user_push_tokens')
-    .select('expo_push_token')
+    .select('id, expo_push_token, updated_at')
     .eq('user_id', receiverId);
 
   if (tokensError) return json(500, { error: 'tokens_lookup_failed' });
 
-  const tokens: string[] = (tokenRows ?? [])
-    .map((r: { expo_push_token: string }) => r.expo_push_token)
-    .filter((t): t is string => typeof t === 'string' && t.length > 0);
+  const activeTokenRows = (tokenRows ?? []).filter(
+    (row: { expo_push_token: string }) => typeof row.expo_push_token === 'string' && row.expo_push_token.length > 0
+  );
+  const tokens: string[] = activeTokenRows.map((row: { expo_push_token: string }) => row.expo_push_token);
 
   if (tokens.length === 0) {
     return json(200, { ok: true, skipped: 'no_tokens' });
@@ -152,8 +145,8 @@ Deno.serve(async (req) => {
       body: JSON.stringify(messages),
     });
     expoResult = await resp.json();
-  } catch (err) {
-    return json(502, { error: 'expo_request_failed', detail: String(err) });
+  } catch {
+    return json(502, { error: 'expo_request_failed' });
   }
 
   // 6. Nettoyage des tokens invalides (DeviceNotRegistered).
@@ -169,13 +162,20 @@ Deno.serve(async (req) => {
     }
   });
 
+  let cleaned = 0;
   if (invalidTokens.length > 0) {
-    await admin.from('user_push_tokens').delete().in('expo_push_token', invalidTokens);
+    // Do not revoke a device that was transferred/re-registered while Expo responded.
+    for (const row of activeTokenRows) {
+      if (!invalidTokens.includes(row.expo_push_token)) continue;
+      const { data: removed, error: removeError } = await admin.from('user_push_tokens').delete().eq('id', row.id)
+        .eq('user_id', receiverId).eq('updated_at', row.updated_at).select('id');
+      if (!removeError) cleaned += removed?.length ?? 0;
+    }
   }
 
   return json(200, {
     ok: true,
     sent: tokens.length,
-    cleaned: invalidTokens.length,
+    cleaned,
   });
 });

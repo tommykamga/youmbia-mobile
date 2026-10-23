@@ -349,6 +349,17 @@ describe('push token registration', () => {
     consoleError.mockRestore();
   });
 
+  it('offline cleanup: retains the token for an authenticated retry, without claiming server revocation', async () => {
+    const finalEq = vi.fn().mockResolvedValueOnce({ error: { message: 'network unavailable' } })
+      .mockResolvedValueOnce({ error: null });
+    mocks.from.mockReturnValue({ delete: () => ({ eq: () => ({ eq: finalEq }) }) });
+    await registerForPushNotifications();
+    expect(await unregisterCurrentPushToken()).toMatchObject({ ok: false, errorCode: 'token_unregister_failed' });
+    expect(getStoredPushToken()).toBe(TOKEN_A);
+    expect(await unregisterCurrentPushToken()).toEqual({ ok: true });
+    expect(getStoredPushToken()).toBeNull();
+  });
+
   it('logout: supprime uniquement le token courant du compte avant de vider le stockage', async () => {
     const finalEq = vi.fn().mockResolvedValue({ error: null });
     const firstEq = vi.fn(() => ({ eq: finalEq }));

@@ -1,12 +1,14 @@
 # Notifications transactionnelles P0/P1 — préparation locale, 23 octobre 2026
 
+Mise à jour corrective : [audit sécurité des conversations](conversation-security-audit.md). Le correctif local d’identité et les tests associés remplacent la réserve initiale sur les participants ; les validations Supabase isolé et physiques restent à faire.
+
 ## Périmètre et préflight
 
 Niveau L3 : événement PostgreSQL, privilèges serveur, livraison asynchrone et compatibilité mobile. Spec : demande utilisateur jointe « Notifications Push Transactionnelles P0/P1 ». Aucun déploiement, push Git, PR, build, envoi réel, migration distante ou changement Auth/Lifecycle autorisé/exécuté.
 
 Départ observé : `codex/release-4.6.2`, HEAD `b5e2196`, index vide, trois dossiers Lifecycle non suivis. Préservés dans le checkout initial. `main` local `61e3565` est en retard sur `origin/main` `250edc2`. La release contient 40 fichiers de changements TOM-104/auth/marketing en dehors de main ; ils ne sont pas embarqués. Branche dédiée `feat/ymb-transactional-push-p0-p1`, worktree `/private/tmp/youmbia-transactional-push`, base `250edc2`. Aucun fetch ni push effectué : fraîcheur du remote à revérifier avant intégration. Aucun AGENTS.md ni `.tsk/policies/QA_POLICY.md` trouvé aux emplacements inspectés ; contrat de contrôle défini ci-dessous, sans prétendre appliquer une politique absente.
 
-## Audit de l'existant
+## Audit initial de l'existant (avant correctif de sécurité)
 
 Audit distant en lecture seule sur `ainzxommczlyjhymuwgu`, métadonnées uniquement :
 
@@ -40,7 +42,7 @@ Receipts interrogés après 15 minutes, puis toutes les heures, 24 consultations
 
 Requis avant commit : npm run lint, npm run typecheck, npm test, deno check des fonctions modifiées, git diff --check, migration et tests SQL/RLS sur PostgreSQL éphémère, concurrence deux connexions. Tests Expo uniquement simulés ; aucun accès réseau Expo pendant les tests. Tests matériels et validation complète de migration sur une copie représentative de Supabase restent requis avant activation.
 
-Tests SQL : `supabase/tests/transactional_push_fixture.sql` est un **contrat minimal observé**, pas l'historique complet de production. Sur une base jetable avec rôles Supabase absents, appliquer ce fixture, la nouvelle migration, puis `supabase/tests/transactional_push.sql` avec psql ON_ERROR_STOP. Ne jamais utiliser le fixture sur une vraie base. `transactional_push_concurrency.py` cible exclusivement `/private/tmp`, port 55439, base postgres : premier message simultané et deux claims concurrents. Le script nettoie ses seules données synthétiques, réservé à cette instance jetable.
+Tests SQL : `supabase/tests/transactional_push_fixture.sql` est un **contrat minimal observé**, pas l'historique complet de production. Sur une base jetable avec rôles Supabase absents, appliquer ce fixture, la nouvelle migration, puis `supabase/tests/transactional_push.sql` avec psql ON_ERROR_STOP. Ne jamais utiliser le fixture sur une vraie base. `transactional_push_concurrency.py` cible exclusivement `/private/tmp`, port 55439, base synthétique ymb_conversation_security : premier message simultané et deux claims concurrents. Le script nettoie ses seules données synthétiques, réservé à cette instance jetable.
 
 Couverture : premier message acheteur, deuxième message, réponse vendeur, insertion directe SQL représentant le Web, exclusion tiers, multi-appareil, auto-favori, retrait/réajout, opt-out au trigger et avant distribution, annonce inactive, idempotence, leases incertaines, RLS lecture/écriture inter-utilisateur, suppression token/version, auth dispatcher, tickets/receipts, backoff borné, erreurs ambiguës, routes mobile, permissions révoquées, fallback local.
 
@@ -75,7 +77,7 @@ Pour revenir au legacy, attendre les invocations actives, traiter accepted/uncer
 ## Risques et écarts explicites
 
 - NO-GO activation tant que QA Android/iOS et répétition sur Supabase isolé représentatif ne passent pas. PostgreSQL local différent de la version distante ; fixtures partielles, pas un test de migration de tout le projet. Scheduler pg_net/cron/Vault préparé mais non exécuté.
-- Intégrité des conversations : RLS UPDATE actuelle trop large pour garantir l'immuabilité buyer/seller/listing. L'expéditeur doit être participant au moment de l'INSERT, mais un participant peut aujourd'hui modifier des champs de la conversation. Risque existant découvert, non corrigé par une modification Auth hors périmètre. À corriger/revoir avant activation.
+- Intégrité des conversations : réserve initiale corrigée localement par `20261023202544_conversation_identity_security.sql` (création validée et identités immuables). Tests avec rôles authentifiés et concurrence dans l’audit complémentaire ; production inchangée.
 - Une erreur d'enqueue est volontairement non bloquante : notification perdue possible ; alerte sur le warning générique nécessaire. Unicité SQL n'est pas une garantie de livraison ni d'exactly-once chez Expo/FCM/APNs.
 - Timeout = uncertain sans retry : choix anti-doublon, pertes possibles. 429/5xx retriés selon recommandations Expo, sans garantie absolue contre un fournisseur ayant accepté avant erreur.
 - Logout hors ligne : le parcours existant continue malgré l'échec de désinscription ; token peut rester associé jusqu'à la prochaine synchronisation/réclamation. Révocation OS inconnue du serveur avant retour foreground ou receipt fournisseur. Fenêtre entre claim et requête réseau pour logout/opt-out inévitable, payloads génériques uniquement.
