@@ -1,4 +1,5 @@
 import { setListingViewSource } from '@/lib/analytics';
+import { YOUMBIA_MOBILE_SCHEME } from '@/lib/appScheme';
 
 const WEB_HOSTS = new Set(['www.youmbia.com', 'youmbia.com']);
 const LISTING_ID_PATTERN = /^[A-Za-z0-9-]+$/;
@@ -15,7 +16,10 @@ function getListingIdFromPath(pathname: string): string | null {
   return normalizeListingId(match?.[1] ?? null);
 }
 
-export function getListingHrefFromUrl(url: string | null | undefined): string | null {
+export function getListingHrefFromUrl(
+  url: string | null | undefined,
+  appScheme = YOUMBIA_MOBILE_SCHEME,
+): string | null {
   const raw = String(url ?? '').trim();
   if (!raw) return null;
 
@@ -32,7 +36,7 @@ export function getListingHrefFromUrl(url: string | null | undefined): string | 
       return '/(tabs)/home';
     }
 
-    if (parsed.protocol === 'youmbiamobile:') {
+    if (parsed.protocol === `${appScheme}:`) {
       const isHostFormat = parsed.hostname.toLowerCase() === 'annonce';
       const isPathFormat = parsed.pathname.toLowerCase().startsWith('/annonce/');
       if (!isHostFormat && !isPathFormat) return null;

@@ -2,6 +2,8 @@
 
 Validation Supabase locale exécutée : [rapport E2E](supabase-isolated-e2e.md). Backend/Edge/PostgREST, upgrade et cron testés avec Expo simulé ; appareils physiques non testés.
 
+Préparation du déblocage physique et garde-fous de build : [qa-infrastructure.md](qa-infrastructure.md). Environnements QA EAS/Supabase et credentials dédiés à provisionner manuellement avant tout build.
+
 Mise à jour corrective : [audit sécurité des conversations](conversation-security-audit.md). Le correctif local d’identité et les tests associés remplacent la réserve initiale sur les participants ; les validations Supabase isolé et physiques restent à faire.
 
 ## Périmètre et préflight

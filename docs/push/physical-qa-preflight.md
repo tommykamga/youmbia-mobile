@@ -41,6 +41,8 @@ Référence contrôlée : `76f0f70b663a9453c095ea7a1c982e5246ce4f5c`
 
 ## Conditions de reprise
 
+Le garde-fou et la proposition d'infrastructure préparés après ce préflight sont décrits dans [qa-infrastructure.md](./qa-infrastructure.md). Ils restent locaux : la configuration EAS distante n'a pas été modifiée.
+
 1. Fournir un projet Supabase de recette distinct, accessible depuis les téléphones, avec fonctions et migrations vérifiées. Ne pas ouvrir publiquement l'instance locale existante.
 2. Configurer les environnements EAS `development` avec l'URL et la clé anon de ce projet seulement. Vérifier par identifiant de projet que l'URL ne vise pas la production avant toute construction.
 3. Configurer un projet Firebase de test et son fichier Google Services pour Android Development. Vérifier les credentials APNs et le provisioning pour le bundle `.dev` iOS sans imprimer ni exporter les secrets.
