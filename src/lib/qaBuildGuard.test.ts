@@ -23,7 +23,7 @@ function qaEnvironment(appEnvironment: 'development' | 'preview' = 'development'
 }
 
 describe('EAS QA build guard', () => {
-  it('uses distinct native identifiers and URL schemes for development and preview', () => {
+  it('uses non-production identifiers and separate URL schemes for development and preview', () => {
     expect(resolveBuildEnvironment(qaEnvironment('development'))).toMatchObject({
       androidPackage: 'com.youmbia.mobile.dev',
       iosBundleIdentifier: 'com.youmbia.mobile.dev',
@@ -32,8 +32,8 @@ describe('EAS QA build guard', () => {
       isQa: true,
     });
     expect(resolveBuildEnvironment(qaEnvironment('preview'))).toMatchObject({
-      androidPackage: 'com.youmbia.mobile.qa',
-      iosBundleIdentifier: 'com.youmbia.mobile.qa',
+      androidPackage: 'com.youmbia.mobile.dev',
+      iosBundleIdentifier: 'com.youmbia.mobile.dev',
       slug: 'youmbia-mobile-qa',
       scheme: 'youmbiamobile-qa',
       isQa: true,

@@ -14,8 +14,8 @@ const APP_IDENTITIES = {
   preview: {
     appName: "YOUMBIA QA",
     slug: "youmbia-mobile-qa",
-    androidPackage: "com.youmbia.mobile.qa",
-    iosBundleIdentifier: "com.youmbia.mobile.qa",
+    androidPackage: "com.youmbia.mobile.dev",
+    iosBundleIdentifier: "com.youmbia.mobile.dev",
     scheme: "youmbiamobile-qa",
   },
   production: {
