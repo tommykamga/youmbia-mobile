@@ -1,0 +1,680 @@
+{
+  "manifestVersion": 1,
+  "purpose": "YOUMBIA dedicated QA baseline and transactional push preparation; manifest only, not an instruction to apply remotely",
+  "target": {
+    "organization": "youmbia-push-qa",
+    "project": "YOUMBIA-PUSH-QA",
+    "projectRef": "wagvrytcguutgbjzhvak",
+    "url": "https://wagvrytcguutgbjzhvak.supabase.co",
+    "region": "eu-west-1",
+    "plan": "Free"
+  },
+  "productionGuard": {
+    "projectRef": "ainzxommczlyjhymuwgu",
+    "writable": false,
+    "includedAsSource": false
+  },
+  "qualification": {
+    "mobileRepo": "tommykamga/youmbia-mobile",
+    "branch": "feat/ymb-transactional-push-p0-p1",
+    "requestedHead": "925eb312ad46b40e6ee541bdabb03f92052087cd",
+    "baselineQualificationCommit": "24bd50dc251c0ad56943c10d4b6a22d578b96ed",
+    "webRepo": "tommykamga/youmbia",
+    "webCommit": "c0de54189ad9cb6a6968e186e387731a4a759f7d",
+    "qualifiedHashManifest": "/private/tmp/ymb-final-baseline-hashes-77.json",
+    "recordCount": 77,
+    "headDelta": "HEAD adds only SQL/RLS shop visibility test assertions; migrations, Edge Functions and Supabase config are unchanged from the baseline qualification commit."
+  },
+  "applicationGroups": [
+    {
+      "order": [
+        1,
+        2
+      ],
+      "group": "Web schema and RLS foundation",
+      "count": 2
+    },
+    {
+      "order": [
+        3,
+        39
+      ],
+      "group": "Web migrations, excluding the two personal/admin-user migrations",
+      "count": 37
+    },
+    {
+      "order": [
+        40,
+        41
+      ],
+      "group": "Observed metadata-only grant and column complements",
+      "count": 2
+    },
+    {
+      "order": [
+        42,
+        70
+      ],
+      "group": "First 29 mobile migrations in timestamp order",
+      "count": 29
+    },
+    {
+      "order": [
+        71,
+        71
+      ],
+      "group": "Recovered Web marketing-consent migration with pinned provenance",
+      "count": 1
+    },
+    {
+      "order": [
+        72,
+        75
+      ],
+      "group": "Final four mobile migrations, including shops active-only and the three Push P0/P1 migrations",
+      "count": 4
+    },
+    {
+      "order": [
+        76,
+        76
+      ],
+      "group": "QA network-safety guard: disable every cron job; require empty Vault and pg_net queues/responses",
+      "count": 1
+    },
+    {
+      "order": [
+        77,
+        77
+      ],
+      "group": "QA least-privilege shops ACL complement",
+      "count": 1
+    }
+  ],
+  "pushMigrations": [
+    "20261023200527_transactional_push_outbox.sql",
+    "20261023202544_conversation_identity_security.sql",
+    "20261023205854_explicit_push_token_grants.sql"
+  ],
+  "edgeFunctionPlan": [
+    {
+      "slug": "dispatch-transactional-push",
+      "status": "required for transactional dispatcher; deploy only after QA identity preflight",
+      "verifyJwt": false,
+      "auth": "X-Transactional-Push-Secret, minimum 32 chars; POST with empty JSON object",
+      "safeInitialSettings": {
+        "TRANSACTIONAL_PUSH_WORKER_ENABLED": "false",
+        "EXPO_ACCESS_TOKEN": "absent"
+      },
+      "outbound": "When worker is enabled, code can call Expo; do not enable or invoke for real delivery in this scope."
+    },
+    {
+      "slug": "send-message-push",
+      "status": "hold from initial QA deployment unless independently fail-closed",
+      "verifyJwt": true,
+      "outbound": "Legacy code calls Expo when the transactional outbox flag is false. With global message push default OFF, a request could reach Expo; do not deploy/call with that combination."
+    },
+    {
+      "slug": "dispatch-saved-search-alerts",
+      "status": "exclude from this transactional P0/P1 deployment",
+      "outbound": "Separate saved-search alert pathway; baseline cron jobs remain disabled and its Vault config must remain absent."
+    }
+  ],
+  "initialFlags": {
+    "transactional_push_config.messages_enabled": false,
+    "transactional_push_config.favorites_enabled": false,
+    "TRANSACTIONAL_PUSH_WORKER_ENABLED": false
+  },
+  "entrySequence": [
+    {
+      "order": 1,
+      "phase": "web-foundation-schema",
+      "source": "youmbia@c0de54189ad9cb6a6968e186e387731a4a759f7d",
+      "path": "supabase/schema.sql",
+      "sha256": "e9b53971666762591055af96fa373a508d04d4a3b5c3263095d3548eedfaabaf"
+    },
+    {
+      "order": 2,
+      "phase": "web-foundation-rls",
+      "source": "youmbia@c0de54189ad9cb6a6968e186e387731a4a759f7d",
+      "path": "supabase/rls.sql",
+      "sha256": "97cc65288e49f778f5c804146b1448bfa6fadf4f36031ac7d48d082b3f3d1456"
+    },
+    {
+      "order": 3,
+      "phase": "web-migrations",
+      "source": "youmbia@c0de54189ad9cb6a6968e186e387731a4a759f7d",
+      "path": "supabase/migrations/2026_03_01_admin_reports.sql",
+      "sha256": "ac465cbd4fff6f6b762ebd2b041cf5ac0aff8d4727a68b4ff900853537729471"
+    },
+    {
+      "order": 4,
+      "phase": "web-migrations",
+      "source": "youmbia@c0de54189ad9cb6a6968e186e387731a4a759f7d",
+      "path": "supabase/migrations/2026_03_01_listings_moderation_status.sql",
+      "sha256": "4f10961ea02b93a242b28893aa0ec952065ec7a23c524f841707b80c17d1a687"
+    },
+    {
+      "order": 5,
+      "phase": "web-migrations",
+      "source": "youmbia@c0de54189ad9cb6a6968e186e387731a4a759f7d",
+      "path": "supabase/migrations/2026_03_01_reports_harden.sql",
+      "sha256": "602ea458365dce53b7bbb52b72450d5b9d1f2d3f98bc2f5e8c44dc1f3b2ceafc"
+    },
+    {
+      "order": 6,
+      "phase": "web-migrations",
+      "source": "youmbia@c0de54189ad9cb6a6968e186e387731a4a759f7d",
+      "path": "supabase/migrations/2026_03_01_trust_reports.sql",
+      "sha256": "31c00c633976b32c308995ec17ef04f3e1d8e252713c3dc28edd68d1602fc3e8"
+    },
+    {
+      "order": 7,
+      "phase": "web-migrations",
+      "source": "youmbia@c0de54189ad9cb6a6968e186e387731a4a759f7d",
+      "path": "supabase/migrations/2026_03_02_listing_promotions.sql",
+      "sha256": "6483c2f2423e9789a4151e6857d169e7bbd984eab30b43ea5da2079f16085ce1"
+    },
+    {
+      "order": 8,
+      "phase": "web-migrations",
+      "source": "youmbia@c0de54189ad9cb6a6968e186e387731a4a759f7d",
+      "path": "supabase/migrations/2026_03_02_profiles_owner_update_rls.sql",
+      "sha256": "deee62d961fd89e5aaba70e2e36d98509535546025c9cc8e624a406ca042cde8"
+    },
+    {
+      "order": 9,
+      "phase": "web-migrations",
+      "source": "youmbia@c0de54189ad9cb6a6968e186e387731a4a759f7d",
+      "path": "supabase/migrations/2026_03_02_profiles_trust_system.sql",
+      "sha256": "ad088785afe517587e726641d5ce56f0be8a23c9c66abce5e237e611800b7d89"
+    },
+    {
+      "order": 10,
+      "phase": "web-migrations",
+      "source": "youmbia@c0de54189ad9cb6a6968e186e387731a4a759f7d",
+      "path": "supabase/migrations/2026_03_02_rls_real_mode_ready.sql",
+      "sha256": "4d381e6df0f0c31cdffeca524fb70cef9946dfdd5cf15250ca9b5e26e53e6eff"
+    },
+    {
+      "order": 11,
+      "phase": "web-migrations",
+      "source": "youmbia@c0de54189ad9cb6a6968e186e387731a4a759f7d",
+      "path": "supabase/migrations/2026_03_03_listing_promotions_rls.sql",
+      "sha256": "0c9df6cedee46e0cd93f0c413ec10eef69e6f4921325ddca137bdda89e295dd5"
+    },
+    {
+      "order": 12,
+      "phase": "web-migrations",
+      "source": "youmbia@c0de54189ad9cb6a6968e186e387731a4a759f7d",
+      "path": "supabase/migrations/2026_03_04_listing_promotions_public_read_active.sql",
+      "sha256": "bbd5d5924568a895c079678003f49d1f139f364ac4adc952fb6aa5a7108f045f"
+    },
+    {
+      "order": 13,
+      "phase": "web-migrations",
+      "source": "youmbia@c0de54189ad9cb6a6968e186e387731a4a759f7d",
+      "path": "supabase/migrations/2026_03_05_trust_reports_rpc_active_status.sql",
+      "sha256": "070e2188aadf4a3be29ccb54b0b699a38207682c3296111603208a65f2eac215"
+    },
+    {
+      "order": 14,
+      "phase": "web-migrations",
+      "source": "youmbia@c0de54189ad9cb6a6968e186e387731a4a759f7d",
+      "path": "supabase/migrations/2026_03_06_listing_images_multi_photos.sql",
+      "sha256": "339af567100559d8b5a7e74bf70f983cadc7beddc75043f2ee2b08a3a1e420cd"
+    },
+    {
+      "order": 15,
+      "phase": "web-migrations",
+      "source": "youmbia@c0de54189ad9cb6a6968e186e387731a4a759f7d",
+      "path": "supabase/migrations/2026_03_07_listing_views_skip_owner.sql",
+      "sha256": "77d20d8a8ab3cce3afb0a397697d79a867be3f0a9d06b3ee0ee08e4a832b4cda"
+    },
+    {
+      "order": 16,
+      "phase": "web-migrations",
+      "source": "youmbia@c0de54189ad9cb6a6968e186e387731a4a759f7d",
+      "path": "supabase/migrations/2026_03_08_favorites.sql",
+      "sha256": "b3175b8ff8279f4066331545ed4ee72f9bb10a9225fc283889d4aeaf059cf286"
+    },
+    {
+      "order": 17,
+      "phase": "web-migrations",
+      "source": "youmbia@c0de54189ad9cb6a6968e186e387731a4a759f7d",
+      "path": "supabase/migrations/2026_03_09_conversations_messages.sql",
+      "sha256": "6dfbcaa0c22a8a1e74ac686c41345f2ded3bc4d432666a189263b1cbab4d4bb4"
+    },
+    {
+      "order": 18,
+      "phase": "web-migrations",
+      "source": "youmbia@c0de54189ad9cb6a6968e186e387731a4a759f7d",
+      "path": "supabase/migrations/2026_03_10_profiles_is_banned.sql",
+      "sha256": "d81f3107d4eab11942ed1e4d5e7c344122ec5f00cc0c6527e1affc901af3074e"
+    },
+    {
+      "order": 19,
+      "phase": "web-migrations",
+      "source": "youmbia@c0de54189ad9cb6a6968e186e387731a4a759f7d",
+      "path": "supabase/migrations/2026_03_11_listing_drafts.sql",
+      "sha256": "bda28c2446e3462e087a1281d296b7d0f93042e8c889e860c88643835fb83ea3"
+    },
+    {
+      "order": 20,
+      "phase": "web-migrations",
+      "source": "youmbia@c0de54189ad9cb6a6968e186e387731a4a759f7d",
+      "path": "supabase/migrations/2026_03_11_seller_response_indicator_rpc.sql",
+      "sha256": "580436ab42786af43d01d63f0e2f27a0d401a4284acf8a7b17c96a0648d468dd"
+    },
+    {
+      "order": 21,
+      "phase": "web-migrations",
+      "source": "youmbia@c0de54189ad9cb6a6968e186e387731a4a759f7d",
+      "path": "supabase/migrations/2026_03_12_system_report_for_suspicious_listing.sql",
+      "sha256": "738ca730b2e6fbc474f45353ef0fb4bccc17a6d5ef8531b7b5f8b594093831e9"
+    },
+    {
+      "order": 22,
+      "phase": "web-migrations",
+      "source": "youmbia@c0de54189ad9cb6a6968e186e387731a4a759f7d",
+      "path": "supabase/migrations/2026_03_13_profiles_phone_verified.sql",
+      "sha256": "3537b5e70c8dafaeca949c55ee5df335c60d4f82276c9d0e9d32abe333f6b035"
+    },
+    {
+      "order": 23,
+      "phase": "web-migrations",
+      "source": "youmbia@c0de54189ad9cb6a6968e186e387731a4a759f7d",
+      "path": "supabase/migrations/2026_03_14_listings_brand_model_condition.sql",
+      "sha256": "b0af888099fe77769b30c9cde1cd0034bbe2b9057fce93d4e943285edc8e0bbc"
+    },
+    {
+      "order": 24,
+      "phase": "web-migrations",
+      "source": "youmbia@c0de54189ad9cb6a6968e186e387731a4a759f7d",
+      "path": "supabase/migrations/2026_03_15_storage_authenticated_listing_images.sql",
+      "sha256": "ce9899852fccabbf08bbc88b795fb1a1fd63a22947d501f58128369e65c9b361"
+    },
+    {
+      "order": 25,
+      "phase": "web-migrations",
+      "source": "youmbia@c0de54189ad9cb6a6968e186e387731a4a759f7d",
+      "path": "supabase/migrations/2026_03_16_listing_views_accept_published.sql",
+      "sha256": "f698da6467e01d4482521eca9b7f493e232151538af8d4e967b02e1d32b625ad"
+    },
+    {
+      "order": 26,
+      "phase": "web-migrations",
+      "source": "youmbia@c0de54189ad9cb6a6968e186e387731a4a759f7d",
+      "path": "supabase/migrations/2026_03_17_listing_images_variants.sql",
+      "sha256": "745db431ee1a23e3caffca3bf7b2aa40fb9757659a1336e5ef6079686fd1145a"
+    },
+    {
+      "order": 27,
+      "phase": "web-migrations",
+      "source": "youmbia@c0de54189ad9cb6a6968e186e387731a4a759f7d",
+      "path": "supabase/migrations/2026_03_17_listings_is_category_suspicious.sql",
+      "sha256": "c12c53f3f9ae92372d7bb575f3d1947249646f4182c620bccfd696288c8ba4fc"
+    },
+    {
+      "order": 28,
+      "phase": "web-migrations",
+      "source": "youmbia@c0de54189ad9cb6a6968e186e387731a4a759f7d",
+      "path": "supabase/migrations/2026_03_18_listings_indexes_scale.sql",
+      "sha256": "d76f5f5c4e271b1128a37b51f5abba220a0d804517c112bbf5f39aebeeb09c02"
+    },
+    {
+      "order": 29,
+      "phase": "web-migrations",
+      "source": "youmbia@c0de54189ad9cb6a6968e186e387731a4a759f7d",
+      "path": "supabase/migrations/2026_03_19_category_maison_to_immobilier.sql",
+      "sha256": "5ceb1a1f8287388471dc1d0906dcb037342356494292b98b7d3f813e639cfc3a"
+    },
+    {
+      "order": 30,
+      "phase": "web-migrations",
+      "source": "youmbia@c0de54189ad9cb6a6968e186e387731a4a759f7d",
+      "path": "supabase/migrations/2026_03_25_category_attributes_v1.sql",
+      "sha256": "9864bf0c5a6f411019874b36fe86befca2407abfe72164f63f2ac7f925e1da90"
+    },
+    {
+      "order": 31,
+      "phase": "web-migrations",
+      "source": "youmbia@c0de54189ad9cb6a6968e186e387731a4a759f7d",
+      "path": "supabase/migrations/2026_03_26_listing_attribute_values_public_read.sql",
+      "sha256": "deac5ba92ba62f547ec3725a623ebdd55b15b60a95a3065e9da1578ef7f36164"
+    },
+    {
+      "order": 32,
+      "phase": "web-migrations",
+      "source": "youmbia@c0de54189ad9cb6a6968e186e387731a4a759f7d",
+      "path": "supabase/migrations/2026_03_27_categories_form_profile_vehicle_electronics_backfill.sql",
+      "sha256": "cb33aeb3771825b3aa0edbc37041493fca095773be778e51a01db227e32b319d"
+    },
+    {
+      "order": 33,
+      "phase": "web-migrations",
+      "source": "youmbia@c0de54189ad9cb6a6968e186e387731a4a759f7d",
+      "path": "supabase/migrations/2026_03_31_perf_top3_indexes.sql",
+      "sha256": "82eaf8c2778d79b7200395e03050d73f84eddc91ff83c3c72419ad1cebc14f4d"
+    },
+    {
+      "order": 34,
+      "phase": "web-migrations",
+      "source": "youmbia@c0de54189ad9cb6a6968e186e387731a4a759f7d",
+      "path": "supabase/migrations/2026_04_03_user_credentials_and_auth_flow_tokens.sql",
+      "sha256": "5331d8f882e8c0cae732707841f8eb0c8a3eabc93dcd46828afc11d512b4fa62"
+    },
+    {
+      "order": 35,
+      "phase": "web-migrations",
+      "source": "youmbia@c0de54189ad9cb6a6968e186e387731a4a759f7d",
+      "path": "supabase/migrations/2026_04_28_reports_status_align_open_reviewed_action_taken_dismissed.sql",
+      "sha256": "f65985464a6a6d26400c34820090e7a12fd92bbcae554b5082b18b2fd074c759",
+      "replayCorrection": "cast CASE results to public.report_status; source hash preserved above"
+    },
+    {
+      "order": 36,
+      "phase": "web-migrations",
+      "source": "youmbia@c0de54189ad9cb6a6968e186e387731a4a759f7d",
+      "path": "supabase/migrations/2026_taxonomy_alignment.sql",
+      "sha256": "1b147c0fd1cdbfe8dc4bd4c135f17bf85c23476060a556eaf3f32d1d4ad519b7"
+    },
+    {
+      "order": 37,
+      "phase": "web-migrations",
+      "source": "youmbia@c0de54189ad9cb6a6968e186e387731a4a759f7d",
+      "path": "supabase/migrations/2026_taxonomy_alimentation_branch.sql",
+      "sha256": "eecb9d17642e2c5c2ef78f246fdaf15ac811bbb977df42a45cd71dc0e628901d"
+    },
+    {
+      "order": 38,
+      "phase": "web-migrations",
+      "source": "youmbia@c0de54189ad9cb6a6968e186e387731a4a759f7d",
+      "path": "supabase/migrations/2026_taxonomy_maison_decoration_branch.sql",
+      "sha256": "bb725f346ae868076d462655d721f754e2f600a264c0aa9dbd5c0474a6cdcfa3"
+    },
+    {
+      "order": 39,
+      "phase": "web-migrations",
+      "source": "youmbia@c0de54189ad9cb6a6968e186e387731a4a759f7d",
+      "path": "supabase/migrations/2026_taxonomy_mode_beaute_branch.sql",
+      "sha256": "76bc5a438ec95ba9a8e3523de3fc190a0a1da6f59f0a59cd560325de8ec964f0"
+    },
+    {
+      "order": 40,
+      "phase": "catalog-complements",
+      "source": "qa-local-artifact",
+      "path": "observed-grants.sql",
+      "sha256": "5d06e13cc8a98b7f0527cff7b4187e4b370203963180f644061c36569de7ecbe"
+    },
+    {
+      "order": 41,
+      "phase": "catalog-complements",
+      "source": "qa-local-artifact",
+      "path": "observed-columns.sql",
+      "sha256": "96822e9c92d6de30e00e7e6e4be1fb41501bdfd32247007661347fef96279861"
+    },
+    {
+      "order": 42,
+      "phase": "mobile-migrations",
+      "source": "qa-local-artifact",
+      "path": "20260514100000_require_marketplace_baseline.sql",
+      "sha256": "c7d3e30a05b86a30728586741a2423df883ad2d67365df712e7b883d4a03e1e0"
+    },
+    {
+      "order": 43,
+      "phase": "mobile-migrations",
+      "source": "qa-local-artifact",
+      "path": "20260514220000_activate_loisirs_autres_root_categories.sql",
+      "sha256": "0d0aa3865f28083efa633fb7d0fba9485fb3809fd4e222a30c9df2d19d20e9f9"
+    },
+    {
+      "order": 44,
+      "phase": "mobile-migrations",
+      "source": "qa-local-artifact",
+      "path": "20260515000000_shops_seller_pro_v1.sql",
+      "sha256": "1ff842ef0cd697ff97974774391136b8543d4c9e005a22cfa138e1b9c527cf71"
+    },
+    {
+      "order": 45,
+      "phase": "mobile-migrations",
+      "source": "qa-local-artifact",
+      "path": "20260515120000_shop_reports_v1.sql",
+      "sha256": "a35d5906154224c15fb227b72448f879dc12e7ada92a75d411e56c635083c7ce"
+    },
+    {
+      "order": 46,
+      "phase": "mobile-migrations",
+      "source": "qa-local-artifact",
+      "path": "20260515140000_report_no_self_report.sql",
+      "sha256": "9577bac652ea3a796059192e43cf8e5b88da4890ae24449882e85335feb5696d"
+    },
+    {
+      "order": 47,
+      "phase": "mobile-migrations",
+      "source": "qa-local-artifact",
+      "path": "20260515160000_app_versions_v1.sql",
+      "sha256": "c0e896268216ff6f5a858b07c0da9a56d55b68c77a9ce9ab129687cf34950735"
+    },
+    {
+      "order": 48,
+      "phase": "mobile-migrations",
+      "source": "qa-local-artifact",
+      "path": "20260527200000_shops_status_v1.sql",
+      "sha256": "cc369222783d6e3514b34a5668d321d75f19f0f6b4ecd1f950f405afc8def01c"
+    },
+    {
+      "order": 49,
+      "phase": "mobile-migrations",
+      "source": "qa-local-artifact",
+      "path": "20260602210000_delete_account_v1.sql",
+      "sha256": "6e53e6417ab84a44434765575051716b6993534b7e686d645ba04d644460f189"
+    },
+    {
+      "order": 50,
+      "phase": "mobile-migrations",
+      "source": "qa-local-artifact",
+      "path": "20260603002100_add_read_at_to_messages.sql",
+      "sha256": "73baf149dff7665fef3bf933fcdd9765a929ac92259b80155d42bbde94be876e"
+    },
+    {
+      "order": 51,
+      "phase": "mobile-migrations",
+      "source": "qa-local-artifact",
+      "path": "20260603003700_mark_conversation_read_rpc.sql",
+      "sha256": "f3752dbe75f3387ed63a1f36227904741f43659879c7e7f7a3abee0b8866bffa"
+    },
+    {
+      "order": 52,
+      "phase": "mobile-migrations",
+      "source": "qa-local-artifact",
+      "path": "20260603005000_user_push_tokens_v1.sql",
+      "sha256": "e60e5feccf6d132e27f5bffbbafcfc4cd81f893fc0fd2f8d9658c1dff4b7e076"
+    },
+    {
+      "order": 53,
+      "phase": "mobile-migrations",
+      "source": "qa-local-artifact",
+      "path": "20260826120000_handle_new_user_profile_provisioning.sql",
+      "sha256": "37072aee13306493af504a9bbf21f5c5d82c9a93f66a0e79c126c18be0eced85"
+    },
+    {
+      "order": 54,
+      "phase": "mobile-migrations",
+      "source": "qa-local-artifact",
+      "path": "20260903220000_conversation_reports_v1.sql",
+      "sha256": "121f1328ce0645920d78a12a4c525dbcfc815f4696b155c01d1f16e0ae57a35f"
+    },
+    {
+      "order": 55,
+      "phase": "mobile-migrations",
+      "source": "qa-local-artifact",
+      "path": "20260908202412_listing_status_sold_v1.sql",
+      "sha256": "7e3ee6aa2a992e1b2264b0b43fc6245edb58134ab2241d292ff53ebcc00e7c5f"
+    },
+    {
+      "order": 56,
+      "phase": "mobile-migrations",
+      "source": "qa-local-artifact",
+      "path": "20260908205641_listing_sale_cycle_v1.sql",
+      "sha256": "85755279900b6f6b612c3eb0dd0951c7b4e944e0f911993f790f3796a30aaa27"
+    },
+    {
+      "order": 57,
+      "phase": "mobile-migrations",
+      "source": "qa-local-artifact",
+      "path": "20260908213204_listing_renewed_at_v1.sql",
+      "sha256": "5def12c4def3671de9f30db17b851660b6e04f1d6be39f72d533fe6bf0d5b047"
+    },
+    {
+      "order": 58,
+      "phase": "mobile-migrations",
+      "source": "qa-local-artifact",
+      "path": "20260908221921_enable_saved_search_alert_extensions.sql",
+      "sha256": "a8ff89cecb23508764d76379c17015b0c92fa5d6b62324e4b8f224b17b4c4d20"
+    },
+    {
+      "order": 59,
+      "phase": "mobile-migrations",
+      "source": "qa-local-artifact",
+      "path": "20260908250000_saved_search_alerts_v1.sql",
+      "sha256": "1c1f34771f0876200b17fb3559c03dcabf3f73a179a8c340617116e98176fca9"
+    },
+    {
+      "order": 60,
+      "phase": "mobile-migrations",
+      "source": "qa-local-artifact",
+      "path": "20260909110000_listing_status_draft_v1.sql",
+      "sha256": "501b85d075d5748bc29976968c02aa4b980562e5ad30d0ce8e062faae9d89333"
+    },
+    {
+      "order": 61,
+      "phase": "mobile-migrations",
+      "source": "qa-local-artifact",
+      "path": "20260909110100_listing_draft_guards_v1.sql",
+      "sha256": "2bb60d558176a4e5e912069867d635aadce5c9b52dae5ddc9007a07999ad52b4"
+    },
+    {
+      "order": 62,
+      "phase": "mobile-migrations",
+      "source": "qa-local-artifact",
+      "path": "20260909120000_conversation_hide_for_me_v1.sql",
+      "sha256": "77561fa7e51c663170f4255b14bd59837612fb6e88db27c787b4d478d71776b7"
+    },
+    {
+      "order": 63,
+      "phase": "mobile-migrations",
+      "source": "qa-local-artifact",
+      "path": "20260909130000_seller_stats_v1.sql",
+      "sha256": "8265e8ef80bc28716b3674fc8bfd61113c59f33a7e93384be7b530a355493c05"
+    },
+    {
+      "order": 64,
+      "phase": "mobile-migrations",
+      "source": "qa-local-artifact",
+      "path": "20261003230000_claim_my_push_token.sql",
+      "sha256": "1928b438d7d63847a1ca9f0b482e79b24d0d36e1bb45554790f5b39f56d2465e"
+    },
+    {
+      "order": 65,
+      "phase": "mobile-migrations",
+      "source": "qa-local-artifact",
+      "path": "20261017150000_lifecycle_email_p0.sql",
+      "sha256": "34f9e01c6cfa63293d3c5879df7c46256d579641008996f908d73b9256a7a605"
+    },
+    {
+      "order": 66,
+      "phase": "mobile-migrations",
+      "source": "qa-local-artifact",
+      "path": "20261017160000_lifecycle_email_p0_lot02_guards.sql",
+      "sha256": "855fed371a915992cf5470b87b7364dbc9bdc47864df57aff732000bd2b02ad5"
+    },
+    {
+      "order": 67,
+      "phase": "mobile-migrations",
+      "source": "qa-local-artifact",
+      "path": "20261017170000_lifecycle_email_kill_switch_fail_closed.sql",
+      "sha256": "6db0fc3c593a2750ddbbe1470805347b0305b5872818a0de1748c4e3746a1a6e"
+    },
+    {
+      "order": 68,
+      "phase": "mobile-migrations",
+      "source": "qa-local-artifact",
+      "path": "20261017220000_lifecycle_service_vs_marketing.sql",
+      "sha256": "022820a2c72b06168c44fed4653a2e56bb789ac40fdf7a57ea2fe0705b306241"
+    },
+    {
+      "order": 69,
+      "phase": "mobile-migrations",
+      "source": "qa-local-artifact",
+      "path": "20261018010000_lifecycle_draft_reminders_prep.sql",
+      "sha256": "fe2138a92b21b957902cd1841d649b5c3d4bc0c2f2c9e1a3098b5564b9e65bc2"
+    },
+    {
+      "order": 70,
+      "phase": "mobile-migrations",
+      "source": "qa-local-artifact",
+      "path": "20261018160000_lifecycle_email_factory.sql",
+      "sha256": "9c26374f618f2d5853d078917751dad0b6459609c4f34e6b7df2b7ec67d5b31b"
+    },
+    {
+      "order": 71,
+      "phase": "recovered-web-migration",
+      "source": "youmbia-mobile@f39fbf4765352c7ce279e543ac814bff7fd60b2f",
+      "path": "20261019000100_mobile_marketing_consent_prompt.sql",
+      "sha256": "272606a51e048b5bb952689e7c248b58264e92df4826a7f4ed06fdf5071d809e"
+    },
+    {
+      "order": 72,
+      "phase": "mobile-migrations",
+      "source": "qa-local-artifact",
+      "path": "20261021000100_shops_public_active_only.sql",
+      "sha256": "ea61c560dccd6c9b393a69f0d3162ad8aa7736115652b119c2efb9bb2ddef255"
+    },
+    {
+      "order": 73,
+      "phase": "mobile-migrations",
+      "source": "qa-local-artifact",
+      "path": "20261023200527_transactional_push_outbox.sql",
+      "sha256": "133f224f15843d490d99a32b18614e297887fd1ef1e68cef9a1021bc5984e690",
+      "pushP0P1": true
+    },
+    {
+      "order": 74,
+      "phase": "mobile-migrations",
+      "source": "qa-local-artifact",
+      "path": "20261023202544_conversation_identity_security.sql",
+      "sha256": "d23a2ca32930c500f038e9e132ccfb35b42356a7de52c1eb054cf8f0dbcac5be",
+      "pushP0P1": true
+    },
+    {
+      "order": 75,
+      "phase": "mobile-migrations",
+      "source": "qa-local-artifact",
+      "path": "20261023205854_explicit_push_token_grants.sql",
+      "sha256": "645273e75e63093fa04d2bc567376edc8962c36b264519f872c79eee2e74fd85",
+      "pushP0P1": true
+    },
+    {
+      "order": 76,
+      "phase": "qa-network-safety",
+      "source": "qa-local-artifact",
+      "path": "YOUMBIA QA complement: disable cron and block network targets",
+      "sha256": "8b7c2bf26c1d177b510c60851e8a45aea3cea3c53a27c7fe97afb0247219ff1f"
+    },
+    {
+      "order": 77,
+      "phase": "qa-shops-acl",
+      "source": "qa-local-artifact",
+      "path": "YOUMBIA QA complement: least-privilege shops grants",
+      "sha256": "2b43d9ec451d0deafb9bd2181b37a967e189e8e29e68f37ed7a7903647d8c46b"
+    }
+  ],
+  "deploymentLimitations": [
+    "The qualified local replay is a schema bootstrap and does not write Supabase migration-history rows. The checked-in representative baseline-manifest.json is not the 77-entry manifest.",
+    "The local reconcile_baseline.py runner refuses non-loopback targets. No remote apply command is authorized or prepared by this manifest.",
+    "The manifest entry for the Web report-status migration records the original pinned source hash plus a deterministic local replay cast correction; a remote bundle must preserve and review that correction explicitly.",
+    "Remote Edge Functions have outbound network capability; SQL cron/Vault/pg_net checks do not create a general Edge egress firewall."
+  ],
+  "remoteProvisioningPerformed": false
+}
