@@ -64,6 +64,16 @@ def shop(owner, status='active'):
     return row[0]
 
 
+def listing(owner, shop_id):
+    row = request('POST', '/rest/v1/listings', {
+        'user_id': owner['id'], 'shop_id': shop_id,
+        'title': 'Synthetic shop visibility listing',
+        'description': 'Synthetic local-only fixture', 'price': 1000,
+        'city': 'Synthetic City', 'status': 'active',
+    }, owner['jwt'])
+    return row[0]
+
+
 def query_shops(ids, token):
     values = ','.join(ids)
     query = urllib.parse.urlencode({'select': 'id,status,owner_id', 'id': f'in.({values})'})
@@ -93,6 +103,28 @@ check({row['id'] for row in other_rows} == {active['id']},
       'authenticated non-owners see active shops only')
 check({row['id'] for row in owner_rows} == set(ids),
       'shop owner can read own active, hidden and suspended shops')
+
+# PostgREST embeds are subject to the joined shops RLS policy as well. Keep a
+# public listing for each status and ensure the relationship cannot disclose an
+# inactive shop, even when the parent listing itself is visible.
+active_listing = listing(owner, active['id'])
+hidden_listing = listing(owner, hidden['id'])
+joined_query = urllib.parse.urlencode({
+    'select': 'id,shops!listings_shop_id_fkey(id,status)',
+    'id': f'in.({active_listing["id"]},{hidden_listing["id"]})',
+})
+joined = request('GET', '/rest/v1/listings?' + joined_query, token=ANON)
+joined_by_id = {row['id']: row['shops'] for row in joined}
+check(joined_by_id.get(active_listing['id'], {}).get('status') == 'active'
+      and joined_by_id.get(hidden_listing['id']) is None,
+      'PostgREST relation embed exposes active shops and redacts hidden shops')
+inner_query = urllib.parse.urlencode({
+    'select': 'id,shops!inner(id,status)',
+    'id': f'in.({active_listing["id"]},{hidden_listing["id"]})',
+})
+inner_joined = request('GET', '/rest/v1/listings?' + inner_query, token=ANON)
+check({row['id'] for row in inner_joined} == {active_listing['id']},
+      'PostgREST inner relationship filter cannot surface hidden shops')
 
 forged = request('POST', '/rest/v1/shops', {
     'owner_id': owner['id'], 'name': 'Forged shop', 'slug': 'qa-forged-' + uuid.uuid4().hex,
