@@ -1,5 +1,7 @@
 # YOUMBIA — réconciliation des migrations Supabase
 
+> **Mise à jour du 24 octobre :** cette note conserve les faits de réconciliation historique. Son ancien verdict NO-GO était antérieur à l’E2E sur baseline complète. Le statut actuel, les décisions de policy et les écarts qualifiés figurent dans [le rapport final baseline/E2E](./supabase-final-baseline-e2e-2026-10-24.md).
+
 Audit en lecture seule de Supabase PROD le 24 octobre 2026. Le dépôt de travail est `feat/ymb-transactional-push-p0-p1`, HEAD initial `14731d40e20f02aa5042d911413ada02b50ca3f9`. Le dépôt Web de référence est `tommykamga/youmbia@c0de54189ad9cb6a6968e186e387731a4a759f7d`. Aucun SQL n’a été exécuté sur PROD; aucune donnée métier ou clé n’a été lue. L’instance de validation locale est `youmbia-push-reconcile-20261024`, PostgreSQL 17 sur `127.0.0.1:56422`.
 
 ## Inventaires et correspondances

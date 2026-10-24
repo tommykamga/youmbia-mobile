@@ -1,5 +1,7 @@
 # YOUMBIA Push P0/P1 — validation Supabase isolé, 23 octobre 2026
 
+> **Mise à jour du 24 octobre :** ce rapport conserve les preuves du harness représentatif (15 migrations Web). Il ne qualifie pas à lui seul la baseline Web complète. Pour le replay exhaustif et l’E2E Auth/PostgREST/Edge, suivre le rapport final [baseline complète et qualification push](./supabase-final-baseline-e2e-2026-10-24.md), qui remplace son verdict de readiness.
+
 ## Verdict et périmètre
 
 **PASS AVEC RÉSERVES pour le backend isolé ; NO-GO production.** Le passage technique à une recette physique dédiée est possible après un GO explicite pour les appareils/builds et envois réels de test. Aucune réception Android/iOS n'est prouvée ici.

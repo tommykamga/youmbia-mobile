@@ -6,6 +6,9 @@ select pg_temp.assert(not exists(select 1 from pg_class c join pg_namespace n on
 select pg_temp.assert(has_table_privilege('authenticated','public.user_push_tokens','select') and has_table_privilege('authenticated','public.user_push_tokens','delete'),'explicit token read/delete grants');
 select pg_temp.assert(not has_table_privilege('anon','public.user_push_tokens','select'),'anon cannot read tokens');
 select pg_temp.assert(not has_table_privilege('authenticated','public.user_push_tokens','truncate'),'clients cannot bypass token RLS with truncate');
+select pg_temp.assert(not has_table_privilege('anon','public.shops','insert') and not has_table_privilege('authenticated','public.shops','delete') and not has_table_privilege('authenticated','public.shops','truncate'),'QA shops ACL is least-privilege');
+select pg_temp.assert(not has_table_privilege('anon','public.user_credentials','select') and not has_table_privilege('authenticated','public.user_credentials','select') and not has_table_privilege('anon','public.auth_flow_tokens','select') and not has_table_privilege('authenticated','public.auth_flow_tokens','select'),'Web-only credential and token tables are not exposed to client roles');
+select pg_temp.assert(not exists(select 1 from pg_policies where schemaname='public' and tablename in ('user_credentials','auth_flow_tokens')),'Web-only credential and token tables have no client RLS policy');
 select pg_temp.assert(not has_function_privilege('authenticated','public.claim_transactional_push(integer)','execute'),'claim restricted to server');
 select pg_temp.assert(not has_function_privilege('anon','public.mark_conversation_read(uuid)','execute'),'read RPC not public');
 select pg_temp.assert(not has_function_privilege('authenticated','push_private.guard_conversation_identity()','execute'),'guard helper not callable by users');

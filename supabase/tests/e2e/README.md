@@ -1,8 +1,62 @@
 # YOUMBIA local Supabase push E2E
 
-This legacy harness still uses the explicitly representative 13-file manifest below. The exhaustive Web/Mobile source replay, migration reconciliation, local-only enum correction, and remaining structural differences are documented in [`docs/push/supabase-migration-reconciliation-2026-10-24.md`](../../../docs/push/supabase-migration-reconciliation-2026-10-24.md). To reproduce its full baseline in a fresh PostgreSQL 17 Supabase local project, run `reconcile_baseline.py` with the pinned Web checkout and a loopback `--db-url`; it refuses a non-loopback host and never writes migration-history rows.
+This file retains the original representative 15-file bootstrap instructions for the earlier HTTP harness. The authoritative full-source replay and final qualification are in [`docs/push/supabase-final-baseline-e2e-2026-10-24.md`](../../../docs/push/supabase-final-baseline-e2e-2026-10-24.md). Use the procedure below for current QA qualification; `baseline-manifest.json` remains representative and is not the exhaustive manifest.
 
-This harness never accepts a cloud API/DB URL. It requires Docker, Supabase CLI, Python 3.11+, Deno, and the versioned Web repository at ref `c0de541`. It uses only synthetic `.invalid` accounts, listings/messages/favorites and synthetic Expo tokens. No production data dump, production environment file or real device token is used.
+The full harness requires Docker, Supabase CLI, Python 3.9+, Node.js, `psql`, and the Web repository at ref `c0de541`. It uses only synthetic `.invalid` accounts, listings/messages/favorites and synthetic Expo tokens. No production data dump, production environment file or real device token is used. Every SQL runner refuses non-loopback endpoints; the baseline runner also pins the API and DB ports when passed a CLI credentials file.
+
+## Full-source baseline and E2E
+
+Create a fresh local project directory and a private server environment file. The preparer refuses existing paths and does not call any cloud API:
+
+```sh
+python3 supabase/tests/e2e/prepare.py \
+  --target /private/tmp/ymb-final-baseline-e2e \
+  --env-out /private/tmp/ymb-final-e2e.env
+```
+
+From that project directory, start local services and save CLI credentials privately. Do not print the JSON to a shared log:
+
+```sh
+umask 077
+SUPABASE_TELEMETRY_DISABLED=1 supabase start --exclude studio,imgproxy,vector \
+  > /private/tmp/ymb-final-supabase-start.log 2>&1
+SUPABASE_TELEMETRY_DISABLED=1 supabase db reset --local --no-seed
+SUPABASE_TELEMETRY_DISABLED=1 supabase status -o json > /private/tmp/ymb-final-e2e-credentials.json
+```
+
+From the mobile checkout at the pinned branch SHA, apply the entire sourced baseline into the fresh local DB. The runner reads the private credentials file, verifies the fixed local API/DB identity, checks the pinned Web commit, and writes a per-run hash manifest. It never writes migration history or imports data:
+
+```sh
+python3 supabase/tests/e2e/reconcile_baseline.py \
+  --web-root '/path/to/Youmbia-web' \
+  --credentials /private/tmp/ymb-final-e2e-credentials.json \
+  --manifest-out /private/tmp/ymb-final-baseline-hashes.json
+```
+
+The replay applies the Web schema/RLS and all 37 non-personal Web migrations, the two explicit metadata complements, all 33 mobile migrations and the recovered consent source, then the QA network-safety guard and least-privilege shop ACL. It records 77 source/correction entries. The guard disables every active `pg_cron` job and fails closed unless Vault and `pg_net` are empty. The Web report-status enum casts are corrected only in the disposable replay, with exact source SHA and pattern checks. Shop table ACLs are deliberately least-privilege while preserving the hosted policies' effective user operations.
+
+Run the rollback-only push SQL test first. Then serve the local Edge Functions, start the Node HTTP simulator in another terminal, and run the real GoTrue/PostgREST/Edge scenarios plus native SQL and shop policy checks:
+
+```sh
+YMB_E2E_CREDENTIALS=/private/tmp/ymb-final-e2e-credentials.json \
+  python3 supabase/tests/e2e/transactional-sql.py
+
+SUPABASE_TELEMETRY_DISABLED=1 supabase functions serve \
+  --env-file /private/tmp/ymb-final-e2e.env
+
+node supabase/functions/_tests/e2e/expo-mock.mjs /private/tmp/ymb-final-e2e.env
+
+YMB_E2E_CREDENTIALS=/private/tmp/ymb-final-e2e-credentials.json \
+YMB_E2E_ENV=/private/tmp/ymb-final-e2e.env \
+  python3 supabase/tests/e2e/backend.py
+YMB_E2E_CREDENTIALS=/private/tmp/ymb-final-e2e-credentials.json \
+YMB_E2E_ENV=/private/tmp/ymb-final-e2e.env \
+  python3 supabase/tests/e2e/native-security.py
+YMB_E2E_CREDENTIALS=/private/tmp/ymb-final-e2e-credentials.json \
+  python3 supabase/tests/e2e/shops-policy.py
+```
+
+`backend.py` covers P0 messages and P1 favorites, access/spoofing, multi-device delivery, retry/timeout/DNR and concurrent HTTP/Edge workers. The mock is local and has no outbound client; the test adapter is local-only and rejects destinations other than the mock. `native-security.py` removes its synthetic Auth users in a `finally` block. `shops-policy.py` tests anonymous, owner and non-owner access plus forbidden writes. Keep the normal dispatcher OFF, cron inactive, and all three local processes stopped after the run.
 
 The mobile migration chain is a delta chain: `20260514100000_require_marketplace_baseline.sql` intentionally rejects an empty marketplace. `db.migrations.enabled=false` in the historical root config means a plain reset does **not** test migrations. This was verified explicitly. To reproduce the negative greenfield test, set that option to true **only in the disposable copy**, run `supabase db reset --local --no-seed`, and preserve the expected `baseline_schema_missing` failure. Then disable migrations in that copy and reset before sourced bootstrap. Never edit the release config or use `--linked`.
 

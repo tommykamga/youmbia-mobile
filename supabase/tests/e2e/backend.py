@@ -4,6 +4,7 @@ No cloud URL is accepted. Credentials are local and never printed.
 """
 import concurrent.futures
 import json
+import os
 from pathlib import Path
 import time
 import urllib.error
@@ -11,12 +12,14 @@ import urllib.parse
 import urllib.request
 import uuid
 
-creds = json.loads(Path('/private/tmp/ymb-e2e-credentials.json').read_text())
+credentials_path = Path(os.environ.get('YMB_E2E_CREDENTIALS', '/private/tmp/ymb-e2e-credentials.json'))
+environment_path = Path(os.environ.get('YMB_E2E_ENV', '/private/tmp/ymb-e2e.env'))
+creds = json.loads(credentials_path.read_text())
 API = creds['API_URL']
 assert API == 'http://127.0.0.1:55421', 'STOP: unexpected API identity'
 assert urllib.parse.urlparse(creds['DB_URL']).hostname in ('127.0.0.1', 'localhost')
 assert urllib.parse.urlparse(creds['DB_URL']).port == 55422
-ENV = dict(line.split('=', 1) for line in Path('/private/tmp/ymb-e2e.env').read_text().strip().splitlines())
+ENV = dict(line.split('=', 1) for line in environment_path.read_text().strip().splitlines())
 assert ENV['E2E_PROJECT_ID'] == 'youmbia-push-e2e-local'
 SECRET = ENV['TRANSACTIONAL_PUSH_DISPATCH_SECRET']
 ANON, ADMIN = creds['ANON_KEY'], creds['SERVICE_ROLE_KEY']

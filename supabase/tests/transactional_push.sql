@@ -1,8 +1,13 @@
 \set ON_ERROR_STOP on
 begin;
 create function pg_temp.assert(ok boolean,label text) returns void language plpgsql as $$begin if ok is distinct from true then raise exception 'FAIL: %',label; end if; end$$;
-insert into auth.users values ('00000000-0000-0000-0000-000000000001'),('00000000-0000-0000-0000-000000000002'),('00000000-0000-0000-0000-000000000003');
-insert into listings values('20000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-000000000002','active');
+insert into auth.users (id, email) values
+('00000000-0000-0000-0000-000000000001','push-fixture-a@ymb-e2e.invalid'),
+('00000000-0000-0000-0000-000000000002','push-fixture-b@ymb-e2e.invalid'),
+('00000000-0000-0000-0000-000000000003','push-fixture-c@ymb-e2e.invalid');
+insert into public.listings (id,user_id,title,description,price,city,status)
+values ('20000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-000000000002',
+        'Synthetic SQL fixture','Synthetic transactional push test listing',1000,'Synthetic City','active');
 set local request.jwt.claim.sub='00000000-0000-0000-0000-000000000001';
 insert into conversations(id,listing_id,buyer_id,seller_id) values('10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-000000000002');
 insert into messages(conversation_id,sender_id,body) values('10000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-000000000001','private');
