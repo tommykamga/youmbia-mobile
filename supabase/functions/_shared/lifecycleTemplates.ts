@@ -221,7 +221,9 @@ export function resolveLifecycleGreetingFirstName(
 ): string | null {
   const raw = String(fullName ?? '')
     .trim()
-    .replace(/\s+/g, ' ');
+    .replace(/\s+/g, ' ')
+    .replace(/\s*\(\s*Apple\s*\)\s*$/iu, '')
+    .trim();
   if (!raw) return null;
   if (raw.includes('@')) return null;
 
