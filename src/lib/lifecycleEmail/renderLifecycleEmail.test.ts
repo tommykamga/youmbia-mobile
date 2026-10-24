@@ -40,6 +40,31 @@ describe('renderLifecycleEmail (source envoi)', () => {
       expect(resolveLifecycleGreetingFirstName('Utilisateur YOUMBIA')).toBeNull();
     });
 
+    it('annotation terminale Apple : personnalisation conservée sans relâcher les rejets', () => {
+      expect(resolveLifecycleGreetingFirstName('Tommy K (Apple)')).toBe('Tommy');
+      expect(resolveLifecycleGreetingFirstName('Tommy ( APPLE )')).toBe('Tommy');
+      expect(resolveLifecycleGreetingFirstName('Anne-Marie Dupont (Apple)')).toBe('Anne-Marie');
+      expect(resolveLifecycleGreetingFirstName('Admin YOUMBIA (Apple)')).toBeNull();
+      expect(resolveLifecycleGreetingFirstName('Apple')).toBeNull();
+      expect(resolveLifecycleGreetingFirstName('Jean (Apple) Dupont')).toBeNull();
+      expect(resolveLifecycleGreetingFirstName('Jean (Apple) (Apple)')).toBeNull();
+      expect(resolveLifecycleGreetingFirstName('a@b.com (Apple)')).toBeNull();
+      expect(resolveLifecycleGreetingFirstName(resolveLifecycleGreetingFirstName('Tommy K (Apple)'))).toBe('Tommy');
+    });
+
+    it('rendu welcome et publication Apple HTML/texte', () => {
+      for (const campaignId of ['welcome_h0', 'listing_published_service'] as const) {
+        const input = {
+          campaignId,
+          fullName: 'Tommy K (Apple)',
+          cta: { href: 'https://www.youmbia.com/', label: 'Ouvrir YOUMBIA', enabled: true },
+          unsubscribeUrl: '',
+        };
+        expect(renderLifecycleEmailHtml(input)).toContain('Bonjour Tommy,');
+        expect(renderLifecycleEmailText(input)).toContain('Bonjour Tommy,');
+      }
+    });
+
     it('nom absent ou non fiable', () => {
       expect(resolveLifecycleGreetingFirstName(null)).toBeNull();
       expect(resolveLifecycleGreetingFirstName('')).toBeNull();
