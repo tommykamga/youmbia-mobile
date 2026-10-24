@@ -72,6 +72,7 @@ insert into favorites(listing_id,user_id) values('20000000-0000-0000-0000-000000
 select pg_temp.assert((select count(*)=1 from transactional_push_events where kind='favorite'),'owner opt out at insertion');
 update transactional_push_preferences set favorites_enabled=true;
 update listings set status='hidden';
+delete from favorites where listing_id='20000000-0000-0000-0000-000000000001' and user_id='00000000-0000-0000-0000-000000000003';
 insert into favorites(listing_id,user_id) values('20000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-000000000003');
 select pg_temp.assert((select count(*)=1 from transactional_push_events where kind='favorite'),'inactive listing skipped');
 rollback;

@@ -1,5 +1,7 @@
 # YOUMBIA Push — finalisation du provisionnement QA
 
+Mise à jour de l’audit migration du 24 octobre : consulter [la réconciliation exhaustive et les résultats locaux](supabase-migration-reconciliation-2026-10-24.md). Elle complète le précédent test sur baseline représentative et conserve le verdict NO-GO tant que la structure et les policies ne sont pas réconciliées.
+
 Audit du 24 octobre 2026. Référence initiale : branche `feat/ymb-transactional-push-p0-p1`, commit `279f2518246465618fec31a60b9cbc29a1ac29ad`. Production Supabase `ainzxommczlyjhymuwgu` inspectée seulement par métadonnées et registre de migrations. Aucun projet, secret, credential, build, migration distante ni envoi n'a été créé ou modifié.
 
 ## Tableau de readiness
