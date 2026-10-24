@@ -18,6 +18,7 @@ import os
 from pathlib import Path
 import re
 import subprocess
+import ssl
 import sys
 import tempfile
 import time
@@ -37,10 +38,16 @@ PINNED_WEB_COMMIT = "c0de54189ad9cb6a6968e186e387731a4a759f7d"
 QA_PROJECT_REF = "wagvrytcguutgbjzhvak"
 PROD_PROJECT_REF = "ainzxommczlyjhymuwgu"
 QA_PROJECT_NAME = "YOUMBIA-PUSH-QA"
-QA_ORGANIZATION_SLUG = "youmbia-push-qa"
+QA_ORGANIZATION_ID = "vhmmlxtbbitsoagmghgu"
+QA_ORGANIZATION_NAME = "youmbia-push-qa"
 QA_REGION = "eu-west-1"
 QA_DB_HOST = f"db.{QA_PROJECT_REF}.supabase.co"
 QA_API_URL = f"https://{QA_PROJECT_REF}.supabase.co"
+NATIVE_SUPABASE_SCHEMAS = {
+    "auth", "extensions", "graphql", "graphql_public", "public", "realtime", "storage", "vault",
+    "cron", "net", "supabase_functions", "supabase_migrations", "_realtime", "_analytics", "pgbouncer",
+}
+NETWORK_CAPABLE_EXTENSIONS = {"dblink", "http", "pg_cron", "pg_net", "postgres_fdw", "wrappers"}
 ENUM_MIGRATION = "2026_04_28_reports_status_align_open_reviewed_action_taken_dismissed.sql"
 ENUM_SOURCE_SHA256 = "f65985464a6a6d26400c34820090e7a12fd92bbcae554b5082b18b2fd074c759"
 ENUM_PATCHES: tuple[tuple[str, str], ...] = (
@@ -303,14 +310,22 @@ def parse_qa_database_url(value: str) -> DatabaseTarget:
 
 
 def validate_project_metadata(project: dict[str, Any], organizations: list[dict[str, Any]]) -> None:
-    if project.get("id") != QA_PROJECT_REF or project.get("name") != QA_PROJECT_NAME:
+    if not isinstance(project, dict) or not isinstance(organizations, list):
+        raise RunnerError("Supabase Management API identity response is malformed")
+    required_project_fields = ("id", "name", "region", "status", "organization_id")
+    if any(not isinstance(project.get(key), str) or not project[key] for key in required_project_fields):
+        raise RunnerError("Supabase Management API project identity is incomplete")
+    if project["id"] != QA_PROJECT_REF or project["name"] != QA_PROJECT_NAME:
         raise RunnerError("Supabase Management API returned an unexpected project identity")
-    if project.get("region") != QA_REGION or project.get("status") != "ACTIVE_HEALTHY":
+    if project["region"] != QA_REGION or project["status"] != "ACTIVE_HEALTHY":
         raise RunnerError("Supabase QA project is not healthy in the expected region")
-    org_id = project.get("organization_id")
-    matches = [o for o in organizations if o.get("id") == org_id and o.get("slug") == QA_ORGANIZATION_SLUG]
-    if len(matches) != 1:
+    if project["organization_id"] != QA_ORGANIZATION_ID:
         raise RunnerError("Supabase project is not in the dedicated YOUMBIA QA organization")
+    matches = [o for o in organizations if isinstance(o, dict) and o.get("id") == QA_ORGANIZATION_ID]
+    if len(matches) != 1 or not isinstance(matches[0].get("name"), str):
+        raise RunnerError("Supabase organization identity is missing or ambiguous")
+    if matches[0]["name"] != QA_ORGANIZATION_NAME:
+        raise RunnerError("Supabase organization name does not match the dedicated YOUMBIA QA organization")
 
 
 class ManagementApi:
@@ -333,7 +348,7 @@ class ManagementApi:
     def verify(self) -> None:
         project = self._get(f"https://api.supabase.com/v1/projects/{QA_PROJECT_REF}")
         organizations = self._get("https://api.supabase.com/v1/organizations")
-        if not isinstance(organizations, list):
+        if not isinstance(project, dict) or not isinstance(organizations, list):
             raise RunnerError("Supabase organization identity response is invalid")
         validate_project_metadata(project, organizations)
 
@@ -363,7 +378,9 @@ class PsqlDatabase:
         return result.stdout.strip()
 
     def query(self, sql: str) -> str:
-        return self._run([self.psql, "-X", "-qAt", "-v", "ON_ERROR_STOP=1", "--command", sql])
+        # All query() calls are inspection-only. Enforce READ ONLY at the server transaction level.
+        return self._run([self.psql, "-X", "-qAt", "-v", "ON_ERROR_STOP=1", "--single-transaction",
+                          "--command", "SET TRANSACTION READ ONLY; " + sql])
 
     def execute(self, sql: str) -> None:
         self._run([self.psql, "-X", "-q", "-v", "ON_ERROR_STOP=1", "--command", sql])
@@ -510,6 +527,8 @@ SELECT json_build_object(
   'server_addr', inet_server_addr()::text,
   'server_port', inet_server_port(),
   'server_version_num', current_setting('server_version_num')::integer,
+  'tls_active', (SELECT ssl FROM pg_stat_ssl WHERE pid = pg_backend_pid()),
+  'tls_version', (SELECT version FROM pg_stat_ssl WHERE pid = pg_backend_pid()),
   'public_app_objects', (
     SELECT count(*) FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
     WHERE n.nspname='public' AND c.relkind IN ('r','p','v','m','f','S')
@@ -628,10 +647,14 @@ class RemoteIdentity:
             row = json.loads(self.database.query(INITIAL_PREFLIGHT_SQL))
         except (json.JSONDecodeError, TypeError) as exc:
             raise RunnerError("database identity query returned invalid metadata") from exc
+        if not isinstance(row, dict):
+            raise RunnerError("database identity query returned invalid metadata")
         if row.get("database") != "postgres" or row.get("user") != "postgres":
             raise RunnerError("database connection is not the expected QA postgres database")
         if not row.get("server_addr") or not row.get("server_port"):
             raise RunnerError("database server identity could not be verified")
+        if row.get("tls_active") is not True or row.get("tls_version") not in {"TLSv1.2", "TLSv1.3"}:
+            raise RunnerError("PostgreSQL session is not protected by an accepted TLS version")
         if row.get("migration_log_exists"):
             try:
                 row["migration_log_count"] = int(self.database.query(
@@ -651,6 +674,55 @@ def _check_pristine(row: dict[str, Any]) -> None:
         raise RunnerError("QA database contains application objects before the pinned baseline")
     if row.get("migration_log_count") != 0:
         raise RunnerError("QA database already has migration history; refusing a baseline replay")
+
+
+def inspect_readonly_initial_state(db: Database, identity_row: dict[str, Any]) -> dict[str, Any]:
+    """Assert a pristine, network-quiet project using SELECT-only transactions."""
+    _check_pristine(identity_row)
+    schemas = json.loads(db.query(
+        "SELECT COALESCE(json_agg(nspname ORDER BY nspname),'[]'::json)::text "
+        "FROM pg_namespace WHERE nspname NOT LIKE 'pg_%' AND nspname <> 'information_schema'"
+    ))
+    unexpected = sorted(set(schemas) - NATIVE_SUPABASE_SCHEMAS)
+    if unexpected:
+        raise RunnerError("QA database contains an unexpected non-Supabase schema")
+    public_triggers = int(db.query(
+        "SELECT count(*) FROM pg_trigger t JOIN pg_class c ON c.oid=t.tgrelid "
+        "JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='public' AND NOT t.tgisinternal"
+    ))
+    if public_triggers:
+        raise RunnerError("QA database contains application triggers before the baseline")
+
+    network_extensions = json.loads(db.query(
+        "SELECT COALESCE(json_agg(extname ORDER BY extname),'[]'::json)::text FROM pg_extension "
+        "WHERE extname IN ('dblink','http','pg_cron','pg_net','postgres_fdw','wrappers')"
+    ))
+    if network_extensions:
+        raise RunnerError("QA database has a network-capable extension installed before the baseline")
+
+    counts: dict[str, int] = {}
+    for key, relation in (("vault_secrets", "vault.secrets"), ("cron_jobs", "cron.job"),
+                          ("pg_net_queue", "net.http_request_queue"), ("pg_net_responses", "net._http_response")):
+        present = db.query(f"SELECT to_regclass({_quote(relation)}) IS NOT NULL") == "t"
+        counts[key] = int(db.query(f"SELECT count(*) FROM {relation}")) if present else 0
+    if counts["vault_secrets"] or counts["cron_jobs"] or counts["pg_net_queue"] or counts["pg_net_responses"]:
+        raise RunnerError("QA database contains Vault secrets, cron jobs, or pg_net traffic before baseline")
+
+    push_config = db.query("SELECT to_regclass('public.transactional_push_config') IS NOT NULL") == "t"
+    if push_config:
+        flags = db.query(
+            "SELECT COALESCE(bool_or(messages_enabled OR favorites_enabled),false)::text "
+            "FROM public.transactional_push_config"
+        )
+        if flags != "false":
+            raise RunnerError("QA Push flags are enabled before the baseline")
+    tokens = db.query("SELECT to_regclass('public.user_push_tokens') IS NOT NULL") == "t"
+    if tokens and db.query("SELECT count(*) FROM public.user_push_tokens") != "0":
+        raise RunnerError("QA database contains device tokens before the baseline")
+    return {"schemas": schemas, "unexpected_schemas": [], "public_app_objects": 0,
+            "public_app_functions": 0, "public_triggers": public_triggers,
+            "network_capable_extensions": network_extensions, **counts,
+            "push_config_exists": push_config, "push_tokens_exist": tokens}
 
 
 def _journal_state(db: Database, digest: str) -> tuple[dict[str, Any] | None, list[dict[str, Any]]]:
@@ -873,18 +945,33 @@ def _remote_database_from_environment(environ: dict[str, str] | None = None) -> 
     url = env.get("YOUMBIA_QA_DATABASE_URL", "")
     token = env.get("SUPABASE_ACCESS_TOKEN", "")
     if not url or not token:
-        raise RunnerError("--apply requires QA-only YOUMBIA_QA_DATABASE_URL and SUPABASE_ACCESS_TOKEN environment variables")
+        raise RunnerError("remote preflight requires QA-only YOUMBIA_QA_DATABASE_URL and SUPABASE_ACCESS_TOKEN environment variables")
     target = parse_qa_database_url(url)
     ca_file = env.get("YOUMBIA_QA_SSLROOTCERT")
-    if not ca_file or not Path(ca_file).is_file():
-        raise RunnerError("--apply requires YOUMBIA_QA_SSLROOTCERT pointing to a trusted CA bundle")
-    return dataclasses.replace(target, sslrootcert=ca_file)
+    if not ca_file:
+        raise RunnerError("remote preflight requires YOUMBIA_QA_SSLROOTCERT pointing to a trusted CA bundle")
+    validate_ssl_rootcert(Path(ca_file))
+    return dataclasses.replace(target, sslrootcert=str(Path(ca_file).resolve()))
+
+
+def validate_ssl_rootcert(path: Path) -> None:
+    """Reject missing, unreadable, or malformed CA bundles before invoking libpq."""
+    try:
+        if not path.is_file():
+            raise RunnerError("QA TLS CA bundle is unavailable")
+        context = ssl.create_default_context(cafile=str(path))
+        if not context.get_ca_certs():
+            raise RunnerError("QA TLS CA bundle contains no trusted certificates")
+    except (OSError, ssl.SSLError) as exc:
+        raise RunnerError("QA TLS CA bundle is invalid or unreadable") from exc
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     modes = parser.add_mutually_exclusive_group()
     modes.add_argument("--dry-run", action="store_true", help="verify all sources and print order; no database connection (default)")
+    modes.add_argument("--preflight-only", action="store_true",
+                       help="inspect the pinned QA project and pristine database in read-only mode")
     modes.add_argument("--apply", action="store_true", help="apply to the pinned QA project; remote write mode")
     parser.add_argument("--web-repo", type=Path, default=os.environ.get("YOUMBIA_WEB_REPO"),
                         help="local Git checkout containing the pinned Web commit")
@@ -897,6 +984,23 @@ def main(argv: list[str] | None = None) -> int:
         if not args.web_repo:
             raise RunnerError("--web-repo or YOUMBIA_WEB_REPO is required")
         manifest = load_manifest(args.manifest, Path(args.web_repo))
+        if args.preflight_only:
+            target = _remote_database_from_environment()
+            db = PsqlDatabase(target)
+            api = ManagementApi(os.environ["SUPABASE_ACCESS_TOKEN"])
+            identity = RemoteIdentity(api, db)
+            row = identity.verify()
+            state = inspect_readonly_initial_state(db, row)
+            reporter.emit({"event": "readonly_preflight_pass", "project_ref": QA_PROJECT_REF,
+                           "project_name": QA_PROJECT_NAME, "organization_id": QA_ORGANIZATION_ID,
+                           "organization_name": QA_ORGANIZATION_NAME, "region": QA_REGION,
+                           "database_host": QA_DB_HOST, "database": row["database"],
+                           "database_role": row["user"], "server_addr": row["server_addr"],
+                           "server_port": row["server_port"],
+                           "server_version_num": row["server_version_num"],
+                           "tls_version": row["tls_version"],
+                           "manifest_sha256": manifest.digest, **state})
+            return 0
         if not args.apply:
             _dry_run(manifest, reporter)
             return 0
@@ -906,7 +1010,8 @@ def main(argv: list[str] | None = None) -> int:
         identity = RemoteIdentity(api, db)
         identity.verify()
         reporter.emit({"event": "remote_preflight_pass", "project_ref": QA_PROJECT_REF,
-                       "project_name": QA_PROJECT_NAME, "organization": QA_ORGANIZATION_SLUG,
+                       "project_name": QA_PROJECT_NAME, "organization_id": QA_ORGANIZATION_ID,
+                       "organization_name": QA_ORGANIZATION_NAME,
                        "region": QA_REGION, "database_host": QA_DB_HOST,
                        "sslmode": "verify-full", "manifest_sha256": manifest.digest})
         MigrationRunner(db, identity, manifest, reporter).run()
