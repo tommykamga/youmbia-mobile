@@ -2,10 +2,10 @@ import type { EmailPreferences } from '@/services/emailPreferences';
 import { MARKETING_CONSENT_VERSION } from '@/lib/marketingConsentVersion';
 
 /**
- * Un ancien flag importé n'est pas une preuve de consentement.
- * La liste doit rester synchronisée avec lifecycle_has_verifiable_marketing_consent() côté SQL.
+ * Un ancien flag importé ou une source/date écrites par le client ne prouvent pas
+ * le consentement. La liste doit rester synchronisée avec le helper SQL Lifecycle.
  */
-const VERIFIED_SOURCES = ['signup', 'settings', 'mobile_home_prompt'] as const;
+const VERIFIED_SOURCES = ['authenticated_user_action'] as const;
 
 export function hasVerifiableMarketingConsent(
   prefs: Pick<

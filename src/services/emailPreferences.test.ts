@@ -70,7 +70,7 @@ describe('emailPreferences', () => {
       data: [{
         marketing_opt_in: true,
         marketing_opt_in_at: '2026-10-17T00:00:00.000Z',
-        marketing_opt_in_source: 'mobile_home_prompt',
+        marketing_opt_in_source: 'authenticated_user_action',
         marketing_opt_in_version: '2026-10-26.v1',
         unsubscribed_at: null,
         optional_draft_reminders_opt_out: false,
@@ -98,7 +98,7 @@ describe('emailPreferences', () => {
       data: [{
         marketing_opt_in: false,
         marketing_opt_in_at: null,
-        marketing_opt_in_source: 'settings',
+        marketing_opt_in_source: 'authenticated_user_action',
         marketing_opt_in_version: null,
         unsubscribed_at: '2026-10-17T00:00:00.000Z',
         optional_draft_reminders_opt_out: false,
@@ -126,7 +126,7 @@ describe('emailPreferences', () => {
       data: [{
         marketing_opt_in: false,
         marketing_opt_in_at: null,
-        marketing_opt_in_source: 'mobile_home_prompt',
+        marketing_opt_in_source: 'authenticated_user_action',
         marketing_opt_in_version: null,
         unsubscribed_at: '2026-10-26T09:00:00.000Z',
         optional_draft_reminders_opt_out: false,
@@ -158,7 +158,7 @@ describe('emailPreferences', () => {
       data: [{
         marketing_opt_in: true,
         marketing_opt_in_at: '2026-10-26T09:00:00.000Z',
-        marketing_opt_in_source: 'settings',
+        marketing_opt_in_source: 'authenticated_user_action',
         marketing_opt_in_version: '2026-10-26.v1',
         unsubscribed_at: null,
         optional_draft_reminders_opt_out: false,
@@ -195,7 +195,7 @@ describe('emailPreferences', () => {
         data: {
           marketing_opt_in: true,
           marketing_opt_in_at: '2026-10-26T09:00:00.000Z',
-          marketing_opt_in_source: 'settings',
+          marketing_opt_in_source: 'authenticated_user_action',
           marketing_opt_in_version: '2026-10-26.v1',
           unsubscribed_at: null,
         },
@@ -219,7 +219,7 @@ describe('emailPreferences', () => {
       data: {
         marketing_opt_in: true,
         marketing_opt_in_at: '2026-10-17T00:00:00.000Z',
-        marketing_opt_in_source: 'settings',
+        marketing_opt_in_source: 'authenticated_user_action',
         unsubscribed_at: null,
         optional_draft_reminders_opt_out: true,
         draft_reminders_notice_acknowledged_at: null,

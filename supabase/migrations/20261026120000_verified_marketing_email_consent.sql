@@ -15,7 +15,7 @@ CREATE TABLE IF NOT EXISTS public.marketing_consent_events (
   operation_id uuid NOT NULL DEFAULT gen_random_uuid(),
   user_id uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
   choice text NOT NULL CHECK (choice IN ('accepted', 'refused', 'revoked')),
-  source text NOT NULL CHECK (source IN ('signup', 'settings', 'mobile_home_prompt', 'email_unsubscribe')),
+  source text NOT NULL CHECK (source IN ('authenticated_user_action', 'email_unsubscribe')),
   consent_version text CHECK (consent_version IS NULL OR length(btrim(consent_version)) > 0),
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   CONSTRAINT marketing_consent_events_acceptance_version_chk
@@ -74,7 +74,7 @@ BEGIN
   END IF;
   IF p_opted_in IS NULL
      OR p_source IS NULL
-     OR p_source NOT IN ('signup', 'settings', 'mobile_home_prompt')
+     OR p_source IS DISTINCT FROM 'authenticated_user_action'
      OR p_consent_version IS DISTINCT FROM '2026-10-26.v1' THEN
     RAISE EXCEPTION 'invalid marketing consent request' USING ERRCODE = '22023';
   END IF;
@@ -87,7 +87,7 @@ BEGIN
          AND p.unsubscribed_at IS NULL
          AND p.marketing_opt_in_at IS NOT NULL
          AND p.marketing_opt_in_version = '2026-10-26.v1'
-         AND p.marketing_opt_in_source IN ('signup', 'settings', 'mobile_home_prompt')
+         AND p.marketing_opt_in_source = 'authenticated_user_action'
     INTO v_previous_opted_in
   FROM public.email_preferences AS p
   WHERE p.user_id = v_user_id
@@ -138,8 +138,8 @@ $function$;
 
 REVOKE ALL ON FUNCTION public.marketing_consent_record_internal(boolean, text, text) FROM PUBLIC, anon, authenticated, service_role;
 
--- Public RPCs have a server-fixed source; a caller cannot label a settings
--- action as a signup or prompt action by changing an argument.
+-- Public RPCs share one server-fixed source. The caller cannot forge a UI
+-- surface label; the authenticated RPC invocation is the recorded provenance.
 CREATE OR REPLACE FUNCTION public.set_marketing_consent_from_signup(
   p_opted_in boolean,
   p_consent_version text
@@ -157,7 +157,7 @@ LANGUAGE sql
 SECURITY DEFINER
 SET search_path = ''
 AS $function$
-  SELECT * FROM public.marketing_consent_record_internal(p_opted_in, 'signup', p_consent_version);
+  SELECT * FROM public.marketing_consent_record_internal(p_opted_in, 'authenticated_user_action', p_consent_version);
 $function$;
 
 CREATE OR REPLACE FUNCTION public.set_marketing_consent_from_settings(
@@ -177,7 +177,7 @@ LANGUAGE sql
 SECURITY DEFINER
 SET search_path = ''
 AS $function$
-  SELECT * FROM public.marketing_consent_record_internal(p_opted_in, 'settings', p_consent_version);
+  SELECT * FROM public.marketing_consent_record_internal(p_opted_in, 'authenticated_user_action', p_consent_version);
 $function$;
 
 CREATE OR REPLACE FUNCTION public.set_marketing_consent_from_home_prompt(
@@ -197,7 +197,7 @@ LANGUAGE sql
 SECURITY DEFINER
 SET search_path = ''
 AS $function$
-  SELECT * FROM public.marketing_consent_record_internal(p_opted_in, 'mobile_home_prompt', p_consent_version);
+  SELECT * FROM public.marketing_consent_record_internal(p_opted_in, 'authenticated_user_action', p_consent_version);
 $function$;
 
 REVOKE ALL ON FUNCTION public.set_marketing_consent_from_signup(boolean, text) FROM PUBLIC, anon, service_role;
@@ -207,44 +207,18 @@ GRANT EXECUTE ON FUNCTION public.set_marketing_consent_from_signup(boolean, text
 GRANT EXECUTE ON FUNCTION public.set_marketing_consent_from_settings(boolean, text) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.set_marketing_consent_from_home_prompt(boolean, text) TO authenticated;
 
--- Signup is recorded server-side even when Auth requires email confirmation.
--- Only the explicit, versioned UI choice is accepted; default remains false.
+-- The Auth sign-up metadata is client-controlled, so the trigger only provisions
+-- a non-consenting row. A versioned consent is recorded later by the authenticated RPC.
 CREATE OR REPLACE FUNCTION public.handle_new_user_email_preferences()
 RETURNS trigger
 LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = ''
 AS $function$
-DECLARE
-  v_opt_in boolean :=
-    lower(coalesce(NEW.raw_user_meta_data ->> 'marketing_opt_in', 'false')) = 'true'
-    AND NEW.raw_user_meta_data ->> 'marketing_consent_version' = '2026-10-26.v1';
-  v_occurred_at timestamptz := clock_timestamp();
 BEGIN
-  INSERT INTO public.email_preferences (
-    user_id, marketing_opt_in, marketing_opt_in_at,
-    marketing_opt_in_source, marketing_opt_in_version
-  )
-  VALUES (
-    NEW.id,
-    v_opt_in,
-    CASE WHEN v_opt_in THEN v_occurred_at ELSE NULL END,
-    CASE WHEN v_opt_in THEN 'signup' ELSE NULL END,
-    CASE WHEN v_opt_in THEN '2026-10-26.v1' ELSE NULL END
-  )
-  ON CONFLICT (user_id) DO UPDATE
-  SET marketing_opt_in = EXCLUDED.marketing_opt_in,
-      marketing_opt_in_at = EXCLUDED.marketing_opt_in_at,
-      marketing_opt_in_source = EXCLUDED.marketing_opt_in_source,
-      marketing_opt_in_version = EXCLUDED.marketing_opt_in_version,
-      unsubscribed_at = NULL
-  WHERE v_opt_in;
-
-  IF v_opt_in THEN
-    INSERT INTO public.marketing_consent_events
-      (user_id, choice, source, consent_version, created_at)
-    VALUES (NEW.id, 'accepted', 'signup', '2026-10-26.v1', v_occurred_at);
-  END IF;
+  INSERT INTO public.email_preferences (user_id, marketing_opt_in)
+  VALUES (NEW.id, false)
+  ON CONFLICT (user_id) DO NOTHING;
   RETURN NEW;
 END;
 $function$;
@@ -268,7 +242,7 @@ AS $function$
       AND p.unsubscribed_at IS NULL
       AND p.marketing_opt_in_at IS NOT NULL
       AND p.marketing_opt_in_version = '2026-10-26.v1'
-      AND p.marketing_opt_in_source IN ('signup', 'settings', 'mobile_home_prompt')
+      AND p.marketing_opt_in_source = 'authenticated_user_action'
   );
 $function$;
 

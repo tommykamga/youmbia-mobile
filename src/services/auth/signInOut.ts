@@ -60,23 +60,12 @@ export async function signIn(
  */
 export async function signUp(
   email: string,
-  password: string,
-  options?: { marketingOptIn?: boolean; marketingConsentVersion?: string }
+  password: string
 ): Promise<SignUpResult> {
   try {
-    const marketingOptIn = options?.marketingOptIn === true;
     const { data, error } = await supabase.auth.signUp({
       email: email.trim(),
       password,
-      options: {
-        data: {
-          // Strict boolean → string 'true' only when explicit opt-in (trigger SQL).
-          marketing_opt_in: marketingOptIn ? 'true' : 'false',
-          ...(marketingOptIn && options?.marketingConsentVersion
-            ? { marketing_consent_version: options.marketingConsentVersion }
-            : {}),
-        },
-      },
     });
 
     if (error) {

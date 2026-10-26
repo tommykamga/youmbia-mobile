@@ -27,8 +27,8 @@ export const LIFECYCLE_REACTIVATION_MS = 15 * 24 * 60 * 60 * 1000;
 export const LIFECYCLE_CLAIM_STALE_MS = 10 * 60 * 1000;
 export const LIFECYCLE_MAX_SEND_ATTEMPTS = 5;
 
-/** Sources attestant un consentement marketing individuel (exclut migration groupée). */
-export const LIFECYCLE_VERIFIABLE_MARKETING_SOURCES = ['signup', 'settings'] as const;
+/** Source attribuée par le serveur aux RPC Auth; exclut sources legacy non vérifiables et imports. */
+export const LIFECYCLE_VERIFIABLE_MARKETING_SOURCES = ['authenticated_user_action'] as const;
 
 export const LIFECYCLE_BLOCKED_MARKETING_SOURCES = [
   'migration_initiale_youmbia_2026_10_18',

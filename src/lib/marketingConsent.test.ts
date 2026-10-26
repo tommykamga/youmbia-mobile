@@ -5,7 +5,7 @@ import { MARKETING_CONSENT_COPY, MARKETING_CONSENT_VERSION } from './marketingCo
 const base = {
   marketing_opt_in: true,
   marketing_opt_in_at: '2026-10-19T00:00:00.000Z',
-  marketing_opt_in_source: 'settings',
+  marketing_opt_in_source: 'authenticated_user_action',
   marketing_opt_in_version: '2026-10-26.v1',
   unsubscribed_at: null,
 };
@@ -28,14 +28,11 @@ describe('consentement marketing YOUMBIA Mobile', () => {
   it('ne considère pas une autorisation de test comme une preuve de campagne', () => {
     expect(hasVerifiableMarketingConsent({ ...base, marketing_opt_in_source: 'direct_user_authorization_chat' })).toBe(false);
   });
-  it('reconnaît une acceptation explicite depuis la bannière, avec horodatage', () => {
-    const prefs = { ...base, marketing_opt_in_source: 'mobile_home_prompt' };
-    expect(hasVerifiableMarketingConsent(prefs)).toBe(true);
-    expect(shouldOfferMarketingConsent(prefs)).toBe(false);
-  });
-  it('reconnaît un consentement valide en Paramètres ou inscription', () => {
+  it('reconnaît un consentement versionné dont la source est fixée côté serveur', () => {
     expect(hasVerifiableMarketingConsent(base)).toBe(true);
-    expect(hasVerifiableMarketingConsent({ ...base, marketing_opt_in_source: 'signup' })).toBe(true);
+    expect(hasVerifiableMarketingConsent({ ...base, marketing_opt_in_source: 'signup' })).toBe(false);
+    expect(hasVerifiableMarketingConsent({ ...base, marketing_opt_in_source: 'settings' })).toBe(false);
+    expect(hasVerifiableMarketingConsent({ ...base, marketing_opt_in_source: 'mobile_home_prompt' })).toBe(false);
   });
   it('exige une date de consentement', () => {
     expect(hasVerifiableMarketingConsent({ ...base, marketing_opt_in_at: null })).toBe(false);

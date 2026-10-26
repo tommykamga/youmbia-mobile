@@ -12,7 +12,7 @@ import { runAppleOAuth, formatAppleSignInUserMessage } from '@/lib/appleSignInMo
 import { AppleSignInButton } from '@/features/auth/AppleSignInButton';
 import { trackSignUpStarted } from '@/lib/analytics';
 import { setMarketingEmailOptIn } from '@/services/emailPreferences';
-import { MARKETING_CONSENT_COPY, MARKETING_CONSENT_VERSION } from '@/lib/marketingConsentVersion';
+import { MARKETING_CONSENT_COPY } from '@/lib/marketingConsentVersion';
 
 function getErrorMessage(error: { message: string }): string {
   const msg = error.message.toLowerCase();
@@ -82,18 +82,17 @@ export default function SignupScreen() {
     trackSignUpStarted({ signup_method: 'email' });
     setLoading(true);
     try {
-      const result = await signUp(trimmedEmail, password, {
-        marketingOptIn,
-        marketingConsentVersion: MARKETING_CONSENT_VERSION,
-      });
+      const result = await signUp(trimmedEmail, password);
       if (result.ok) {
         if (result.requiresEmailConfirmation) {
-          // Opt-in déjà porté dans user_metadata → trigger email_preferences à la création.
           setSuccessMessage(
-            'Compte créé avec succès ! Vérifiez votre boîte mail pour confirmer votre inscription avant de vous connecter.'
+            marketingOptIn
+              ? 'Compte créé avec succès ! Vérifiez votre boîte mail pour confirmer votre inscription. Après connexion, vous pourrez enregistrer votre accord e-mail dans Profil > Préférences.'
+              : 'Compte créé avec succès ! Vérifiez votre boîte mail pour confirmer votre inscription avant de vous connecter.'
           );
           return;
         }
+        if (!(await applyMarketingPreferenceIfNeeded())) return;
         replaceAfterSuccessfulAuth(router, params.redirect, params.contact);
       } else {
         setError(getErrorMessage(result.error));
