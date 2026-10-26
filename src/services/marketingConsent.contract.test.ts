@@ -97,4 +97,17 @@ describe('contrat SQL de consentement marketing', () => {
     expect(migration).toMatch(/GRANT EXECUTE ON FUNCTION public\.apply_lifecycle_unsubscribe\(uuid, text, text\) TO service_role/);
     expect(migration).toMatch(/REVOKE ALL ON FUNCTION public\.apply_lifecycle_unsubscribe\(uuid, text, text\) FROM PUBLIC, anon, authenticated/);
   });
+
+  it('permet une réacceptation explicite après désabonnement sans effacer une suppression dure', () => {
+    const consentStart = migration.indexOf('CREATE OR REPLACE FUNCTION public.marketing_consent_record_internal');
+    const consentEnd = migration.indexOf('$function$;', consentStart + 1);
+    const consentFunction = migration.slice(consentStart, consentEnd);
+    const unsubscribeStart = migration.indexOf('CREATE OR REPLACE FUNCTION public.apply_lifecycle_unsubscribe');
+    const unsubscribeEnd = migration.indexOf('$function$;', unsubscribeStart + 1);
+    const unsubscribeFunction = migration.slice(unsubscribeStart, unsubscribeEnd);
+
+    expect(consentFunction).toMatch(/DELETE FROM public\.email_suppressions AS s\s+USING auth\.users AS u/);
+    expect(consentFunction).toMatch(/s\.email = lower\(btrim\(u\.email\)\)\s+AND s\.reason = 'unsub'/);
+    expect(unsubscribeFunction).toMatch(/ON CONFLICT \(email\) DO UPDATE[\s\S]*WHERE public\.email_suppressions\.reason = 'unsub'/);
+  });
 });
