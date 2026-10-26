@@ -44,6 +44,22 @@ describe('contrat SQL de consentement marketing', () => {
     expect(migration).toMatch(/GRANT SELECT ON TABLE public\.marketing_consent_events TO service_role/);
   });
 
+  it('journalise les déclarations téléphoniques comme attestations administratives de cohorte uniquement', () => {
+    const tableStart = migration.indexOf('CREATE TABLE IF NOT EXISTS public.marketing_consent_admin_attestations');
+    const tableEnd = migration.indexOf('CREATE OR REPLACE FUNCTION public.admin_record_phone_consent_cohort_attestation()', tableStart);
+    const adminTable = migration.slice(tableStart, tableEnd);
+    expect(adminTable).toContain('recorded_by_admin_id uuid NOT NULL');
+    expect(adminTable).toContain('attested_at timestamptz NOT NULL DEFAULT clock_timestamp()');
+    expect(adminTable).not.toMatch(/user_id|original_consent_at|signature/i);
+    expect(migration).toMatch(/IF v_actor IS NULL OR NOT public\.is_admin\(\) THEN/);
+    expect(migration).toMatch(/GRANT EXECUTE ON FUNCTION public\.admin_record_phone_consent_cohort_attestation\(\) TO authenticated/);
+    expect(migration).toMatch(/REVOKE ALL ON FUNCTION public\.admin_record_phone_consent_cohort_attestation\(\) FROM PUBLIC, anon, service_role/);
+    const eligibilityStart = migration.indexOf('CREATE OR REPLACE FUNCTION public.lifecycle_has_verifiable_marketing_consent');
+    const eligibilityEnd = migration.indexOf('$function$;', eligibilityStart + 1);
+    const eligibilityFunction = migration.slice(eligibilityStart, eligibilityEnd);
+    expect(eligibilityFunction).not.toContain('marketing_consent_admin_attestations');
+  });
+
   it('attribue une source générique côté serveur aux RPC auth', () => {
     expect(migration.match(/marketing_consent_record_internal\(p_opted_in, 'authenticated_user_action', p_consent_version\)/g)).toHaveLength(3);
     expect(migration).toMatch(/p_source IS DISTINCT FROM 'authenticated_user_action'/);
