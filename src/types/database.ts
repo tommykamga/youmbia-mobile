@@ -816,6 +816,33 @@ export type Database = {
         };
         Relationships: [];
       };
+      marketing_consent_admin_attestations: {
+        Row: {
+          id: string;
+          cohort_source: string;
+          active_preference_count: number;
+          recorded_by_admin_id: string;
+          attested_at: string;
+          attestation: string;
+        };
+        Insert: {
+          id?: string;
+          cohort_source: string;
+          active_preference_count: number;
+          recorded_by_admin_id: string;
+          attested_at?: string;
+          attestation: string;
+        };
+        Update: {
+          id?: string;
+          cohort_source?: string;
+          active_preference_count?: number;
+          recorded_by_admin_id?: string;
+          attested_at?: string;
+          attestation?: string;
+        };
+        Relationships: [];
+      };
       saved_searches: {
         Row: {
           id: string;
@@ -1075,6 +1102,16 @@ export type Database = {
       set_marketing_consent_from_home_prompt: {
         Args: { p_opted_in: boolean; p_consent_version: string };
         Returns: Database['public']['Functions']['set_marketing_consent_from_signup']['Returns'];
+      };
+      admin_record_phone_consent_cohort_attestation: {
+        Args: Record<PropertyKey, never>;
+        Returns: {
+          attestation_id: string;
+          cohort_source: string;
+          active_preference_count: number;
+          recorded_by_admin_id: string;
+          attested_at: string;
+        }[];
       };
     };
     Enums: {
