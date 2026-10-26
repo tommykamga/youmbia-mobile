@@ -4,11 +4,15 @@
  */
 
 import { supabase } from '@/lib/supabase';
+import { MARKETING_CONSENT_VERSION } from '@/lib/marketingConsentVersion';
+
+export { MARKETING_CONSENT_VERSION } from '@/lib/marketingConsentVersion';
 
 export type EmailPreferences = {
   marketing_opt_in: boolean;
   marketing_opt_in_at: string | null;
   marketing_opt_in_source: string | null;
+  marketing_opt_in_version: string | null;
   unsubscribed_at: string | null;
   optional_draft_reminders_opt_out: boolean;
   draft_reminders_notice_acknowledged_at: string | null;
@@ -21,7 +25,7 @@ export type EmailPreferencesResult =
 const GENERIC_ERROR = 'Impossible de mettre à jour vos préférences email';
 
 const PREFS_SELECT =
-  'marketing_opt_in, marketing_opt_in_at, marketing_opt_in_source, unsubscribed_at, optional_draft_reminders_opt_out, draft_reminders_notice_acknowledged_at';
+  'marketing_opt_in, marketing_opt_in_at, marketing_opt_in_source, marketing_opt_in_version, unsubscribed_at, optional_draft_reminders_opt_out, draft_reminders_notice_acknowledged_at';
 
 function mapError(message: string): string {
   const msg = message.toLowerCase();
@@ -34,6 +38,7 @@ function mapRow(data: {
   marketing_opt_in?: boolean | null;
   marketing_opt_in_at?: string | null;
   marketing_opt_in_source?: string | null;
+  marketing_opt_in_version?: string | null;
   unsubscribed_at?: string | null;
   optional_draft_reminders_opt_out?: boolean | null;
   draft_reminders_notice_acknowledged_at?: string | null;
@@ -42,6 +47,7 @@ function mapRow(data: {
     marketing_opt_in: data.marketing_opt_in === true,
     marketing_opt_in_at: data.marketing_opt_in_at ?? null,
     marketing_opt_in_source: data.marketing_opt_in_source ?? null,
+    marketing_opt_in_version: data.marketing_opt_in_version ?? null,
     unsubscribed_at: data.unsubscribed_at ?? null,
     optional_draft_reminders_opt_out: data.optional_draft_reminders_opt_out === true,
     draft_reminders_notice_acknowledged_at:
@@ -81,6 +87,7 @@ export async function getEmailPreferences(): Promise<EmailPreferencesResult> {
         marketing_opt_in: false,
         marketing_opt_in_at: null,
         marketing_opt_in_source: null,
+        marketing_opt_in_version: null,
         unsubscribed_at: null,
         optional_draft_reminders_opt_out: false,
         draft_reminders_notice_acknowledged_at: null,
@@ -99,37 +106,22 @@ export async function getEmailPreferences(): Promise<EmailPreferencesResult> {
  */
 export async function setMarketingEmailOptIn(
   optedIn: boolean,
-  source: 'signup' | 'settings' | 'unsubscribe' | 'mobile_home_prompt'
+  source: 'signup' | 'settings' | 'mobile_home_prompt'
 ): Promise<EmailPreferencesResult> {
   const auth = await requireUserId();
   if (auth.error || !auth.userId) {
     return { data: null, error: auth.error ?? { message: 'Connexion requise' } };
   }
-  const nowIso = new Date().toISOString();
-
-  const payload = optedIn
-    ? {
-        user_id: auth.userId,
-        marketing_opt_in: true,
-        marketing_opt_in_at: nowIso,
-        marketing_opt_in_source: source,
-        unsubscribed_at: null,
-        updated_at: nowIso,
-      }
-    : {
-        user_id: auth.userId,
-        marketing_opt_in: false,
-        marketing_opt_in_at: null,
-        marketing_opt_in_source: source,
-        unsubscribed_at: nowIso,
-        updated_at: nowIso,
-      };
-
-  const { data, error } = await supabase
-    .from('email_preferences')
-    .upsert(payload, { onConflict: 'user_id' })
-    .select(PREFS_SELECT)
-    .single();
+  const rpcBySource = {
+    signup: 'set_marketing_consent_from_signup',
+    settings: 'set_marketing_consent_from_settings',
+    mobile_home_prompt: 'set_marketing_consent_from_home_prompt',
+  } as const;
+  const rpcName = rpcBySource[source];
+  const { data, error } = await supabase.rpc(rpcName, {
+    p_opted_in: optedIn,
+    p_consent_version: MARKETING_CONSENT_VERSION,
+  });
 
   if (error || !data) {
     return {
@@ -138,7 +130,9 @@ export async function setMarketingEmailOptIn(
     };
   }
 
-  return { data: mapRow(data), error: null };
+  const row = Array.isArray(data) ? data[0] : data;
+  if (!row) return { data: null, error: { message: GENERIC_ERROR } };
+  return { data: mapRow(row), error: null };
 }
 
 /**
@@ -153,14 +147,12 @@ export async function setDraftRemindersAllowed(
   if (auth.error || !auth.userId) {
     return { data: null, error: auth.error ?? { message: 'Connexion requise' } };
   }
-  const nowIso = new Date().toISOString();
   const optOut = !allowed;
 
   const { data: updated, error: updateError } = await supabase
     .from('email_preferences')
     .update({
       optional_draft_reminders_opt_out: optOut,
-      updated_at: nowIso,
     })
     .eq('user_id', auth.userId)
     .select(PREFS_SELECT)
@@ -178,9 +170,7 @@ export async function setDraftRemindersAllowed(
     .from('email_preferences')
     .insert({
       user_id: auth.userId,
-      marketing_opt_in: false,
       optional_draft_reminders_opt_out: optOut,
-      updated_at: nowIso,
     })
     .select(PREFS_SELECT)
     .single();

@@ -1,3 +1,5 @@
+import { MARKETING_CONSENT_VERSION } from '@/lib/marketingConsentVersion';
+
 /**
  * Contrats campagnes Lifecycle Email (miroir SQL enqueue / revalidate).
  * Channel : welcome + listing_published = service ; reste = marketing.
@@ -44,7 +46,9 @@ export type LifecycleOutboxStatus =
 export type LifecycleEmailPreferences = {
   marketing_opt_in: boolean;
   unsubscribed_at: string | null;
+  marketing_opt_in_at?: string | null;
   marketing_opt_in_source?: string | null;
+  marketing_opt_in_version?: string | null;
   optional_draft_reminders_opt_out?: boolean;
 };
 
@@ -94,6 +98,8 @@ export function hasVerifiableMarketingConsent(
   if (!preferences) return false;
   if (preferences.unsubscribed_at != null) return false;
   if (preferences.marketing_opt_in !== true) return false;
+  if (!preferences.marketing_opt_in_at) return false;
+  if (preferences.marketing_opt_in_version !== MARKETING_CONSENT_VERSION) return false;
   const source = String(preferences.marketing_opt_in_source ?? '').trim();
   if (!source) return false;
   if (

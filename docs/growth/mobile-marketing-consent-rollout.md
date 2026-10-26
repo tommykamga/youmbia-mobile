@@ -5,12 +5,16 @@
 - Opt-in volontaire, non précoché, à l'accueil pour les seuls utilisateurs connectés qui n'ont ni preuve d'accord ni désabonnement.
 - "Pas maintenant" n'écrit aucune préférence et masque seulement pour la session applicative.
 - Paramètres : le switch reflète une preuve valide, pas un booléen d'import.
-- Action "Oui, j'accepte" : source `mobile_home_prompt` et horodatage. Vérifier la persistance avant de masquer l'invitation.
+- Action "Oui, j'accepte" : RPC authentifiée à source fixée côté serveur, version `2026-10-26.v1`, horodatage PostgreSQL et événement serveur.
+- Refus initial, révocation depuis Profil > Préférences, désinscription par lien et nouvel accord sont enregistrés séparément dans `marketing_consent_events`; aucun événement historique n'est inféré.
+- `2026-10-26.v1` désigne le texte exact partagé entre inscription et invitation : « Je souhaite recevoir par e-mail des conseils, nouveautés et recommandations YOUMBIA. Ce choix est facultatif et révocable à tout moment, sans effet sur l’utilisation de mon compte. Les e-mails transactionnels (connexion, confirmation et sécurité) restent séparés. »
+- Le déclencheur d'inscription n'enregistre un accord que si la métadonnée explicite et la version attendue sont présentes. Les imports et anciennes lignes sans version restent non vérifiés.
+- Les clients n'ont plus de droit d'écrire directement les colonnes marketing. Les droits d'opposition aux rappels de brouillon restent séparés.
 - Aucun opt-in marketing par Auth/SMTP/Lifecycle, aucune réinscription des désabonnés.
 
 ## Déploiement
 1. CI lint, typecheck, tests Vitest + revue QA mobile et accessibilité.
-2. Migration SQL compatible avant diffusion du code mobile ; vérifier `lifecycle_has_verifiable_marketing_consent`.
+2. Revue puis migration SQL compatible avant diffusion du code mobile ; vérifier grants, RLS et `lifecycle_has_verifiable_marketing_consent` sur base isolée.
 3. Publier l'actualisation mobile selon les règles EAS/OTA existantes, ou via le prochain build si OTA incompatible ; confirmer la distribution installée.
 4. Tests sur comptes consentant et non consentant, sign-out/login, refus, préférences migrées, désabonnement ; lecture source/date en SQL.
 5. Mesurer le nombre de consentements `source in ('signup','settings','mobile_home_prompt')` et leur horodatage.

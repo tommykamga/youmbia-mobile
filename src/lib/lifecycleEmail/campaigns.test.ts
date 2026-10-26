@@ -12,8 +12,10 @@ const CUTOFF = Date.parse('2026-10-17T20:00:00.000Z');
 const base = (over: Partial<LifecycleEligibilityInput> = {}): LifecycleEligibilityInput => ({
   preferences: {
     marketing_opt_in: true,
+    marketing_opt_in_at: '2026-10-26T00:00:00.000Z',
     unsubscribed_at: null,
     marketing_opt_in_source: 'signup',
+    marketing_opt_in_version: '2026-10-26.v1',
   },
   isBanned: false,
   email: 'user@example.com',
@@ -145,8 +147,10 @@ describe('lifecycle eligibility service vs marketing', () => {
         base({
           preferences: {
             marketing_opt_in: true,
+            marketing_opt_in_at: '2026-10-26T00:00:00.000Z',
             unsubscribed_at: null,
             marketing_opt_in_source: 'signup',
+            marketing_opt_in_version: '2026-10-26.v1',
             optional_draft_reminders_opt_out: true,
           },
           draft: {

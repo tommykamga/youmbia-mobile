@@ -786,6 +786,7 @@ export type Database = {
           marketing_opt_in: boolean;
           marketing_opt_in_at: string | null;
           marketing_opt_in_source: string | null;
+          marketing_opt_in_version: string | null;
           unsubscribed_at: string | null;
           optional_draft_reminders_opt_out: boolean;
           draft_reminders_notice_acknowledged_at: string | null;
@@ -796,6 +797,7 @@ export type Database = {
           marketing_opt_in?: boolean;
           marketing_opt_in_at?: string | null;
           marketing_opt_in_source?: string | null;
+          marketing_opt_in_version?: string | null;
           unsubscribed_at?: string | null;
           optional_draft_reminders_opt_out?: boolean;
           draft_reminders_notice_acknowledged_at?: string | null;
@@ -806,6 +808,7 @@ export type Database = {
           marketing_opt_in?: boolean;
           marketing_opt_in_at?: string | null;
           marketing_opt_in_source?: string | null;
+          marketing_opt_in_version?: string | null;
           unsubscribed_at?: string | null;
           optional_draft_reminders_opt_out?: boolean;
           draft_reminders_notice_acknowledged_at?: string | null;
@@ -1049,6 +1052,29 @@ export type Database = {
       acknowledge_lifecycle_draft_reminders_notice: {
         Args: Record<PropertyKey, never>;
         Returns: boolean;
+      };
+      set_marketing_consent_from_signup: {
+        Args: {
+          p_opted_in: boolean;
+          p_consent_version: string;
+        };
+        Returns: {
+          marketing_opt_in: boolean;
+          marketing_opt_in_at: string | null;
+          marketing_opt_in_source: string | null;
+          marketing_opt_in_version: string | null;
+          unsubscribed_at: string | null;
+          optional_draft_reminders_opt_out: boolean;
+          draft_reminders_notice_acknowledged_at: string | null;
+        }[];
+      };
+      set_marketing_consent_from_settings: {
+        Args: { p_opted_in: boolean; p_consent_version: string };
+        Returns: Database['public']['Functions']['set_marketing_consent_from_signup']['Returns'];
+      };
+      set_marketing_consent_from_home_prompt: {
+        Args: { p_opted_in: boolean; p_consent_version: string };
+        Returns: Database['public']['Functions']['set_marketing_consent_from_signup']['Returns'];
       };
     };
     Enums: {

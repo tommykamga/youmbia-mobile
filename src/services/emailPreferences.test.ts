@@ -61,57 +61,153 @@ describe('emailPreferences', () => {
     expect(mocks.from).not.toHaveBeenCalled();
   });
 
-  it('opt-in écrit marketing_opt_in true + source signup', async () => {
+  it('opt-in appelle le RPC serveur avec la source et la version explicites', async () => {
     mocks.getSession.mockResolvedValue({
       data: { session: { user: { id: 'user-1' } } },
       error: null,
     });
-    mocks.single.mockResolvedValue({
-      data: {
+    mocks.rpc.mockResolvedValue({
+      data: [{
         marketing_opt_in: true,
         marketing_opt_in_at: '2026-10-17T00:00:00.000Z',
-        marketing_opt_in_source: 'signup',
+        marketing_opt_in_source: 'mobile_home_prompt',
+        marketing_opt_in_version: '2026-10-26.v1',
         unsubscribed_at: null,
         optional_draft_reminders_opt_out: false,
         draft_reminders_notice_acknowledged_at: null,
-      },
+      }],
       error: null,
     });
     const { setMarketingEmailOptIn } = await import('./emailPreferences');
-    const result = await setMarketingEmailOptIn(true, 'signup');
+    const result = await setMarketingEmailOptIn(true, 'mobile_home_prompt');
     expect(result.error).toBeNull();
     expect(result.data?.marketing_opt_in).toBe(true);
-    expect(mocks.upsert).toHaveBeenCalled();
-    const payload = mocks.upsert.mock.calls[0][0] as { marketing_opt_in: boolean };
-    expect(payload.marketing_opt_in).toBe(true);
+    expect(mocks.rpc).toHaveBeenCalledWith('set_marketing_consent_from_home_prompt', {
+      p_opted_in: true,
+      p_consent_version: '2026-10-26.v1',
+    });
+    expect(mocks.from).not.toHaveBeenCalled();
   });
 
-  it('opt-out pose unsubscribed_at et marketing_opt_in false', async () => {
+  it('révocation appelle le RPC sans écrire de date depuis le client', async () => {
     mocks.getSession.mockResolvedValue({
       data: { session: { user: { id: 'user-1' } } },
       error: null,
     });
-    mocks.single.mockResolvedValue({
-      data: {
+    mocks.rpc.mockResolvedValue({
+      data: [{
         marketing_opt_in: false,
         marketing_opt_in_at: null,
         marketing_opt_in_source: 'settings',
+        marketing_opt_in_version: null,
         unsubscribed_at: '2026-10-17T00:00:00.000Z',
         optional_draft_reminders_opt_out: false,
         draft_reminders_notice_acknowledged_at: null,
-      },
+      }],
       error: null,
     });
     const { setMarketingEmailOptIn } = await import('./emailPreferences');
     const result = await setMarketingEmailOptIn(false, 'settings');
     expect(result.data?.marketing_opt_in).toBe(false);
     expect(result.data?.unsubscribed_at).toBeTruthy();
-    const payload = mocks.upsert.mock.calls[0][0] as {
-      marketing_opt_in: boolean;
-      unsubscribed_at: string | null;
-    };
-    expect(payload.marketing_opt_in).toBe(false);
-    expect(payload.unsubscribed_at).toBeTruthy();
+    expect(mocks.rpc).toHaveBeenCalledWith('set_marketing_consent_from_settings', {
+      p_opted_in: false,
+      p_consent_version: '2026-10-26.v1',
+    });
+    expect(mocks.from).not.toHaveBeenCalled();
+  });
+
+  it('refus explicite depuis la bannière passe par le RPC de refus avec source fixe', async () => {
+    mocks.getSession.mockResolvedValue({
+      data: { session: { user: { id: 'user-1' } } },
+      error: null,
+    });
+    mocks.rpc.mockResolvedValue({
+      data: [{
+        marketing_opt_in: false,
+        marketing_opt_in_at: null,
+        marketing_opt_in_source: 'mobile_home_prompt',
+        marketing_opt_in_version: null,
+        unsubscribed_at: '2026-10-26T09:00:00.000Z',
+        optional_draft_reminders_opt_out: false,
+        draft_reminders_notice_acknowledged_at: null,
+      }],
+      error: null,
+    });
+    const { setMarketingEmailOptIn } = await import('./emailPreferences');
+    const result = await setMarketingEmailOptIn(false, 'mobile_home_prompt');
+    expect(result.error).toBeNull();
+    expect(result.data?.unsubscribed_at).toBeTruthy();
+    expect(mocks.rpc).toHaveBeenCalledWith('set_marketing_consent_from_home_prompt', {
+      p_opted_in: false,
+      p_consent_version: '2026-10-26.v1',
+    });
+    expect(mocks.from).not.toHaveBeenCalled();
+  });
+
+  it('utilise l’identifiant Auth, pas l’adresse Apple Private Relay', async () => {
+    mocks.getSession.mockResolvedValue({
+      data: {
+        session: {
+          user: { id: 'apple-user-id', email: 'relay-123@privaterelay.appleid.com' },
+        },
+      },
+      error: null,
+    });
+    mocks.rpc.mockResolvedValue({
+      data: [{
+        marketing_opt_in: true,
+        marketing_opt_in_at: '2026-10-26T09:00:00.000Z',
+        marketing_opt_in_source: 'settings',
+        marketing_opt_in_version: '2026-10-26.v1',
+        unsubscribed_at: null,
+        optional_draft_reminders_opt_out: false,
+        draft_reminders_notice_acknowledged_at: null,
+      }],
+      error: null,
+    });
+    const { setMarketingEmailOptIn } = await import('./emailPreferences');
+    const result = await setMarketingEmailOptIn(true, 'settings');
+    expect(result.error).toBeNull();
+    expect(mocks.rpc).toHaveBeenCalledWith('set_marketing_consent_from_settings', {
+      p_opted_in: true,
+      p_consent_version: '2026-10-26.v1',
+    });
+  });
+
+  it('relit la préférence serveur à chaque ouverture pour synchroniser les appareils', async () => {
+    mocks.getSession.mockResolvedValue({
+      data: { session: { user: { id: 'shared-user-id' } } },
+      error: null,
+    });
+    mocks.maybeSingle
+      .mockResolvedValueOnce({
+        data: {
+          marketing_opt_in: false,
+          marketing_opt_in_at: null,
+          marketing_opt_in_source: null,
+          marketing_opt_in_version: null,
+          unsubscribed_at: null,
+        },
+        error: null,
+      })
+      .mockResolvedValueOnce({
+        data: {
+          marketing_opt_in: true,
+          marketing_opt_in_at: '2026-10-26T09:00:00.000Z',
+          marketing_opt_in_source: 'settings',
+          marketing_opt_in_version: '2026-10-26.v1',
+          unsubscribed_at: null,
+        },
+        error: null,
+      });
+    const { getEmailPreferences } = await import('./emailPreferences');
+    const first = await getEmailPreferences();
+    const second = await getEmailPreferences();
+    expect(first.data?.marketing_opt_in).toBe(false);
+    expect(second.data?.marketing_opt_in).toBe(true);
+    expect(mocks.eq).toHaveBeenCalledWith('user_id', 'shared-user-id');
+    expect(mocks.from).toHaveBeenCalledTimes(2);
   });
 
   it('opposition draft met à jour optional_draft_reminders_opt_out sans toucher marketing', async () => {

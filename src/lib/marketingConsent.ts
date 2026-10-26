@@ -1,4 +1,5 @@
 import type { EmailPreferences } from '@/services/emailPreferences';
+import { MARKETING_CONSENT_VERSION } from '@/lib/marketingConsentVersion';
 
 /**
  * Un ancien flag importé n'est pas une preuve de consentement.
@@ -9,7 +10,11 @@ const VERIFIED_SOURCES = ['signup', 'settings', 'mobile_home_prompt'] as const;
 export function hasVerifiableMarketingConsent(
   prefs: Pick<
     EmailPreferences,
-    'marketing_opt_in' | 'marketing_opt_in_at' | 'marketing_opt_in_source' | 'unsubscribed_at'
+    | 'marketing_opt_in'
+    | 'marketing_opt_in_at'
+    | 'marketing_opt_in_source'
+    | 'marketing_opt_in_version'
+    | 'unsubscribed_at'
   >
 ): boolean {
   return (
@@ -17,6 +22,7 @@ export function hasVerifiableMarketingConsent(
     prefs.unsubscribed_at == null &&
     typeof prefs.marketing_opt_in_at === 'string' &&
     prefs.marketing_opt_in_at.length > 0 &&
+    prefs.marketing_opt_in_version === MARKETING_CONSENT_VERSION &&
     VERIFIED_SOURCES.some((source) => source === prefs.marketing_opt_in_source)
   );
 }

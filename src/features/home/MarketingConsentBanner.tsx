@@ -8,6 +8,7 @@ import { useFocusEffect, useRouter } from 'expo-router';
 import { getEmailPreferences, setMarketingEmailOptIn } from '@/services/emailPreferences';
 import { getSession } from '@/services/auth';
 import { hasVerifiableMarketingConsent, shouldOfferMarketingConsent } from '@/lib/marketingConsent';
+import { MARKETING_CONSENT_COPY } from '@/lib/marketingConsentVersion';
 import { colors, fontWeights, radius, spacing, typography } from '@/theme';
 
 // Dismiss pour la session applicative ; ne persiste aucun consentement implicite.
@@ -58,15 +59,25 @@ export function MarketingConsentBanner() {
     dismiss();
   };
 
+  const refuse = async () => {
+    if (!userId || saving) return;
+    setSaving(true);
+    setError(null);
+    const result = await setMarketingEmailOptIn(false, 'mobile_home_prompt');
+    setSaving(false);
+    if (result.error || !result.data || result.data.unsubscribed_at == null) {
+      setError(result.error?.message ?? 'Votre choix n’a pas été enregistré. Veuillez réessayer.');
+      return;
+    }
+    dismiss();
+  };
+
   if (!visible) return null;
 
   return (
     <View style={styles.panel} accessibilityRole="summary">
       <Text style={styles.title}>Recevez les nouveautés YOUMBIA par e-mail ?</Text>
-      <Text style={styles.description}>
-        Avec votre accord, recevez des sélections d'annonces, rappels et nouveautés YOUMBIA.
-        Désinscription possible à tout moment. Les e-mails de sécurité restent séparés.
-      </Text>
+      <Text style={styles.description}>{MARKETING_CONSENT_COPY}</Text>
       {error ? <Text style={styles.error} accessibilityRole="alert">{error}</Text> : null}
       <View style={styles.actions}>
         <Pressable
@@ -76,10 +87,10 @@ export function MarketingConsentBanner() {
           accessibilityLabel="J'accepte les e-mails marketing YOUMBIA"
           style={[styles.accept, saving && styles.disabled]}
         >
-          {saving ? <ActivityIndicator color="#fff" /> : <Text style={styles.acceptText}>Oui, j'accepte</Text>}
+          {saving ? <ActivityIndicator color="#fff" /> : <Text style={styles.acceptText}>Oui, j&apos;accepte</Text>}
         </Pressable>
         <Pressable
-          onPress={dismiss}
+          onPress={() => { void refuse(); }}
           disabled={saving}
           accessibilityRole="button"
           style={styles.later}
