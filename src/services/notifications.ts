@@ -21,6 +21,22 @@ const PUSH_PROMPT_DISMISS_COOLDOWN_MS = 24 * 60 * 60 * 1000;
 const NOTIFICATION_COOLDOWN_STORAGE_KEY = 'youmbia.notificationCooldowns.v1';
 const SEARCH_ROUTE_PREFIXES = ['/(tabs)/search', '/search'] as const;
 
+/**
+ * Canal Android versionné : un canal `default` déjà créé avec une importance basse
+ * n’est souvent pas upgradé par l’OS — un nouvel ID force la config HIGH.
+ * Son : non forcé ici ; le foreground handler garde shouldPlaySound=false (validation produit).
+ */
+export const ANDROID_NOTIFICATION_CHANNEL_ID = 'youmbia-default-v2';
+
+/** Présentation foreground Expo — bannière native sans son automatique. */
+export const FOREGROUND_NOTIFICATION_BEHAVIOR = {
+  shouldShowAlert: true,
+  shouldShowBanner: true,
+  shouldShowList: true,
+  shouldPlaySound: false,
+  shouldSetBadge: false,
+} as const;
+
 type NotificationData = Record<string, unknown>;
 type NotificationCooldownMap = Record<string, number>;
 export type NotificationResponseLike = {
@@ -69,7 +85,6 @@ type PushTokenPersistenceResult =
   | { ok: false; errorCode: string; message: string };
 
 let notificationsInitialized = false;
-let notificationsInitializing = false;
 let notificationsModulePromise: Promise<NotificationsModule | null> | null = null;
 let notificationsModuleError: unknown = null;
 
@@ -208,46 +223,60 @@ function getSafeNotificationData(data: unknown): NotificationData {
   return data && typeof data === 'object' ? (data as NotificationData) : {};
 }
 
+let initializeNotificationsPromise: Promise<void> | null = null;
+
+/**
+ * Pose le handler de présentation immédiatement après le chargement du module
+ * (évite la course où une push foreground arrive avant setNotificationHandler).
+ */
 export function initializeNotifications(): void {
+  void initializeNotificationsAsync();
+}
+
+export async function initializeNotificationsAsync(): Promise<void> {
   if (!isPushNotificationsAvailable()) return;
-  if (notificationsInitialized || notificationsInitializing) return;
-  notificationsInitializing = true;
+  if (notificationsInitialized) return;
+  if (initializeNotificationsPromise) return initializeNotificationsPromise;
 
-  void loadNotificationsModule()
-    .then((Notifications) => {
-      if (!Notifications || notificationsInitialized) return;
+  initializeNotificationsPromise = (async () => {
+    const Notifications = await loadNotificationsModule();
+    if (!Notifications || notificationsInitialized) return;
 
-      Notifications.setNotificationHandler({
-        handleNotification: async () => ({
-          shouldShowAlert: true,
-          shouldPlaySound: false,
-          shouldSetBadge: false,
-          shouldShowBanner: true,
-          shouldShowList: true,
-        }),
-      });
+    Notifications.setNotificationHandler({
+      handleNotification: async () => ({ ...FOREGROUND_NOTIFICATION_BEHAVIOR }),
+    });
 
-      void ensureAndroidNotificationChannel(Notifications).catch((error) => {
-        logPushRuntimeFailure('channel_setup', 'native_unavailable', error);
-      });
+    try {
+      await ensureAndroidNotificationChannel(Notifications);
+    } catch (error) {
+      logPushRuntimeFailure('channel_setup', 'native_unavailable', error);
+    }
 
-      notificationsInitialized = true;
-    })
-    .finally(() => {
-      notificationsInitializing = false;
-  });
+    notificationsInitialized = true;
+  })();
+
+  return initializeNotificationsPromise;
 }
 
 async function ensureAndroidNotificationChannel(
   Notifications: NotificationsModule
 ): Promise<void> {
   if (Platform.OS !== 'android') return;
-  await Notifications.setNotificationChannelAsync('default', {
+  await Notifications.setNotificationChannelAsync(ANDROID_NOTIFICATION_CHANNEL_ID, {
     name: 'Notifications YOUMBIA',
     importance: Notifications.AndroidImportance.HIGH,
+    vibrationPattern: [0, 250, 250, 250],
+    // Pas de sound explicite : respect de la décision produit (pas d’opt-in son auto).
   });
 }
 
+/** Reset interne pour tests unitaires (handler / canal). */
+export function resetNotificationsInitializationForTests(): void {
+  notificationsInitialized = false;
+  initializeNotificationsPromise = null;
+  notificationsModulePromise = null;
+  notificationsModuleError = null;
+}
 export function getStoredPushToken(): string | null {
   const token = readStorage(PUSH_TOKEN_STORAGE_KEY);
   return token?.trim() ? token.trim() : null;
@@ -596,7 +625,7 @@ export async function syncPushTokenIfGranted(): Promise<PushTokenSyncResult> {
 
     trackPushTokenRegistrationStarted(source);
 
-    initializeNotifications();
+    await initializeNotificationsAsync();
     const Notifications = await loadNotificationsModule();
     if (!Notifications) {
       const failure = createPushFailure(
@@ -724,7 +753,7 @@ export async function registerForPushNotifications(): Promise<PushRegistrationRe
       };
     }
 
-    initializeNotifications();
+    await initializeNotificationsAsync();
     const Notifications = await loadNotificationsModule();
     if (!Notifications) {
       const failure = createPushFailure(

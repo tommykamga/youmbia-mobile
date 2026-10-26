@@ -11,6 +11,14 @@ export type GetShopBySlugAnyStatusResult =
  * Lecture boutique par slug sans filtre de statut.
  * À utiliser uniquement côté propriétaire (pour afficher hidden/suspended).
  */
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Accepte les URLs canoniques par slug ainsi que les anciennes URLs Web
+ * /shop/{owner_id}. L'UUID est d'abord cherché comme ID boutique, puis
+ * comme ID propriétaire. En cas de boutiques multiples, sélection stable
+ * de la plus ancienne (les nouveaux partages utilisent le slug).
+ */
 export async function getShopBySlugAnyStatus(slug: string): Promise<GetShopBySlugAnyStatusResult> {
   const normalized = slug.trim().toLowerCase();
   if (!normalized) {
@@ -18,24 +26,40 @@ export async function getShopBySlugAnyStatus(slug: string): Promise<GetShopBySlu
   }
 
   try {
-    const { data, error } = await supabase
+    const isUuid = UUID_PATTERN.test(normalized);
+    const initial = await supabase
       .from('shops')
       .select(SHOP_PUBLIC_SELECT)
-      .eq('slug', normalized)
+      .eq(isUuid ? 'id' : 'slug', normalized)
       .maybeSingle();
 
-    if (error) {
-      return { data: null, error: { message: error.message } };
+    if (initial.error) {
+      return { data: null, error: { message: initial.error.message } };
     }
+
+    let data = initial.data;
+    if (!data && isUuid) {
+      const byOwner = await supabase
+        .from('shops')
+        .select(SHOP_PUBLIC_SELECT)
+        .eq('owner_id', normalized)
+        .order('created_at', { ascending: true })
+        .limit(1)
+        .maybeSingle();
+
+      if (byOwner.error) {
+        return { data: null, error: { message: byOwner.error.message } };
+      }
+      data = byOwner.data;
+    }
+
     if (!data) {
       return { data: null, error: { message: 'Boutique introuvable' } };
     }
 
-    const resolved = await resolveShopMediaUrls(data as PublicShop);
-    return { data: resolved, error: null };
+    return { data: await resolveShopMediaUrls(data as PublicShop), error: null };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error ?? '');
     return { data: null, error: { message } };
   }
 }
-

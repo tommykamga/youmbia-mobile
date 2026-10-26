@@ -30,6 +30,7 @@ import {
 import { startProfileProvisioningOnAuth } from '@/services/profile';
 import { handleSupabaseAuthDeepLink } from '@/services/auth/handleSupabaseAuthDeepLink';
 import { getListingHrefFromUrl } from '@/lib/listingDeepLink';
+import { getShopHrefFromUrl } from '@/lib/shopDeepLink';
 import {
   addNotificationReceivedListenerSafe,
   addNotificationResponseReceivedListenerSafe,
@@ -38,7 +39,7 @@ import {
   getComparableTargetKey,
   getLastNotificationResponseAsyncSafe,
   getNotificationOpenMeta,
-  initializeNotifications,
+  initializeNotificationsAsync,
   isPushNotificationsAvailable,
   syncPushTokenIfGranted,
   type NotificationOpenMeta,
@@ -184,7 +185,7 @@ function RootLayout() {
 
   useEffect(() => {
     if (!isPushNotificationsAvailable()) return;
-    initializeNotifications();
+    void initializeNotificationsAsync();
   }, []);
 
   // Persiste côté serveur le token push d'un utilisateur ayant DÉJÀ accordé la
@@ -297,7 +298,7 @@ function RootLayout() {
         return;
       }
 
-      const target = getListingHrefFromUrl(raw);
+      const target = getListingHrefFromUrl(raw) ?? getShopHrefFromUrl(raw);
       if (!target) return;
       if (raw && lastHandledUrlRef.current === raw) return;
       if (getComparableTargetKey(target) === routeKeyRef.current) {
@@ -481,6 +482,7 @@ function RootLayout() {
         >
           <Stack.Screen name="index" />
           <Stack.Screen name="(auth)" options={{ headerShown: false }} />
+          <Stack.Screen name="auth" options={{ headerShown: false }} />
           <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
           <Stack.Screen name="listing/[id]" options={{ headerShown: false }} />
           <Stack.Screen name="shop/[slug]" options={{ headerShown: false }} />

@@ -22,6 +22,9 @@ type ExpoPushMessage = {
   body: string;
   data: Record<string, unknown>;
   sound: 'default';
+  /** Aligné sur ANDROID_NOTIFICATION_CHANNEL_ID mobile (`youmbia-default-v2`). */
+  channelId: string;
+  priority: 'default' | 'normal' | 'high';
 };
 
 const json = (status: number, payload: Record<string, unknown>) =>
@@ -128,7 +131,10 @@ Deno.serve(async (req) => {
       conversationId: message.conversation_id,
       messageId: message.id,
     },
+    // sound conservé pour arrière-plan OS ; le foreground mobile reste silencieux (produit).
     sound: 'default',
+    channelId: 'youmbia-default-v2',
+    priority: 'high',
   }));
 
   let expoResult: unknown = null;

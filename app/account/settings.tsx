@@ -13,6 +13,7 @@ import {
   setMarketingEmailOptIn,
 } from '@/services/emailPreferences';
 import { captureSentryTestException } from '@/lib/sentry';
+import { hasVerifiableMarketingConsent } from '@/lib/marketingConsent';
 import { colors, spacing, typography, fontWeights } from '@/theme';
 
 export default function AccountSettingsScreen() {
@@ -37,7 +38,8 @@ export default function AccountSettingsScreen() {
         setDraftRemindersAllowedState(true);
       } else {
         setPrefsError(null);
-        setMarketingOptIn(result.data.marketing_opt_in);
+        // Les flags importés ne sont pas des accords vérifiables.
+        setMarketingOptIn(hasVerifiableMarketingConsent(result.data));
         setDraftRemindersAllowedState(!result.data.optional_draft_reminders_opt_out);
       }
       setPrefsLoading(false);
@@ -52,9 +54,11 @@ export default function AccountSettingsScreen() {
     setPrefsError(null);
     setMarketingOptIn(next);
     const result = await setMarketingEmailOptIn(next, 'settings');
-    if (result.error) {
+    if (result.error || !result.data) {
       setMarketingOptIn(!next);
-      setPrefsError(result.error.message);
+      setPrefsError(result.error?.message ?? 'Préférence non enregistrée');
+    } else {
+      setMarketingOptIn(hasVerifiableMarketingConsent(result.data));
     }
     setPrefsSaving(false);
   }, []);
