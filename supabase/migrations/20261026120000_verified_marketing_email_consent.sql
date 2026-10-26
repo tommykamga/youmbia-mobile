@@ -326,6 +326,60 @@ $function$;
 REVOKE ALL ON FUNCTION public.lifecycle_has_verifiable_marketing_consent(uuid) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.lifecycle_has_verifiable_marketing_consent(uuid) TO service_role;
 
+-- Admin-only, privacy-preserving summary for the MCC historical cohort panel.
+-- It returns aggregates only; individual user identifiers and email addresses
+-- remain inside the function and are never used as consent evidence.
+CREATE OR REPLACE FUNCTION public.admin_get_marketing_consent_cohort_summary()
+RETURNS TABLE (
+  cohort_source text,
+  active_declared_preferences integer,
+  verified_mobile_opt_ins integer,
+  suppressed_declared_preferences integer,
+  frequency_capped_declared_preferences integer,
+  declaration_count integer,
+  last_declaration_recorded_at timestamptz
+)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $function$
+DECLARE
+  v_actor uuid := auth.uid();
+BEGIN
+  IF v_actor IS NULL OR NOT public.is_admin() THEN
+    RAISE EXCEPTION 'admin_required' USING ERRCODE = '42501';
+  END IF;
+
+  RETURN QUERY
+  WITH active_cohort AS (
+    SELECT p.user_id, u.email
+    FROM public.email_preferences AS p
+    LEFT JOIN auth.users AS u ON u.id = p.user_id
+    WHERE p.marketing_opt_in IS TRUE
+      AND p.unsubscribed_at IS NULL
+      AND p.marketing_opt_in_source = 'migration_initiale_youmbia_2026_10_18'
+  )
+  SELECT
+    'migration_initiale_youmbia_2026_10_18'::text,
+    (SELECT count(*)::integer FROM active_cohort),
+    (SELECT count(*)::integer FROM public.email_preferences AS p
+      WHERE p.marketing_opt_in IS TRUE
+        AND p.unsubscribed_at IS NULL
+        AND p.marketing_opt_in_at IS NOT NULL
+        AND p.marketing_opt_in_version = '2026-10-26.v1'
+        AND p.marketing_opt_in_source = 'authenticated_user_action'),
+    (SELECT count(*)::integer FROM active_cohort AS c
+      WHERE public.lifecycle_email_is_suppressed(c.email)),
+    (SELECT count(*)::integer FROM active_cohort AS c
+      WHERE public.lifecycle_email_user_within_frequency_cap(c.user_id)),
+    (SELECT count(*)::integer FROM public.marketing_consent_admin_attestations),
+    (SELECT max(a.attested_at) FROM public.marketing_consent_admin_attestations AS a);
+END;
+$function$;
+
+REVOKE ALL ON FUNCTION public.admin_get_marketing_consent_cohort_summary() FROM PUBLIC, anon, service_role;
+GRANT EXECUTE ON FUNCTION public.admin_get_marketing_consent_cohort_summary() TO authenticated;
+
 -- Preserve the existing marketing unsubscribe flow while recording its revoke
 -- in the same database transaction. This does not touch service/transactional mail.
 CREATE OR REPLACE FUNCTION public.apply_lifecycle_unsubscribe(
