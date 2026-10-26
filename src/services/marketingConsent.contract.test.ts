@@ -60,6 +60,19 @@ describe('contrat SQL de consentement marketing', () => {
     expect(eligibilityFunction).not.toContain('marketing_consent_admin_attestations');
   });
 
+  it('expose au MCC uniquement un résumé agrégé et vérifie l’administrateur côté base', () => {
+    const summaryStart = migration.indexOf('CREATE OR REPLACE FUNCTION public.admin_get_marketing_consent_cohort_summary()');
+    const summaryEnd = migration.indexOf('$function$;', summaryStart + 1);
+    const summaryFunction = migration.slice(summaryStart, summaryEnd);
+    const returnedColumns = summaryFunction.match(/RETURNS TABLE \(([\s\S]*?)\)/i)?.[1] ?? '';
+    expect(summaryFunction).toContain('SET search_path = \'\'');
+    expect(summaryFunction).toContain('IF v_actor IS NULL OR NOT public.is_admin() THEN');
+    expect(returnedColumns).not.toMatch(/user_id|email/i);
+    expect(returnedColumns).toContain('active_declared_preferences integer');
+    expect(migration).toMatch(/REVOKE ALL ON FUNCTION public\.admin_get_marketing_consent_cohort_summary\(\) FROM PUBLIC, anon, service_role/);
+    expect(migration).toMatch(/GRANT EXECUTE ON FUNCTION public\.admin_get_marketing_consent_cohort_summary\(\) TO authenticated/);
+  });
+
   it('attribue une source générique côté serveur aux RPC auth', () => {
     expect(migration.match(/marketing_consent_record_internal\(p_opted_in, 'authenticated_user_action', p_consent_version\)/g)).toHaveLength(3);
     expect(migration).toMatch(/p_source IS DISTINCT FROM 'authenticated_user_action'/);
