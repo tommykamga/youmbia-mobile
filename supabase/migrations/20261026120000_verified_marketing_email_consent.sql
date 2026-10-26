@@ -32,6 +32,83 @@ ALTER TABLE public.marketing_consent_events ENABLE ROW LEVEL SECURITY;
 REVOKE ALL ON TABLE public.marketing_consent_events FROM PUBLIC, anon, authenticated, service_role;
 GRANT SELECT ON TABLE public.marketing_consent_events TO service_role;
 
+-- Administrative cohort-level record for an owner's historical verbal claim.
+-- It is deliberately separate from user consent events and never participates
+-- in lifecycle eligibility. No call date, signature, or individual action is
+-- inferred or stored here.
+CREATE TABLE IF NOT EXISTS public.marketing_consent_admin_attestations (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  cohort_source text NOT NULL CHECK (
+    cohort_source = 'migration_initiale_youmbia_2026_10_18'
+  ),
+  active_preference_count integer NOT NULL CHECK (active_preference_count >= 0),
+  recorded_by_admin_id uuid NOT NULL REFERENCES auth.users(id) ON DELETE RESTRICT,
+  attested_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  attestation text NOT NULL CHECK (
+    attestation = 'The application owner reports prior telephone marketing agreements for this legacy preference cohort; no signed or user-level evidence was provided.'
+  )
+);
+
+COMMENT ON TABLE public.marketing_consent_admin_attestations IS
+  'Append-only administrative record of a cohort-level owner statement. Not a user consent event and never evidence for lifecycle eligibility.';
+
+ALTER TABLE public.marketing_consent_admin_attestations ENABLE ROW LEVEL SECURITY;
+REVOKE ALL ON TABLE public.marketing_consent_admin_attestations FROM PUBLIC, anon, authenticated, service_role;
+GRANT SELECT ON TABLE public.marketing_consent_admin_attestations TO authenticated;
+DROP POLICY IF EXISTS marketing_consent_admin_attestations_admin_read
+  ON public.marketing_consent_admin_attestations;
+CREATE POLICY marketing_consent_admin_attestations_admin_read
+  ON public.marketing_consent_admin_attestations
+  FOR SELECT TO authenticated
+  USING (public.is_admin());
+
+CREATE OR REPLACE FUNCTION public.admin_record_phone_consent_cohort_attestation()
+RETURNS TABLE (
+  attestation_id uuid,
+  cohort_source text,
+  active_preference_count integer,
+  recorded_by_admin_id uuid,
+  attested_at timestamptz
+)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $function$
+DECLARE
+  v_actor uuid := auth.uid();
+  v_active_count integer;
+  v_attestation_id uuid := gen_random_uuid();
+  v_attested_at timestamptz := clock_timestamp();
+BEGIN
+  IF v_actor IS NULL OR NOT public.is_admin() THEN
+    RAISE EXCEPTION 'admin_required' USING ERRCODE = '42501';
+  END IF;
+
+  SELECT count(*)::integer INTO v_active_count
+  FROM public.email_preferences AS p
+  WHERE p.marketing_opt_in IS TRUE
+    AND p.unsubscribed_at IS NULL
+    AND p.marketing_opt_in_source = 'migration_initiale_youmbia_2026_10_18';
+
+  RETURN QUERY
+  INSERT INTO public.marketing_consent_admin_attestations (
+    id, cohort_source, active_preference_count, recorded_by_admin_id, attested_at, attestation
+  )
+  VALUES (
+    v_attestation_id,
+    'migration_initiale_youmbia_2026_10_18',
+    v_active_count,
+    v_actor,
+    v_attested_at,
+    'The application owner reports prior telephone marketing agreements for this legacy preference cohort; no signed or user-level evidence was provided.'
+  )
+  RETURNING id, cohort_source, active_preference_count, recorded_by_admin_id, attested_at;
+END;
+$function$;
+
+REVOKE ALL ON FUNCTION public.admin_record_phone_consent_cohort_attestation() FROM PUBLIC, anon, service_role;
+GRANT EXECUTE ON FUNCTION public.admin_record_phone_consent_cohort_attestation() TO authenticated;
+
 -- Remove the broad client write path that allowed a caller to forge the
 -- marketing state, timestamp, source, or version. Draft-reminder preferences
 -- remain independently writable and new rows retain marketing=false by default.
