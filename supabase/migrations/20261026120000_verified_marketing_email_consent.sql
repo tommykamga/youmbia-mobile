@@ -171,6 +171,15 @@ BEGIN
   FOR UPDATE;
 
   IF p_opted_in THEN
+    -- An explicit, authenticated re-consent may clear only the prior
+    -- unsubscribe suppression for the user's current address. Hard suppressions
+    -- remain in force and are never removed by a consent action.
+    DELETE FROM public.email_suppressions AS s
+    USING auth.users AS u
+    WHERE u.id = v_user_id
+      AND s.email = lower(btrim(u.email))
+      AND s.reason = 'unsub';
+
     UPDATE public.email_preferences AS p
     SET marketing_opt_in = true,
         marketing_opt_in_at = v_occurred_at,
@@ -424,7 +433,9 @@ BEGIN
     VALUES (lower(btrim(p_email)), 'unsub', coalesce(p_method, 'link'))
     ON CONFLICT (email) DO UPDATE
     SET reason = EXCLUDED.reason,
-        source = EXCLUDED.source;
+        source = EXCLUDED.source
+    -- An unsubscribe must not downgrade an existing hard suppression.
+    WHERE public.email_suppressions.reason = 'unsub';
   END IF;
 
   INSERT INTO public.marketing_consent_events
