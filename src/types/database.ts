@@ -1113,6 +1113,18 @@ export type Database = {
           attested_at: string;
         }[];
       };
+      admin_get_marketing_consent_cohort_summary: {
+        Args: Record<PropertyKey, never>;
+        Returns: {
+          cohort_source: string;
+          active_declared_preferences: number;
+          verified_mobile_opt_ins: number;
+          suppressed_declared_preferences: number;
+          frequency_capped_declared_preferences: number;
+          declaration_count: number;
+          last_declaration_recorded_at: string | null;
+        }[];
+      };
     };
     Enums: {
       listing_status: 'active' | 'hidden' | 'suspended' | 'sold' | 'draft';
