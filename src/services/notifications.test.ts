@@ -8,6 +8,7 @@ import {
   clearLastNotificationResponseAsyncSafe,
   getPushActivationCardState,
   getPushPermissionSnapshot,
+  getNotificationNavigationTarget,
   getStoredPushToken,
   initializeNotificationsAsync,
   markPushPromptDismissed,
@@ -17,6 +18,7 @@ import {
   resetNotificationsInitializationForTests,
   shouldShowPushPrompt,
   unregisterCurrentPushToken,
+  syncPushTokenIfGranted,
 } from './notifications';
 
 const mocks = vi.hoisted(() => ({
@@ -353,6 +355,17 @@ describe('push token registration', () => {
     consoleError.mockRestore();
   });
 
+  it('offline cleanup: retains the token for an authenticated retry, without claiming server revocation', async () => {
+    const finalEq = vi.fn().mockResolvedValueOnce({ error: { message: 'network unavailable' } })
+      .mockResolvedValueOnce({ error: null });
+    mocks.from.mockReturnValue({ delete: () => ({ eq: () => ({ eq: finalEq }) }) });
+    await registerForPushNotifications();
+    expect(await unregisterCurrentPushToken()).toMatchObject({ ok: false, errorCode: 'token_unregister_failed' });
+    expect(getStoredPushToken()).toBe(TOKEN_A);
+    expect(await unregisterCurrentPushToken()).toEqual({ ok: true });
+    expect(getStoredPushToken()).toBeNull();
+  });
+
   it('logout: supprime uniquement le token courant du compte avant de vider le stockage', async () => {
     const finalEq = vi.fn().mockResolvedValue({ error: null });
     const firstEq = vi.fn(() => ({ eq: finalEq }));
@@ -434,5 +447,24 @@ describe('LINK-01 HTTPS content notification targets', () => {
     ]) {
       expect(getNotificationNavigationTarget({notification:{request:{content:{data:{url}}}}})).toBe(expected);
     }
+  });
+});
+
+describe('transactional push navigation and permission revocation', () => {
+  it('opens generic server message and favorite destinations', () => {
+    expect(getNotificationNavigationTarget({ notification: { request: { content: { data: { type: 'conversation_message', conversationId: USER_ID } } } } })).toBe(`/conversation/${USER_ID}`);
+    expect(getNotificationNavigationTarget({ notification: { request: { content: { data: { type: 'listing_favorite', listingId: USER_ID } } } } })).toBe(`/listing/${USER_ID}`);
+  });
+  it('unregisters a previously registered token when the permission is revoked without prompting', async () => {
+    const finalEq = vi.fn().mockResolvedValue({ error: null });
+    mocks.from.mockReturnValue({ delete: () => ({ eq: () => ({ eq: finalEq }) }) });
+    await registerForPushNotifications();
+    mocks.requestPermissionsAsync.mockClear();
+    mocks.getPermissionsAsync.mockResolvedValue({ status: 'denied', canAskAgain: false });
+    const result = await syncPushTokenIfGranted();
+    expect(result).toMatchObject({ ok: true, status: 'skipped' });
+    expect(finalEq).toHaveBeenCalledWith('expo_push_token', TOKEN_A);
+    expect(getStoredPushToken()).toBeNull();
+    expect(mocks.requestPermissionsAsync).not.toHaveBeenCalled();
   });
 });

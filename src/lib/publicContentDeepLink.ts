@@ -1,6 +1,7 @@
+import { YOUMBIA_MOBILE_SCHEME } from './appScheme';
 /** Pure routing bridge. Auth URLs are deliberately left to the existing auth handler. */
 const HOSTS = new Set(['www.youmbia.com', 'youmbia.com']);
-export function getPublicContentHref(raw: string | null | undefined): string | null {
+export function getPublicContentHref(raw: string | null | undefined, appScheme = YOUMBIA_MOBILE_SCHEME): string | null {
   if (!raw) return null;
   try {
     const url = new URL(raw);
@@ -8,7 +9,7 @@ export function getPublicContentHref(raw: string | null | undefined): string | n
     let path = url.pathname;
     if (url.protocol === 'https:') {
       if (!HOSTS.has(url.hostname)) return null;
-    } else if (url.protocol === 'youmbiamobile:') {
+    } else if (url.protocol === `${appScheme}:`) {
       if (url.hostname) path = `/${url.hostname}${path}`;
     } else return null;
     const match = path.match(/^\/(annonce|seller|vendeur|shop)\/([^/]+)\/?$/i);

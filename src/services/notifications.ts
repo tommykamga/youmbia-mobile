@@ -621,6 +621,10 @@ export async function syncPushTokenIfGranted(): Promise<PushTokenSyncResult> {
     const permission = await getPushPermissionSnapshot();
     trackPushPermissionChecked(permission.status);
     if (permission.status !== 'granted') {
+      if (permission.status === 'denied' || permission.status === 'blocked') {
+        const removed = await unregisterCurrentPushToken();
+        if (!removed.ok) return { ok: false, status: 'error', ...createPushFailure('supabase_persist_failed', removed.message, true, removed.errorCode) };
+      }
       return { ok: true, status: 'skipped', reason: `permission_${permission.status}` };
     }
 

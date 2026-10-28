@@ -5,37 +5,11 @@
  */
 const fs = require('fs');
 const path = require('path');
-
-const { getAppVariant } = require('../config/app-variant');
-const { androidPackage: EXPECTED_ANDROID_PACKAGE } = getAppVariant(require('../app.json').expo);
+const { validateGoogleServicesFile } = require('./qa-build-guard.cjs');
 const GOOGLE_SERVICES_CLASSPATH =
   "classpath('com.google.gms:google-services:4.4.1')";
 const GOOGLE_SERVICES_APPLY_PLUGIN =
   'apply plugin: "com.google.gms.google-services"';
-
-function validateGoogleServices(source) {
-  let config;
-
-  try {
-    config = JSON.parse(fs.readFileSync(source, 'utf8'));
-  } catch {
-    throw new Error('GOOGLE_SERVICES_JSON is not valid JSON.');
-  }
-
-  const hasExpectedClient =
-    Array.isArray(config.client) &&
-    config.client.some(
-      (client) =>
-        client?.client_info?.android_client_info?.package_name ===
-        EXPECTED_ANDROID_PACKAGE,
-    );
-
-  if (!hasExpectedClient) {
-    throw new Error(
-      `GOOGLE_SERVICES_JSON has no Android client for ${EXPECTED_ANDROID_PACKAGE}.`,
-    );
-  }
-}
 
 function updateGradleFile(filePath, marker, addition, description) {
   const source = fs.readFileSync(filePath, 'utf8');
@@ -73,7 +47,7 @@ function main() {
     throw new Error('GOOGLE_SERVICES_JSON does not point to a readable file.');
   }
 
-  validateGoogleServices(source);
+  const validated = validateGoogleServicesFile(source, process.env);
 
   const androidDirectory = path.join(process.cwd(), 'android');
   if (!fs.existsSync(androidDirectory)) {
@@ -110,7 +84,7 @@ function main() {
   }
 
   console.log(
-    `[firebase] Android configuration prepared for ${EXPECTED_ANDROID_PACKAGE}.`,
+    `[firebase] Android configuration prepared for ${validated.packageName}.`,
   );
 }
 

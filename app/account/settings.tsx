@@ -6,6 +6,7 @@ import { View, Text, StyleSheet, Switch, ActivityIndicator } from 'react-native'
 import { useFocusEffect, useRouter } from 'expo-router';
 import Constants from 'expo-constants';
 import { Screen, AppHeader, Button } from '@/components';
+import { getFavoritePushPreference, setFavoritePushPreference } from '@/services/transactionalPushPreferences';
 import { signOut } from '@/services/auth';
 import {
   getEmailPreferences,
@@ -18,6 +19,22 @@ import { colors, spacing, typography, fontWeights } from '@/theme';
 
 export default function AccountSettingsScreen() {
   const router = useRouter();
+  const [favoritePush, setFavoritePush] = useState<boolean | null>(null);
+  const [favoriteBusy, setFavoriteBusy] = useState(false);
+  const [favoriteError, setFavoriteError] = useState<string | null>(null);
+  useEffect(() => {
+    let active = true;
+    void getFavoritePushPreference().then(value => { if (active) setFavoritePush(value); })
+      .catch(() => { if (active) setFavoriteError('Notifications de favoris indisponibles'); });
+    return () => { active = false; };
+  }, []);
+  const toggleFavoritePush = async (value: boolean) => {
+    setFavoriteBusy(true);
+    setFavoriteError(null);
+    try { await setFavoritePushPreference(value); setFavoritePush(value); }
+    catch { setFavoriteError('Impossible de modifier les notifications de favoris'); }
+    finally { setFavoriteBusy(false); }
+  };
   const [signingOut, setSigningOut] = useState(false);
   const [marketingOptIn, setMarketingOptIn] = useState(false);
   const [draftRemindersAllowed, setDraftRemindersAllowedState] = useState(true);
@@ -91,7 +108,7 @@ export default function AccountSettingsScreen() {
   const prefsBusy = prefsSaving || draftSaving || signingOut;
 
   return (
-    <Screen scroll={false} safe={false}>
+    <Screen scroll={true} safe={false}>
       <AppHeader title="Paramètres" showBack density="compact" />
       <View style={styles.content}>
         <View style={styles.actions}>
@@ -138,6 +155,17 @@ export default function AccountSettingsScreen() {
               )}
             </View>
             {prefsError ? <Text style={styles.prefsError}>{prefsError}</Text> : null}
+          </View>
+
+          <View style={styles.prefsBlock}>
+            <Text style={styles.prefsTitle}>Notifications de favoris</Text>
+            <View style={styles.prefsRow}>
+              <Text style={styles.prefsLabel}>Quand mon annonce est ajoutée aux favoris</Text>
+              <Switch value={favoritePush === true} onValueChange={toggleFavoritePush}
+                disabled={favoritePush === null || favoriteBusy || signingOut}
+                accessibilityLabel="Recevoir les notifications de favoris" />
+            </View>
+            {favoriteError ? <Text style={styles.prefsError}>{favoriteError}</Text> : null}
           </View>
 
           <Button

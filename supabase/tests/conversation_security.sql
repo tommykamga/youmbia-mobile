@@ -1,0 +1,96 @@
+\set ON_ERROR_STOP on
+begin;
+create function pg_temp.assert(ok boolean,label text) returns void language plpgsql as $$begin if ok is distinct from true then raise exception 'FAIL: %',label; end if; end$$;
+create function pg_temp.denied(statement text) returns void language plpgsql as $$begin
+ begin execute statement; exception when insufficient_privilege then return; end;
+ raise exception 'FAIL: expected denial: %',statement;
+end$$;
+insert into auth.users values('00000000-0000-0000-0000-000000000001'),('00000000-0000-0000-0000-000000000002'),('00000000-0000-0000-0000-000000000003'),('00000000-0000-0000-0000-000000000004');
+insert into listings values('20000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-000000000002','active'),('20000000-0000-0000-0000-000000000002','00000000-0000-0000-0000-000000000002','hidden'),('20000000-0000-0000-0000-000000000003','00000000-0000-0000-0000-000000000004','active');
+update transactional_push_config set messages_enabled=true,favorites_enabled=true;
+insert into user_push_tokens(user_id,expo_push_token) values('00000000-0000-0000-0000-000000000001','ExpoPushToken[buyer]'),('00000000-0000-0000-0000-000000000002','ExpoPushToken[sellerA]'),('00000000-0000-0000-0000-000000000002','ExpoPushToken[sellerB]'),('00000000-0000-0000-0000-000000000003','ExpoPushToken[outsider]');
+set local role authenticated;
+set local request.jwt.claim.sub='00000000-0000-0000-0000-000000000001';
+insert into conversations(id,listing_id,buyer_id,seller_id) values('10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-000000000002');
+select pg_temp.assert((select count(*)=1 from conversations),'legitimate buyer creates thread');
+select pg_temp.denied($q$insert into conversations(listing_id,buyer_id,seller_id) values('20000000-0000-0000-0000-000000000003','00000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-000000000003')$q$);
+select pg_temp.denied($q$insert into conversations(listing_id,buyer_id,seller_id) values('20000000-0000-0000-0000-000000000002','00000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-000000000002')$q$);
+select pg_temp.denied($q$insert into conversations(listing_id,buyer_id,seller_id) values('20000000-0000-0000-0000-000000000099','00000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-000000000002')$q$);
+select pg_temp.denied($q$update conversations set seller_id='00000000-0000-0000-0000-000000000003'$q$);
+select pg_temp.denied($q$update conversations set listing_id='20000000-0000-0000-0000-000000000003'$q$);
+select pg_temp.denied($q$update conversations set id='10000000-0000-0000-0000-000000000099'$q$);
+select pg_temp.denied('delete from conversations');
+select pg_temp.denied('truncate conversations cascade');
+-- Authenticated buyers cannot impersonate the seller as message sender.
+select pg_temp.denied($q$insert into messages(conversation_id,sender_id,body) values('10000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-000000000002','spoof')$q$);
+insert into messages(id,conversation_id,sender_id,body) values('30000000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-000000000001','private first');
+-- These metadata updates are the observed Web/mobile write contract.
+update conversations set last_message_at=now(),last_message_preview='synthetic preview',buyer_unread_count=0,seller_unread_count=1;
+set local request.jwt.claim.sub='00000000-0000-0000-0000-000000000002';
+select pg_temp.denied($q$update conversations set buyer_id='00000000-0000-0000-0000-000000000003'$q$);
+select pg_temp.denied($q$insert into conversations(listing_id,buyer_id,seller_id) values('20000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-000000000003','00000000-0000-0000-0000-000000000002')$q$);
+select hide_conversation_for_me('10000000-0000-0000-0000-000000000001');
+select pg_temp.assert((select seller_deleted_at is not null and seller_unread_count=0 from conversations),'seller hide and unread reset preserved');
+set local request.jwt.claim.sub='00000000-0000-0000-0000-000000000001';
+insert into messages(id,conversation_id,sender_id,body) values('30000000-0000-0000-0000-000000000002','10000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-000000000001','private second');
+select pg_temp.assert((select seller_deleted_at is null from conversations),'new message unhides recipient');
+set local request.jwt.claim.sub='00000000-0000-0000-0000-000000000002';
+insert into messages(id,conversation_id,sender_id,body) values('30000000-0000-0000-0000-000000000003','10000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-000000000002','private reply');
+update conversations set buyer_unread_count=1,seller_unread_count=0;
+set local request.jwt.claim.sub='00000000-0000-0000-0000-000000000001';
+select mark_conversation_read('10000000-0000-0000-0000-000000000001');
+update conversations set buyer_unread_count=0;
+select pg_temp.assert((select read_at is not null from messages where id='30000000-0000-0000-0000-000000000003'),'received message marked read');
+select pg_temp.assert((select read_at is null from messages where id='30000000-0000-0000-0000-000000000002'),'own message not marked by buyer');
+select pg_temp.denied($q$update messages set sender_id='00000000-0000-0000-0000-000000000001'$q$);
+set local request.jwt.claim.sub='00000000-0000-0000-0000-000000000003';
+select pg_temp.assert((select count(*)=0 from conversations),'third party cannot read conversations');
+select pg_temp.assert((select count(*)=0 from messages),'third party cannot read messages');
+with attempted as (update conversations set buyer_unread_count=99 returning id) select pg_temp.assert(count(*)=0,'third party cannot update') from attempted;
+select pg_temp.denied($q$insert into conversations(listing_id,buyer_id,seller_id) values('20000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-000000000002')$q$);
+select pg_temp.denied($q$insert into messages(conversation_id,sender_id,body) values('10000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-000000000003','third party')$q$);
+-- Current RPC bodies reject a non-participant (P0001), even with EXECUTE permission.
+do $$begin
+ begin perform public.mark_conversation_read('10000000-0000-0000-0000-000000000001'); raise exception 'FAIL: third party read RPC'; exception when raise_exception then if sqlerrm like 'FAIL:%' then raise; end if; end;
+ begin perform public.hide_conversation_for_me('10000000-0000-0000-0000-000000000001'); raise exception 'FAIL: third party hide RPC'; exception when raise_exception then if sqlerrm like 'FAIL:%' then raise; end if; end;
+end$$;
+select pg_temp.denied('select * from public.claim_transactional_push()');
+select pg_temp.denied('select * from public.transactional_push_events');
+select pg_temp.denied($q$insert into transactional_push_events(kind,source_id,recipient_id,target_id) values('message',gen_random_uuid(),'00000000-0000-0000-0000-000000000003','10000000-0000-0000-0000-000000000001')$q$);
+insert into favorites(listing_id,user_id) values('20000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-000000000003');
+reset role;
+select pg_temp.assert((select count(*)=3 from transactional_push_events where kind='message'),'rejected messages rolled back their before-trigger events');
+select pg_temp.assert((select count(*)=1 from transactional_push_events where first_contact),'first contact single');
+select pg_temp.assert((select count(*)=2 from transactional_push_events where kind='message' and recipient_id='00000000-0000-0000-0000-000000000002'),'buyer messages target seller');
+select pg_temp.assert((select count(*)=1 from transactional_push_events where kind='message' and recipient_id='00000000-0000-0000-0000-000000000001'),'seller reply targets buyer');
+select pg_temp.assert((select count(*)=1 from transactional_push_events where kind='favorite' and recipient_id='00000000-0000-0000-0000-000000000002'),'favorite target correct');
+select pg_temp.assert((select count(*)=7 from claim_transactional_push()),'fanout only to recipient devices, never outsider token');
+select pg_temp.assert((select count(*)=0 from claim_transactional_push()),'no duplicate claims');
+select pg_temp.assert(not has_table_privilege('authenticated','conversations','truncate') and not has_table_privilege('anon','messages','truncate'),'TRUNCATE denied independently of RLS');
+select pg_temp.assert(not has_function_privilege('anon','mark_conversation_read(uuid)','execute') and not has_function_privilege('anon','hide_conversation_for_me(uuid)','execute'),'anon RPC grants removed');
+select pg_temp.assert(not has_function_privilege('authenticated','conversations_undelete_on_new_message()','execute'),'trigger helper not exposed');
+select pg_temp.assert(not has_function_privilege('authenticated','push_private.guard_conversation_identity()','execute'),'identity helper not exposed');
+select pg_temp.assert(not has_table_privilege('authenticated','user_push_tokens','truncate') and not has_table_privilege('anon','listings','truncate'),'related tables cannot bypass RLS with truncate');
+select pg_temp.assert((select bool_and(not has_function_privilege('anon',p.oid,'execute')) from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname in ('public','push_private') and p.proname in ('mark_conversation_read','hide_conversation_for_me','conversations_undelete_on_new_message','guard_conversation_identity','claim_transactional_push','enqueue_message','enqueue_favorite')),'no anon execution on privileged messaging functions');
+select pg_temp.assert((select bool_and(not (p.proconfig::text like '%public%')) from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname in ('mark_conversation_read','hide_conversation_for_me','conversations_undelete_on_new_message')),'no mutable public search path');
+set local role service_role;
+set local request.jwt.claim.sub='';
+select pg_temp.denied($q$update conversations set buyer_id='00000000-0000-0000-0000-000000000003'$q$);
+select pg_temp.denied($q$insert into conversations(listing_id,buyer_id,seller_id) values('20000000-0000-0000-0000-000000000003','00000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-000000000004')$q$);
+update conversations set buyer_unread_count=0;
+reset role;
+-- Existing discussions still work after an announcement is sold/hidden.
+update listings set status='sold' where id='20000000-0000-0000-0000-000000000001';
+set local role authenticated;
+set local request.jwt.claim.sub='00000000-0000-0000-0000-000000000001';
+insert into messages(conversation_id,sender_id,body) values('10000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-000000000001','existing sold listing conversation');
+update conversations set buyer_unread_count=0;
+reset role;
+select pg_temp.assert((select count(*)=4 from transactional_push_events where kind='message'),'existing thread remains functional after listing becomes inactive');
+set local role anon;
+select pg_temp.denied('select * from public.conversations');
+select pg_temp.denied('select public.mark_conversation_read(gen_random_uuid())');
+select pg_temp.denied('select public.claim_transactional_push()');
+reset role;
+rollback;
+\echo PASS conversation authorization, identity, roles, message/favorite fanout, read/hide and privileges.
