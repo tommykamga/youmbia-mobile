@@ -6,6 +6,7 @@
  * Contrat : autoVerify=true + chaque couple host×pathPrefix
  * (/annonce, /shop, /auth/confirm, /auth/callback) × (www|apex).
  */
+import { createRequire } from 'node:module';
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
@@ -13,6 +14,8 @@ const REQUIRED_PREFIXES = ['/annonce', '/shop', '/seller/', '/vendeur/', '/auth/
 const REQUIRED_HOSTS = ['www.youmbia.com', 'youmbia.com'];
 
 const root = resolve(process.cwd());
+const require = createRequire(import.meta.url);
+const target = require('./qa-build-guard.cjs').resolveBuildEnvironment(process.env);
 const appJson = JSON.parse(readFileSync(resolve(root, 'app.json'), 'utf8'));
 const filter = appJson?.expo?.android?.intentFilters?.[0];
 const required = (filter?.data ?? [])
@@ -42,6 +45,20 @@ if (!existsSync(manifestPath)) {
 }
 
 const xml = readFileSync(manifestPath, 'utf8');
+if (target.isQa) {
+  if (/<data\b[^>]*android:(?:scheme="https"|host="(?:www\.)?youmbia\.com")/.test(xml)) {
+    throw new Error('QA native manifests must not claim production HTTPS App Links.');
+  }
+  const gradle = readFileSync(resolve(root, 'android/app/build.gradle'), 'utf8');
+  if (!gradle.includes(`applicationId '${target.androidPackage}'`) && !gradle.includes(`applicationId "${target.androidPackage}"`)) {
+    throw new Error('QA native applicationId does not match the isolated build target.');
+  }
+  if (!xml.includes(`android:scheme="${target.scheme}"`)) {
+    throw new Error('QA native URL scheme does not match the isolated build target.');
+  }
+  console.log('[assert-android-app-links] PASS — isolated QA identity, scheme and no production App Links.');
+  process.exit(0);
+}
 const missing = [];
 
 if (!/android:autoVerify\s*=\s*"true"/.test(xml)) {

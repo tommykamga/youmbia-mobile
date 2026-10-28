@@ -1,12 +1,7 @@
-// One source of truth for Expo config and the Firebase pre-install validator.
+// Shared identity resolver; build validation remains in qa-build-guard.
+const { resolveBuildEnvironment } = require('../scripts/qa-build-guard.cjs');
 function getAppVariant(expo, env = process.env) {
-  const isDevelopment =
-    env.APP_ENV === 'development' || env.EXPO_PUBLIC_APP_ENV === 'development';
-  return {
-    isDevelopment,
-    androidPackage: isDevelopment ? 'com.youmbia.mobile.dev' : expo.android.package,
-    iosBundleIdentifier: isDevelopment ? 'com.youmbia.mobile.dev' : expo.ios.bundleIdentifier,
-  };
+  const target = resolveBuildEnvironment(env);
+  return { ...target, isDevelopment: target.appEnvironment === 'development' };
 }
-
 module.exports = { getAppVariant };

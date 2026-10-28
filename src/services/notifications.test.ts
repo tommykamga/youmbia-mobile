@@ -8,7 +8,6 @@ import {
   clearLastNotificationResponseAsyncSafe,
   getPushActivationCardState,
   getPushPermissionSnapshot,
-  getNotificationNavigationTarget,
   getStoredPushToken,
   initializeNotificationsAsync,
   markPushPromptDismissed,

@@ -10,6 +10,7 @@
  * Stratégie : conserver android/ (personnalisations gradle/kotlin) et
  * réécrire uniquement le bloc App Links HTTPS avant chaque build EAS.
  */
+import { createRequire } from 'node:module';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
@@ -18,6 +19,8 @@ const appJsonPath = resolve(root, 'app.json');
 const manifestPath = resolve(root, 'android/app/src/main/AndroidManifest.xml');
 
 const appJson = JSON.parse(readFileSync(appJsonPath, 'utf8'));
+const require = createRequire(import.meta.url);
+const target = require('./qa-build-guard.cjs').resolveBuildEnvironment(process.env);
 const filter = appJson?.expo?.android?.intentFilters?.[0];
 if (!filter || filter.autoVerify !== true) {
   console.error('[sync-android-app-links] app.json intentFilters[0].autoVerify doit être true');
@@ -85,10 +88,10 @@ if (closeActivity < 0) {
   process.exit(1);
 }
 
-const nextXml =
+const nextXml = target.isQa ? withoutOld :
   withoutOld.slice(0, closeActivity) + `\n${appLinksBlock}\n    ` + withoutOld.slice(closeActivity);
 
 writeFileSync(manifestPath, nextXml, 'utf8');
 console.log(
-  `[sync-android-app-links] PASS — ${httpsData.length} data https synchronisées (autoVerify=true).`
+  target.isQa ? '[sync-android-app-links] PASS — production HTTPS App Links removed for QA.' : `[sync-android-app-links] PASS — ${httpsData.length} data https synchronisées (autoVerify=true).`
 );
