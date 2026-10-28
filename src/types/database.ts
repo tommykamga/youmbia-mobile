@@ -786,6 +786,7 @@ export type Database = {
           marketing_opt_in: boolean;
           marketing_opt_in_at: string | null;
           marketing_opt_in_source: string | null;
+          marketing_opt_in_version: string | null;
           unsubscribed_at: string | null;
           optional_draft_reminders_opt_out: boolean;
           draft_reminders_notice_acknowledged_at: string | null;
@@ -796,6 +797,7 @@ export type Database = {
           marketing_opt_in?: boolean;
           marketing_opt_in_at?: string | null;
           marketing_opt_in_source?: string | null;
+          marketing_opt_in_version?: string | null;
           unsubscribed_at?: string | null;
           optional_draft_reminders_opt_out?: boolean;
           draft_reminders_notice_acknowledged_at?: string | null;
@@ -806,10 +808,38 @@ export type Database = {
           marketing_opt_in?: boolean;
           marketing_opt_in_at?: string | null;
           marketing_opt_in_source?: string | null;
+          marketing_opt_in_version?: string | null;
           unsubscribed_at?: string | null;
           optional_draft_reminders_opt_out?: boolean;
           draft_reminders_notice_acknowledged_at?: string | null;
           updated_at?: string;
+        };
+        Relationships: [];
+      };
+      marketing_consent_admin_attestations: {
+        Row: {
+          id: string;
+          cohort_source: string;
+          active_preference_count: number;
+          recorded_by_admin_id: string;
+          attested_at: string;
+          attestation: string;
+        };
+        Insert: {
+          id?: string;
+          cohort_source: string;
+          active_preference_count: number;
+          recorded_by_admin_id: string;
+          attested_at?: string;
+          attestation: string;
+        };
+        Update: {
+          id?: string;
+          cohort_source?: string;
+          active_preference_count?: number;
+          recorded_by_admin_id?: string;
+          attested_at?: string;
+          attestation?: string;
         };
         Relationships: [];
       };
@@ -1049,6 +1079,51 @@ export type Database = {
       acknowledge_lifecycle_draft_reminders_notice: {
         Args: Record<PropertyKey, never>;
         Returns: boolean;
+      };
+      set_marketing_consent_from_signup: {
+        Args: {
+          p_opted_in: boolean;
+          p_consent_version: string;
+        };
+        Returns: {
+          marketing_opt_in: boolean;
+          marketing_opt_in_at: string | null;
+          marketing_opt_in_source: string | null;
+          marketing_opt_in_version: string | null;
+          unsubscribed_at: string | null;
+          optional_draft_reminders_opt_out: boolean;
+          draft_reminders_notice_acknowledged_at: string | null;
+        }[];
+      };
+      set_marketing_consent_from_settings: {
+        Args: { p_opted_in: boolean; p_consent_version: string };
+        Returns: Database['public']['Functions']['set_marketing_consent_from_signup']['Returns'];
+      };
+      set_marketing_consent_from_home_prompt: {
+        Args: { p_opted_in: boolean; p_consent_version: string };
+        Returns: Database['public']['Functions']['set_marketing_consent_from_signup']['Returns'];
+      };
+      admin_record_phone_consent_cohort_attestation: {
+        Args: Record<PropertyKey, never>;
+        Returns: {
+          attestation_id: string;
+          cohort_source: string;
+          active_preference_count: number;
+          recorded_by_admin_id: string;
+          attested_at: string;
+        }[];
+      };
+      admin_get_marketing_consent_cohort_summary: {
+        Args: Record<PropertyKey, never>;
+        Returns: {
+          cohort_source: string;
+          active_declared_preferences: number;
+          verified_mobile_opt_ins: number;
+          suppressed_declared_preferences: number;
+          frequency_capped_declared_preferences: number;
+          declaration_count: number;
+          last_declaration_recorded_at: string | null;
+        }[];
       };
     };
     Enums: {
