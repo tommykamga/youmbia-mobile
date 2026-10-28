@@ -40,6 +40,7 @@ const SECTIONS = [
     title: 'Paramètres',
     items: [
       { icon: 'person-outline', label: 'Profil public', route: '/account/profile' },
+      { icon: 'mail-outline', label: 'Préférences e-mail', route: '/account/settings' },
       // { icon: 'notifications-outline', label: 'Notifications', route: '/settings/notifications' },
       { icon: 'shield-checkmark-outline', label: 'Sécurité & Confidentialité', route: '/privacy' },
     ] as RouteItem[],
