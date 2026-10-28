@@ -91,7 +91,7 @@ BEGIN
     AND p.marketing_opt_in_source = 'migration_initiale_youmbia_2026_10_18';
 
   RETURN QUERY
-  INSERT INTO public.marketing_consent_admin_attestations (
+  INSERT INTO public.marketing_consent_admin_attestations AS attestation_row (
     id, cohort_source, active_preference_count, recorded_by_admin_id, attested_at, attestation
   )
   VALUES (
@@ -102,7 +102,7 @@ BEGIN
     v_attested_at,
     'The application owner reports prior telephone marketing agreements for this legacy preference cohort; no signed or user-level evidence was provided.'
   )
-  RETURNING id, cohort_source, active_preference_count, recorded_by_admin_id, attested_at;
+  RETURNING attestation_row.id, attestation_row.cohort_source, attestation_row.active_preference_count, attestation_row.recorded_by_admin_id, attestation_row.attested_at;
 END;
 $function$;
 

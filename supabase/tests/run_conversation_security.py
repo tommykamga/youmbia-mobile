@@ -20,6 +20,7 @@ FILES = [
     'supabase/migrations/20261023205854_explicit_push_token_grants.sql',
     'supabase/tests/conversation_security.sql',
     'supabase/tests/transactional_push.sql',
+    'supabase/tests/verified_marketing_consent.sql',
 ]
 subprocess.run(['createdb', '-h', '/private/tmp', '-p', '55439', DATABASE], check=True)
 for file in FILES:

@@ -1,6 +1,6 @@
 /**
  * Invitation ponctuelle, non bloquante, au consentement marketing sur l'accueil.
- * Aucun opt-in par défaut ; « Pas maintenant » ne modifie aucune donnée serveur.
+ * Aucun opt-in par défaut ; « Pas maintenant » enregistre un refus explicite.
  */
 import React, { useCallback, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';

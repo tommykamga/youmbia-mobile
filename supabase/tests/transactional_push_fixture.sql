@@ -10,8 +10,8 @@ alter default privileges grant execute on functions to anon,authenticated,servic
 alter default privileges in schema public grant all on tables to anon,authenticated,service_role;
 create schema auth;
 create function auth.uid() returns uuid language sql as $$ select nullif(current_setting('request.jwt.claim.sub',true),'')::uuid $$;
-create table auth.users(id uuid primary key);
-create table public.listings(id uuid primary key,user_id uuid references auth.users(id),status text);
+create table auth.users(id uuid primary key, email text, raw_app_meta_data jsonb default '{}', raw_user_meta_data jsonb default '{}');
+create table public.listings(id uuid primary key,user_id uuid references auth.users(id),status text,title text,description text,price numeric,city text);
 create table public.conversations(
  id uuid primary key default gen_random_uuid(),listing_id uuid not null references public.listings(id) on delete cascade,
  buyer_id uuid not null references auth.users(id) on delete cascade,seller_id uuid not null references auth.users(id) on delete cascade,
