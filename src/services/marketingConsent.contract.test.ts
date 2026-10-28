@@ -19,12 +19,28 @@ describe('contrat SQL de consentement marketing', () => {
   });
 
   it('retire les écritures directes du client sur le consentement', () => {
-    expect(migration).toMatch(/REVOKE INSERT, UPDATE ON TABLE public\.email_preferences FROM authenticated/);
-    expect(migration).toMatch(/GRANT UPDATE \(optional_draft_reminders_opt_out\)/);
-    expect(migration).toMatch(/GRANT INSERT \(user_id, optional_draft_reminders_opt_out\)/);
+    expect(migration).toMatch(/REVOKE INSERT, UPDATE ON TABLE public\.email_preferences FROM PUBLIC, anon, authenticated/);
+    expect(migration).toMatch(/GRANT UPDATE \(optional_draft_reminders_opt_out, updated_at\)/);
+    expect(migration).toMatch(/GRANT INSERT \(user_id, marketing_opt_in, optional_draft_reminders_opt_out, updated_at\)/);
     expect(migration).toMatch(/REVOKE UPDATE \(marketing_opt_in, marketing_opt_in_at, marketing_opt_in_source, marketing_opt_in_version, unsubscribed_at\)/);
+    expect(migration).toMatch(/CREATE OR REPLACE FUNCTION public\.email_preferences_legacy_draft_guard\(\)[\s\S]*IF current_user = 'authenticated'[\s\S]*NEW\.marketing_opt_in := false[\s\S]*NEW\.updated_at := pg_catalog\.clock_timestamp\(\)/);
     expect(migration).toMatch(/GRANT EXECUTE ON FUNCTION public\.set_marketing_consent_from_settings[\s\S]*TO authenticated/);
     expect(migration).toMatch(/REVOKE ALL ON FUNCTION public\.marketing_consent_record_internal\(boolean, text, text\) FROM PUBLIC, anon, authenticated, service_role/);
+    expect(migration).toMatch(/verified_consent_legacy_permissions_too_broad/);
+    expect(migration).toMatch(/verified_consent_legacy_draft_permissions_missing/);
+    expect(migration).toMatch(/information_schema\.column_privileges[\s\S]*cp\.grantee IN \('PUBLIC', 'anon', 'authenticated'\)[\s\S]*cp\.privilege_type IN \('INSERT', 'UPDATE'\)/);
+  });
+
+  it('isole la compatibilité des rappels brouillon et neutralise les écritures de consentement des vieux clients', () => {
+    const guardStart = migration.indexOf('CREATE OR REPLACE FUNCTION public.email_preferences_legacy_draft_guard()');
+    const guardEnd = migration.indexOf('$function$;', guardStart + 1);
+    const guard = migration.slice(guardStart, guardEnd);
+    expect(guard).toContain("IF current_user = 'authenticated' THEN");
+    expect(guard).toContain('NEW.marketing_opt_in := false');
+    expect(guard).toContain('NEW.marketing_opt_in := OLD.marketing_opt_in');
+    expect(guard).toContain('NEW.unsubscribed_at := OLD.unsubscribed_at');
+    expect(guard).toContain('NEW.updated_at := pg_catalog.clock_timestamp()');
+    expect(migration).not.toMatch(/GRANT UPDATE \([^)]*marketing_opt_in/);
   });
 
   it('n’invente pas d’événements historiques et ignore les versions antérieures', () => {

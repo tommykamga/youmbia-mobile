@@ -112,15 +112,91 @@ GRANT EXECUTE ON FUNCTION public.admin_record_phone_consent_cohort_attestation()
 -- Remove the broad client write path that allowed a caller to forge the
 -- marketing state, timestamp, source, or version. Draft-reminder preferences
 -- remain independently writable and new rows retain marketing=false by default.
-REVOKE INSERT, UPDATE ON TABLE public.email_preferences FROM authenticated;
+REVOKE INSERT, UPDATE ON TABLE public.email_preferences FROM PUBLIC, anon, authenticated;
 REVOKE INSERT (marketing_opt_in, marketing_opt_in_at, marketing_opt_in_source, marketing_opt_in_version, unsubscribed_at)
-  ON TABLE public.email_preferences FROM authenticated;
+  ON TABLE public.email_preferences FROM PUBLIC, anon, authenticated;
 REVOKE UPDATE (marketing_opt_in, marketing_opt_in_at, marketing_opt_in_source, marketing_opt_in_version, unsubscribed_at)
-  ON TABLE public.email_preferences FROM authenticated;
-GRANT INSERT (user_id, optional_draft_reminders_opt_out)
+  ON TABLE public.email_preferences FROM PUBLIC, anon, authenticated;
+
+-- Old installed clients still write updated_at together with the independent
+-- draft-reminder preference. Their fallback INSERT also sends
+-- marketing_opt_in=false. Allow only that narrow insert shape and clamp it so
+-- this compatibility path can never establish consent or alter an existing
+-- consent record. Marketing opt-out writes remain unavailable to legacy apps.
+CREATE OR REPLACE FUNCTION public.email_preferences_legacy_draft_guard()
+RETURNS trigger
+LANGUAGE plpgsql
+SET search_path = ''
+AS $function$
+BEGIN
+  IF current_user = 'authenticated' THEN
+    IF TG_OP = 'INSERT' THEN
+      NEW.marketing_opt_in := false;
+      NEW.marketing_opt_in_at := NULL;
+      NEW.marketing_opt_in_source := NULL;
+      NEW.marketing_opt_in_version := NULL;
+      NEW.unsubscribed_at := NULL;
+      NEW.draft_reminders_notice_acknowledged_at := NULL;
+    ELSE
+      NEW.marketing_opt_in := OLD.marketing_opt_in;
+      NEW.marketing_opt_in_at := OLD.marketing_opt_in_at;
+      NEW.marketing_opt_in_source := OLD.marketing_opt_in_source;
+      NEW.marketing_opt_in_version := OLD.marketing_opt_in_version;
+      NEW.unsubscribed_at := OLD.unsubscribed_at;
+      NEW.draft_reminders_notice_acknowledged_at := OLD.draft_reminders_notice_acknowledged_at;
+    END IF;
+    NEW.updated_at := pg_catalog.clock_timestamp();
+  END IF;
+  RETURN NEW;
+END;
+$function$;
+
+REVOKE ALL ON FUNCTION public.email_preferences_legacy_draft_guard() FROM PUBLIC, anon, authenticated, service_role;
+DROP TRIGGER IF EXISTS trg_email_preferences_legacy_draft_guard ON public.email_preferences;
+CREATE TRIGGER trg_email_preferences_legacy_draft_guard
+BEFORE INSERT OR UPDATE ON public.email_preferences
+FOR EACH ROW EXECUTE FUNCTION public.email_preferences_legacy_draft_guard();
+
+GRANT INSERT (user_id, marketing_opt_in, optional_draft_reminders_opt_out, updated_at)
   ON TABLE public.email_preferences TO authenticated;
-GRANT UPDATE (optional_draft_reminders_opt_out)
+GRANT UPDATE (optional_draft_reminders_opt_out, updated_at)
   ON TABLE public.email_preferences TO authenticated;
+
+DO $legacy_email_preferences_permissions$
+BEGIN
+  IF has_table_privilege('authenticated', 'public.email_preferences', 'INSERT')
+     OR has_table_privilege('authenticated', 'public.email_preferences', 'UPDATE')
+     OR has_table_privilege('anon', 'public.email_preferences', 'INSERT')
+     OR has_table_privilege('anon', 'public.email_preferences', 'UPDATE')
+     OR has_column_privilege('authenticated', 'public.email_preferences', 'marketing_opt_in', 'UPDATE')
+     OR has_column_privilege('authenticated', 'public.email_preferences', 'unsubscribed_at', 'UPDATE')
+     OR has_column_privilege('anon', 'public.email_preferences', 'optional_draft_reminders_opt_out', 'INSERT')
+     OR has_column_privilege('anon', 'public.email_preferences', 'optional_draft_reminders_opt_out', 'UPDATE')
+     OR EXISTS (
+       SELECT 1 FROM information_schema.column_privileges AS cp
+       WHERE cp.table_schema = 'public'
+         AND cp.table_name = 'email_preferences'
+         AND cp.grantee IN ('PUBLIC', 'anon', 'authenticated')
+         AND cp.privilege_type IN ('INSERT', 'UPDATE')
+         AND NOT (
+           cp.grantee = 'authenticated'
+           AND ((cp.privilege_type = 'INSERT' AND cp.column_name IN (
+             'user_id', 'marketing_opt_in', 'optional_draft_reminders_opt_out', 'updated_at'
+           )) OR (cp.privilege_type = 'UPDATE' AND cp.column_name IN (
+             'optional_draft_reminders_opt_out', 'updated_at'
+           )))
+         )
+     ) THEN
+    RAISE EXCEPTION 'verified_consent_legacy_permissions_too_broad';
+  END IF;
+  IF NOT has_column_privilege('authenticated', 'public.email_preferences', 'optional_draft_reminders_opt_out', 'UPDATE')
+     OR NOT has_column_privilege('authenticated', 'public.email_preferences', 'updated_at', 'UPDATE')
+     OR NOT has_column_privilege('authenticated', 'public.email_preferences', 'marketing_opt_in', 'INSERT')
+     OR NOT has_column_privilege('authenticated', 'public.email_preferences', 'updated_at', 'INSERT') THEN
+    RAISE EXCEPTION 'verified_consent_legacy_draft_permissions_missing';
+  END IF;
+END;
+$legacy_email_preferences_permissions$;
 
 CREATE OR REPLACE FUNCTION public.marketing_consent_record_internal(
   p_opted_in boolean,
