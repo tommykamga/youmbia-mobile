@@ -100,6 +100,11 @@ describe('full screen listing photos', () => {
     const photo = nodes(r, 'FlatList')[0].props.renderItem({ item: 0 });
     let image!: ReactTestRenderer; act(() => { image = create(photo); });
     expect(nodes(image, 'Image')[0].props.resizeMode).toBe('contain');
+    expect(nodes(image, 'ScrollView')[0].props.maximumZoomScale).toBe(3);
+    act(() => nodes(image, 'ScrollView')[0].props.onScroll({ nativeEvent: { zoomScale: 2 } }));
+    expect(nodes(r, 'FlatList')[0].props.scrollEnabled).toBe(false);
+    act(() => nodes(image, 'ScrollView')[0].props.onScroll({ nativeEvent: { zoomScale: 1 } }));
+    expect(nodes(r, 'FlatList')[0].props.scrollEnabled).toBe(true);
     expect(nodes(image, 'ActivityIndicator')).toHaveLength(1);
     act(() => nodes(image, 'Image')[0].props.onError());
     expect(nodes(image, 'Text')[0].props.children).toBe('Photo indisponible');

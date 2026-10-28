@@ -49,17 +49,21 @@ export function ListingGallery(props: ListingGalleryProps) {
   return <ListingGalleryContent key={JSON.stringify([props.listingId, props.images, props.lazySourcePaths])} {...props} />;
 }
 
-function FullScreenPhoto({ uri, unavailable, width, height }: { uri: string | null; unavailable: boolean; width: number; height: number }) {
+function FullScreenPhoto({ uri, unavailable, width, height, onZoomChange }: { uri: string | null; unavailable: boolean; width: number; height: number; onZoomChange: (zoomed: boolean) => void }) {
   const [loading, setLoading] = useState(true);
   const [failed, setFailed] = useState(false);
   return (
-    <View style={{ width, height, justifyContent: 'center', alignItems: 'center' }}>
+    <ScrollView style={{ width, height }}
+      contentContainerStyle={{ width, height, justifyContent: 'center', alignItems: 'center' }}
+      maximumZoomScale={3} minimumZoomScale={1} bounces={false} centerContent directionalLockEnabled
+      showsHorizontalScrollIndicator={false} showsVerticalScrollIndicator={false}
+      onScroll={(event) => onZoomChange((event.nativeEvent.zoomScale ?? 1) > 1)} scrollEventThrottle={16}>
       {uri && !failed ? <Image source={{ uri }} style={StyleSheet.absoluteFill}
         resizeMode="contain" onLoad={() => setLoading(false)} onError={() => { setLoading(false); setFailed(true); }}
         accessibilityLabel="Photo de l’annonce" /> : null}
       {failed || unavailable ? <Text style={styles.indicatorText}>Photo indisponible</Text>
         : loading || !uri ? <ActivityIndicator color={colors.surface} accessibilityLabel="Chargement de la photo" /> : null}
-    </View>
+    </ScrollView>
   );
 }
 
@@ -69,6 +73,7 @@ function ListingGalleryContent({ images, listingId, lazySourcePaths }: ListingGa
   const slideHeight = getGalleryHeight(width, height);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [modalVisible, setModalVisible] = useState(false);
+  const [zoomed, setZoomed] = useState(false);
   const galleryRef = useRef<ScrollView>(null);
   const currentIndexRef = useRef(0);
 
@@ -145,10 +150,12 @@ function ListingGalleryContent({ images, listingId, lazySourcePaths }: ListingGa
 
   const closeFullScreen = useCallback(() => {
     setModalVisible(false);
+    setZoomed(false);
     galleryRef.current?.scrollTo({ x: currentIndexRef.current * width, animated: false });
   }, [width]);
 
   useEffect(() => {
+    setZoomed(false);
     galleryRef.current?.scrollTo({ x: currentIndexRef.current * width, animated: false });
   }, [width]);
 
@@ -225,13 +232,14 @@ function ListingGalleryContent({ images, listingId, lazySourcePaths }: ListingGa
             data={Array.from({ length: totalSlides }, (_, index) => index)}
             horizontal
             pagingEnabled
+            scrollEnabled={!zoomed}
             bounces={false}
             overScrollMode="never"
             showsHorizontalScrollIndicator={false}
             initialScrollIndex={currentIndex}
             getItemLayout={(_, index) => ({ length: width, offset: width * index, index })}
             keyExtractor={(index) => String(index)}
-            renderItem={({ item: index }) => <FullScreenPhoto key={getSlideUri(index) ?? 'missing'} uri={getSlideUri(index)} unavailable={tailFailed.has(index - eagerImages.length)} width={width} height={height} />}
+            renderItem={({ item: index }) => <FullScreenPhoto key={getSlideUri(index) ?? 'missing'} uri={getSlideUri(index)} unavailable={tailFailed.has(index - eagerImages.length)} width={width} height={height} onZoomChange={setZoomed} />}
             onScroll={handleScroll}
             scrollEventThrottle={16}
             initialNumToRender={1}

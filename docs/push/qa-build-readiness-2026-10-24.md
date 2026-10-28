@@ -2,9 +2,9 @@
 
 Complété par l'audit approfondi des droits Free et de l'historique canonique Web dans [qa-provisioning-finalization-2026-10-24.md](./qa-provisioning-finalization-2026-10-24.md). Celui-ci remplace l'ancien constat « baseline représentative » par la comparaison explicite au registre de migrations PROD.
 
-Date de contrôle : 24 octobre 2026 (Europe/Paris)  
-Branche : `feat/ymb-transactional-push-p0-p1`  
-HEAD de départ : `fd3188be600b415b50c14bc76ac41ea078922ac1`  
+Date de contrôle : 24 octobre 2026 (Europe/Paris)
+Branche : `feat/ymb-transactional-push-p0-p1`
+HEAD de départ : `fd3188be600b415b50c14bc76ac41ea078922ac1`
 Production Supabase : `ainzxommczlyjhymuwgu`, consultée en lecture seule stricte.
 
 ## Verdict
