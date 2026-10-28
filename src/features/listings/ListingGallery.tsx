@@ -4,10 +4,11 @@
  * Les URLs après la première peuvent être résolues en lazy (`lazySourcePaths`) pour limiter l’egress Storage.
  */
 
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   ScrollView,
+  FlatList,
   Image,
   StyleSheet,
   useWindowDimensions,
@@ -24,8 +25,6 @@ import { resolveSingleListingImageUrl } from '@/lib/listingImageUrl';
 import { trackListingGallerySwiped } from '@/lib/analytics';
 import { colors, spacing, radius, typography, fontWeights } from '@/theme';
 
-const ZOOM_MAX = 3;
-const ZOOM_MIN = 1;
 const ASPECT_RATIO = 4 / 3;
 /** Viewport height above this uses percentage-based gallery height (~45%). */
 const LARGE_SCREEN_HEIGHT = 600;
@@ -45,17 +44,38 @@ type ListingGalleryProps = {
   lazySourcePaths?: string[];
 };
 
-export function ListingGallery({ images, listingId, lazySourcePaths }: ListingGalleryProps) {
+export function ListingGallery(props: ListingGalleryProps) {
+  // A new listing/photo set must not inherit resolved URLs or indices from the previous one.
+  return <ListingGalleryContent key={JSON.stringify([props.listingId, props.images, props.lazySourcePaths])} {...props} />;
+}
+
+function FullScreenPhoto({ uri, unavailable, width, height }: { uri: string | null; unavailable: boolean; width: number; height: number }) {
+  const [loading, setLoading] = useState(true);
+  const [failed, setFailed] = useState(false);
+  return (
+    <View style={{ width, height, justifyContent: 'center', alignItems: 'center' }}>
+      {uri && !failed ? <Image source={{ uri }} style={StyleSheet.absoluteFill}
+        resizeMode="contain" onLoad={() => setLoading(false)} onError={() => { setLoading(false); setFailed(true); }}
+        accessibilityLabel="Photo de l’annonce" /> : null}
+      {failed || unavailable ? <Text style={styles.indicatorText}>Photo indisponible</Text>
+        : loading || !uri ? <ActivityIndicator color={colors.surface} accessibilityLabel="Chargement de la photo" /> : null}
+    </View>
+  );
+}
+
+function ListingGalleryContent({ images, listingId, lazySourcePaths }: ListingGalleryProps) {
   const { width, height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const slideHeight = getGalleryHeight(width, height);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [modalVisible, setModalVisible] = useState(false);
-  const [modalUri, setModalUri] = useState<string | null>(null);
+  const galleryRef = useRef<ScrollView>(null);
+  const currentIndexRef = useRef(0);
 
   const lazyLen = lazySourcePaths?.length ?? 0;
   const useLazyTail = lazyLen > 0;
-  const eagerImages = (images ?? []).filter((u): u is string => typeof u === 'string' && u.trim() !== '');
+  const eagerImages = useMemo(() => (images ?? []).filter((u): u is string => typeof u === 'string' && u.trim() !== ''), [images]);
+  const [tailFailed, setTailFailed] = useState<Set<number>>(() => new Set());
   const [tailResolved, setTailResolved] = useState<string[]>(() => Array(lazyLen).fill(''));
   const tailResolvedRef = useRef<string[]>(tailResolved);
   tailResolvedRef.current = tailResolved;
@@ -81,64 +101,56 @@ export function ListingGallery({ images, listingId, lazySourcePaths }: ListingGa
       const li = start + offset;
       if (li < 0 || li >= lazySourcePaths.length) continue;
       const path = lazySourcePaths[li];
-      if (!path) continue;
+      if (tailFailed.has(li)) continue;
+      if (!path) { setTailFailed(prev => new Set(prev).add(li)); continue; }
       if (tailResolvedRef.current[li] || inflightLazyRef.current.has(li)) continue;
       inflightLazyRef.current.add(li);
       void resolveSingleListingImageUrl(path).then((url) => {
         inflightLazyRef.current.delete(li);
-        if (!url) return;
+        if (!url) { setTailFailed(prev => new Set(prev).add(li)); return; }
         setTailResolved((prev) => {
           if (prev[li]) return prev;
           const next = [...prev];
           next[li] = url;
           return next;
         });
-      });
+      }).catch(() => { inflightLazyRef.current.delete(li); setTailFailed(prev => new Set(prev).add(li)); });
     }
-  }, [currentIndex, eagerImages.length, lazySourcePaths]);
+  }, [currentIndex, eagerImages.length, lazySourcePaths, tailFailed]);
 
   const handleScroll = useCallback(
     (e: NativeSyntheticEvent<NativeScrollEvent>) => {
       const x = e.nativeEvent.contentOffset.x;
-      const index = Math.round(x / width);
-      if (index >= 0 && index < totalSlides && index !== currentIndex) {
+      const index = Math.max(0, Math.min(totalSlides - 1, Math.round(x / width)));
+      if (index >= 0 && index < totalSlides && index !== currentIndexRef.current) {
         if (listingId) {
           trackListingGallerySwiped({
             listing_id: listingId,
             gallery_image_index: index,
-            gallery_direction: index > currentIndex ? 'next' : 'previous',
+            gallery_direction: index > currentIndexRef.current ? 'next' : 'previous',
           });
         }
+        currentIndexRef.current = index;
         setCurrentIndex(index);
       }
     },
-    [width, totalSlides, currentIndex, listingId]
+    [width, totalSlides, listingId]
   );
 
-  const openFullScreen = useCallback(
-    async (index: number) => {
-      let uri = getSlideUri(index);
-      if (!uri && lazySourcePaths && index >= eagerImages.length) {
-        const li = index - eagerImages.length;
-        const path = lazySourcePaths[li];
-        if (path) {
-          uri = await resolveSingleListingImageUrl(path);
-          if (uri) {
-            setTailResolved((prev) => {
-              if (prev[li]) return prev;
-              const next = [...prev];
-              next[li] = uri!;
-              return next;
-            });
-          }
-        }
-      }
-      if (!uri) return;
-      setModalUri(uri);
-      setModalVisible(true);
-    },
-    [getSlideUri, lazySourcePaths, eagerImages.length]
-  );
+  const openFullScreen = useCallback((index: number) => {
+    currentIndexRef.current = index;
+    setCurrentIndex(index);
+    setModalVisible(true);
+  }, []);
+
+  const closeFullScreen = useCallback(() => {
+    setModalVisible(false);
+    galleryRef.current?.scrollTo({ x: currentIndexRef.current * width, animated: false });
+  }, [width]);
+
+  useEffect(() => {
+    galleryRef.current?.scrollTo({ x: currentIndexRef.current * width, animated: false });
+  }, [width]);
 
   const hasImages = totalSlides > 0;
 
@@ -162,6 +174,7 @@ export function ListingGallery({ images, listingId, lazySourcePaths }: ListingGa
     <>
       <View style={[styles.container, { width, height: slideHeight }]}>
         <ScrollView
+          ref={galleryRef}
           horizontal
           pagingEnabled
           showsHorizontalScrollIndicator={false}
@@ -176,7 +189,9 @@ export function ListingGallery({ images, listingId, lazySourcePaths }: ListingGa
               <Pressable
                 key={`slide-${index}`}
                 style={[styles.slide, { width, height: slideHeight }]}
-                onPress={() => void openFullScreen(index)}
+                onPress={() => openFullScreen(index)}
+                accessibilityRole="button"
+                accessibilityLabel={`Ouvrir la photo ${index + 1} sur ${totalSlides}`}
               >
                 {uri ? (
                   <Image source={{ uri }} style={styles.image} resizeMode="cover" />
@@ -199,35 +214,39 @@ export function ListingGallery({ images, listingId, lazySourcePaths }: ListingGa
         visible={modalVisible}
         transparent
         animationType="fade"
-        onRequestClose={() => {
-          setModalVisible(false);
-          setModalUri(null);
-        }}
+        onRequestClose={closeFullScreen}
         statusBarTranslucent
       >
         <View style={styles.modalBackdrop}>
-          <ScrollView
+          {modalVisible ? <FlatList
+            key={`fullscreen-${width}`}
+            testID="listing-photo-viewer"
             style={StyleSheet.absoluteFill}
-            contentContainerStyle={[
-              styles.modalScrollContent,
-              { minWidth: width, minHeight: height },
-            ]}
-            maximumZoomScale={ZOOM_MAX}
-            minimumZoomScale={ZOOM_MIN}
+            data={Array.from({ length: totalSlides }, (_, index) => index)}
+            horizontal
+            pagingEnabled
+            bounces={false}
+            overScrollMode="never"
             showsHorizontalScrollIndicator={false}
-            showsVerticalScrollIndicator={false}
-            centerContent
-          >
-            {modalUri ? (
-              <Image source={{ uri: modalUri }} style={{ width, height }} resizeMode="contain" />
-            ) : null}
-          </ScrollView>
+            initialScrollIndex={currentIndex}
+            getItemLayout={(_, index) => ({ length: width, offset: width * index, index })}
+            keyExtractor={(index) => String(index)}
+            renderItem={({ item: index }) => <FullScreenPhoto key={getSlideUri(index) ?? 'missing'} uri={getSlideUri(index)} unavailable={tailFailed.has(index - eagerImages.length)} width={width} height={height} />}
+            onScroll={handleScroll}
+            scrollEventThrottle={16}
+            initialNumToRender={1}
+            maxToRenderPerBatch={3}
+            windowSize={3}
+            extraData={tailResolved}
+          /> : null}
+          {totalSlides > 1 ? <View style={[styles.indicator, { bottom: insets.bottom + spacing.base }]} pointerEvents="none">
+            <Text style={styles.indicatorText} accessibilityLiveRegion="polite">{currentIndex + 1} / {totalSlides}</Text>
+          </View> : null}
           <Pressable
             style={[styles.modalClose, { top: insets.top + spacing.base }]}
-            onPress={() => {
-              setModalVisible(false);
-              setModalUri(null);
-            }}
+            onPress={closeFullScreen}
+            accessibilityRole="button"
+            accessibilityLabel="Fermer les photos"
             hitSlop={16}
           >
             <Ionicons name="close" size={28} color={colors.surface} />
@@ -294,10 +313,6 @@ const styles = StyleSheet.create({
   modalBackdrop: {
     flex: 1,
     backgroundColor: '#000',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  modalScrollContent: {
     justifyContent: 'center',
     alignItems: 'center',
   },
