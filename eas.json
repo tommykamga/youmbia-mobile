@@ -40,6 +40,7 @@
         "EXPO_PUBLIC_APP_ENV": "preview",
         "YOUMBIA_EAS_BUILD_PROFILE": "preview",
         "YOUMBIA_EAS_PROJECT_ID": "a8cfe828-82de-466a-b2f0-83ed1b4d1409",
+        "SENTRY_DISABLE_AUTO_UPLOAD": "true",
         "EXPO_PUBLIC_SUPABASE_PROJECT_REF": "wagvrytcguutgbjzhvak",
         "EXPO_PUBLIC_SUPABASE_URL": "https://wagvrytcguutgbjzhvak.supabase.co",
         "QA_FIREBASE_PROJECT_ID": "youmbia-mobile-qa",
