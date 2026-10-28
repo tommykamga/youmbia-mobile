@@ -15,13 +15,15 @@ const Mixpanel = vi.hoisted(() => vi.fn(function MixpanelMock() {
   return mixpanelInstance;
 }));
 
+const reactNative = vi.hoisted(() => ({
+  Platform: { OS: 'ios' },
+}));
+
 vi.mock('mixpanel-react-native', () => ({
   Mixpanel,
 }));
 
-vi.mock('react-native', () => ({
-  Platform: { OS: 'ios' },
-}));
+vi.mock('react-native', () => reactNative);
 
 vi.mock('expo-constants', () => ({
   default: { expoConfig: { version: '4.4.1' } },
@@ -53,6 +55,7 @@ describe('mixpanel', () => {
   beforeEach(() => {
     vi.unstubAllEnvs();
     vi.stubGlobal('__DEV__', false);
+    reactNative.Platform.OS = 'ios';
   });
 
   it('n’initialise pas et ne crash pas si le token est absent', async () => {
@@ -69,6 +72,15 @@ describe('mixpanel', () => {
     expect(mixpanelInstance.track).not.toHaveBeenCalled();
     expect(mixpanelInstance.identify).not.toHaveBeenCalled();
     expect(mixpanelInstance.reset).not.toHaveBeenCalled();
+  });
+
+  it('n’importe pas le SDK natif pendant le rendu statique web', async () => {
+    reactNative.Platform.OS = 'web';
+    vi.stubEnv('EXPO_PUBLIC_MIXPANEL_TOKEN', 'project-token');
+    const mixpanel = await loadMixpanel();
+
+    await expect(mixpanel.initMixpanel()).resolves.toBeNull();
+    expect(Mixpanel).not.toHaveBeenCalled();
   });
 
   it('n’initialise Mixpanel qu’une seule fois', async () => {

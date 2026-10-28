@@ -8,6 +8,7 @@
 
 import 'react-native-url-polyfill/auto';
 import { createClient } from '@supabase/supabase-js';
+import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { Database } from '@/types/database';
 
@@ -22,15 +23,18 @@ if (!supabaseUrl || !supabaseAnonKey) {
 }
 
 const isSupabaseConfigured = Boolean(supabaseUrl && supabaseAnonKey);
+// Expo statically renders Web routes in Node, where AsyncStorage's Web adapter
+// uses window.localStorage. Do not initialize persistence or a shared user session there.
+const canPersistSession = Platform.OS !== 'web' || typeof window !== 'undefined';
 
 export const supabase = createClient<Database>(
   supabaseUrl || 'https://placeholder.supabase.co',
   supabaseAnonKey || 'placeholder',
   {
     auth: {
-      storage: AsyncStorage,
-      autoRefreshToken: isSupabaseConfigured,
-      persistSession: true,
+      storage: canPersistSession ? AsyncStorage : undefined,
+      autoRefreshToken: isSupabaseConfigured && canPersistSession,
+      persistSession: canPersistSession,
       detectSessionInUrl: false,
     },
   }
@@ -38,5 +42,5 @@ export const supabase = createClient<Database>(
 
 export const supabaseRuntime = {
   isConfigured: isSupabaseConfigured,
-  canPersistSession: true,
+  canPersistSession,
 };

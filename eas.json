@@ -18,8 +18,12 @@
         "APP_ENV": "development",
         "EXPO_PUBLIC_APP_ENV": "development",
         "YOUMBIA_EAS_BUILD_PROFILE": "development",
-        "YOUMBIA_EAS_PROJECT_ID": "SET_AFTER_QA_EAS_PROJECT_CREATION",
-        "SENTRY_DISABLE_AUTO_UPLOAD": "true"
+        "YOUMBIA_EAS_PROJECT_ID": "a8cfe828-82de-466a-b2f0-83ed1b4d1409",
+        "SENTRY_DISABLE_AUTO_UPLOAD": "true",
+        "EXPO_PUBLIC_SUPABASE_PROJECT_REF": "wagvrytcguutgbjzhvak",
+        "EXPO_PUBLIC_SUPABASE_URL": "https://wagvrytcguutgbjzhvak.supabase.co",
+        "QA_FIREBASE_PROJECT_ID": "youmbia-mobile-qa",
+        "YOUMBIA_PRODUCTION_FIREBASE_PROJECT_ID": "youmbia-54af1"
       }
     },
     "preview": {
@@ -35,7 +39,11 @@
         "APP_ENV": "preview",
         "EXPO_PUBLIC_APP_ENV": "preview",
         "YOUMBIA_EAS_BUILD_PROFILE": "preview",
-        "YOUMBIA_EAS_PROJECT_ID": "SET_AFTER_QA_EAS_PROJECT_CREATION"
+        "YOUMBIA_EAS_PROJECT_ID": "a8cfe828-82de-466a-b2f0-83ed1b4d1409",
+        "EXPO_PUBLIC_SUPABASE_PROJECT_REF": "wagvrytcguutgbjzhvak",
+        "EXPO_PUBLIC_SUPABASE_URL": "https://wagvrytcguutgbjzhvak.supabase.co",
+        "QA_FIREBASE_PROJECT_ID": "youmbia-mobile-qa",
+        "YOUMBIA_PRODUCTION_FIREBASE_PROJECT_ID": "youmbia-54af1"
       }
     },
     "production": {

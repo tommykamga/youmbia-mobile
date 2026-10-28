@@ -6,7 +6,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
 import { Platform } from 'react-native';
-import { Mixpanel } from 'mixpanel-react-native';
+import type { Mixpanel } from 'mixpanel-react-native';
 
 export const MIXPANEL_PROJECT_TOKEN =
   (process.env.EXPO_PUBLIC_MIXPANEL_TOKEN ?? '').trim();
@@ -25,6 +25,10 @@ export type AnalyticsProperties = Record<string, MixpanelPrimitive | null | unde
 let client: Mixpanel | null = null;
 let initPromise: Promise<Mixpanel | null> | null = null;
 let sessionStartedAt: number | null = null;
+
+// The native SDK imports Node-incompatible UUID code.  Keep that import out of
+// Expo Router's static Node renderer while preserving the iOS/Android/web-client path.
+const isStaticWebRender = Platform.OS === 'web' && typeof window === 'undefined';
 
 export function getAnalyticsPlatform(): AnalyticsPlatform {
   if (Platform.OS === 'ios' || Platform.OS === 'android') return Platform.OS;
@@ -100,6 +104,7 @@ export async function initMixpanel(): Promise<Mixpanel | null> {
 
   initPromise = (async () => {
     try {
+      if (isStaticWebRender) return null;
       if (!MIXPANEL_PROJECT_TOKEN) {
         if (__DEV__) {
           console.warn(
@@ -109,7 +114,8 @@ export async function initMixpanel(): Promise<Mixpanel | null> {
         return null;
       }
 
-      const mixpanel = new Mixpanel(MIXPANEL_PROJECT_TOKEN, false, false, AsyncStorage);
+      const { Mixpanel: MixpanelClient } = await import('mixpanel-react-native');
+      const mixpanel = new MixpanelClient(MIXPANEL_PROJECT_TOKEN, false, false, AsyncStorage);
       // JS mode starts the flush queue in the constructor (default US URL).
       // Set EU residency immediately, then pass the same URL to init.
       mixpanel.setServerURL(MIXPANEL_EU_SERVER_URL);

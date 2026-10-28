@@ -174,3 +174,19 @@ describe('EAS QA build guard', () => {
     }
   });
 });
+
+
+describe('platform-specific QA push credential qualification', () => {
+ it('accepts verified Android FCM without claiming iOS APNs readiness', () => {
+  const env: Record<string, string | undefined> = { ...qaEnvironment('preview'), EAS_BUILD_PLATFORM: 'android',
+    GOOGLE_SERVICES_JSON: '/synthetic/google-services.json', QA_FIREBASE_PROJECT_ID: 'qa-only',
+    YOUMBIA_PRODUCTION_FIREBASE_PROJECT_ID: 'production-only', QA_FCM_CREDENTIALS_VERIFIED: 'true' };
+  delete env.QA_PUSH_CREDENTIALS_VERIFIED;
+  expect(resolveBuildEnvironment(env).isQa).toBe(true);
+  expect(() => resolveBuildEnvironment({ ...env, EAS_BUILD_PLATFORM: 'ios' })).toThrow(/QA_APNS_CREDENTIALS_VERIFIED/);
+ });
+ it('does not let an explicit platform refusal inherit a global approval', () => {
+  expect(() => resolveBuildEnvironment({ ...qaEnvironment(), EAS_BUILD_PLATFORM: 'ios',
+   QA_APNS_CREDENTIALS_VERIFIED: 'false' })).toThrow(/QA_APNS_CREDENTIALS_VERIFIED/);
+ });
+});

@@ -112,8 +112,13 @@ function resolveBuildEnvironment(env = process.env) {
   }
 
   required(env, "EXPO_PUBLIC_SUPABASE_ANON_KEY");
-  if (isEasBuild && required(env, "QA_PUSH_CREDENTIALS_VERIFIED") !== "true") {
-    throw new Error("Set QA_PUSH_CREDENTIALS_VERIFIED=true only after FCM and APNs credentials are verified.");
+  if (isEasBuild) {
+    const platformFlag = env.EAS_BUILD_PLATFORM === "android" ? "QA_FCM_CREDENTIALS_VERIFIED"
+      : env.EAS_BUILD_PLATFORM === "ios" ? "QA_APNS_CREDENTIALS_VERIFIED" : "QA_PUSH_CREDENTIALS_VERIFIED";
+    const attestation = env[platformFlag] ?? env.QA_PUSH_CREDENTIALS_VERIFIED;
+    if (attestation !== "true") {
+      throw new Error(`Set ${platformFlag}=true only after the target platform credentials are verified (QA_PUSH_CREDENTIALS_VERIFIED requires both platforms).`);
+    }
   }
 
   if (env.EAS_BUILD_PLATFORM === "android") {
