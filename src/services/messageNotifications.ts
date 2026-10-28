@@ -1,9 +1,11 @@
+import { Platform } from 'react-native';
 import { getSession } from '@/services/auth';
 import { getConversations, type Conversation } from '@/services/conversations';
 import {
+  ANDROID_NOTIFICATION_CHANNEL_ID,
   getPushPermissionStatus,
   getStoredPushToken,
-  initializeNotifications,
+  initializeNotificationsAsync,
   isPushNotificationsAvailable,
   reserveNotificationDispatch,
 } from '@/services/notifications';
@@ -125,7 +127,7 @@ export async function shouldScheduleLocalMessageNotification(): Promise<boolean>
 }
 
 async function scheduleNewMessageNotification(conversation: Conversation): Promise<void> {
-  initializeNotifications();
+  await initializeNotificationsAsync();
 
   const Notifications = await loadNotificationsModule();
   if (!Notifications) {
@@ -142,6 +144,9 @@ async function scheduleNewMessageNotification(conversation: Conversation): Promi
         href: `/conversation/${conversation.id}`,
         type: 'new_message',
       },
+      ...(Platform.OS === 'android'
+        ? { channelId: ANDROID_NOTIFICATION_CHANNEL_ID }
+        : {}),
     },
     trigger: null,
   });

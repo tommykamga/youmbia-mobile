@@ -2,14 +2,19 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  ANDROID_NOTIFICATION_CHANNEL_ID,
+  getNotificationNavigationTarget,
+  FOREGROUND_NOTIFICATION_BEHAVIOR,
   clearLastNotificationResponseAsyncSafe,
   getPushActivationCardState,
   getPushPermissionSnapshot,
   getStoredPushToken,
+  initializeNotificationsAsync,
   markPushPromptDismissed,
   openPushNotificationSettings,
   persistPushTokenToServer,
   registerForPushNotifications,
+  resetNotificationsInitializationForTests,
   shouldShowPushPrompt,
   unregisterCurrentPushToken,
 } from './notifications';
@@ -206,9 +211,10 @@ describe('push token registration', () => {
     const result = await registerForPushNotifications();
 
     expect(result.ok).toBe(true);
-    expect(mocks.setNotificationChannelAsync).toHaveBeenCalledWith('default', {
+    expect(mocks.setNotificationChannelAsync).toHaveBeenCalledWith(ANDROID_NOTIFICATION_CHANNEL_ID, {
       name: 'Notifications YOUMBIA',
       importance: 4,
+      vibrationPattern: [0, 250, 250, 250],
     });
     expect(mocks.setNotificationChannelAsync.mock.invocationCallOrder[0]).toBeLessThan(
       mocks.requestPermissionsAsync.mock.invocationCallOrder[0]
@@ -378,5 +384,55 @@ describe('claim_my_push_token migration', () => {
     expect(sql).toMatch(/REVOKE ALL .* FROM PUBLIC/);
     expect(sql).toMatch(/GRANT EXECUTE .* TO authenticated/);
     expect(sql).not.toMatch(/TO anon/);
+  });
+});
+
+describe('présentation foreground notifications', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    resetNotificationsInitializationForTests();
+    mocks.platform.OS = 'android';
+    mocks.constants.executionEnvironment = 'standalone';
+    mocks.constants.appOwnership = null;
+    mocks.setNotificationChannelAsync.mockResolvedValue(null);
+  });
+
+  it('expose bannière/list sans son automatique (décision produit)', () => {
+    expect(FOREGROUND_NOTIFICATION_BEHAVIOR).toEqual({
+      shouldShowAlert: true,
+      shouldShowBanner: true,
+      shouldShowList: true,
+      shouldPlaySound: false,
+      shouldSetBadge: false,
+    });
+    expect(ANDROID_NOTIFICATION_CHANNEL_ID).toBe('youmbia-default-v2');
+  });
+
+  it('pose le handler et le canal Android versionné avant la suite', async () => {
+    await initializeNotificationsAsync();
+
+    expect(mocks.setNotificationHandler).toHaveBeenCalledTimes(1);
+    const arg = mocks.setNotificationHandler.mock.calls[0][0];
+    await expect(arg.handleNotification()).resolves.toEqual(FOREGROUND_NOTIFICATION_BEHAVIOR);
+    expect(mocks.setNotificationChannelAsync).toHaveBeenCalledWith(
+      ANDROID_NOTIFICATION_CHANNEL_ID,
+      expect.objectContaining({
+        name: 'Notifications YOUMBIA',
+        importance: 4,
+      })
+    );
+  });
+});
+
+
+describe('LINK-01 HTTPS content notification targets', () => {
+  it('opens a shop or seller URL and preserves parameters', () => {
+    for (const [url, expected] of [
+      ['https://www.youmbia.com/shop/w-electronik?utm_source=push', '/shop/w-electronik?utm_source=push'],
+      ['https://youmbia.com/seller/abc', '/user/abc'],
+      ['https://www.youmbia.com/vendeur/abc', '/user/abc'],
+    ]) {
+      expect(getNotificationNavigationTarget({notification:{request:{content:{data:{url}}}}})).toBe(expected);
+    }
   });
 });

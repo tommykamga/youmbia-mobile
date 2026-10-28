@@ -2,6 +2,7 @@ import Constants from 'expo-constants';
 import { Platform } from 'react-native';
 import { supabase, supabaseRuntime } from '@/lib/supabase';
 import { compareVersions } from './compareVersions';
+import { sanitizeUpdateUrl } from './sanitizeUpdateUrl';
 
 export type AppVersionPlatform = 'android' | 'ios';
 
@@ -17,11 +18,6 @@ export type AppVersionStatus = {
 };
 
 const DEFAULT_FETCH_TIMEOUT_MS = 10_000;
-
-const ALLOWED_STORE_HOST_FRAGMENTS: Record<AppVersionPlatform, string[]> = {
-  ios: ['apps.apple.com', 'itunes.apple.com'],
-  android: ['play.google.com', 'market://', 'galaxystore.samsung.com', 'appgallery'],
-};
 
 function devLog(message: string, detail?: unknown) {
   if (typeof __DEV__ !== 'undefined' && __DEV__) {
@@ -45,25 +41,6 @@ export function getAppVersionPlatform(): AppVersionPlatform | null {
   if (Platform.OS === 'ios') return 'ios';
   if (Platform.OS === 'android') return 'android';
   return null;
-}
-
-function sanitizeUpdateUrl(
-  platform: AppVersionPlatform,
-  rawUrl: string | null | undefined
-): string | null {
-  const url = rawUrl?.trim();
-  if (!url) return null;
-  const lower = url.toLowerCase();
-  const isAllowed = ALLOWED_STORE_HOST_FRAGMENTS[platform].some((fragment) =>
-    lower.includes(fragment)
-  );
-  if (!isAllowed) {
-    devLog(
-      `store_url ignorée car incohérente avec la plateforme "${platform}": ${url}`
-    );
-    return null;
-  }
-  return url;
 }
 
 function idleStatus(platform: AppVersionPlatform | null): AppVersionStatus {

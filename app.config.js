@@ -1,8 +1,7 @@
 const appJson = require("./app.json");
 
-const isDevelopment =
-  process.env.APP_ENV === "development" ||
-  process.env.EXPO_PUBLIC_APP_ENV === "development";
+const { getAppVariant } = require("./config/app-variant");
+const { isDevelopment, androidPackage, iosBundleIdentifier } = getAppVariant(appJson.expo);
 const googleServicesFile = process.env.GOOGLE_SERVICES_JSON?.trim();
 
 if (process.env.EAS_BUILD_PLATFORM === "android" && !googleServicesFile) {
@@ -19,16 +18,12 @@ module.exports = ({ config }) => ({
 
   ios: {
     ...appJson.expo.ios,
-    bundleIdentifier: isDevelopment
-      ? "com.youmbia.mobile.dev"
-      : appJson.expo.ios.bundleIdentifier,
+    bundleIdentifier: iosBundleIdentifier,
   },
 
   android: {
     ...appJson.expo.android,
-    package: isDevelopment
-      ? "com.youmbia.mobile.dev"
-      : appJson.expo.android.package,
+    package: androidPackage,
     ...(googleServicesFile ? { googleServicesFile } : {}),
   },
 });

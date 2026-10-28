@@ -6,7 +6,8 @@
 const fs = require('fs');
 const path = require('path');
 
-const EXPECTED_ANDROID_PACKAGE = 'com.youmbia.mobile';
+const { getAppVariant } = require('../config/app-variant');
+const { androidPackage: EXPECTED_ANDROID_PACKAGE } = getAppVariant(require('../app.json').expo);
 const GOOGLE_SERVICES_CLASSPATH =
   "classpath('com.google.gms:google-services:4.4.1')";
 const GOOGLE_SERVICES_APPLY_PLUGIN =
