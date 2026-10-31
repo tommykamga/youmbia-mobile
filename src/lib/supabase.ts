@@ -1,3 +1,4 @@
+import { Platform as SupabasePlatform } from 'react-native';
 /**
  * Supabase client for YOUMBIA mobile.
  * Uses the same project as the web app (same URL + anon key).
@@ -28,7 +29,7 @@ export const supabase = createClient<Database>(
   supabaseAnonKey || 'placeholder',
   {
     auth: {
-      storage: AsyncStorage,
+      storage: SupabasePlatform.OS === 'web' ? undefined : AsyncStorage,
       autoRefreshToken: isSupabaseConfigured,
       persistSession: true,
       detectSessionInUrl: false,

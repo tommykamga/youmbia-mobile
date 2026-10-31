@@ -6,7 +6,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
 import { Platform } from 'react-native';
-import { Mixpanel } from 'mixpanel-react-native';
+import type { Mixpanel } from 'mixpanel-react-native';
 
 export const MIXPANEL_PROJECT_TOKEN =
   (process.env.EXPO_PUBLIC_MIXPANEL_TOKEN ?? '').trim();
@@ -95,6 +95,7 @@ export async function consumeAnalyticsSessionDurationSeconds(): Promise<number> 
 }
 
 export async function initMixpanel(): Promise<Mixpanel | null> {
+  if (Platform.OS === 'web' && typeof window === 'undefined') return null;
   if (client) return client;
   if (initPromise) return initPromise;
 
@@ -109,7 +110,8 @@ export async function initMixpanel(): Promise<Mixpanel | null> {
         return null;
       }
 
-      const mixpanel = new Mixpanel(MIXPANEL_PROJECT_TOKEN, false, false, AsyncStorage);
+      const { Mixpanel: MixpanelClass } = await import('mixpanel-react-native');
+      const mixpanel = new MixpanelClass(MIXPANEL_PROJECT_TOKEN, false, false, AsyncStorage);
       // JS mode starts the flush queue in the constructor (default US URL).
       // Set EU residency immediately, then pass the same URL to init.
       mixpanel.setServerURL(MIXPANEL_EU_SERVER_URL);
