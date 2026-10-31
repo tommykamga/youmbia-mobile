@@ -5,7 +5,7 @@
  */
 
 import { supabase } from '@/lib/supabase';
-import { buildCanonicalCityOrClause } from '@/lib/canonicalCity';
+import { buildCanonicalCityOrClause, cityFilterPattern } from '@/lib/canonicalCity';
 import {
   getSignedUrlsMap,
   listingStoragePathsForCardCover,
@@ -176,7 +176,12 @@ export async function searchListings(options: SearchOptions = {}): Promise<Searc
           request = request.eq('category_id', filter.id);
         }
       } catch {
-        request = request.eq('category_id', catId);
+        // Do not present an incomplete parent-category result as exhaustive.
+        return {
+          data: null,
+          total: 0,
+          error: { message: 'Impossible de charger les catégories. Veuillez réessayer.' },
+        };
       }
     }
   }
@@ -187,7 +192,7 @@ export async function searchListings(options: SearchOptions = {}): Promise<Searc
     if (canonicalClause) {
       request = request.or(canonicalClause);
     } else {
-      const cityPattern = '%' + city.trim().replace(/[%_\\]/g, '') + '%';
+      const cityPattern = cityFilterPattern(city.trim());
       request = request.ilike('city', cityPattern);
     }
   }

@@ -35,16 +35,30 @@ export function canonicalCityInputValue(value: string): string {
   return r.kind === 'canonical' ? canonicalCityLabel(r.code) : value.trim();
 }
 
-/** Filtre PostgREST compatible avec les variantes contrôlées et les résultats historiques. */
-export function buildCanonicalCityOrClause(value: string): string | null {
+/** Shared literal terms: keep legacy inclusion, without resolving stored addresses. */
+export function cityFilterTerms(value: string): readonly string[] {
   const result = resolveCanonicalCity(value);
-  if (result.kind !== 'canonical') return null;
+  if (result.kind !== 'canonical') {
+    // Same literal treatment on the server and in saved-search matching.
+    return [value.trim()];
+  }
   const variants: Record<CityCode, readonly string[]> = {
-    douala: ['Douala'], yaounde: ['Yaoundé','Yaounde'], bafoussam: ['Bafoussam'],
-    buea: ['Buea'], limbe: ['Limbe'], ngaoundere: ['Ngaoundéré','Ngaoundere'],
+    douala: ['Douala'], yaounde: ['Yaoundé', 'Yaounde'], bafoussam: ['Bafoussam'],
+    buea: ['Buea'], limbe: ['Limbe'],
+    ngaoundere: ['Ngaoundéré', 'Ngaoundere', 'Ngaoundére', 'Ngaounderé'],
     dibombari: ['Dibombari'], melong: ['Melong'],
   };
-  // Préserve les recherches historiques par inclusion et ajoute les variantes accentuées.
-  // Les valeurs sont issues uniquement d'une liste autorisée.
-  return variants[result.code].map(v => 'city.ilike.%'+v+'%').join(',');
+  // NFD historical values are distinct strings for PostgreSQL ILIKE.
+  return [...new Set(variants[result.code].flatMap(v => [v, v.normalize('NFD')]))];
+}
+
+/** Escape SQL LIKE wildcards, preserving unknown cities as literal input. */
+export function cityFilterPattern(term: string): string {
+  return '%' + term.replace(/[\\%_]/g, '\\$&') + '%';
+}
+
+/** Only allowlisted canonical terms are interpolated into PostgREST OR syntax. */
+export function buildCanonicalCityOrClause(value: string): string | null {
+  if (resolveCanonicalCity(value).kind !== 'canonical') return null;
+  return cityFilterTerms(value).map(v => 'city.ilike.' + cityFilterPattern(v)).join(',');
 }
