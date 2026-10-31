@@ -101,6 +101,13 @@ describe('searchQuery', () => {
     expect(listingMatchesCityFilter(inYaounde.city, 'Douala')).toBe(false);
   });
 
+  it('V5-01 rapproche les variantes et maintient les résultats historiques', () => {
+    expect(listingMatchesCityFilter('YAOUNDE', 'Yaoundé')).toBe(true);
+    expect(listingMatchesCityFilter('Yaoundé', 'Yaounde')).toBe(true);
+    expect(listingMatchesCityFilter('Douala 🇨🇲', 'Douala')).toBe(true);
+    expect(listingMatchesCityFilter('Douala et Yaoundé', 'Douala')).toBe(true);
+    expect(listingMatchesCityFilter('Douala Bonapriso', 'Douala')).toBe(true);
+  });
   it('applique prix min/max', () => {
     expect(listingMatchesPriceFilter(50, 100, 200)).toBe(false);
     expect(listingMatchesPriceFilter(150, 100, 200)).toBe(true);

@@ -4,6 +4,7 @@
  */
 
 import { listingPublishedAtMs } from '@/lib/listingPublishedAt';
+import { resolveCanonicalCity, canonicalCityLabel } from '@/lib/canonicalCity';
 import {
   collectCategoryBranchIds,
   type MarketplaceCategoryIdentity,
@@ -137,6 +138,10 @@ export function listingMatchesCityFilter(
 ): boolean {
   const needle = normalizeSearchText(cityFilter);
   if (!needle) return true;
+  const selected = resolveCanonicalCity(cityFilter);
+  if (selected.kind === 'canonical') {
+    return normalizeSearchText(listingCity).includes(normalizeSearchText(canonicalCityLabel(selected.code)));
+  }
   return normalizeSearchText(listingCity).includes(needle);
 }
 

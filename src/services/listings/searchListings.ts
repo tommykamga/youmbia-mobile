@@ -5,6 +5,7 @@
  */
 
 import { supabase } from '@/lib/supabase';
+import { buildCanonicalCityOrClause } from '@/lib/canonicalCity';
 import {
   getSignedUrlsMap,
   listingStoragePathsForCardCover,
@@ -180,10 +181,15 @@ export async function searchListings(options: SearchOptions = {}): Promise<Searc
     }
   }
 
-  // City filter (explicite, inchangé)
+  // V5-01: expand accent variants while preserving legacy city inclusion.
   if (city?.trim()) {
-    const cityPattern = `%${city.trim().replace(/[%_\\]/g, '')}%`;
-    request = request.ilike('city', cityPattern);
+    const canonicalClause = buildCanonicalCityOrClause(city);
+    if (canonicalClause) {
+      request = request.or(canonicalClause);
+    } else {
+      const cityPattern = '%' + city.trim().replace(/[%_\\]/g, '') + '%';
+      request = request.ilike('city', cityPattern);
+    }
   }
 
   // Price range filters
