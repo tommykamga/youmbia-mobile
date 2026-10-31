@@ -106,6 +106,7 @@ import {
   validateListingTitle,
 } from '@/lib/listingPublishFormValidation';
 import { computeListingQualityScore } from '@/lib/listingQualityScore';
+import { canonicalCityInputValue, canonicalCityLabel, resolveCanonicalCity } from '@/lib/canonicalCity';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import * as Haptics from 'expo-haptics';
 import {
@@ -322,6 +323,7 @@ export default function SellScreen() {
   const descriptionError = useMemo(() => validateListingDescription(description), [description]);
   const priceError = useMemo(() => validateListingPrice(priceStr), [priceStr]);
   const cityError = useMemo(() => validateListingCity(city), [city]);
+  const cityResolution = useMemo(() => resolveCanonicalCity(city), [city]);
 
   const showTitleError = shouldShowListingFieldError(title, titleError, validationAttempted);
   const showDescriptionError = shouldShowListingFieldError(
@@ -441,7 +443,7 @@ export default function SellScreen() {
       listingId,
       title: title.trim(),
       price: Number.isFinite(parsed) ? Math.round(parsed) : 0,
-      city: city.trim(),
+      city: canonicalCityInputValue(city),
     });
   }, [city, priceStr, title]);
 
@@ -835,7 +837,7 @@ export default function SellScreen() {
         title: title.trim(),
         price: Number.isFinite(parsedPrice) && parsedPrice > 0 ? Math.round(parsedPrice) : null,
         categoryId: publishCategoryId,
-        city: city.trim(),
+        city: canonicalCityInputValue(city),
         description: description.trim() || '',
         shopId: publishShopId,
       };
@@ -1060,7 +1062,7 @@ export default function SellScreen() {
         title: title.trim(),
         price: Math.round(price),
         categoryId: publishCategoryId,
-        city: city.trim(),
+        city: canonicalCityInputValue(city),
         description: description.trim() || '',
         shopId: publishShopId,
       };
@@ -1107,7 +1109,7 @@ export default function SellScreen() {
         listing_id: listingId,
         has_photos: totalPhotoCount > 0,
         category: resolveMarketplaceCategoryLabel(marketplaceCategories, publishCategoryId),
-        city: city.trim(),
+        city: canonicalCityInputValue(city),
       });
 
       const dynamicRows = buildListingDynamicAttributeRows(
@@ -1146,7 +1148,7 @@ export default function SellScreen() {
 
         if (uploadResult.status === 'ok' && missingSourceCount === 0) {
           void saveListingPublishMemory({
-            city: city.trim(),
+            city: canonicalCityInputValue(city),
             parentCategoryId: selectedParentCategoryId,
             childCategoryId: selectedChildCategoryId,
             publishCategoryId,
@@ -1185,7 +1187,7 @@ export default function SellScreen() {
       }
 
       void saveListingPublishMemory({
-        city: city.trim(),
+        city: canonicalCityInputValue(city),
         parentCategoryId: selectedParentCategoryId,
         childCategoryId: selectedChildCategoryId,
         publishCategoryId,
@@ -1755,6 +1757,9 @@ export default function SellScreen() {
               maxLength={20}
               error={showCityError ? (cityError ?? undefined) : undefined}
             />
+            {city.trim() && cityResolution.kind === 'canonical' ? (
+              <Text style={styles.fieldHint}>Ville reconnue : {canonicalCityLabel(cityResolution.code)}</Text>
+            ) : null}
 
             <Text style={styles.requiredLegend}>* Champ obligatoire</Text>
 
