@@ -30,7 +30,7 @@ import { PopularShopsSection } from '@/features/shops';
 import { searchListings } from '@/services/listings';
 import { appendUniqueSearchListings } from '@/services/listings/searchQuery';
 import { getFavoriteIds as getFavIds } from '@/services/favorites';
-import { sortListings, type SortOption } from '@/utils/sortListings';
+import { type SortOption } from '@/utils/sortListings';
 import {
   buildSavedSearchHref,
   getSavedSearches,
@@ -70,6 +70,7 @@ import {
   SEARCH_INITIAL_PAGE_SIZE,
   SEARCH_NAV_PARAMS_RUN_COOLDOWN_MS,
   buildSearchPage1SessionKey,
+  getSearchDisplayListings,
   searchSessionPage1Cache,
   type SearchState,
 } from '@/features/search/searchSession';
@@ -130,7 +131,7 @@ export default function SearchScreen() {
   const mainSearchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastDisplayedPage1KeyRef = useRef<string | null>(null);
   const searchSeqRef = useRef(0);
-  const runSearchRef = useRef<(q: string, filters?: Partial<AppliedSearchFilters & AppliedPriceFilters>) => Promise<void>>(
+  const runSearchRef = useRef<(q: string, filters?: Partial<AppliedSearchFilters & AppliedPriceFilters>, requestedSort?: SortOption) => Promise<void>>(
     async () => {}
   );
   const resultsListRef = useRef<FlatList<PublicListing> | null>(null);
@@ -200,7 +201,8 @@ export default function SearchScreen() {
     }, [loadFavorites, loadSavedSearches])
   );
 
-  const runSearch = useCallback(async (q: string, filters?: Partial<AppliedSearchFilters & AppliedPriceFilters>) => {
+  const runSearch = useCallback(async (q: string, filters?: Partial<AppliedSearchFilters & AppliedPriceFilters>, requestedSort?: SortOption) => {
+    const searchSort = requestedSort ?? sortBy;
     const trimmed = q.trim();
     const browseFromHome = browseFromHomeFooterRef.current;
     if (browseFromHome) {
@@ -215,7 +217,7 @@ export default function SearchScreen() {
     const searchMaxPrice = filters?.max !== undefined ? filters.max : appliedPriceFilters.max;
 
     const hasSearchIntent =
-      browseFromHome ||
+      browseFromHome || requestedSort != null ||
       trimmed.length >= 2 ||
       searchCategoryId != null ||
       (searchCity != null && String(searchCity).trim() !== '') ||
@@ -255,7 +257,9 @@ export default function SearchScreen() {
       min: searchMinPrice,
       max: searchMaxPrice,
       pageSize,
+      sortBy: searchSort,
     });
+    const seq = ++searchSeqRef.current;
 
     if (page1Key === lastDisplayedPage1KeyRef.current) {
       setSubmittedQuery(trimmed);
@@ -291,8 +295,8 @@ export default function SearchScreen() {
       return;
     }
 
-    const seq = ++searchSeqRef.current;
     setSubmittedQuery(trimmed);
+    lastDisplayedPage1KeyRef.current = null;
     setState({ status: 'loading' });
 
     const result = await searchListings({
@@ -301,7 +305,7 @@ export default function SearchScreen() {
       city: searchCity,
       minPrice: searchMinPrice,
       maxPrice: searchMaxPrice,
-      sortBy: sortBy,
+      sortBy: searchSort,
       page: 1,
       pageSize,
     });
@@ -356,6 +360,12 @@ export default function SearchScreen() {
   }, [appliedSearchFilters, appliedPriceFilters, sortBy]);
 
   runSearchRef.current = runSearch;
+  const previousSortRef = useRef(sortBy);
+  useEffect(() => {
+    if (previousSortRef.current === sortBy) return;
+    previousSortRef.current = sortBy;
+    if (state.status !== 'idle') void runSearchRef.current(submittedQuery, undefined, sortBy);
+  }, [sortBy, state.status, submittedQuery]);
 
   /** When navigating with query params, pre-fill and run search once. */
   useEffect(() => {
@@ -432,6 +442,7 @@ export default function SearchScreen() {
     if (state.status !== 'success' || !state.hasMore || loadingMoreSearch) return;
     setLoadingMoreSearch(true);
     const nextPage = state.page + 1;
+    const seq = searchSeqRef.current;
     try {
       const result = await searchListings({
         query: state.query,
@@ -443,13 +454,13 @@ export default function SearchScreen() {
         page: nextPage,
         pageSize: state.pageSize ?? SEARCH_INITIAL_PAGE_SIZE,
       });
-      if (result.error) {
+      if (result.error || seq !== searchSeqRef.current) {
         return;
       }
       const batch = result.data ?? [];
       const nextTotal = result.total ?? 0;
       setState((prev) => {
-        if (prev.status !== 'success') return prev;
+        if (seq !== searchSeqRef.current || prev.status !== 'success') return prev;
         return {
           status: 'success',
           data: appendUniqueSearchListings(prev.data, batch),
@@ -709,7 +720,7 @@ export default function SearchScreen() {
   const successSearchData = state.status === 'success' ? state.data : null;
   const sortedListings = useMemo(() => {
     const list = successSearchData ?? [];
-    return sortListings(
+    return getSearchDisplayListings(
       list,
       sortBy,
       sortBy === 'relevance'

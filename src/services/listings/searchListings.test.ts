@@ -50,7 +50,7 @@ beforeEach(() => {
   mocks.from.mockImplementation((table: string) => {
     const predicates: ((r: Record<string, unknown>) => boolean)[] = [];
     let bounds = [0, Infinity];
-    let orderColumn = ''; let ascending = true;
+    const queryOrders: { key: string; ascending: boolean }[] = [];
     const builder = {
       select: vi.fn().mockReturnThis(),
       eq: vi.fn((key: string, value: unknown) => { predicates.push(r => r[key] === value); return builder; }),
@@ -67,13 +67,21 @@ beforeEach(() => {
       lte: (key: string, value: number) => { predicates.push(r => Number(r[key]) <= value); return builder; },
       limit: () => builder,
       order: (key: string, options: { ascending: boolean }) => {
-        orderColumn = key; ascending = options.ascending; orders.push(key); return builder;
+        queryOrders.push({ key, ascending: options.ascending }); orders.push(key); return builder;
       },
       range: (from: number, to: number) => { bounds = [from, to]; ranges.push(bounds); return builder; },
       then: (resolve: (value: unknown) => unknown) => {
         mocks.executed(table);
         let filtered = table === 'listings' ? rows.filter(r => predicates.every(p => p(r))) : [];
-        if (orderColumn === 'price') filtered = [...filtered].sort((a, b) => (a.price - b.price) * (ascending ? 1 : -1));
+        filtered = [...filtered].sort((a, b) => {
+          for (const { key, ascending } of queryOrders) {
+            const left = (a as Record<string, unknown>)[key] as string | number;
+            const right = (b as Record<string, unknown>)[key] as string | number;
+            const order = left < right ? -1 : left > right ? 1 : 0;
+            if (order) return ascending ? order : -order;
+          }
+          return 0;
+        });
         return Promise.resolve(resolve({ data: filtered.slice(bounds[0], bounds[1] + 1), count: filtered.length, error: failure }));
       },
     };
@@ -95,7 +103,7 @@ describe('V5-01 search service regression', () => {
     rows = [row('parent', 'Douala', 5), row('child', 'Douala', 6), row('grandchild', 'Douala', 7), row('other', 'Douala', 9)];
     const result = await searchListings({ categoryId: '5' });
     expect(result.error).toBeNull();
-    expect(result.data?.map(r => r.id)).toEqual(['parent', 'child', 'grandchild']);
+    expect(result.data?.map(r => r.id)).toEqual(['parent', 'grandchild', 'child']);
     expect(result.total).toBe(3);
     const leaf = await searchListings({ categoryId: 7 });
     expect(leaf.data?.map(r => r.id)).toEqual(['grandchild']);
@@ -120,34 +128,33 @@ describe('V5-01 search service regression', () => {
     rows = cities.map((value, i) => row(String(i), value));
     const result = await searchListings({ city, pageSize: 100 });
     expect(result.error).toBeNull();
-    expect(result.data?.map(r => r.id)).toEqual(rows.filter(r => listingMatchesCityFilter(r.city, city)).map(r => r.id));
+    expect(result.data?.map(r => r.id)).toEqual(rows.filter(r => listingMatchesCityFilter(r.city, city)).map(r => r.id).sort().reverse());
     // Returned historical values are preserved verbatim.
-    expect(result.data?.map(r => r.city)).toEqual(rows.filter(r => listingMatchesCityFilter(r.city, city)).map(r => r.city));
+    expect(result.data?.map(r => r.city).sort()).toEqual(rows.filter(r => listingMatchesCityFilter(r.city, city)).map(r => r.city).sort());
   });
 
   it('includes controlled accented and decomposed variants, preserving historical inclusion', async () => {
     rows = cities.map((value, i) => row(String(i), value));
     const yaounde = await searchListings({ city: 'Yaoundé', pageSize: 100 });
-    expect(yaounde.data?.map(r => r.city)).toEqual([
+    expect(yaounde.data?.map(r => r.city).sort()).toEqual([
       'Douala et Yaoundé', 'Yaoundé', 'YAOUNDE', 'Yaoundé Cameroun', 'Yaoundé'.normalize('NFD'),
-    ]);
+    ].sort());
     const ngaoundere = await searchListings({ city: 'Ngaoundere', pageSize: 100 });
-    expect(ngaoundere.data?.map(r => r.city)).toEqual([
+    expect(ngaoundere.data?.map(r => r.city).sort()).toEqual([
       'Ngaoundéré', 'Ngaoundere', 'Ngaoundére', 'Ngaounderé', 'Ngaoundéré'.normalize('NFD'),
-    ]);
+    ].sort());
     const unknown = await searchListings({ city: 'Édéa', pageSize: 100 });
     expect(unknown.data?.map(r => r.city)).toEqual(['Édéa']);
     const ambiguous = await searchListings({ city: 'Douala Bonapriso', pageSize: 100 });
     expect(ambiguous.data?.map(r => r.city)).toEqual(['Douala Bonapriso']);
   });
 
-  it('returns an empty page after exhaustion and keeps the default discovery order', async () => {
+  it('returns an empty page after exhaustion and defaults to creation date, then id', async () => {
     rows = [row('a', 'Douala')];
     const result = await searchListings({ page: 2, pageSize: 1 });
     expect(result).toEqual({ data: [], total: 1, error: null });
     expect(ranges).toEqual([[1, 1]]);
-    expect(orders).toHaveLength(1);
-    expect(orders[0]).not.toBe('price');
+    expect(orders).toEqual(['created_at', 'id']);
   });
 
   it('keeps filters and counts before pagination, with text tokens, price and sort', async () => {
@@ -163,6 +170,30 @@ describe('V5-01 search service regression', () => {
     expect(first.total).toBe(3); expect(second.total).toBe(3);
     expect(ranges).toEqual([[0, 1], [2, 3]]);
     expect(orders).toEqual(['price', 'price']);
+  });
+
+  it('paginates recent globally by creation date then descending id, without renewal promotion', async () => {
+    rows = [
+      Object.assign(row('z', 'Douala'), { created_at: '2025-01-01', last_published_at: '2026-10-01' }),
+      { ...row('a', 'Douala'), created_at: '2026-06-01' },
+      { ...row('c', 'Douala'), created_at: '2026-06-01' },
+      { ...row('b', 'Douala'), created_at: '2026-06-01' },
+    ];
+    const first = await searchListings({ sortBy: 'recent', page: 1, pageSize: 2 });
+    const second = await searchListings({ sortBy: 'recent', page: 2, pageSize: 2 });
+    expect(first.data?.map(r => r.id)).toEqual(['c', 'b']);
+    expect(second.data?.map(r => r.id)).toEqual(['a', 'z']);
+    expect(orders).toEqual(['created_at', 'id', 'created_at', 'id']);
+    expect(first.total).toBe(4);
+    expect(second.total).toBe(4);
+    expect(ranges).toEqual([[0, 1], [2, 3]]);
+  });
+
+  it('preserves descending price ordering', async () => {
+    rows = [row('cheap', 'Douala', 7, 10), row('expensive', 'Douala', 7, 500)];
+    const result = await searchListings({ sortBy: 'price_desc' });
+    expect(result.data?.map(r => r.id)).toEqual(['expensive', 'cheap']);
+    expect(orders).toEqual(['price']);
   });
 
   it('preserves database errors', async () => {

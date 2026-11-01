@@ -1,4 +1,5 @@
 import type { PublicListing } from '@/services/listings';
+import { sortListings, type SortOption, type SortListingsContext } from '@/utils/sortListings';
 
 export const SUGGESTIONS_DEBOUNCE_MS = 300;
 /** Ne pas relancer `runSearch` si les params de navigation sont identiques sous ce délai (anti double effet / focus). */
@@ -18,7 +19,7 @@ export type SearchPage1SessionCacheEntry = {
   total: number;
 };
 
-/** Cache mémoire session : première page par clé query + filtres appliqués (hors tri UI). */
+/** Cache mémoire session : première page par clé query + filtres appliqués + tri serveur. */
 export const searchSessionPage1Cache = new Map<string, SearchPage1SessionCacheEntry>();
 
 export function buildSearchPage1SessionKey(parts: {
@@ -28,6 +29,7 @@ export function buildSearchPage1SessionKey(parts: {
   min: number | null;
   max: number | null;
   pageSize: number;
+  sortBy: SortOption;
 }): string {
   return JSON.stringify(parts);
 }
@@ -46,3 +48,10 @@ export type SearchState =
       hasMore: boolean;
       pageSize?: number;
     };
+
+/** Paginated recent results already have the global server order, without local boost promotion. */
+export function getSearchDisplayListings(
+  listings: PublicListing[], sortBy: SortOption, context?: SortListingsContext
+): PublicListing[] {
+  return sortBy === 'recent' ? listings : sortListings(listings, sortBy, context);
+}

@@ -81,7 +81,7 @@ describe('sold exclu des requêtes discovery actives', () => {
     expect(search).not.toMatch(/sold_at/);
   });
 
-  it('Home / Search / Similar trient last_published_at, jamais updated_at', () => {
+  it('Découverte conserve last_published_at ; recherche recent utilise created_at puis id', () => {
     const publicFeed = read('src/services/listings/getPublicListings.ts');
     const search = read('src/services/listings/searchListings.ts');
     const similar = read('src/services/listings/getSimilarListings.ts');
@@ -89,7 +89,8 @@ describe('sold exclu des requêtes discovery actives', () => {
     const listSelect = read('src/services/listings/listingListSelect.ts');
     expect(listSelect).toMatch(/LISTING_DISCOVERY_ORDER_COLUMN = 'last_published_at'/);
     expect(publicFeed).toMatch(/LISTING_DISCOVERY_ORDER_COLUMN/);
-    expect(search).toMatch(/LISTING_DISCOVERY_ORDER_COLUMN/);
+    expect(search).toMatch(/sortBy === 'recent'/);
+    expect(search).toMatch(/order\('created_at', \{ ascending: false \}\)\.order\('id', \{ ascending: false \}\)/);
     expect(similar).toMatch(/LISTING_DISCOVERY_ORDER_COLUMN/);
     expect(byCity).toMatch(/LISTING_DISCOVERY_ORDER_COLUMN/);
     expect(publicFeed).not.toMatch(/\.order\('updated_at'/);

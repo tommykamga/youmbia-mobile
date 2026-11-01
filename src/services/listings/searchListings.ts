@@ -205,11 +205,13 @@ export async function searchListings(options: SearchOptions = {}): Promise<Searc
     request = request.lte('price', maxPrice);
   }
 
-  // Sorting — la pertinence texte est appliquée côté UI (cache hors tri).
+  // Sorting before pagination; text relevance remains applied by the UI.
   if (sortBy === 'price_asc') {
     request = request.order('price', { ascending: true });
   } else if (sortBy === 'price_desc') {
     request = request.order('price', { ascending: false });
+  } else if (sortBy === 'recent') {
+    request = request.order('created_at', { ascending: false }).order('id', { ascending: false });
   } else {
     request = request.order(LISTING_DISCOVERY_ORDER_COLUMN, { ascending: false });
   }
