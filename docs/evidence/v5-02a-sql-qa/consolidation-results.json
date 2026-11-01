@@ -1,0 +1,35 @@
+{
+  "scope": "V5-02A final Git consolidation; sanitized evidence only",
+  "postgres_assertions": {
+    "pass": 67,
+    "fail": 0,
+    "repeat": "PASS"
+  },
+  "catalog_comparison": {
+    "exact": 460,
+    "equivalent": 1,
+    "total": 461,
+    "equivalence_cases_pass": 12
+  },
+  "source_capture": "Schema catalog metadata only; no production rows were imported. Raw captures and reconstructed SQL excluded from commits.",
+  "raw_evidence_verified_before_selection": true,
+  "excluded_local_files": [
+    "production-schema-only.json",
+    "production-schema-extra.json",
+    "baseline-reconstructed.sql",
+    "catalog-comparison.json",
+    "catalog-query.sql",
+    "reconstruct.py",
+    "qualify.py",
+    "restore.log",
+    "synthetic-fixtures.sql",
+    "sql-suite-first.log",
+    "sql-suite-repeat.log",
+    "SHA256SUMS.json"
+  ],
+  "limits": [
+    "Released 4.7.x binaries not certified",
+    "Storage HTTP signing not certified",
+    "No Production deployment authorization"
+  ]
+}

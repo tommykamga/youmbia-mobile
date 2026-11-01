@@ -1,0 +1,10 @@
+{
+  "baseline-qualification.json": "0f9a272023adbce1dd123886f824bf0c87a86db5d213075379a2efa73f89330c",
+  "instance-state.json": "6c2e12dba43108aca46a396e8f4265d19ec731eb00b2aa76e3787386a8c60f43",
+  "migration-delta.json": "0c438a83872b129261e5970b406c81b048aac13e5af7d883ae4503e78e0f10d4",
+  "post-test-safety.json": "4b35f623a48f60a8425c42361eb76dadb7200d6096554514753fc621c67d493d",
+  "test-results.json": "cdeb4b15117ef6884a05a915e8514e6af09c4f9f191843cd5928ed00f9380280",
+  "sql-suite-first.sanitized.log": "033d6da7f4b5a7f2268fbd7039d7b2051be63f0ec0c2f755f0b612027d9f9227",
+  "sql-suite-repeat.sanitized.log": "033d6da7f4b5a7f2268fbd7039d7b2051be63f0ec0c2f755f0b612027d9f9227",
+  "consolidation-results.json": "f9ef38afdc7bfd5786e90651cfe014db434575e70e068892225f5f555cb77bee"
+}

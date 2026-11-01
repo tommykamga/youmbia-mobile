@@ -1,0 +1,31 @@
+{
+  "execution": "PostgreSQL 17.6 native, unchanged protected runner",
+  "assertion_count_method": "Explicit expected-result checks; matrices count each loop iteration. Preconditions/SQL setup statements excluded. Compound checks count once.",
+  "pass": 67,
+  "fail": 0,
+  "groups": {
+    "owner_transition_matrix": 25,
+    "owner_initial_status_matrix": 5,
+    "moderator_transition_matrix": 25,
+    "owner_photo_visibility": 1,
+    "legacy_timestamp_and_draft_contract": 4,
+    "renewal_boundary_and_replay": 2,
+    "cross_user_isolation": 2,
+    "anonymous_photo_visibility": 1,
+    "admin_identity_and_restore": 2
+  },
+  "repeat_run": "PASS, same 67 expected-result checks; not counted as new coverage",
+  "baseline_catalog": {
+    "exact": 460,
+    "equivalent": 1,
+    "total": 461
+  },
+  "semantic_profile_check": {
+    "pass": 12,
+    "fail": 0
+  },
+  "migration_file": "20261101080731_v5_02a_listing_lifecycle_owner_guards.sql",
+  "migration_sha256": "8583bf0b698fc97e6b6181d001c5a7607e4ad8a34ea2507650b8fec2203366e3",
+  "suite_sha256": "e82c40d281b97e5fe364a8f0d3b25a5423caef86e459edc6c30894c487747941",
+  "runner_sha256": "738e7bf4a7092eeb2ee177378c40f066ff89e66b3e3edf9be8542aa1e66e6a9f"
+}
