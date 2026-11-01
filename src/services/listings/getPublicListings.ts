@@ -103,8 +103,8 @@ export type GetPublicListingsResult =
   | { data: null; error: { message: string } };
 
 /**
- * Fetches active listings for the feed, ordered by last_published_at desc
- * (COALESCE(renewed_at, created_at)). Never updated_at.
+ * Fetches active listings in global discovery RPC order (seller diversity).
+ * Before backend rollout only, missing RPC falls back to last_published_at.
  */
 export async function getPublicListings(
   offset: number = 0,
@@ -115,21 +115,7 @@ export async function getPublicListings(
 
   // V5-03B : classement global et pagination côté PostgreSQL.
   // Fallback legacy uniquement si la RPC n'est pas encore déployée.
-  type DiscoveryRankRow = {
-    listing_id: string;
-    rank_position: number;
-  };
-
-  // RPC additive : types générés à synchroniser lors de la release SQL.
-  const discoveryRpc = supabase.rpc.bind(supabase) as unknown as (
-    name: 'get_v5_discovery_listing_ids',
-    args: { p_offset: number; p_limit: number }
-  ) => Promise<{
-    data: DiscoveryRankRow[] | null;
-    error: { code?: string; message: string } | null;
-  }>;
-
-  const { data: ranked, error: rankingError } = await discoveryRpc(
+  const { data: ranked, error: rankingError } = await supabase.rpc(
     'get_v5_discovery_listing_ids',
     { p_offset: from, p_limit: Math.max(1, limit) }
   );

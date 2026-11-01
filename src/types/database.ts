@@ -960,6 +960,10 @@ export type Database = {
     };
     Views: Record<string, never>;
     Functions: {
+      get_v5_discovery_listing_ids: {
+        Args: { p_offset?: number; p_limit?: number };
+        Returns: { listing_id: string; rank_position: number }[];
+      };
       prepare_listing_publication: {
         Args: { p_listing_id: string };
         Returns: { id: string; status: string; already_published: boolean }[];

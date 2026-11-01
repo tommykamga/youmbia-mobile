@@ -16,7 +16,7 @@ import Animated from 'react-native-reanimated';
 import { useScrollToTop } from '@react-navigation/native';
 import { useFocusEffect } from 'expo-router';
 import { getPublicListings, type PublicListing } from '@/services/listings';
-import { sortListings, type SortOption } from '@/utils/sortListings';
+import { orderDiscoveryListings, type DiscoverySortOption } from './discoveryDisplay';
 import { ListingCard } from './ListingCard';
 import { EmptyState, SkeletonListingCard, Button } from '@/components';
 import { spacing, colors, typography, fontWeights, radius, ui } from '@/theme';
@@ -114,7 +114,7 @@ export function ListingFeed({
 
   const { refresh: refreshFavorites } = useFavorites();
   const [state, setState] = useState<FeedState>({ status: 'loading' });
-  const [sortBy, setSortBy] = useState<SortOption>('recent');
+  const [sortBy, setSortBy] = useState<DiscoverySortOption>('discovery');
   const [refreshing, setRefreshing] = useState(false);
   const hasLoadedListingsRef = useRef(false);
   const loadingMoreRef = useRef(false);
@@ -300,7 +300,7 @@ export function ListingFeed({
 
   const sortedListings = useMemo(() => {
     const list = feedSuccessData ?? [];
-    return sortListings(list, sortBy);
+    return orderDiscoveryListings(list, sortBy);
   }, [feedSuccessData, sortBy]);
 
   const feedData = useMemo(() => {
@@ -323,11 +323,11 @@ export function ListingFeed({
     () => (
       <View style={[styles.sortContainer, homeInsetStyle]}>
         <Pressable
-          style={[styles.sortOption, sortBy === 'recent' && styles.sortOptionActive]}
-          onPress={() => setSortBy('recent')}
+          style={[styles.sortOption, sortBy === 'discovery' && styles.sortOptionActive]}
+          onPress={() => setSortBy('discovery')}
         >
-          <Text style={[styles.sortOptionText, sortBy === 'recent' && styles.sortOptionTextActive]}>
-            Plus récentes
+          <Text style={[styles.sortOptionText, sortBy === 'discovery' && styles.sortOptionTextActive]}>
+            Découvrir
           </Text>
         </Pressable>
         <Pressable
