@@ -1,0 +1,68 @@
+{
+  "verdict": "GO_LOCAL_IMPLEMENTATION_ONLY",
+  "baseline": {
+    "mobile": "bc6acb72cf140f4010a1fd27a0ac61be2e917d26",
+    "web": "af843998a70ca2d3f53670d49681d45f7e6c5243",
+    "sql": "qualified V5-02A schema-only native Supabase PostgreSQL 17.6, plus V5-02B local migration",
+    "full_ledger_replay": false
+  },
+  "tests": {
+    "mobile_mocked_and_unit": 221,
+    "web_unit_and_contract": 64,
+    "sql_transactional": 39,
+    "sql_concurrency": 8,
+    "sql_v5_02a_regression": 67,
+    "fail": 0
+  },
+  "typecheck": {
+    "mobile": "PASS",
+    "web": "PASS",
+    "incremental": false
+  },
+  "targeted_eslint": {
+    "mobile": "PASS",
+    "web": "PASS"
+  },
+  "react_review": "Stable unconditional hooks; synchronous click guards; bounded background-upload wait; private error state; errors never render publication success.",
+  "safety": {
+    "listings": 0,
+    "images": 0,
+    "attributes": 0,
+    "storage_objects": 0,
+    "outbox": 0,
+    "http_queue": 0,
+    "http_responses": 0,
+    "cron_jobs": 0,
+    "runtime_flags": 0,
+    "vault_secrets": 0
+  },
+  "limits": [
+    "Legacy protocol stays permissive for 4.7.x compatibility; full direct-write lockdown intentionally deferred.",
+    "Released 4.7.x binaries and interactive native/browser flow not certified.",
+    "SQL tests use synthetic Storage metadata, not real HTTP uploads/signatures.",
+    "No Production deployment, remote migration, push, EAS build, campaign or Cron change."
+  ],
+  "source_sha256": {
+    "app/sell/index.tsx": "a27ddd6a8522665667cbf807b3bdd8bc3c04d0b8844e61d42c798aa64e4bc795",
+    "src/services/listings/createListingDraft.ts": "be990fa21417d61e1f8eedfe0faa81192c2c33d5f62f9061ef9d9f21f0a46026",
+    "src/services/listings/index.ts": "7b35a765be40a42e407f735c9bee22372a86f18783e7fc149cb4a33bba3d89d8",
+    "src/services/listings/listingDraft.contract.test.ts": "5080158540874560429730b8c906c6eb2e9f48c147f33626f649ef4f0c2cafa2",
+    "src/services/listings/listingDuplicate.contract.test.ts": "09007fd251dd5cb08fd7fde3b79aa1bf3938d1d59d438560231dcecbb6e0eda8",
+    "src/services/listings/publishListingSafely.ts": "f0a11384710fcee4b143d946bc6b886c960036674e4a74f93b0774f8d88db9da",
+    "src/services/listings/publishListingSafely.test.ts": "f73b28099b6ef1dd8d2e104cfae9417116073e8b31bb19dbe430266594a8ad6e",
+    "src/types/database.ts": "3700fdb0ebf9b59285df3c15d1eb5319d9bd051cf3ddaed6b1c1dbac80397251",
+    "supabase/migrations/20261101090258_v5_02b_listing_publication_finalization.sql": "e7cc02978fd1c9bbdd7148af1e5e0701c0742e513a1d37032e69296ebf6bc7e5",
+    "supabase/scripts/v5_02b_publication_tests.sql": "e91d9edc6f08f58a70ed2de64f964bb57326029eaaf02a07de58abc005724404",
+    "scripts/run-v5-02b-sql.sh": "f599311fe051284048fedb28f264da9f8db258dfbd24928c6a24f8b1b00f9eab",
+    "scripts/test-v5-02b-concurrency.py": "c1e9fac6834168740dd92699b3e858fb45d28d93235c7f9909f87fa8c983e60f"
+  },
+  "web_source_sha256": {
+    "app/(main)/(public)/vendre/actions.ts": "709db47b73a0cc43b4c05d6a31d7fb781bc1b59c4a789b2230a1c455a1d78514",
+    "lib/data/listingDrafts.ts": "d4956311017baeb9176ec52cd7152b0a4d285d88372b14fb1a46f88bfaba2633",
+    "lib/listingDraftContract.ts": "d1edd6277f75f2d92686193bda1179a295f8ca301d1ad18bbd0b096923de173c",
+    "lib/listingDrafts.contract.test.ts": "741ac54652c575763158a37c1cf57290eab5c6367cb6155c34d29ba467f9a885",
+    "lib/listingPublicationProtocol.ts": "6a3397140d316b2a1a81dfb9a47f563f4958f7cb13820f3ab49e06d5883d4e26",
+    "lib/listingPublicationProtocol.test.ts": "93f3fa01102caff4844aed64cbc436c4506a79079775a63eb7200a33ac3420fb",
+    "src/components/ListingForm/ListingWizardV2.tsx": "c785d714925065a73b7954af64e19162e9a7ad38e30170576748f4e508927617"
+  }
+}

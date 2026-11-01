@@ -442,6 +442,8 @@ export type Database = {
           sale_cycle_started_at: string | null;
           sold_at: string | null;
           status: Database['public']['Enums']['listing_status'];
+          publication_managed: boolean;
+          publication_finalized_at: string | null;
           title: string;
           updated_at: string;
           urgent: boolean;
@@ -467,6 +469,7 @@ export type Database = {
           sale_cycle_started_at?: string | null;
           sold_at?: string | null;
           status?: Database['public']['Enums']['listing_status'];
+          publication_managed?: boolean;
           title: string;
           updated_at?: string;
           urgent?: boolean;
@@ -492,6 +495,7 @@ export type Database = {
           sale_cycle_started_at?: string | null;
           sold_at?: string | null;
           status?: Database['public']['Enums']['listing_status'];
+          publication_managed?: boolean;
           title?: string;
           updated_at?: string;
           urgent?: boolean;
@@ -947,6 +951,14 @@ export type Database = {
     };
     Views: Record<string, never>;
     Functions: {
+      prepare_listing_publication: {
+        Args: { p_listing_id: string };
+        Returns: { id: string; status: string; already_published: boolean }[];
+      };
+      finalize_listing_publication: {
+        Args: { p_listing_id: string };
+        Returns: { id: string; status: string; already_published: boolean }[];
+      };
       claim_my_push_token: {
         Args: {
           p_expo_push_token: string;

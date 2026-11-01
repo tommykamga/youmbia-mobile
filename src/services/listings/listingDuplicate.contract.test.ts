@@ -42,9 +42,9 @@ describe('TOM-98 Lot B — duplication d’annonce', () => {
     expect(sell).toMatch(/deleteListing/);
     expect(sell).toMatch(/isPersistedListingImageId/);
     expect(sell).not.toMatch(/imagesSkipped/);
-    expect(sell).toMatch(/checkListingPublishDailyQuota/);
+    expect(read('src/services/listings/publishListingSafely.ts')).toMatch(/checkListingPublishDailyQuota/);
     expect(sell).toMatch(/createListingDraft/);
-    expect(sell).toMatch(/publishListingDraft/);
+    expect(sell).toMatch(/publishListingSafely/);
   });
 
   it('copie images : dest contient newListingId, rollback dest, jamais delete source', () => {

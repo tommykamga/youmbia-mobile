@@ -356,7 +356,8 @@ describe('TOM-98 Lot A — brouillons d’annonces', () => {
     expect(publish).toMatch(/checkListingPublishDailyQuota/);
     expect(publish).not.toMatch(/\.insert\(/);
     const sell = read('app/sell/index.tsx');
-    expect(sell).toMatch(/publishListingDraft/);
+    expect(sell).toMatch(/publishListingSafely/);
+    expect(sell).not.toMatch(/await createListing\(/);
     expect(sell).toMatch(/editingDraftId/);
   });
 

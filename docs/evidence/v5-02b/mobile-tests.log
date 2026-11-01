@@ -1,0 +1,30 @@
+
+ RUN  v3.2.4 <mobile>
+
+ ✓ src/services/listings/searchQuery.test.ts (15 tests) 6ms
+ ✓ src/services/listings/listingDuplicate.unit.test.ts (7 tests) 7ms
+ ✓ src/services/listings/listingDraft.contract.test.ts (11 tests) 23ms
+ ✓ src/services/listings/listingDraft.unit.test.ts (12 tests) 11ms
+ ✓ src/services/listings/renewListing.test.ts (10 tests) 8ms
+ ✓ src/services/listings/updateListingStatus.test.ts (25 tests) 16ms
+ ✓ src/services/listings/searchListings.test.ts (28 tests) 95ms
+ ✓ src/lib/listingSaleCycle.test.ts (13 tests) 2ms
+ ✓ src/services/listings/getMySellerStats.test.ts (10 tests) 3ms
+ ✓ src/services/listings/copyListingImagesToListing.unit.test.ts (4 tests) 4ms
+ ✓ src/lib/listingRenewal.test.ts (15 tests) 3ms
+ ✓ src/services/listings/listingDraftImages.unit.test.ts (5 tests) 9ms
+ ✓ src/services/listings/listingDuplicate.contract.test.ts (8 tests) 5ms
+ ✓ src/services/listings/similarListingsRank.test.ts (10 tests) 6ms
+ ✓ src/lib/listingStatus.test.ts (9 tests) 3ms
+ ✓ src/services/listings/listingSoldDiscovery.contract.test.ts (8 tests) 11ms
+ ✓ src/lib/listingImageUrl.test.ts (5 tests) 3ms
+ ✓ src/services/listings/publishListingSafely.test.ts (7 tests) 6ms
+ ✓ src/services/listings/getListingById.test.ts (7 tests) 3ms
+ ✓ src/services/listings/uploadListingImages.unit.test.ts (3 tests) 28ms
+ ✓ src/lib/listingPublishedAt.test.ts (6 tests) 2ms
+ ✓ src/services/listings/checkListingPublishDailyQuota.test.ts (3 tests) 3ms
+
+ Test Files  22 passed (22)
+      Tests  221 passed (221)
+   Start at  10:38:46
+   Duration  1.49s (transform 1.12s, setup 211ms, collect 2.86s, tests 260ms, environment 5ms, prepare 1.42s)

@@ -74,3 +74,5 @@ export type { BumpListingResult } from './bumpListing';
 export type { RenewListingResult } from './renewListing';
 export type { UpdateListingStatusResult, ListingStatus } from './updateListingStatus';
 export type { UpdateListingUrgentResult } from './updateListingUrgent';
+
+export { publishListingSafely } from './publishListingSafely';

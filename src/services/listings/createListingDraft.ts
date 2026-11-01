@@ -106,6 +106,7 @@ export async function createListingDraft(
       description: fields.description,
       user_id: user.id,
       status: LISTING_STATUS.draft,
+      publication_managed: true,
       views_count: 0,
       ...(fields.shopId ? { shop_id: fields.shopId } : {}),
     };
