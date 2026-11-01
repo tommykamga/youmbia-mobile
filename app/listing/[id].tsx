@@ -1,6 +1,8 @@
+import { supabase } from '@/lib/supabase';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
+  AppState,
   ScrollView,
   StyleSheet,
   Pressable,
@@ -185,6 +187,34 @@ export default function ListingDetailScreen() {
   const [markSoldLoading, setMarkSoldLoading] = useState(false);
   const [reactivateLoading, setReactivateLoading] = useState(false);
   const [renewLoading, setRenewLoading] = useState(false);
+  const authEpochRef = useRef(0);
+  useEffect(() => {
+    let alive = true;
+    const { data } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event !== 'SIGNED_OUT' && event !== 'SIGNED_IN') return;
+      const epoch = ++authEpochRef.current;
+      setSessionStatus(session?.user ? 'authed' : 'guest');
+      setSessionUserId(session?.user?.id ?? null);
+      setIsFavorite(false);
+      lastFavoriteIdsFetchAtRef.current = 0;
+      setReportModalVisible(false);
+      setReportComment('');
+      setReportReason(null);
+      setReportedListingId(null);
+      setState({ status: 'loading' });
+      setTimeout(() => {
+        if (!alive || !id) return;
+        void Promise.all([getListingById(id), getListingDynamicAttributesForDisplay(id)]).then(([result, dynamicAttributes]) => {
+          if (!alive || epoch !== authEpochRef.current) return;
+          setState(result.error ? { status: 'error', message: result.error.message }
+            : { status: 'success', listing: result.data, dynamicAttributes });
+        }).catch(() => {
+          if (alive && epoch === authEpochRef.current) setState({ status: 'error', message: 'Impossible de vérifier cette annonce.' });
+        });
+      }, 0);
+    });
+    return () => { alive = false; data.subscription.unsubscribe(); };
+  }, [id]);
   const [sessionStatus, setSessionStatus] = useState<'loading' | 'authed' | 'guest'>('loading');
   const [sessionUserId, setSessionUserId] = useState<string | null>(null);
   const [sellerStats, setSellerStats] = useState<{ memberSince: string | null; listingCount: number | null }>({
@@ -237,37 +267,9 @@ export default function ListingDetailScreen() {
     }
     setSellerStats({ memberSince: null, listingCount: null });
     let cancelled = false;
-
+    const authEpoch = authEpochRef.current;
     const cached = peekListingDetailSession(id);
-    if (cached) {
-      setState({
-        status: 'success',
-        listing: cached.listing,
-        dynamicAttributes: cached.dynamicAttributes,
-      });
-      addRecentlyViewedListingId(id);
-      void (async () => {
-        const favResult = await getFavoriteIds();
-        if (cancelled) return;
-        if (favResult.data && id) {
-          setIsFavorite(favResult.data.includes(id));
-        }
-        lastFavoriteIdsFetchAtRef.current = Date.now();
-        const sellerId = cached.listing.seller_id;
-        if (sellerId) {
-          const statsResult = await getSellerStats(sellerId);
-          if (!cancelled && !statsResult.error) {
-            setSellerStats({
-              memberSince: statsResult.data.memberSince,
-              listingCount: statsResult.data.listingCount,
-            });
-          }
-        }
-      })();
-      return () => {
-        cancelled = true;
-      };
-    }
+    if (cached) setState({ status: 'success', listing: cached.listing, dynamicAttributes: cached.dynamicAttributes });
 
     (async () => {
       const [listingResult, favResult, dynamicAttributes] = await Promise.all([
@@ -275,7 +277,7 @@ export default function ListingDetailScreen() {
         getFavoriteIds(),
         getListingDynamicAttributesForDisplay(id),
       ]);
-      if (cancelled) return;
+      if (cancelled || authEpoch !== authEpochRef.current) return;
       if (listingResult.error) {
         setState({ status: 'error', message: listingResult.error.message });
         return;
@@ -354,6 +356,28 @@ export default function ListingDetailScreen() {
     [tryBeginSimilarLoad]
   );
 
+  useFocusEffect(useCallback(() => {
+    let active = true;
+    let pending = false;
+    const refresh = async () => {
+      if (!id || pending || AppState.currentState !== 'active') return;
+      pending = true;
+      const epoch = authEpochRef.current;
+      try {
+        const result = await getListingById(id);
+        if (!active || epoch !== authEpochRef.current) return;
+        if (result.error) setState({ status: 'error', message: result.error.message });
+        else setState((previous) => previous.status === 'success' ? { ...previous, listing: result.data } : previous);
+      } catch {
+        if (active && epoch === authEpochRef.current) setState({ status: 'error', message: 'Impossible de vérifier cette annonce.' });
+      } finally { pending = false; }
+    };
+    void refresh();
+    const timer = setInterval(() => { void refresh(); }, 60_000);
+    const subscription = AppState.addEventListener('change', (state) => { if (state === 'active') void refresh(); });
+    return () => { active = false; clearInterval(timer); subscription.remove(); };
+  }, [id]));
+
   /** Refresh favorite state when screen gains focus (e.g. return from Favorites tab). */
   useFocusEffect(
     useCallback(() => {
@@ -361,8 +385,9 @@ export default function ListingDetailScreen() {
       const now = Date.now();
       if (now - lastFavoriteIdsFetchAtRef.current < FAVORITES_FETCH_TTL_MS) return;
       lastFavoriteIdsFetchAtRef.current = now;
+      const epoch = authEpochRef.current;
       getFavoriteIds().then((res) => {
-        if (res.data) setIsFavorite(res.data.includes(id));
+        if (epoch === authEpochRef.current && res.data) setIsFavorite(res.data.includes(id));
       });
     }, [id, state.status])
   );
@@ -370,15 +395,16 @@ export default function ListingDetailScreen() {
   useFocusEffect(
     useCallback(() => {
       let active = true;
+      const epoch = authEpochRef.current;
       setSessionStatus('loading');
       getSession()
         .then((s) => {
-          if (!active) return;
+          if (!active || epoch !== authEpochRef.current) return;
           setSessionStatus(s?.user ? 'authed' : 'guest');
           setSessionUserId(s?.user?.id ?? null);
         })
         .catch(() => {
-          if (!active) return;
+          if (!active || epoch !== authEpochRef.current) return;
           setSessionStatus('guest');
           setSessionUserId(null);
         });
@@ -416,6 +442,8 @@ export default function ListingDetailScreen() {
 
   const openConversationForListing = useCallback(async (): Promise<boolean> => {
     if (!id) return false;
+    const available = await getListingById(id);
+    if (available.error || available.data.status !== 'active') { Alert.alert('Annonce indisponible'); return false; }
     const result = await getOrCreateConversation(id);
     if (result.error) {
       if (result.error.message === 'Non connecté') {
@@ -468,7 +496,9 @@ export default function ListingDetailScreen() {
       );
       return;
     }
-    await openWhatsAppForListing(state.listing);
+    const current = await getListingById(id);
+    if (current.error || current.data.status !== 'active') { Alert.alert('Annonce indisponible'); return; }
+    await openWhatsAppForListing(current.data);
     trackSellerContactInitiated({ listing_id: id, contact_method: 'whatsapp' });
   }, [id, state, router]);
 
@@ -479,7 +509,9 @@ export default function ListingDetailScreen() {
       router.push(buildAuthGateHref('messages', { redirect: `/listing/${id}`, contact: 'call' }));
       return;
     }
-    await openSellerPhoneCall(state.listing);
+    const current = await getListingById(id);
+    if (current.error || current.data.status !== 'active') { Alert.alert('Annonce indisponible'); return; }
+    await openSellerPhoneCall(current.data);
     trackSellerContactInitiated({ listing_id: id, contact_method: 'call' });
   }, [id, state, router]);
 
@@ -490,15 +522,15 @@ export default function ListingDetailScreen() {
       router.push(buildAuthGateHref('messages', { redirect: `/listing/${id}`, contact: 'sms' }));
       return;
     }
-    await openSellerSms(state.listing);
+    const current = await getListingById(id);
+    if (current.error || current.data.status !== 'active') { Alert.alert('Annonce indisponible'); return; }
+    await openSellerSms(current.data);
     trackSellerContactInitiated({ listing_id: id, contact_method: 'sms' });
   }, [id, state, router]);
 
   useEffect(() => {
     const contact = contactParam;
     if (!contact || !isSellerContactAction(contact) || state.status !== 'success' || !id) return;
-
-    const listing = state.listing;
 
     const key = `${id}:${contact}`;
     if (contactHandledRef.current === key) return;
@@ -520,6 +552,9 @@ export default function ListingDetailScreen() {
       if (ac.signal.aborted) return;
 
       try {
+        const current = await getListingById(id);
+        if (current.error || current.data.status !== 'active') { Alert.alert('Annonce indisponible'); return; }
+        const listing = current.data;
         switch (contact) {
           case 'whatsapp':
             await openWhatsAppForListing(listing);

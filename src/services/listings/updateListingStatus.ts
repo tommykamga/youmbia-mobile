@@ -73,7 +73,7 @@ export async function updateListingStatus(
 
   let previousStatusForRenewalTrack: string | null = null;
 
-  if (status === LISTING_STATUS.active) {
+  {
     const { data: existing, error: existingError } = await supabase
       .from('listings')
       .select('id, status')
@@ -92,13 +92,14 @@ export async function updateListingStatus(
     if (current === LISTING_STATUS.suspended) {
       return { data: null, error: { message: SUSPENDED_REACTIVATE_ERROR } };
     }
-    if (current === LISTING_STATUS.active) {
-      return { data: { id, status: LISTING_STATUS.active }, error: null };
+    if (current === status) {
+      return { data: { id, status }, error: null };
     }
-    if (!canSellerReactivateListing(current)) {
+    if (status === LISTING_STATUS.active && !canSellerReactivateListing(current)) {
       return { data: null, error: { message: 'Statut annonce invalide' } };
     }
 
+    if (!isAllowedListingStatus(current)) return { data: null, error: { message: 'Statut annonce invalide' } };
     previousStatusForRenewalTrack = current;
   }
 
@@ -106,6 +107,7 @@ export async function updateListingStatus(
   const { data, error } = await supabase
     .from('listings')
     .update({ status })
+    .eq('status', previousStatusForRenewalTrack as ListingStatus)
     .eq('id', id)
     .eq('user_id', user.id)
     .select('id, status')
@@ -121,8 +123,8 @@ export async function updateListingStatus(
 
   removeListingDetailSession(id);
 
-  const nextStatus = String((data as { status?: string }).status ?? status).toLowerCase();
-  if (!isAllowedListingStatus(nextStatus)) {
+  const nextStatus = String((data as { status?: string }).status ?? '').toLowerCase();
+  if (!isAllowedListingStatus(nextStatus) || nextStatus !== status) {
     return { data: null, error: { message: GENERIC_UPDATE_ERROR } };
   }
 
@@ -133,6 +135,10 @@ export async function updateListingStatus(
     previousStatusForRenewalTrack === LISTING_STATUS.hidden
   ) {
     trackListingRenewed({ listing_id: id, source: 'hidden_reactivation' });
+  }
+
+  if (nextStatus === LISTING_STATUS.sold) {
+    trackListingMarkedSold({ listing_id: id, ...(await readTimeToSaleSeconds(id, user.id)) });
   }
 
   return {
@@ -195,10 +201,6 @@ export async function markListingSold(listingId: string): Promise<UpdateListingS
   const result = await updateListingStatus(id, LISTING_STATUS.sold);
   if (result.error) return result;
 
-  trackListingMarkedSold({
-    listing_id: id,
-    ...(await readTimeToSaleSeconds(id, user.id)),
-  });
   return result;
 }
 

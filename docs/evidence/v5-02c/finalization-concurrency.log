@@ -1,0 +1,34 @@
+{
+  "pass": 8,
+  "fail": 0,
+  "assertions": [
+    "second_session_waited_on_real_lock",
+    "first_finalized_once",
+    "second_received_existing_receipt",
+    "active",
+    "receipt",
+    "single_update",
+    "creation_unchanged",
+    "not_renewed"
+  ],
+  "sessions": [
+    {
+      "already_published": false,
+      "txid": 4239
+    },
+    {
+      "already_published": true,
+      "txid": 4240
+    }
+  ],
+  "timestamps": {
+    "active": true,
+    "receipt": true,
+    "single_update": true,
+    "creation_unchanged": true,
+    "not_renewed": true
+  },
+  "roles": "authenticated with owner JWT SQL context"
+}
+
+C unique first fact after double finalization: PASS

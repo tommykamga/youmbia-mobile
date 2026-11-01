@@ -1,0 +1,74 @@
+{
+  "date": "2026-11-01",
+  "verdict": "GO_LOCAL_ONLY",
+  "baseline_mobile": "036cafa010a71a3df5d01f80dee71f87cf61f2f5",
+  "baseline_web": "c46f7b8e97775aad52a86885cc5ea3953e0fe346",
+  "instance": {
+    "host": "127.0.0.1",
+    "port": 55432,
+    "postgres": "17.6",
+    "container": "youmbia-v5-02a-qa-20261101",
+    "baseline": "existing schema-only qualified A/B baseline; 460 exact catalog matches / 461, one proven equivalent constraint"
+  },
+  "executed": {
+    "mobile_unit": {
+      "pass": 57,
+      "fail": 0,
+      "transport": "mock"
+    },
+    "web_unit": {
+      "pass": 22,
+      "fail": 0,
+      "transport": "mock"
+    },
+    "sql_A": {
+      "pass": 67,
+      "fail": 0
+    },
+    "sql_B": {
+      "pass": 39,
+      "fail": 0
+    },
+    "sql_C": {
+      "pass": 10,
+      "fail": 0
+    },
+    "C_concurrency_scenarios": {
+      "pass": 4,
+      "fail": 0
+    },
+    "B_concurrent_finalization": {
+      "pass": 8,
+      "fail": 0
+    },
+    "single_fact_after_concurrent_finalization": {
+      "pass": 1,
+      "fail": 0
+    },
+    "launcher_rejection_checks": {
+      "pass": 3,
+      "fail": 0
+    }
+  },
+  "typecheck": {
+    "mobile": "PASS",
+    "web": "PASS"
+  },
+  "targeted_lint": {
+    "mobile": "PASS, 0 warnings",
+    "web": "PASS, 0 warnings"
+  },
+  "git_diff_check": "PASS",
+  "preexisting_dirty_fingerprints": {
+    "checked": 60,
+    "mismatch": 0
+  },
+  "limitations": [
+    "No native released 4.7.x binary execution",
+    "No PostgREST/GoTrue HTTP or Storage HTTP test",
+    "No device/browser interactive session-switch test",
+    "Pre-migration first-publication dates unknown; no fabricated backfill",
+    "New clients require backend migration before release; no remote migration performed"
+  ],
+  "scoped_secret_scan": "PASS: 36 allowlisted files; token/private-key patterns and QA credential value checked"
+}

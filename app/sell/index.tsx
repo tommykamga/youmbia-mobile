@@ -326,13 +326,14 @@ export default function SellScreen() {
   const listingQuality = useMemo(
     () =>
       computeListingQualityScore({
+        categoryId: publishCategoryId ?? 0,
         title,
         description,
         priceStr,
         city,
         imageCount: existingDraftImages.length + images.length,
       }),
-    [title, description, priceStr, city, existingDraftImages.length, images.length]
+    [publishCategoryId, title, description, priceStr, city, existingDraftImages.length, images.length]
   );
 
   const totalPhotoCount = existingDraftImages.length + images.length;
@@ -1557,6 +1558,10 @@ export default function SellScreen() {
                 <Text style={styles.qualityCardCompactTitle}>Qualité de l&apos;annonce</Text>
                 <Text style={styles.qualityCardCompactScore}>{listingQuality.score}/100</Text>
               </View>
+              <Text style={styles.fieldHint}>
+                {listingQuality.explanation.map((row) => `${({ title: 'Titre', description: 'Description', city: 'Ville', photos: 'Photos', price: 'Prix', category: 'Catégorie', district: 'Quartier', availability: 'Disponibilité' } as Record<string, string>)[row.field]} ${row.earned}/${row.possible}`).join(' · ')}
+                {' · Disponibilité non confirmée : hors score'}
+              </Text>
               <Text style={styles.qualityCardCompactAdvice} numberOfLines={2}>
                 {listingQuality.priorityTip ?? listingQuality.label}
               </Text>

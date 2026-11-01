@@ -4,7 +4,6 @@ import {
   LISTING_PUBLISH_QUOTA_REACHED_MESSAGE,
   MAX_LISTINGS_PER_24H,
 } from './checkListingPublishDailyQuota';
-import { LISTING_STATUS } from '@/lib/listingStatus';
 
 const mocks = vi.hoisted(() => ({
   from: vi.fn(),
@@ -24,12 +23,7 @@ function mockCountQuery(count: number | null, error: { message: string } | null 
   const chain = {
     select: () => chain,
     eq: () => chain,
-    neq: (column: string, value: unknown) => {
-      expect(column).toBe('status');
-      expect(value).toBe(LISTING_STATUS.draft);
-      return chain;
-    },
-    gte: () =>
+    gt: () =>
       Promise.resolve({
         count,
         error,
@@ -55,10 +49,11 @@ describe('checkListingPublishDailyQuota', () => {
     expect(result.count).toBe(MAX_LISTINGS_PER_24H);
   });
 
-  it('exclut explicitement status draft du compteur', async () => {
+  it('compte le registre de premières publications avec une borne exclusive', async () => {
     const chain = mockCountQuery(0);
-    const neqSpy = vi.spyOn(chain, 'neq');
+    const gtSpy = vi.spyOn(chain, 'gt');
     await checkListingPublishDailyQuota('user-1');
-    expect(neqSpy).toHaveBeenCalledWith('status', LISTING_STATUS.draft);
+    expect(mocks.from).toHaveBeenCalledWith('listing_first_publications');
+    expect(gtSpy).toHaveBeenCalledWith('published_at', expect.any(String));
   });
 });

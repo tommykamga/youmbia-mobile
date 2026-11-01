@@ -20,6 +20,8 @@ const SIGNED_URL_EXPIRES_IN = 60 * 60; // 1 hour, same as web
 const SIGNED_URL_MEMORY_TTL_MS = Math.max(60_000, SIGNED_URL_EXPIRES_IN * 1000 - 120_000);
 
 const signedUrlMemoryCache = new Map<string, { signedUrl: string; expiresAt: number }>();
+let authEpoch = 0;
+supabase.auth?.onAuthStateChange?.(() => { authEpoch++; signedUrlMemoryCache.clear(); });
 
 function cacheKeyForPathOrUrl(s: string): string {
   return String(s ?? '').trim();
@@ -51,6 +53,7 @@ export function clearListingSignedUrlMemoryCacheForTests(): void {
 }
 
 async function createSignedUrlSingular(path: string, now: number): Promise<string> {
+  const epoch = authEpoch;
   const key = cacheKeyForPathOrUrl(path);
   if (!key) return '';
   if (isListingImageHttpUrl(key)) return key;
@@ -69,6 +72,7 @@ async function createSignedUrlSingular(path: string, now: number): Promise<strin
     return '';
   }
 
+  if (epoch !== authEpoch) return '';
   rememberSignedUrl(key, data.signedUrl, now);
   return data.signedUrl;
 }
@@ -138,6 +142,7 @@ export function mapListingCardImages(
  * - fallback `createSignedUrl` unitaire pour chaque path manquant.
  */
 export async function getSignedUrlsMap(paths: string[]): Promise<Map<string, string>> {
+  const epoch = authEpoch;
   const trimmed = paths
     .map((p) => String(p ?? '').trim())
     .filter((p) => p !== '' && !isListingImageHttpUrl(p));
@@ -163,6 +168,7 @@ export async function getSignedUrlsMap(paths: string[]): Promise<Map<string, str
     .from(LISTING_IMAGES_BUCKET)
     .createSignedUrls(uniqueNeedFetch, SIGNED_URL_EXPIRES_IN);
 
+  if (epoch !== authEpoch) return new Map();
   if (error && __DEV__) {
     console.warn('[listingImageUrl] createSignedUrls error', error.message);
   }
@@ -187,6 +193,7 @@ export async function getSignedUrlsMap(paths: string[]): Promise<Map<string, str
   for (const p of uniqueNeedFetch) {
     if (map.has(p)) continue;
     const singular = await createSignedUrlSingular(p, now);
+    if (epoch !== authEpoch) return new Map();
     if (singular) map.set(p, singular);
   }
 

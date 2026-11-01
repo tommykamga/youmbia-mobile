@@ -9,10 +9,12 @@ import {
 const mocks = vi.hoisted(() => ({
   createSignedUrls: vi.fn(),
   createSignedUrl: vi.fn(),
+  authChange: undefined as undefined | (() => void),
 }));
 
 vi.mock('@/lib/supabase', () => ({
   supabase: {
+    auth: { onAuthStateChange: (callback: () => void) => { mocks.authChange = callback; } },
     storage: {
       from: () => ({
         createSignedUrls: mocks.createSignedUrls,
@@ -94,4 +96,20 @@ describe('listingImageUrl — paths Storage', () => {
     expect(toDisplayImageUrl('a/b/0.jpg', map)).toBe('https://signed/0.jpg?t=x');
     expect(toDisplayImageUrl('missing.jpg', map)).toBe('');
   });
+});
+
+it('does not reuse signed URLs across sessions', async () => {
+  mocks.createSignedUrls.mockResolvedValue({data:[{path:'u/private.jpg',signedUrl:'https://signed.example/a'}],error:null});
+  await getSignedUrlsMap(['u/private.jpg']);
+  mocks.authChange?.();
+  await getSignedUrlsMap(['u/private.jpg']);
+  expect(mocks.createSignedUrls).toHaveBeenCalledTimes(2);
+});
+it('discards a signing response from the previous session', async () => {
+  let finish!: (result: unknown) => void;
+  mocks.createSignedUrls.mockImplementation(() => new Promise(resolve => { finish = resolve; }));
+  const pending = getSignedUrlsMap(['u/private.jpg']);
+  mocks.authChange?.();
+  finish({data:[{path:'u/private.jpg',signedUrl:'https://signed.example/old'}],error:null});
+  expect((await pending).size).toBe(0);
 });

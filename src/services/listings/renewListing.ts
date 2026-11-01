@@ -75,6 +75,7 @@ export async function renewListing(listingId: string): Promise<RenewListingResul
   const { data, error } = await supabase
     .from('listings')
     .update({ renewed_at: new Date().toISOString() })
+    .eq('status', LISTING_STATUS.active)
     .eq('id', id)
     .eq('user_id', user.id)
     .select('id, status')
@@ -87,6 +88,7 @@ export async function renewListing(listingId: string): Promise<RenewListingResul
     return { data: null, error: { message: UNAUTHORIZED_ERROR } };
   }
 
+  if (data.status !== LISTING_STATUS.active) return { data: null, error: { message: NOT_ACTIVE_ERROR } };
   removeListingDetailSession(id);
   trackListingRenewed({ listing_id: id, source: 'manual_renewal' });
 

@@ -14,6 +14,10 @@ export type ListingQualityInput = {
   priceStr: string;
   city: string;
   imageCount: number;
+  categoryId?: number | null;
+  district?: string | null;
+  availabilityConfirmed?: boolean | null;
+  priceApplicable?: boolean;
 };
 
 export type ListingQualityResult = {
@@ -22,6 +26,7 @@ export type ListingQualityResult = {
   subtitle: string;
   priorityTip: string | null;
   progressRatio: number;
+  explanation: { field: string; earned: number; possible: number }[];
 };
 
 const TITLE_TIER_1 = 5;
@@ -104,6 +109,7 @@ export function getListingQualityPriorityTip(input: ListingQualityInput): string
   if (!trimmedCity || validateListingCity(trimmedCity) || trimmedCity.length < CITY_MIN) {
     return 'Indiquez une seule ville.';
   }
+  if (input.priceApplicable === false) return null;
   if (!sanitizeListingPriceDigits(input.priceStr)) {
     return 'Ajoutez un prix clair en FCFA.';
   }
@@ -119,19 +125,25 @@ export function computeListingQualityScore(input: ListingQualityInput): ListingQ
   const trimmedDescription = input.description.trim();
   const trimmedCity = input.city.trim();
 
-  const rawScore =
-    scoreTitle(trimmedTitle) +
-    scoreDescription(trimmedDescription) +
-    scorePrice(input.priceStr) +
-    scoreCity(trimmedCity) +
-    scorePhotos(input.imageCount);
-
-  const score = Math.min(100, Math.max(0, rawScore));
+  const explanation = [
+    { field: 'title', earned: scoreTitle(trimmedTitle), possible: 20 },
+    { field: 'description', earned: scoreDescription(trimmedDescription), possible: 25 },
+    { field: 'city', earned: scoreCity(trimmedCity), possible: 15 },
+    { field: 'photos', earned: scorePhotos(input.imageCount), possible: 20 },
+  ];
+  if (input.priceApplicable !== false) explanation.push({ field: 'price', earned: scorePrice(input.priceStr), possible: 20 });
+  if (input.categoryId != null) explanation.push({ field: 'category', earned: input.categoryId > 0 ? 10 : 0, possible: 10 });
+  if (input.district != null) explanation.push({ field: 'district', earned: input.district.trim() ? 5 : 0, possible: 5 });
+  if (input.availabilityConfirmed != null) explanation.push({ field: 'availability', earned: input.availabilityConfirmed ? 10 : 0, possible: 10 });
+  // Unknown historical dimensions are excluded, never silently interpreted as false.
+  const possible = explanation.reduce((n, row) => n + row.possible, 0);
+  const score = Math.round(100 * explanation.reduce((n, row) => n + row.earned, 0) / possible);
   const label = getLabel(score);
   const priorityTip = getListingQualityPriorityTip(input);
 
   return {
     score,
+    explanation,
     label,
     subtitle: getSubtitle(label, score, input),
     priorityTip,

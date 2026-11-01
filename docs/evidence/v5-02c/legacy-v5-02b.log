@@ -1,0 +1,173 @@
+BEGIN
+SET
+DO
+CREATE TABLE
+GRANT
+CREATE FUNCTION
+CREATE TABLE
+GRANT
+INSERT 0 1
+INSERT 0 2
+INSERT 0 5
+INSERT 0 1
+INSERT 0 2
+INSERT 0 1
+INSERT 0 1
+INSERT 0 1
+INSERT 0 1
+INSERT 0 1
+INSERT 0 1
+INSERT 0 1
+INSERT 0 1
+INSERT 0 1
+INSERT 0 1
+ qa_assert
+-----------
+
+(1 row)
+
+CREATE TABLE
+GRANT
+CREATE FUNCTION
+CREATE TRIGGER
+SET
+                              set_config
+-----------------------------------------------------------------------
+ {"sub":"10000000-0000-4000-8000-000000000001","role":"authenticated"}
+(1 row)
+
+ qa_assert
+-----------
+
+(1 row)
+
+DO
+DO
+UPDATE 1
+ qa_assert
+-----------
+
+(1 row)
+
+ set_config
+------------
+ on
+(1 row)
+
+DO
+RESET
+ qa_assert
+-----------
+
+(1 row)
+
+SET
+ set_config
+------------
+ off
+(1 row)
+
+ qa_assert
+-----------
+
+(1 row)
+
+ qa_assert
+-----------
+
+(1 row)
+
+ qa_assert
+-----------
+
+(1 row)
+
+ qa_assert
+-----------
+
+(1 row)
+
+ qa_assert
+-----------
+
+(1 row)
+
+RESET
+ qa_assert
+-----------
+
+(1 row)
+
+SET
+DO
+INSERT 0 1
+UPDATE 1
+ qa_assert
+-----------
+
+(1 row)
+
+                              set_config
+-----------------------------------------------------------------------
+ {"sub":"20000000-0000-4000-8000-000000000002","role":"authenticated"}
+(1 row)
+
+DO
+RESET
+SET
+ set_config
+------------
+ {}
+(1 row)
+
+DO
+RESET
+ verdict | assertions
+---------+------------
+ PASS    |         39
+(1 row)
+
+                            label
+--------------------------------------------------------------
+ private preparation does not convert attribution
+ real nonprivileged owner role
+ reject + rollback + direct-write guard: short_title
+ reject + rollback + direct-write guard: long_title
+ reject + rollback + direct-write guard: short_description
+ reject + rollback + direct-write guard: long_description
+ reject + rollback + direct-write guard: zero_price
+ reject + rollback + direct-write guard: negative_price
+ reject + rollback + direct-write guard: empty_city
+ reject + rollback + direct-write guard: multi_city
+ reject + rollback + direct-write guard: long_city
+ reject + rollback + direct-write guard: null_category
+ reject + rollback + direct-write guard: parent_category
+ reject + rollback + direct-write guard: no_photo
+ reject + rollback + direct-write guard: missing_storage
+ reject + rollback + direct-write guard: empty_storage
+ reject + rollback + direct-write guard: missing_attribute
+ reject + rollback + direct-write guard: wrong_attribute_type
+ reject + rollback + direct-write guard: wrong_option
+ reject + rollback + direct-write guard: nonfinite_number
+ reject + rollback + direct-write guard: wrong_date
+ reject + rollback + direct-write guard: too_many_photos
+ reject + rollback + direct-write guard: downgrade
+ reject + rollback + direct-write guard: initial_active
+ category override replaces profile requirement
+ cannot forge receipt
+ effect failure rolls back publication
+ effect failure rolls back ledger
+ failed publication leaves attribution pending
+ valid finalization, boolean false accepted
+ idempotent retry
+ prepare recovers lost finalization response
+ exactly one publication effect
+ server receipt, unchanged creation/ranking/renewal
+ attribution converts only on successful finalization
+ legacy draft enrolls privately with same id and created_at
+ legacy active insert and incomplete edit preserved
+ cross-owner finalization denied
+ anonymous finalization denied
+(39 rows)
+
+ROLLBACK

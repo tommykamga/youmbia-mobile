@@ -42,9 +42,9 @@ export async function updateListing(
      * on persiste une chaîne vide plutôt que `null` quand non renseignée.
      */
     const city = payload.city?.trim() || '';
-    const description = payload.description?.trim() || null;
+    const description = payload.description?.trim() || '';
 
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from('listings')
       .update({
         title,
@@ -54,13 +54,16 @@ export async function updateListing(
         updated_at: new Date().toISOString(),
       })
       .eq('id', listingId)
-      .eq('user_id', user.id);
+      .eq('user_id', user.id)
+      .select('id')
+      .maybeSingle();
 
     if (error) {
       console.warn('[updateListing]', error);
       return { success: false, error: error.message || 'Impossible de mettre à jour l’annonce.' };
     }
 
+    if (!data) return { success: false, error: 'Annonce introuvable ou mutation concurrente.' };
     return { success: true };
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e ?? '');

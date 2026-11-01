@@ -16,6 +16,12 @@ export type Json =
 export type Database = {
   public: {
     Tables: {
+      listing_first_publications: {
+        Row: { listing_id: string; user_id: string; published_at: string };
+        Insert: { listing_id: string; user_id: string; published_at: string };
+        Update: { listing_id?: string; user_id?: string; published_at?: string };
+        Relationships: [];
+      };
       admin_users: {
         Row: {
           email: string;
@@ -431,6 +437,7 @@ export type Database = {
           condition: string | null;
           contact_clicks_count: number;
           created_at: string;
+          first_published_at: string | null;
           description: string | null;
           district: string | null;
           id: string;
@@ -458,6 +465,7 @@ export type Database = {
           condition?: string | null;
           contact_clicks_count?: number;
           created_at?: string;
+          first_published_at?: never;
           description?: string | null;
           district?: string | null;
           id?: string;
@@ -484,6 +492,7 @@ export type Database = {
           condition?: string | null;
           contact_clicks_count?: number;
           created_at?: string;
+          first_published_at?: never;
           description?: string | null;
           district?: string | null;
           id?: string;
