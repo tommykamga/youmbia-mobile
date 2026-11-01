@@ -113,18 +113,68 @@ export async function getPublicListings(
   const from = Math.max(0, offset);
   const to = from + Math.max(1, limit) - 1;
 
-  const { data, error } = await supabase
+  // V5-03B : classement global et pagination côté PostgreSQL.
+  // Fallback legacy uniquement si la RPC n'est pas encore déployée.
+  type DiscoveryRankRow = {
+    listing_id: string;
+    rank_position: number;
+  };
+
+  // RPC additive : types générés à synchroniser lors de la release SQL.
+  const discoveryRpc = supabase.rpc.bind(supabase) as unknown as (
+    name: 'get_v5_discovery_listing_ids',
+    args: { p_offset: number; p_limit: number }
+  ) => Promise<{
+    data: DiscoveryRankRow[] | null;
+    error: { code?: string; message: string } | null;
+  }>;
+
+  const { data: ranked, error: rankingError } = await discoveryRpc(
+    'get_v5_discovery_listing_ids',
+    { p_offset: from, p_limit: Math.max(1, limit) }
+  );
+
+  if (!rankingError && !Array.isArray(ranked)) {
+    return { data: null, error: { message: 'Réponse RPC Découverte invalide' } };
+  }
+
+  const rankingRows = ranked ?? [];
+
+  const rpcUnavailable =
+    rankingError?.code === 'PGRST202' ||
+    rankingError?.code === '42883';
+
+  if (rankingError && !rpcUnavailable) {
+    return { data: null, error: { message: rankingError.message } };
+  }
+
+  const rankedIds = rpcUnavailable
+    ? null
+    : rankingRows.map((item) => item.listing_id);
+
+  const query = supabase
     .from('listings')
     .select(listingPublicListSelect(false))
-    .eq('status', 'active')
-    .order(LISTING_DISCOVERY_ORDER_COLUMN, { ascending: false })
-    .range(from, to);
+    .eq('status', 'active');
+
+  const { data, error } = rankedIds === null
+    ? await query
+        .order(LISTING_DISCOVERY_ORDER_COLUMN, { ascending: false })
+        .range(from, to)
+    : rankedIds.length === 0
+      ? { data: [], error: null }
+      : await query.in('id', rankedIds);
 
   if (error) {
     return { data: null, error: { message: error.message } };
   }
 
-  const list = (data ?? []) as unknown as ListingRow[];
+  const fetched = (data ?? []) as unknown as ListingRow[];
+  const list = rankedIds === null
+    ? fetched
+    : [...fetched].sort(
+        (a, b) => rankedIds.indexOf(a.id) - rankedIds.indexOf(b.id)
+      );
   const allImagePaths = list.flatMap((row) => listingStoragePathsForCardCover(row.listing_images));
   const imageSignedMap = await getSignedUrlsMap(allImagePaths);
   const results = list.map((row) => mapRow(row, imageSignedMap));
