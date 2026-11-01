@@ -1,3 +1,4 @@
+import { shouldShowVerifiedShopBadge } from '@/lib/shopSeller';
 /**
  * Section optionnelle — vendeurs vérifiés (horizontal, discret).
  * Réutilise le cache mémoire de PopularShopsSection quand disponible.
@@ -34,7 +35,7 @@ export function VerifiedShopsSection() {
     try {
       const result = await getPopularShopsCached(12);
       const verified = (result.data ?? [])
-        .filter((s) => s.is_verified)
+        .filter(shouldShowVerifiedShopBadge)
         .slice(0, VERIFIED_LIMIT);
       setShops(verified);
     } finally {

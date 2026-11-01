@@ -636,6 +636,8 @@ export type Database = {
           body: string;
           conversation_id: string;
           created_at: string;
+          server_received_at: string | null;
+          server_context_key: string | null;
           id: string;
           read_at: string | null;
           sender_id: string;
@@ -644,6 +646,8 @@ export type Database = {
           body: string;
           conversation_id: string;
           created_at?: string;
+          server_received_at?: never;
+          server_context_key?: never;
           id?: string;
           read_at?: string | null;
           sender_id: string;
@@ -652,6 +656,8 @@ export type Database = {
           body?: string;
           conversation_id?: string;
           created_at?: string;
+          server_received_at?: never;
+          server_context_key?: never;
           id?: string;
           read_at?: string | null;
           sender_id?: string;
@@ -960,6 +966,30 @@ export type Database = {
     };
     Views: Record<string, never>;
     Functions: {
+      get_v5_verified_subjects: {
+        Args: { p_subject_type: string; p_subject_ids: string[] };
+        Returns: { subject_id: string; verification_proven: boolean }[];
+      };
+      record_v5_contact_intent: {
+        Args: { p_event_id: string; p_listing_id: string; p_channel: string; p_platform: string; p_source: string; p_entry_point: string; p_session_key: string };
+        Returns: string;
+      };
+      declare_v5_listing_availability: {
+        Args: { p_listing_id: string; p_state: string; p_expected_status: string };
+        Returns: string;
+      };
+      get_v5_listing_availability: {
+        Args: { p_listing_id: string };
+        Returns: { state: string; confirmed_at: string | null }[];
+      };
+      is_v5_verified_subject: {
+        Args: { p_subject_type: string; p_subject_id: string };
+        Returns: boolean;
+      };
+      get_v5_seller_response_metrics: {
+        Args: { p_seller_id: string };
+        Returns: { eligible_conversations: number; responded_conversations: number; unanswered_conversations: number; excluded_legacy_conversations: number; median_first_response_seconds: number | null }[];
+      };
       get_v5_discovery_listing_ids: {
         Args: { p_offset?: number; p_limit?: number };
         Returns: { listing_id: string; rank_position: number }[];

@@ -1,3 +1,4 @@
+import { verifiedSubject } from '@/services/listings/listingTrust';
 /**
  * Boutique publique vendeur pro — `/shop/[slug]`
  */
@@ -111,6 +112,7 @@ export default function ShopScreen() {
       return;
     }
 
+    resolvedShop.verification_proven = await verifiedSubject('shop', resolvedShop.id);
     const listingsResult = await getShopListings({
       shopId: resolvedShop.id,
       ownerId: resolvedShop.owner_id,
@@ -120,6 +122,7 @@ export default function ShopScreen() {
         name: resolvedShop.name,
         logo_url: resolvedShop.logo_url ?? null,
         is_verified: resolvedShop.is_verified,
+        verification_proven: resolvedShop.verification_proven,
         status: resolvedShop.status,
       },
     });

@@ -1,3 +1,4 @@
+import { conversationHref } from '@/lib/conversationDeepLink';
 import 'expo-sqlite/localStorage/install';
 
 import Constants from 'expo-constants';
@@ -969,11 +970,11 @@ export function getNotificationNavigationTarget(
   const href = typeof data.href === 'string' ? data.href.trim() : '';
   if (href.startsWith('/(tabs)/search')) return href;
   if (href.startsWith('/search')) return href;
-  if (href.startsWith('/conversation/')) return href;
+  if (href.startsWith('/conversation/')) return conversationHref(href.slice('/conversation/'.length));
   if (href.startsWith('/listing/')) return href;
 
   const conversationId = typeof data.conversationId === 'string' ? data.conversationId.trim() : '';
-  if (conversationId) return `/conversation/${conversationId}`;
+  if (conversationId) return conversationHref(conversationId);
 
   const listingId = typeof data.listingId === 'string' ? data.listingId.trim() : '';
   if (listingId) return `/listing/${listingId}`;

@@ -1,0 +1,10 @@
+{
+  "pass": 4,
+  "fail": 0,
+  "cases": [
+    "same UUID concurrent retry has one fact",
+    "59 + two concurrent intents capped at 60",
+    "suspension rejects stale availability confirmation",
+    "concurrent sale declaration performs one status transition"
+  ]
+}

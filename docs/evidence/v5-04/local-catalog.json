@@ -1,0 +1,17 @@
+[
+  {
+    "new_tables_rls": true,
+    "no_direct_event_writes": true
+  },
+  {
+    "remaining_listings": 0,
+    "remaining_contacts": 0,
+    "remaining_messages": 0,
+    "remaining_availability": 0,
+    "remaining_proofs": 0,
+    "anon_contacts_denied": true,
+    "proof_read_denied": true,
+    "purge_user_execute_denied": true,
+    "new_triggers_enabled": true
+  }
+]

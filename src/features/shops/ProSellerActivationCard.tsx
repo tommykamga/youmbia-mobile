@@ -1,3 +1,4 @@
+import { verifiedSubject } from '@/services/listings/listingTrust';
 /**
  * CTA activation vendeur pro — Compte / Mes annonces.
  */
@@ -39,7 +40,7 @@ export function ProSellerActivationCard({ variant = 'account' }: Props) {
       setShopSlug(shop?.slug ?? null);
       setShopName(shop?.name ?? null);
       setShopCity(shop?.city ?? null);
-      setIsVerified(shop?.is_verified === true);
+      setIsVerified(!!shop && await verifiedSubject('shop', shop.id));
     } finally {
       setLoading(false);
     }

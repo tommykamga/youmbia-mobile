@@ -1,0 +1,62 @@
+BEGIN
+CREATE FUNCTION
+CREATE TABLE
+INSERT 0 10
+INSERT 0 10
+INSERT 0 30
+INSERT 0 4
+SET
+ check_b
+---------
+
+(1 row)
+
+ check_b
+---------
+
+(1 row)
+
+ check_b
+---------
+
+(1 row)
+
+ check_b
+---------
+
+(1 row)
+
+ check_b
+---------
+
+(1 row)
+
+ check_b
+---------
+
+(1 row)
+
+RESET
+SET
+SET
+ check_b
+---------
+
+(1 row)
+
+SET
+ check_b
+---------
+
+(1 row)
+
+RESET
+ROLLBACK
+psql:supabase/scripts/v5_03b_discovery_tests.sql:17: NOTICE:  PASS anonymous active-only catalog
+psql:supabase/scripts/v5_03b_discovery_tests.sql:18: NOTICE:  PASS top ten organic sellers diversified
+psql:supabase/scripts/v5_03b_discovery_tests.sql:19: NOTICE:  PASS no cross-page duplicates
+psql:supabase/scripts/v5_03b_discovery_tests.sql:20: NOTICE:  PASS pages equal full global ranking
+psql:supabase/scripts/v5_03b_discovery_tests.sql:21: NOTICE:  PASS exhausted page
+psql:supabase/scripts/v5_03b_discovery_tests.sql:22: NOTICE:  PASS offset and limit bounds
+psql:supabase/scripts/v5_03b_discovery_tests.sql:26: NOTICE:  PASS owner private rows excluded by RPC
+psql:supabase/scripts/v5_03b_discovery_tests.sql:28: NOTICE:  PASS other user cannot discover private rows

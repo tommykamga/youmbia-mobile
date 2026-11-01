@@ -1,3 +1,4 @@
+import { withShopVerification } from '@/services/listings/listingTrust';
 import { supabase } from '@/lib/supabase';
 import { resolveShopsMediaUrls } from '@/lib/shopMediaUrl';
 import type { PublicShop } from '@/types/shops';
@@ -101,9 +102,10 @@ export async function getPopularShops(
     }
 
     const sorted = sortPopularShops([...merged.values()]).slice(0, safeLimit);
-    const withMedia = await resolveShopsMediaUrls(sorted);
+    const withMedia = await resolveShopsMediaUrls(await withShopVerification(sorted));
     const data: PopularShop[] = withMedia.map((shop, index) => ({
       ...shop,
+      verification_proven: shop.verification_proven === true,
       active_listings_count: sorted[index]?.active_listings_count ?? 0,
     }));
     return { data, error: null };

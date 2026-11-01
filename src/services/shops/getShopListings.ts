@@ -48,7 +48,9 @@ function mapRow(
   const images = mapListingCardImages(row.listing_images, signedMap);
   const schema = normalizeListingSchemaFeatures(row);
   const embedded = parseListingShopEmbed(row.shops);
-  const shopSummary = embedded ?? attach?.shopSummary ?? null;
+  const shopSummary = embedded
+    ? { ...embedded, verification_proven: embedded.id === attach?.shopSummary?.id && attach.shopSummary.verification_proven === true }
+    : attach?.shopSummary ?? null;
   const shopId = row.shop_id ?? attach?.shopId ?? null;
   return {
     id: row.id,

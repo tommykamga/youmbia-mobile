@@ -1,3 +1,5 @@
+import { recordContactIntent } from '@/services/listings/contactIntent';
+import { declareListingAvailability, availabilityLabel, UNKNOWN_AVAILABILITY } from '@/services/listings/listingTrust';
 import { supabase } from '@/lib/supabase';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -440,10 +442,11 @@ export default function ListingDetailScreen() {
     }
   }, [favoriteLoading, id, isFavorite, router]);
 
-  const openConversationForListing = useCallback(async (): Promise<boolean> => {
+  const openConversationForListing = useCallback(async (entryPoint: 'listing_detail' | 'auth_return' = 'listing_detail'): Promise<boolean> => {
     if (!id) return false;
     const available = await getListingById(id);
     if (available.error || available.data.status !== 'active') { Alert.alert('Annonce indisponible'); return false; }
+    void recordContactIntent(available.data, 'message', entryPoint);
     const result = await getOrCreateConversation(id);
     if (result.error) {
       if (result.error.message === 'Non connecté') {
@@ -498,6 +501,7 @@ export default function ListingDetailScreen() {
     }
     const current = await getListingById(id);
     if (current.error || current.data.status !== 'active') { Alert.alert('Annonce indisponible'); return; }
+    void recordContactIntent(current.data, 'whatsapp');
     await openWhatsAppForListing(current.data);
     trackSellerContactInitiated({ listing_id: id, contact_method: 'whatsapp' });
   }, [id, state, router]);
@@ -511,6 +515,7 @@ export default function ListingDetailScreen() {
     }
     const current = await getListingById(id);
     if (current.error || current.data.status !== 'active') { Alert.alert('Annonce indisponible'); return; }
+    void recordContactIntent(current.data, 'call');
     await openSellerPhoneCall(current.data);
     trackSellerContactInitiated({ listing_id: id, contact_method: 'call' });
   }, [id, state, router]);
@@ -524,6 +529,7 @@ export default function ListingDetailScreen() {
     }
     const current = await getListingById(id);
     if (current.error || current.data.status !== 'active') { Alert.alert('Annonce indisponible'); return; }
+    void recordContactIntent(current.data, 'sms');
     await openSellerSms(current.data);
     trackSellerContactInitiated({ listing_id: id, contact_method: 'sms' });
   }, [id, state, router]);
@@ -557,19 +563,22 @@ export default function ListingDetailScreen() {
         const listing = current.data;
         switch (contact) {
           case 'whatsapp':
+            void recordContactIntent(listing, 'whatsapp', 'auth_return');
             await openWhatsAppForListing(listing);
             trackSellerContactInitiated({ listing_id: id, contact_method: 'whatsapp' });
             break;
           case 'call':
+            void recordContactIntent(listing, 'call', 'auth_return');
             await openSellerPhoneCall(listing);
             trackSellerContactInitiated({ listing_id: id, contact_method: 'call' });
             break;
           case 'sms':
+            void recordContactIntent(listing, 'sms', 'auth_return');
             await openSellerSms(listing);
             trackSellerContactInitiated({ listing_id: id, contact_method: 'sms' });
             break;
           case 'message':
-            await openConversationForListing();
+            await openConversationForListing('auth_return');
             break;
           default:
             break;
@@ -583,6 +592,20 @@ export default function ListingDetailScreen() {
       ac.abort();
     };
   }, [contactParam, state, id, router, openConversationForListing]);
+
+  const [availabilitySaving, setAvailabilitySaving] = useState(false);
+  const handleAvailability = useCallback(async (value: 'available' | 'unknown') => {
+    if (!id || state.status !== 'success' || availabilitySaving) return;
+    const epoch = authEpochRef.current;
+    setAvailabilitySaving(true);
+    try {
+      const saved = await declareListingAvailability(id, value, state.listing.status ?? '');
+      if (epoch !== authEpochRef.current) return;
+      if (!saved) { Alert.alert('Disponibilité non enregistrée', 'Actualisez l’annonce puis réessayez.'); return; }
+      const fresh = await getListingById(id);
+      if (!fresh.error && epoch === authEpochRef.current) setState(previous => previous.status === 'success' ? { ...previous, listing: fresh.data } : previous);
+    } finally { setAvailabilitySaving(false); }
+  }, [id, state, availabilitySaving]);
 
   const handleMarkSold = useCallback(() => {
     if (!id || markSoldLoading) return;
@@ -853,6 +876,13 @@ export default function ListingDetailScreen() {
             dynamicItems={dynamicAttributes}
           />
           <ListingDescription description={listing.description} />
+          <Text accessibilityRole="text">{availabilityLabel(isSoldListing ? { state: 'sold', confirmed_at: null } : listing.availability ?? UNKNOWN_AVAILABILITY)}</Text>
+          {isOwnListing && listing.status === 'active' ? (
+            <View style={styles.ownerSoldAction}>
+              <Button variant="outline" disabled={availabilitySaving || ownerMutating} onPress={() => { void handleAvailability('available'); }}>Toujours disponible</Button>
+              <Button variant="outline" disabled={availabilitySaving || ownerMutating} onPress={() => { void handleAvailability('unknown'); }}>Disponibilité inconnue</Button>
+            </View>
+          ) : null}
           <MarketplaceTrustTips compact />
 
           <SecondaryActions

@@ -1,0 +1,47 @@
+{
+  "reference": "0ec7194",
+  "branch": "feat/marketing-command-center-v2-1-lifecycle",
+  "date": "2026-11-01",
+  "source_prd": "https://app.notion.com/p/40980247caf3816c9470f71aa6657750",
+  "source_execution": "https://linear.app/tsk-io/document/youmbia-500-plan-dexecution-consolide-et-kpis-marketplace-mcc-hors-60572cf482e7",
+  "source_ticket": "TOM-104",
+  "V5_03B": {
+    "unit_pass": 16,
+    "unit_fail": 0,
+    "sql_pass": 8,
+    "sql_fail": 0,
+    "commit": "4d8a79fefd2987933d927fd5bf516715f34c52c9"
+  },
+  "V5_04": {
+    "unit_pass": 38,
+    "unit_fail": 0,
+    "sql_pass": 37,
+    "sql_fail": 0,
+    "concurrency_scenarios_pass": 4,
+    "concurrency_fail": 0,
+    "legacy_4_7_SQL_assertions_pass": 67,
+    "typecheck": "PASS",
+    "targeted_lint": "PASS, 0 warnings",
+    "git_diff_check": "PASS",
+    "advisors_cli": "NOT QUALIFIED: explicit loopback connection failed (LegacyDbConnectError); native psql RLS and local catalog checks executed successfully"
+  },
+  "QA": {
+    "host": "127.0.0.1",
+    "port": 55432,
+    "postgres": "17.6",
+    "container": "youmbia-v5-02a-qa-20261101",
+    "origin": "Existing qualified schema-only A/B/C baseline, synthetic auth fixtures only; no new Production access",
+    "preexisting_catalog_provenance": "460 strict matches/461, one independently proven equivalent constraint"
+  },
+  "limitations": [
+    "No physical iOS/Android execution or EAS build",
+    "No PostgREST/GoTrue/Storage HTTP validation",
+    "No Production schema modification",
+    "Old 4.7.x clients remain usable but do not emit the new contact facts",
+    "External opening is not delivery or conversion",
+    "No real identity-verification policy or evidence provisioned",
+    "Explicit 30-day purge function prepared, no scheduler enabled",
+    "Web instrumentation and MCC UI are outside this Mobile-only change",
+    "No full historical migration replay in this intervention"
+  ]
+}

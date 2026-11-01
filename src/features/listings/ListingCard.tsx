@@ -105,6 +105,7 @@ function listingCardPropsAreEqual(prev: ListingCardProps, next: ListingCardProps
   if ((a.shop_id ?? '') !== (b.shop_id ?? '')) return false;
   if ((a.shop?.name ?? '') !== (b.shop?.name ?? '')) return false;
   if (Boolean(a.shop?.is_verified) !== Boolean(b.shop?.is_verified)) return false;
+  if (Boolean(a.shop?.verification_proven) !== Boolean(b.shop?.verification_proven)) return false;
   const ps = (a as unknown as { status?: string | null }).status ?? null;
   const ns = (b as unknown as { status?: string | null }).status ?? null;
   if (ps !== ns) return false;
