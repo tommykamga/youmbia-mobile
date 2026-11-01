@@ -4,13 +4,13 @@ export type CityResolution =
   | { kind: 'canonical'; code: CityCode; original: string; confidence: 'exact' | 'qualified' }
   | { kind: 'review'; original: string; reason: 'empty' | 'multiple' | 'unknown' | 'ambiguous' };
 
-const CANONICAL: Record<CityCode, string> = {
+export const CANONICAL_CITIES: Readonly<Record<CityCode, string>> = {
   douala: 'Douala', yaounde: 'Yaoundé', bafoussam: 'Bafoussam',
   buea: 'Buea', limbe: 'Limbe', ngaoundere: 'Ngaoundéré', dibombari: 'Dibombari', melong: 'Melong',
 };
 const normalize = (s: string): string => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim().replace(/\s+/g, ' ');
-const codes = Object.keys(CANONICAL) as CityCode[];
-const names = new Map<CityCode, string>(codes.map(k => [k, normalize(CANONICAL[k])]));
+const codes = Object.keys(CANONICAL_CITIES) as CityCode[];
+const names = new Map<CityCode, string>(codes.map(k => [k, normalize(CANONICAL_CITIES[k])]));
 const qualified = /^(?:cameroun |cameroon )?(douala|yaounde|bafoussam|buea|limbe|ngaoundere|dibombari|melong)(?: cameroun| cameroon)?$/;
 
 /** Never guess a primary city from an address, multiple cities or free text. */
@@ -27,7 +27,7 @@ export function resolveCanonicalCity(value: string | null | undefined): CityReso
   return {kind:'review', original, reason:'unknown'};
 }
 
-export function canonicalCityLabel(code: CityCode): string { return CANONICAL[code]; }
+export function canonicalCityLabel(code: CityCode): string { return CANONICAL_CITIES[code]; }
 
 /** Canonicalise uniquement les valeurs de ville non ambiguës, sans modifier les anciennes annonces. */
 export function canonicalCityInputValue(value: string): string {
