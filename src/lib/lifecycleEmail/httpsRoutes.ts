@@ -7,9 +7,10 @@
 
 import type { LifecycleCampaignId } from './campaigns';
 import { resolveLifecycleRenderCta } from './renderLifecycleEmail';
+import { YOUMBIA_MOBILE_SCHEME } from '@/lib/appScheme';
 
 export const YOUMBIA_WEB_ORIGIN = 'https://www.youmbia.com';
-export const YOUMBIA_MOBILE_SCHEME = 'youmbiamobile';
+export { YOUMBIA_MOBILE_SCHEME };
 
 export const VERIFIED_UNIVERSAL_LINK_PREFIXES = [
   '/',

@@ -88,13 +88,15 @@ export function useAppUpdateStatus(): UseAppUpdateStatusResult {
     });
   }, [status?.latestVersion]);
 
-  const shouldShowCriticalBlock = Boolean(status?.isCriticalUpdate);
+  // Ne pas bloquer l'application si aucune mise à jour installable n'est liée.
+  const shouldShowCriticalBlock = Boolean(status?.isCriticalUpdate && status.updateUrl);
 
   const shouldShowOptionalBanner =
     Boolean(
       status?.isUpdateAvailable &&
         !status.isCriticalUpdate &&
-        status.latestVersion
+        status.latestVersion &&
+        status.updateUrl
     ) && !isOptionalUpdateDismissed(dismissRecord, status?.latestVersion ?? null);
 
   return {

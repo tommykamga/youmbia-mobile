@@ -369,7 +369,8 @@ describe('TOM-98 Lot A — brouillons d’annonces', () => {
     expect(create).toMatch(/checkListingPublishDailyQuota/);
     expect(publish).toMatch(/checkListingPublishDailyQuota/);
     expect(draftSvc).not.toMatch(/checkListingPublishDailyQuota/);
-    expect(quota).toMatch(/neq\('status', LISTING_STATUS\.draft\)/);
+    expect(quota).toMatch(/\.from\(['"]listing_first_publications['"]\)/);
+    expect(quota).toMatch(/\.gt\(['"]published_at['"], since\)/);
     expect(isDiscoveryListingStatus('active')).toBe(true);
   });
 });

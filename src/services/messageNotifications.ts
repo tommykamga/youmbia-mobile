@@ -1,9 +1,10 @@
+import { Platform } from 'react-native';
 import { getSession } from '@/services/auth';
 import { getConversations, type Conversation } from '@/services/conversations';
 import {
+  ANDROID_NOTIFICATION_CHANNEL_ID,
   getPushPermissionStatus,
-  getStoredPushToken,
-  initializeNotifications,
+  initializeNotificationsAsync,
   isPushNotificationsAvailable,
   reserveNotificationDispatch,
 } from '@/services/notifications';
@@ -92,9 +93,8 @@ function buildUnreadMap(conversations: Conversation[]): Record<string, number> {
   }, {});
 }
 
-function buildNotificationBody(name: string | null | undefined): string {
-  const safeName = String(name ?? '').trim();
-  return safeName ? `${safeName} vous a écrit` : 'Vous avez reçu un nouveau message';
+function buildNotificationBody(): string {
+  return 'Vous avez reçu un nouveau message.';
 }
 
 function isConversationAlreadyOpen(currentPath: string | null | undefined, conversationId: string): boolean {
@@ -102,30 +102,13 @@ function isConversationAlreadyOpen(currentPath: string | null | undefined, conve
   return safePath === `/conversation/${conversationId}`;
 }
 
-/**
- * B1 — Alerte locale message uniquement en fallback (Expo Go, ou build natif sans token push local).
- * Build natif + permission accordée + token Expo stocké → push serveur = source de vérité, pas de locale.
- */
+/** Native builds use remote push exclusively; missing local cache must not create duplicates. */
 export async function shouldScheduleLocalMessageNotification(): Promise<boolean> {
-  if (!isPushNotificationsAvailable()) {
-    return true;
-  }
-
-  const permissionStatus = await getPushPermissionStatus();
-  if (permissionStatus !== 'granted') {
-    return false;
-  }
-
-  const token = getStoredPushToken();
-  if (token) {
-    return false;
-  }
-
-  return true;
+  return !isPushNotificationsAvailable();
 }
 
 async function scheduleNewMessageNotification(conversation: Conversation): Promise<void> {
-  initializeNotifications();
+  await initializeNotificationsAsync();
 
   const Notifications = await loadNotificationsModule();
   if (!Notifications) {
@@ -136,12 +119,15 @@ async function scheduleNewMessageNotification(conversation: Conversation): Promi
   await Notifications.scheduleNotificationAsync({
     content: {
       title: 'Nouveau message',
-      body: buildNotificationBody(conversation.other_party_name),
+      body: buildNotificationBody(),
       data: {
         conversationId: conversation.id,
         href: `/conversation/${conversation.id}`,
         type: 'new_message',
       },
+      ...(Platform.OS === 'android'
+        ? { channelId: ANDROID_NOTIFICATION_CHANNEL_ID }
+        : {}),
     },
     trigger: null,
   });

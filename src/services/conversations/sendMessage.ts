@@ -63,10 +63,12 @@ export async function sendMessage(
 
   await supabase
     .from('conversations')
-    .update({ updated_at: new Date().toISOString() } as never)
+    .update({ last_message_at: new Date().toISOString() } as never)
     .eq('id', conversationId);
 
-  // Notification push au destinataire (best-effort, fire-and-forget).
+  // Compatibility wake-up for the legacy path (OFF-by-default rollout).
+  // send-message-push returns without sending when the server outbox is enabled,
+  // including for older mobile builds. The INSERT trigger also covers Web senders.
   // Ne bloque jamais l'envoi : si l'Edge Function échoue, on log en dev uniquement
   // et le message reste considéré comme envoyé.
   void supabase.functions

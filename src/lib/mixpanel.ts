@@ -26,6 +26,10 @@ let client: Mixpanel | null = null;
 let initPromise: Promise<Mixpanel | null> | null = null;
 let sessionStartedAt: number | null = null;
 
+// The native SDK imports Node-incompatible UUID code.  Keep that import out of
+// Expo Router's static Node renderer while preserving the iOS/Android/web-client path.
+const isStaticWebRender = Platform.OS === 'web' && typeof window === 'undefined';
+
 export function getAnalyticsPlatform(): AnalyticsPlatform {
   if (Platform.OS === 'ios' || Platform.OS === 'android') return Platform.OS;
   return 'web';
@@ -101,6 +105,7 @@ export async function initMixpanel(): Promise<Mixpanel | null> {
 
   initPromise = (async () => {
     try {
+      if (isStaticWebRender) return null;
       if (!MIXPANEL_PROJECT_TOKEN) {
         if (__DEV__) {
           console.warn(

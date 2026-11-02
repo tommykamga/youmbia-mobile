@@ -3,9 +3,10 @@
  */
 import React, { useCallback, useEffect, useState } from 'react';
 import { View, Text, StyleSheet, Switch, ActivityIndicator } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import Constants from 'expo-constants';
 import { Screen, AppHeader, Button } from '@/components';
+import { getFavoritePushPreference, setFavoritePushPreference } from '@/services/transactionalPushPreferences';
 import { signOut } from '@/services/auth';
 import {
   getEmailPreferences,
@@ -13,10 +14,27 @@ import {
   setMarketingEmailOptIn,
 } from '@/services/emailPreferences';
 import { captureSentryTestException } from '@/lib/sentry';
+import { hasVerifiableMarketingConsent } from '@/lib/marketingConsent';
 import { colors, spacing, typography, fontWeights } from '@/theme';
 
 export default function AccountSettingsScreen() {
   const router = useRouter();
+  const [favoritePush, setFavoritePush] = useState<boolean | null>(null);
+  const [favoriteBusy, setFavoriteBusy] = useState(false);
+  const [favoriteError, setFavoriteError] = useState<string | null>(null);
+  useEffect(() => {
+    let active = true;
+    void getFavoritePushPreference().then(value => { if (active) setFavoritePush(value); })
+      .catch(() => { if (active) setFavoriteError('Notifications de favoris indisponibles'); });
+    return () => { active = false; };
+  }, []);
+  const toggleFavoritePush = async (value: boolean) => {
+    setFavoriteBusy(true);
+    setFavoriteError(null);
+    try { await setFavoritePushPreference(value); setFavoritePush(value); }
+    catch { setFavoriteError('Impossible de modifier les notifications de favoris'); }
+    finally { setFavoriteBusy(false); }
+  };
   const [signingOut, setSigningOut] = useState(false);
   const [marketingOptIn, setMarketingOptIn] = useState(false);
   const [draftRemindersAllowed, setDraftRemindersAllowedState] = useState(true);
@@ -25,36 +43,41 @@ export default function AccountSettingsScreen() {
   const [draftSaving, setDraftSaving] = useState(false);
   const [prefsError, setPrefsError] = useState<string | null>(null);
 
-  useEffect(() => {
-    let mounted = true;
-    (async () => {
-      setPrefsLoading(true);
-      const result = await getEmailPreferences();
-      if (!mounted) return;
-      if (result.error) {
-        setPrefsError(result.error.message);
-        setMarketingOptIn(false);
-        setDraftRemindersAllowedState(true);
-      } else {
-        setPrefsError(null);
-        setMarketingOptIn(result.data.marketing_opt_in);
-        setDraftRemindersAllowedState(!result.data.optional_draft_reminders_opt_out);
-      }
-      setPrefsLoading(false);
-    })();
-    return () => {
-      mounted = false;
-    };
-  }, []);
+  useFocusEffect(
+    useCallback(() => {
+      let mounted = true;
+      (async () => {
+        setPrefsLoading(true);
+        const result = await getEmailPreferences();
+        if (!mounted) return;
+        if (result.error) {
+          setPrefsError(result.error.message);
+          setMarketingOptIn(false);
+          setDraftRemindersAllowedState(true);
+        } else {
+          setPrefsError(null);
+          // Les flags importés ne sont pas des accords vérifiables.
+          setMarketingOptIn(hasVerifiableMarketingConsent(result.data));
+          setDraftRemindersAllowedState(!result.data.optional_draft_reminders_opt_out);
+        }
+        setPrefsLoading(false);
+      })();
+      return () => {
+        mounted = false;
+      };
+    }, [])
+  );
 
   const handleMarketingToggle = useCallback(async (next: boolean) => {
     setPrefsSaving(true);
     setPrefsError(null);
     setMarketingOptIn(next);
     const result = await setMarketingEmailOptIn(next, 'settings');
-    if (result.error) {
+    if (result.error || !result.data) {
       setMarketingOptIn(!next);
-      setPrefsError(result.error.message);
+      setPrefsError(result.error?.message ?? 'Préférence non enregistrée');
+    } else {
+      setMarketingOptIn(hasVerifiableMarketingConsent(result.data));
     }
     setPrefsSaving(false);
   }, []);
@@ -85,14 +108,14 @@ export default function AccountSettingsScreen() {
   const prefsBusy = prefsSaving || draftSaving || signingOut;
 
   return (
-    <Screen scroll={false} safe={false}>
+    <Screen scroll={true} safe={false}>
       <AppHeader title="Paramètres" showBack density="compact" />
       <View style={styles.content}>
         <View style={styles.actions}>
           <View style={styles.prefsBlock}>
             <Text style={styles.prefsTitle}>E-mails marketing</Text>
             <Text style={styles.prefsHint}>
-              Communications commerciales YOUMBIA uniquement. Les e-mails de connexion, confirmation et réinitialisation restent séparés.
+              Conseils, nouveautés et recommandations YOUMBIA. Ce choix est facultatif et révocable à tout moment. Les e-mails de connexion, confirmation et réinitialisation restent séparés.
             </Text>
             <View style={styles.prefsRow}>
               <Text style={styles.prefsLabel}>Recevoir les e-mails marketing</Text>
@@ -132,6 +155,17 @@ export default function AccountSettingsScreen() {
               )}
             </View>
             {prefsError ? <Text style={styles.prefsError}>{prefsError}</Text> : null}
+          </View>
+
+          <View style={styles.prefsBlock}>
+            <Text style={styles.prefsTitle}>Notifications de favoris</Text>
+            <View style={styles.prefsRow}>
+              <Text style={styles.prefsLabel}>Quand mon annonce est ajoutée aux favoris</Text>
+              <Switch value={favoritePush === true} onValueChange={toggleFavoritePush}
+                disabled={favoritePush === null || favoriteBusy || signingOut}
+                accessibilityLabel="Recevoir les notifications de favoris" />
+            </View>
+            {favoriteError ? <Text style={styles.prefsError}>{favoriteError}</Text> : null}
           </View>
 
           <Button

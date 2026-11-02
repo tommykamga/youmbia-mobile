@@ -22,6 +22,8 @@ type ExpoPushMessage = {
   body: string;
   data: Record<string, unknown>;
   sound: 'default';
+  channelId: string;
+  priority: 'default' | 'normal' | 'high';
 };
 
 type ClaimOutcome = 'notified' | 'released' | 'expired';
@@ -241,6 +243,8 @@ Deno.serve(async (req) => {
           href,
         },
         sound: 'default',
+        channelId: 'youmbia-default-v2',
+        priority: 'high',
       }));
 
       let expoResult: unknown = null;

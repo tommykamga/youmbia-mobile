@@ -12,6 +12,7 @@ import { runAppleOAuth, formatAppleSignInUserMessage } from '@/lib/appleSignInMo
 import { AppleSignInButton } from '@/features/auth/AppleSignInButton';
 import { trackSignUpStarted } from '@/lib/analytics';
 import { setMarketingEmailOptIn } from '@/services/emailPreferences';
+import { MARKETING_CONSENT_COPY } from '@/lib/marketingConsentVersion';
 
 function getErrorMessage(error: { message: string }): string {
   const msg = error.message.toLowerCase();
@@ -42,8 +43,13 @@ export default function SignupScreen() {
   const isAnyLoading = loading || googleLoading || appleLoading;
 
   const applyMarketingPreferenceIfNeeded = async () => {
-    if (!marketingOptIn) return;
-    await setMarketingEmailOptIn(true, 'signup');
+    if (!marketingOptIn) return true;
+    const result = await setMarketingEmailOptIn(true, 'signup');
+    if (result.error || !result.data) {
+      setError('Compte connecté, mais votre choix e-mail n’a pas été enregistré. Vous pourrez le gérer dans Profil > Préférences.');
+      return false;
+    }
+    return true;
   };
 
   useEffect(() => {
@@ -76,18 +82,17 @@ export default function SignupScreen() {
     trackSignUpStarted({ signup_method: 'email' });
     setLoading(true);
     try {
-      const result = await signUp(trimmedEmail, password, {
-        marketingOptIn,
-      });
+      const result = await signUp(trimmedEmail, password);
       if (result.ok) {
         if (result.requiresEmailConfirmation) {
-          // Opt-in déjà porté dans user_metadata → trigger email_preferences à la création.
           setSuccessMessage(
-            'Compte créé avec succès ! Vérifiez votre boîte mail pour confirmer votre inscription avant de vous connecter.'
+            marketingOptIn
+              ? 'Compte créé avec succès ! Vérifiez votre boîte mail pour confirmer votre inscription. Après connexion, vous pourrez enregistrer votre accord e-mail dans Profil > Préférences.'
+              : 'Compte créé avec succès ! Vérifiez votre boîte mail pour confirmer votre inscription avant de vous connecter.'
           );
           return;
         }
-        await applyMarketingPreferenceIfNeeded();
+        if (!(await applyMarketingPreferenceIfNeeded())) return;
         replaceAfterSuccessfulAuth(router, params.redirect, params.contact);
       } else {
         setError(getErrorMessage(result.error));
@@ -107,8 +112,9 @@ export default function SignupScreen() {
     try {
       const result = await runGoogleOAuth();
       if (result.ok) {
-        await applyMarketingPreferenceIfNeeded();
-        replaceAfterSuccessfulAuth(router, params.redirect, params.contact);
+        if (await applyMarketingPreferenceIfNeeded()) {
+          replaceAfterSuccessfulAuth(router, params.redirect, params.contact);
+        }
       } else {
         setError(formatGoogleSignInUserMessage(undefined, result));
       }
@@ -127,8 +133,9 @@ export default function SignupScreen() {
     try {
       const result = await runAppleOAuth();
       if (result.ok) {
-        await applyMarketingPreferenceIfNeeded();
-        replaceAfterSuccessfulAuth(router, params.redirect, params.contact);
+        if (await applyMarketingPreferenceIfNeeded()) {
+          replaceAfterSuccessfulAuth(router, params.redirect, params.contact);
+        }
       } else if (result.error.message !== 'Connexion annulée') {
         setError(formatAppleSignInUserMessage(undefined, result));
       }
@@ -208,9 +215,7 @@ export default function SignupScreen() {
                 <Ionicons name="checkmark" size={14} color="#fff" />
               ) : null}
             </View>
-            <Text style={styles.consentText}>
-              J’accepte de recevoir des e-mails marketing YOUMBIA (annonces, rappels). Les e-mails de connexion et de sécurité restent séparés. Vous pourrez vous désinscrire à tout moment.
-            </Text>
+            <Text style={styles.consentText}>{MARKETING_CONSENT_COPY}</Text>
           </Pressable>
 
           <AppButton

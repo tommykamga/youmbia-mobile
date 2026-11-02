@@ -94,6 +94,15 @@ export async function getOrCreateConversation(listingId: string): Promise<GetOrC
       .select('id')
       .single();
 
+    // Concurrent callers may lose the unique INSERT race. Read the winning
+    // row with the same authenticated client; never overwrite its identities.
+    if (error?.code === '23505') {
+      const { data: winner, error: winnerError } = await supabase
+        .from('conversations').select('id')
+        .eq('listing_id', listingId).eq('buyer_id', buyerId).eq('seller_id', sellerId)
+        .maybeSingle();
+      if (!winnerError && winner) return { data: { id: (winner as { id: string }).id }, error: null };
+    }
     if (error) {
       return {
         data: null,
