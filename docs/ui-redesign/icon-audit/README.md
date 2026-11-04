@@ -1,10 +1,10 @@
 # YOUMBIA — Audit des icônes (04/11/2026)
 
 ## État
-15 SVG Lucide originaux enregistrés sur branche d'audit, sans modification de composants, de backend ou de production. Ni la validation iPhone, ni la conformité aux catégories exactes de YOUMBIA ne sont acquises.
+30 SVG originaux (15 Lucide et 15 Phosphor Regular) enregistrés sur branche d'audit, sans modification de composants, de backend ou de production. Ni la validation iPhone, ni la conformité aux catégories exactes de YOUMBIA ne sont acquises.
 
 ## Prévisualisation
-Ouvrir `preview.html` après récupération du dossier ; les SVG locaux s'affichent sans CDN ni dépendance JS.
+Ouvrir `comparatif.html` pour la comparaison Lucide/Phosphor ou `preview.html` pour Lucide seul après récupération du dossier ; les SVG locaux s'affichent sans CDN ni dépendance JS.
 
 | Catégorie illustrative | SVG |
 |---|---|
@@ -36,7 +36,7 @@ Attention : ce mapping reste provisoire, en particulier `bike` ne couvre pas exa
 Sources : https://github.com/lucide-icons/lucide/tree/main/icons . Notice officielle conservée dans `LUCIDE-LICENSE.txt` (ISC et licences MIT Feather). Conserver la notice lors de la redistribution.
 
 ## Noun Project
-La collection Shopping Categories est intéressante mais ses droits gratuits individuels et attributions éventuelles ne sont pas vérifiés ; aucun fichier Noun Project n'est incorporé. Phosphor (MIT) reste une alternative à comparer.
+La collection Shopping Categories est intéressante mais ses droits gratuits individuels et attributions éventuelles ne sont pas vérifiés ; aucun fichier Noun Project n'est incorporé. Phosphor (MIT) est également présent, avec 15 SVG et sa notice `PHOSPHOR-LICENSE.txt`.
 
 ## Étape suivante
 Après approbation visuelle, faire correspondre les IDs de `marketplaceCategories` et intégrer dans une tranche UI isolée ; pas de merge automatique.
