@@ -20,6 +20,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useAppUpdateBannerInset } from '@/context/AppUpdateBannerInsetContext';
 import { useFocusEffect, useLocalSearchParams, useRouter, type Href } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
+import { CityPickerSheet } from '@/components/CityPickerSheet';
 import { Screen, Button, HomeBrandHeader, HomeCategoryStrip, KeyboardSafeView, LoadingState } from '@/components';
 import { ListingCard, ListingFeed } from '@/features/listings';
 import {
@@ -1800,67 +1801,9 @@ function MarketplaceSearchScreen({ onOpenDemo }: { onOpenDemo?: () => void }) {
           </Pressable>
         </Modal>
 
-        {/* Le raccourci de localisation ne modifie que la ville. */}
-        <Modal
-          visible={cityPickerOpen}
-          transparent
-          animationType="slide"
-          onRequestClose={closeCityPicker}
-        >
-          <KeyboardSafeView androidInsetPadding subtractSafeAreaBottom={false}>
-            <Pressable style={styles.sheetOverlay} onPress={closeCityPicker}>
-              <Pressable style={styles.sheet} onPress={(e) => e.stopPropagation()}>
-                <ScrollView
-                  style={styles.filtersScroll}
-                  keyboardShouldPersistTaps="handled"
-                  keyboardDismissMode="on-drag"
-                >
-                  <View style={styles.sheetCard}>
-                    <View style={styles.sheetHeader}>
-                      <Text style={styles.sheetTitle}>Ville</Text>
-                      <Pressable
-                        onPress={closeCityPicker}
-                        hitSlop={12}
-                        accessibilityRole="button"
-                        accessibilityLabel="Fermer le choix de ville"
-                        style={({ pressed }) => [styles.sheetCloseBtn, pressed && styles.sheetCloseBtnPressed]}
-                      >
-                        <Ionicons name="close" size={22} color={colors.textMuted} />
-                      </Pressable>
-                    </View>
-                    <TextInput
-                      style={styles.filterInput}
-                      accessibilityLabel="Ville"
-                      value={cityPickerDraft}
-                      onChangeText={setCityPickerDraft}
-                      placeholder="Ex. Douala"
-                      placeholderTextColor={colors.textMuted}
-                      autoCapitalize="words"
-                      returnKeyType="done"
-                      onSubmitEditing={() => applyCityPicker(cityPickerDraft)}
-                    />
-                    <View style={styles.filterActions}>
-                      <Pressable
-                        accessibilityRole="button"
-                        onPress={() => applyCityPicker(cityPickerDraft)}
-                        style={({ pressed }) => [styles.filterActionPrimary, pressed && styles.filterActionPrimaryPressed]}
-                      >
-                        <Text style={styles.filterActionPrimaryText}>Appliquer</Text>
-                      </Pressable>
-                      <Pressable
-                        accessibilityRole="button"
-                        onPress={() => applyCityPicker('')}
-                        style={({ pressed }) => [styles.filterActionSecondary, pressed && styles.filterActionSecondaryPressed]}
-                      >
-                        <Text style={styles.filterActionSecondaryText}>Toutes les villes</Text>
-                      </Pressable>
-                    </View>
-                  </View>
-                </ScrollView>
-              </Pressable>
-            </Pressable>
-          </KeyboardSafeView>
-        </Modal>
+        <CityPickerSheet visible={cityPickerOpen} value={cityPickerDraft}
+          onChangeText={setCityPickerDraft} onApply={applyCityPicker}
+          onReset={() => applyCityPicker('')} onClose={closeCityPicker} suggestions={availableCities} />
 
         {/* Bottom sheet: filtres */}
         <Modal

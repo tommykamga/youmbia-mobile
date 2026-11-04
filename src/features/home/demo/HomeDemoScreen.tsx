@@ -2,6 +2,7 @@ import React, { useCallback, useMemo, useState } from 'react';
 import { View, Text, TextInput, Pressable, ScrollView, Modal, StyleSheet, Image, useWindowDimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Ionicons from '@expo/vector-icons/Ionicons';
+import { CityPickerSheet } from '@/components/CityPickerSheet';
 import { HomeCategoryStripContent } from '@/components/HomeCategoryStrip';
 import { useMarketplaceCategories } from '@/hooks/useMarketplaceCategories';
 import { getRootMarketplaceCategories } from '@/lib/marketplaceCategories';
@@ -46,9 +47,6 @@ export function HomeDemoScreen({ onExit }: { onExit: () => void }) {
     setMax(criteria.max == null ? '' : String(criteria.max)); setError(''); setPanel(next);
   };
   const apply = () => {
-    if (panel === 'city') {
-      setCriteria(prev => ({ ...prev, city: draft.city.trim() })); setPanel(null); return;
-    }
     const lower = min.trim() ? Number(min) : undefined;
     const upper = max.trim() ? Number(max) : undefined;
     if ((lower != null && (!/^\d+$/.test(min) || !Number.isFinite(lower))) ||
@@ -106,12 +104,16 @@ export function HomeDemoScreen({ onExit }: { onExit: () => void }) {
           <Text style={styles.title}>À découvrir</Text>
         </View>}
         extraComponent={<PopularShopsSection preview={shopsPreview} />} /></View>
-      <Modal visible={panel != null} transparent animationType="slide" onRequestClose={() => setPanel(null)}>
+      <CityPickerSheet visible={panel === 'city'} value={draft.city} suggestions={DEMO_CITIES}
+        onChangeText={city => setDraft(prev => ({ ...prev, city }))} onClose={() => setPanel(null)}
+        onApply={city => { setCriteria(prev => ({ ...prev, city: city.trim() })); setPanel(null); }}
+        onReset={() => { setCriteria(prev => ({ ...prev, city: '' })); setPanel(null); }} />
+      <Modal visible={panel != null && panel !== 'city'} transparent animationType="slide" onRequestClose={() => setPanel(null)}>
         <KeyboardSafeView androidInsetPadding subtractSafeAreaBottom={false}>
           <View style={styles.backdrop}>
             <View style={styles.sheet}>
               <ScrollView keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag">
-                <Text style={styles.title}>{panel === 'city' ? 'Ville' : panel === 'search' ? 'Recherche démo' : 'Filtres démo'}</Text>
+                <Text style={styles.title}>{panel === 'search' ? 'Recherche démo' : 'Filtres démo'}</Text>
                 {panel !== 'city' && <><Text>Recherche</Text><TextInput style={styles.input} accessibilityLabel="Recherche démo" value={draft.query} onChangeText={query => setDraft(prev => ({ ...prev, query }))} /></>}
                 <Text>Ville</Text><TextInput style={styles.input} accessibilityLabel="Ville démo" placeholder="Ex. Douala" value={draft.city} onChangeText={city => setDraft(prev => ({ ...prev, city }))} />
                 <View style={styles.chips}>{DEMO_CITIES.map(city => <Pressable style={styles.chip} key={city} accessibilityRole="button" onPress={() => setDraft(prev => ({ ...prev, city }))}><Text>{city}</Text></Pressable>)}</View>
@@ -120,7 +122,7 @@ export function HomeDemoScreen({ onExit }: { onExit: () => void }) {
                   <Text>Prix max</Text><TextInput style={styles.input} accessibilityLabel="Prix maximum démo" keyboardType="number-pad" value={max} onChangeText={setMax} /></>}
                 {!!error && <Text accessibilityRole="alert">{error}</Text>}
                 <Pressable style={styles.button} accessibilityRole="button" onPress={apply}><Text>Appliquer</Text></Pressable>
-                <Pressable style={styles.button} accessibilityRole="button" onPress={() => { setCriteria(prev => panel === 'city' ? { ...prev, city: '' } : EMPTY); setPanel(null); }}><Text>{panel === 'city' ? 'Toutes les villes' : 'Réinitialiser'}</Text></Pressable>
+                <Pressable style={styles.button} accessibilityRole="button" onPress={() => { setCriteria(EMPTY); setPanel(null); }}><Text>Réinitialiser</Text></Pressable>
                 <Pressable style={styles.button} accessibilityRole="button" onPress={() => setPanel(null)}><Text>Annuler</Text></Pressable>
               </ScrollView>
             </View>

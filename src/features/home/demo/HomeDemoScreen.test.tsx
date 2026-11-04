@@ -7,6 +7,7 @@ vi.mock('react-native', () => ({ View: 'View', Text: 'Text', TextInput: 'Input',
   StyleSheet: { create: (s: unknown) => s }, useWindowDimensions: () => ({ width: 390, fontScale: 1 }) }));
 vi.mock('react-native-safe-area-context', () => ({ SafeAreaView: 'SafeArea' }));
 vi.mock('@expo/vector-icons/Ionicons', () => ({ default: 'Icon' }));
+vi.mock('@/components/CityPickerSheet', () => ({ CityPickerSheet: 'CitySheet' }));
 vi.mock('@/components/HomeBrandHeader', () => ({ HomeBrandHeader: 'BrandHeader' }));
 vi.mock('@/components/HomeCategoryStrip', () => ({ HomeCategoryStripContent: 'Categories' }));
 vi.mock('@/components/KeyboardSafeView', () => ({ KeyboardSafeView: 'KeyboardSafe' }));
@@ -38,5 +39,23 @@ it('keeps developer commands collapsed, exposes them explicitly, resets business
   expect(feed().props.previewProvider.total).toBe(48);
   act(() => command('Quitter la démonstration').props.onPress()); expect(exit).toHaveBeenCalledTimes(1);
   act(() => indicator.props.onPress()); expect(texts()).not.toContain('Quitter la démonstration');
+  act(() => r.unmount());
+});
+
+
+it('keeps city draft cancellation separate from applied criteria and resets only the city', () => {
+  let r!: ReactTestRenderer;
+  act(() => { r = create(<HomeDemoScreen onExit={vi.fn()} />); });
+  const feed = () => r.root.findByType('Feed' as never);
+  const sheet = () => r.root.findByType('CitySheet' as never);
+  const open = () => r.root.findByType('BrandHeader' as never).props.location.onPress();
+  act(() => feed().props.listHeaderComponent.props.children[0].props.onCategoryPress('987'));
+  expect(feed().props.previewProvider.total).toBe(8);
+  act(() => open()); act(() => sheet().props.onChangeText('Douala')); act(() => sheet().props.onClose());
+  expect(feed().props.previewProvider.total).toBe(8);
+  act(() => open()); expect(sheet().props.value).toBe('');
+  act(() => sheet().props.onApply('Douala')); expect(feed().props.previewProvider.total).toBe(2);
+  act(() => open()); expect(sheet().props.value).toBe('Douala');
+  act(() => sheet().props.onReset()); expect(feed().props.previewProvider.total).toBe(8);
   act(() => r.unmount());
 });

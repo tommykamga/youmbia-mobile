@@ -42,3 +42,12 @@ L’accueil réel utilise HomeCategoryStrip, qui charge la taxonomie puis rend H
 PopularShopsSection utilise maintenant ShopCard variant="home" en démo comme en mode normal : largeur cible 272 pt, rayon 16, couverture 104 pt avec fallback sobre, nom puis Ville · N annonces et chevron. Aucun bouton Voir ni statut déclaré dans cette variante. Les variantes default et compact sont inchangées. Le statut déclaré reste dans la fiche réelle existante et la fiche simulée. Le choix des boutiques, l’insertion unique et la pagination restent identiques.
 
 L’indicateur Démonstration ouvre/replie un panneau réservé à la démo. Sortie, compteurs et réinitialisation y sont regroupés ; ils ne repoussent plus les premières cartes quand le panneau est fermé. Ne pas réutiliser les anciennes captures comme preuve de cette finition : deux nouvelles captures sont attendues (haut et rail).
+
+
+## Cohérence finale des trois points ciblés
+
+Les cellules de catégorie affichent maintenant le nom métier exact de la branche sélectionnée : Électronique ne s’appelle plus Téléphones et Véhicules ne s’appelle plus Auto. Les pictogrammes existants par slug décrivent cette branche ; aucun ID, descendant, ordre ou gestionnaire de destination n’est changé.
+
+La feuille dédiée Ville est CityPickerSheet dans les deux modes : un seul titre, champ, suggestions facultatives provenant du mode appelant, Appliquer primaire, Réinitialiser secondaire et fermeture. Le brouillon reste contrôlé par chaque appelant ; fermer ne l’applique pas, rouvrir reprend le critère appliqué, et Réinitialiser retire uniquement la ville. Les filtres complets gardent leur propre champ Ville.
+
+Les prix utilisent le même formateur français déterministe en mode normal et en démo, sans dépendre de la locale Intl/Hermes : groupes de trois par espace fine insécable, virgule décimale, espace insécable avant FCFA. Exemple : 1 234 567 890 FCFA. Aucun chiffre n’est arrondi par le formateur ; le nombre JavaScript fourni reste la limite de précision. Les textes de prix des cartes accueil et du rail featured n’ont plus de limite de lignes, d’ellipse ou de réduction automatique de police ; ils peuvent grandir avec le texte OS.

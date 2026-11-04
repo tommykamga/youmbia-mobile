@@ -29,7 +29,7 @@ it('uses a bundled photo and local detail/favorite controls without touching rea
   act(() => r.root.findByType('AnimatedPressable' as never).props.onPress());
   expect(open).toHaveBeenCalledTimes(1); expect(m.push).not.toHaveBeenCalled(); expect(m.source).not.toHaveBeenCalled(); expect(m.favorite).not.toHaveBeenCalled();
   const price = r.root.findAllByType('Text' as never).find(x => typeof x.props.children === 'string' && x.props.children.includes('FCFA'));
-  expect(price?.props.children).toContain('1'); expect(price?.props.numberOfLines).toBe(2);
+  expect(price?.props.children.replace(/\s/g, '')).toBe('1234567890FCFA'); expect(price?.props.numberOfLines).toBeUndefined(); expect(price?.props.ellipsizeMode).toBeUndefined();
   act(() => r.unmount());
 });
 

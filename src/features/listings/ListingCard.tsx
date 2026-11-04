@@ -344,17 +344,13 @@ function ListingCardInner({
 
       <View style={[styles.info, isHomeFeed && styles.infoHome, isFeaturedRail && styles.infoRailFeatured]}>
         {isFeaturedRail && priceLabel ? (
-          <Text style={styles.priceRailFeatured} numberOfLines={1} ellipsizeMode="tail">
+          <Text style={styles.priceRailFeatured}>
             {priceLabel}
           </Text>
         ) : null}
         {isHomeFeed && priceLabel ? (
           <Text
             style={[styles.priceHomePrimary, isHomeGrid && styles.priceHomePrimaryGrid]}
-            numberOfLines={2}
-            ellipsizeMode="tail"
-            adjustsFontSizeToFit
-            minimumFontScale={0.88}
           >
             {priceLabel}
           </Text>

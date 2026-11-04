@@ -37,21 +37,9 @@ const STRIP = {
   labelInactive: 'rgba(15, 23, 42, 0.72)',
 } as const;
 
-/** Libellés courts affichés (pas de troncature sur ces chaînes). */
-const STRIP_LABEL_BY_SLUG: Record<string, string> = {
-  vehicules: 'Auto',
-  electronique: 'Téléphones',
-  'maison-decoration': 'Maison',
-  'mode-beaute': 'Mode',
-  immobilier: 'Immo',
-  services: 'Services',
-  informatique: 'Info',
-  alimentation: 'Food',
-  'loisirs-sports': 'Sport',
-};
-
-function stripLabel(category: { slug: string; name: string }): string {
-  return STRIP_LABEL_BY_SLUG[category.slug] ?? category.name;
+/** The displayed label must describe the full category branch selected by its ID. */
+function stripLabel(category: { name: string }): string {
+  return category.name;
 }
 
 function stripIcon(category: { slug: string }, active: boolean): keyof typeof Ionicons.glyphMap {
@@ -158,7 +146,7 @@ export function HomeCategoryStripContent({
           <View style={[styles.homeIcon, active && styles.homeIconActive]}>
             <Ionicons name={stripIcon(category, active)} size={25} color="#0B4D3C" />
           </View>
-          <Text style={[styles.homeLabel, active && styles.homeLabelActive]} numberOfLines={2}>{stripLabel(category)}</Text>
+          <Text style={[styles.homeLabel, active && styles.homeLabelActive]}>{stripLabel(category)}</Text>
         </Pressable>;
       })}
       <Pressable accessibilityRole="button" accessibilityLabel={AUTRES_LABEL} style={styles.homeCell} onPress={onAutresPress}>

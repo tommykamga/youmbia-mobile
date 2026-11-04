@@ -23,6 +23,9 @@ it('shares the same visual output and business IDs between the normal wrapper an
   const buttons = demo.root.findAllByType('Pressable' as never);
   expect(buttons.map(node => node.props.accessibilityLabel)).toEqual(['Mode & Beauté', 'Électronique', 'Autres']);
   expect(buttons[1].props.accessibilityState.selected).toBe(true);
+  expect(demo.root.findAllByType('Text' as never).map(node => node.props.children)).toContain('Électronique');
+  expect(demo.root.findAllByType('Text' as never).map(node => node.props.children)).not.toContain('Téléphones');
+  expect(demo.root.findAllByType('Icon' as never).map(node => node.props.name)).toContain('laptop');
   act(() => { buttons[1].props.onPress(); buttons[2].props.onPress(); });
   expect(press).toHaveBeenCalledWith('987', 'Électronique'); expect(autres).toHaveBeenCalledTimes(1);
   expect(demo.root.findAllByType('Icon' as never).every(node => node.props.size === 25)).toBe(true);
