@@ -11,6 +11,8 @@ import { getShopInitials } from '@/lib/shopSeller';
 import type { PopularShop } from '@/services/shops/getPopularShops';
 import { colors, spacing, typography, fontWeights, radius, cardStyles, getShadowStyle } from '@/theme';
 
+export const SHOP_CARD_HOME_WIDTH = 272;
+export const SHOP_CARD_HOME_STRIDE = SHOP_CARD_HOME_WIDTH + 12;
 export const SHOP_CARD_RAIL_WIDTH = 248;
 export const SHOP_CARD_RAIL_MARGIN_END = 12;
 export const SHOP_CARD_RAIL_STRIDE = SHOP_CARD_RAIL_WIDTH + SHOP_CARD_RAIL_MARGIN_END;
@@ -18,13 +20,14 @@ export const SHOP_CARD_RAIL_STRIDE = SHOP_CARD_RAIL_WIDTH + SHOP_CARD_RAIL_MARGI
 type ShopCardProps = {
   shop: PopularShop;
   preview?: { onOpen: () => void; bannerSource?: ImageSourcePropType };
-  variant?: 'default' | 'compact';
+  variant?: 'default' | 'compact' | 'home';
 };
 
 function ShopCardInner({ shop, preview, variant = 'default' }: ShopCardProps) {
   const router = useRouter();
   const initials = getShopInitials(shop.name);
   const isCompact = variant === 'compact';
+  const [coverFailed, setCoverFailed] = useState(false);
   const [logoFailed, setLogoFailed] = useState(false);
   const listingsLabel =
     shop.active_listings_count > 0
@@ -43,6 +46,25 @@ function ShopCardInner({ shop, preview, variant = 'default' }: ShopCardProps) {
   useEffect(() => {
     setLogoFailed(false);
   }, [shop.logo_url]);
+
+  useEffect(() => { setCoverFailed(false); }, [shop.banner_url, preview?.bannerSource]);
+
+  if (variant === 'home') {
+    return <Pressable accessibilityRole="button"
+      accessibilityLabel={`${preview ? 'Voir la boutique fictive' : 'Voir la boutique'} ${shop.name}`}
+      onPress={onPress} style={({ pressed }) => [styles.homeCard, pressed && styles.cardPressed]}>
+      <View style={styles.homeCover}>
+        {bannerSource && !coverFailed ? <Image source={bannerSource} resizeMode="cover" style={styles.bannerImage} onError={() => setCoverFailed(true)} />
+          : <Ionicons name="storefront-outline" size={28} color="#54816E" />}
+      </View>
+      <View style={styles.homeBody}>
+        <View style={styles.homeNameRow}><Text style={styles.homeName} numberOfLines={2}>{shop.name}</Text>
+          <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
+        </View>
+        <Text style={styles.homeMeta}>{[shop.city?.trim(), `${shop.active_listings_count} annonce${shop.active_listings_count === 1 ? '' : 's'}`].filter(Boolean).join(' · ')}</Text>
+      </View>
+    </Pressable>;
+  }
 
   return (
     <Pressable
@@ -120,6 +142,12 @@ function ShopCardInner({ shop, preview, variant = 'default' }: ShopCardProps) {
 export const ShopCard = memo(ShopCardInner);
 
 const styles = StyleSheet.create({
+  homeCard: { width: SHOP_CARD_HOME_WIDTH, marginRight: SHOP_CARD_RAIL_MARGIN_END, borderRadius: 16, overflow: 'hidden', backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.borderLight },
+  homeCover: { height: 104, width: '100%', backgroundColor: '#E9F1ED', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
+  homeBody: { padding: 14, gap: 6 },
+  homeNameRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  homeName: { flex: 1, fontSize: 16, lineHeight: 22, fontWeight: '700', color: colors.text },
+  homeMeta: { fontSize: 12, lineHeight: 17, color: colors.textSecondary },
   card: {
     ...cardStyles.default,
     overflow: 'hidden',

@@ -9,7 +9,7 @@ import { AppSectionHeader } from '@/components';
 import { getPopularShopsCached } from '@/services/shops/popularShopsCache';
 import type { PopularShop } from '@/services/shops/getPopularShops';
 import { useHomeMarketplaceGridInset } from '@/lib/responsiveLayout';
-import { ShopCard, SHOP_CARD_RAIL_MARGIN_END, SHOP_CARD_RAIL_STRIDE } from './ShopCard';
+import { ShopCard, SHOP_CARD_RAIL_MARGIN_END, SHOP_CARD_HOME_STRIDE } from './ShopCard';
 import { ShopsRailSkeleton } from './ShopsRailSkeleton';
 import { spacing, ui } from '@/theme';
 
@@ -53,7 +53,7 @@ export function PopularShopsSection({ preview }: { preview?: PopularShopsPreview
   const keyExtractor = useCallback((item: PopularShop) => item.id, []);
 
   const renderItem = useCallback(
-    ({ item }: { item: PopularShop }) => <ShopCard shop={item} preview={preview ? {
+    ({ item }: { item: PopularShop }) => <ShopCard variant="home" shop={item} preview={preview ? {
       onOpen: () => preview.onOpen(item), bannerSource: preview.banners?.[item.id],
     } : undefined} />,
     [preview]
@@ -63,15 +63,15 @@ export function PopularShopsSection({ preview }: { preview?: PopularShopsPreview
 
   if (!preview && loading) {
     return (
-      <View style={styles.section} accessibilityLabel="Chargement des boutiques populaires">
+      <View style={styles.section} accessibilityLabel="Chargement des boutiques à découvrir">
         <View style={[styles.headerRow, headerInsetStyle]}>
           <AppSectionHeader
             dense
-            title="Boutiques populaires"
-            subtitle={preview ? 'Démonstration · destinations simulées' : 'Commerçants professionnels YOUMBIA'}
+            title="Boutiques à découvrir"
+            subtitle={preview ? 'Démonstration · destinations simulées' : undefined}
           />
         </View>
-        <ShopsRailSkeleton contentInset={gridInset} />
+        <ShopsRailSkeleton home contentInset={gridInset} />
       </View>
     );
   }
@@ -92,8 +92,8 @@ export function PopularShopsSection({ preview }: { preview?: PopularShopsPreview
         <View style={styles.headerTextSlot}>
           <AppSectionHeader
             dense
-            title="Boutiques populaires"
-            subtitle={preview ? 'Démonstration · destinations simulées' : 'Commerçants professionnels YOUMBIA'}
+            title="Boutiques à découvrir"
+            subtitle={preview ? 'Démonstration · destinations simulées' : undefined}
           />
         </View>
       </View>
@@ -104,7 +104,7 @@ export function PopularShopsSection({ preview }: { preview?: PopularShopsPreview
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={railContentStyle}
         style={styles.scroll}
-        snapToInterval={SHOP_CARD_RAIL_STRIDE}
+        snapToInterval={SHOP_CARD_HOME_STRIDE}
         snapToAlignment="start"
         decelerationRate="fast"
         renderItem={renderItem}

@@ -13,7 +13,7 @@ describe('isolated home demonstration', () => {
     expect(DEMO_LISTINGS).toHaveLength(48);
     expect(new Set(DEMO_LISTINGS.map(x => x.id)).size).toBe(48);
     expect(new Set(DEMO_LISTINGS.map(x => x.city)).size).toBe(6);
-    expect(new Set(DEMO_LISTINGS.map(x => x.category_id)).size).toBe(6);
+    expect(new Set(DEMO_LISTINGS.map(x => x.fixtureCategorySlug)).size).toBe(6);
     expect(DEMO_LISTINGS.some(x => x.images.length === 0)).toBe(true);
     expect(DEMO_LISTINGS.some(x => x.title.length > 140)).toBe(true);
     expect(formatPrice(DEMO_LISTINGS[0].price)).toContain('FCFA');
@@ -30,12 +30,12 @@ describe('isolated home demonstration', () => {
     expect(feed.getSnapshot().data.map(x => x.id)).toEqual(DEMO_LISTINGS.map(x => x.id));
   });
   it('combines city, query, category and price without mutating the stable catalogue', async () => {
-    const criteria = { query: 'smartphone', city: 'douala', category: 1, min: 1e9, max: 2e9 };
-    const provider = createDemoProvider(criteria);
+    const criteria = { query: 'smartphone', city: 'douala', category: 101, min: 1e9, max: 2e9 };
+    const provider = createDemoProvider(criteria, [{ id: 101, name: 'Électronique', slug: 'electronique', parent_id: null }]);
     const result = await provider.loadPage(0, 6);
     expect(result.data.length).toBeGreaterThan(0);
     for (const x of result.data) {
-      expect(x.city).toBe('Douala'); expect(x.category_id).toBe(1);
+      expect(x.city).toBe('Douala'); expect(x.category_id).toBe(101);
       expect(x.title.toLowerCase()).toContain('smartphone'); expect(x.price).toBeGreaterThanOrEqual(1e9);
     }
     expect(createDemoProvider({ query: '', city: '', category: null }).total).toBe(48);
@@ -54,4 +54,26 @@ it('exposes stable local shops without remote media, contact details or verifica
     expect(shop.banner_url).toBeNull(); expect(shop.logo_url).toBeNull();
     expect(shop.phone).toBeNull(); expect(shop.whatsapp_phone).toBeNull();
   }
+});
+
+
+it('uses supplied business IDs instead of invented demo category IDs', async () => {
+  const categories = [{ id: 987, name: 'Électronique', slug: 'electronique', parent_id: null }];
+  const provider = createDemoProvider({ query: '', city: '', category: 987 }, categories);
+  const page = await provider.loadPage(0, 6);
+  expect(page.data).toHaveLength(6);
+  expect(page.data.every(listing => listing.category_id === 987)).toBe(true);
+  expect(createDemoProvider({ query: '', city: '', category: 1 }, categories).total).toBe(0);
+  expect(DEMO_LISTINGS.every(listing => listing.category_id === null)).toBe(true);
+});
+
+
+it('reuses business category descendant rules for a root selection', async () => {
+  const provider = createDemoProvider({ query: '', city: '', category: 101 }, [
+    { id: 101, name: 'Électronique', slug: 'electronique', parent_id: null },
+    { id: 987, name: 'Informatique', slug: 'informatique', parent_id: 101 },
+  ]);
+  expect(provider.total).toBe(16);
+  const page = await provider.loadPage(0, 50);
+  expect(new Set(page.data.map(x => x.category_id))).toEqual(new Set([101, 987]));
 });

@@ -2,21 +2,22 @@ import React, { useMemo } from 'react';
 import { View, StyleSheet, FlatList } from 'react-native';
 import { SkeletonPulse } from '@/components/SkeletonPulse';
 import { useHomeMarketplaceGridInset } from '@/lib/responsiveLayout';
-import { SHOP_CARD_RAIL_WIDTH, SHOP_CARD_RAIL_MARGIN_END } from './ShopCard';
+import { SHOP_CARD_HOME_WIDTH, SHOP_CARD_RAIL_WIDTH, SHOP_CARD_RAIL_MARGIN_END } from './ShopCard';
 import { spacing, radius, cardStyles, colors } from '@/theme';
 
 export type ShopsRailSkeletonProps = {
   contentInset?: number;
+  home?: boolean;
 };
 
 const PLACEHOLDER_COUNT = 3;
 
-function ShopCardSkeleton() {
+function ShopCardSkeleton({ home = false }: { home?: boolean }) {
   return (
-    <View style={styles.card}>
-      <SkeletonPulse style={styles.banner} />
+    <View style={[styles.card, home && { width: SHOP_CARD_HOME_WIDTH, borderRadius: 16 }]}>
+      <SkeletonPulse style={[styles.banner, home && { height: 104 }]} />
       <View style={styles.body}>
-        <SkeletonPulse style={styles.logo} />
+        {!home && <SkeletonPulse style={styles.logo} />}
         <SkeletonPulse style={styles.lineLg} />
         <SkeletonPulse style={styles.lineSm} />
         <SkeletonPulse style={styles.lineMd} />
@@ -25,7 +26,7 @@ function ShopCardSkeleton() {
   );
 }
 
-export function ShopsRailSkeleton({ contentInset }: ShopsRailSkeletonProps = {}) {
+export function ShopsRailSkeleton({ contentInset, home }: ShopsRailSkeletonProps = {}) {
   const gridInset = useHomeMarketplaceGridInset();
   const inset = contentInset ?? gridInset;
   const railContentStyle = useMemo(
@@ -44,7 +45,7 @@ export function ShopsRailSkeleton({ contentInset }: ShopsRailSkeletonProps = {})
       contentContainerStyle={railContentStyle}
       style={styles.scroll}
       ItemSeparatorComponent={() => <View style={{ width: 0 }} />}
-      renderItem={() => <ShopCardSkeleton />}
+      renderItem={() => <ShopCardSkeleton home={home} />}
     />
   );
 }

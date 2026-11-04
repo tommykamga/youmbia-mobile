@@ -2,6 +2,10 @@ import React, { useCallback, useMemo, useState } from 'react';
 import { View, Text, TextInput, Pressable, ScrollView, Modal, StyleSheet, Image, useWindowDimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Ionicons from '@expo/vector-icons/Ionicons';
+import { HomeCategoryStripContent } from '@/components/HomeCategoryStrip';
+import { useMarketplaceCategories } from '@/hooks/useMarketplaceCategories';
+import { getRootMarketplaceCategories } from '@/lib/marketplaceCategories';
+import { getWindowSizeBucket } from '@/lib/responsiveLayout';
 import { HomeBrandHeader } from '@/components/HomeBrandHeader';
 import { KeyboardSafeView } from '@/components/KeyboardSafeView';
 import { PopularShopsSection } from '@/features/shops/PopularShopsSection';
@@ -12,13 +16,16 @@ import type { PublicListing } from '@/services/listings';
 import { colors } from '@/theme';
 import { formatPrice } from '@/lib/format';
 import { DEMO_IMAGES } from './demoImages';
-import { createDemoProvider, DEMO_CATEGORIES, DEMO_CITIES, type DemoCriteria } from './demoProvider';
+import { createDemoProvider, DEMO_CITIES, type DemoCriteria } from './demoProvider';
 
 const EMPTY: DemoCriteria = { query: '', city: '', category: null };
 type Panel = 'city' | 'search' | 'filters' | null;
 
 export function HomeDemoScreen({ onExit }: { onExit: () => void }) {
-  const { fontScale } = useWindowDimensions();
+  const { fontScale, width } = useWindowDimensions();
+  const { categories } = useMarketplaceCategories();
+  const rootCategories = useMemo(() => getRootMarketplaceCategories(categories), [categories]);
+  const [devPanelOpen, setDevPanelOpen] = useState(false);
   const [criteria, setCriteria] = useState(EMPTY);
   const [draft, setDraft] = useState(EMPTY);
   const [min, setMin] = useState('');
@@ -29,7 +36,7 @@ export function HomeDemoScreen({ onExit }: { onExit: () => void }) {
   const [shopDetail, setShopDetail] = useState<PopularShop | null>(null);
   const [notice, setNotice] = useState(false);
   const [favorites, setFavorites] = useState<Set<string>>(() => new Set());
-  const provider = useMemo(() => createDemoProvider(criteria), [criteria]);
+  const provider = useMemo(() => createDemoProvider(criteria, categories), [criteria, categories]);
   const shopsPreview = useMemo(() => ({
     shops: provider.shops, onOpen: setShopDetail,
     banners: { 'home-demo-shop-1': DEMO_IMAGES.phone_01, 'home-demo-shop-2': DEMO_IMAGES.fashion_01, 'home-demo-shop-3': DEMO_IMAGES.home_01 },
@@ -81,21 +88,22 @@ export function HomeDemoScreen({ onExit }: { onExit: () => void }) {
           </Pressable>
         </View>
       </View>
-      <Pressable accessibilityRole="button" accessibilityLabel="Quitter la démonstration et retrouver les données réelles" style={styles.exit} onPress={onExit}><Text style={{ color: '#FFF' }}>Quitter la démonstration</Text></Pressable>
-      <Text style={styles.banner}>DÉMONSTRATION · 48 annonces fictives · favoris locaux</Text>
+      <Pressable accessibilityRole="button" accessibilityLabel="Commandes de démonstration" accessibilityState={{ expanded: devPanelOpen }}
+        onPress={() => setDevPanelOpen(value => !value)} style={styles.demoIndicator}>
+        <Text style={styles.demoIndicatorText}>Démonstration</Text><Ionicons name={devPanelOpen ? 'chevron-up' : 'chevron-down'} size={14} color="#614700" />
+      </Pressable>
+      {devPanelOpen && <View style={styles.devPanel}>
+        <Text>{provider.total} annonces fictives · {favorites.size} favoris locaux</Text>
+        <Pressable accessibilityRole="button" style={styles.button} onPress={() => setCriteria(EMPTY)}><Text>Réinitialiser les critères démo</Text></Pressable>
+        <Pressable accessibilityRole="button" style={styles.button} onPress={onExit}><Text>Quitter la démonstration</Text></Pressable>
+      </View>}
       <View style={styles.feed}><ListingFeed previewProvider={provider} renderPreviewCard={renderCard} fetchPageSize={6}
         listingCardFeedPresentation="home" homeFeedCardInset={16} contentBottomInset={120}
         listHeaderComponent={<View style={styles.intro}>
-          <ScrollView horizontal contentContainerStyle={styles.chips}>
-            {DEMO_CATEGORIES.map((name, i) => <Pressable key={name} accessibilityRole="button"
-              accessibilityState={{ selected: criteria.category === i + 1 }} style={styles.chip}
-              onPress={() => setCriteria(prev => ({ ...prev, category: prev.category === i + 1 ? null : i + 1 }))}>
-              <Text>{criteria.category === i + 1 ? '✓ ' : ''}{name}</Text>
-            </Pressable>)}
-          </ScrollView>
+          <HomeCategoryStripContent compact categories={categories} bucket={getWindowSizeBucket(width)} insetHorizontal={0}
+            selectedCategoryId={criteria.category} onAutresPress={() => open('filters')}
+            onCategoryPress={id => setCriteria(prev => ({ ...prev, category: prev.category === Number(id) ? null : Number(id) }))} />
           <Text style={styles.title}>À découvrir</Text>
-          <Text>{provider.total} annonces fictives · {favorites.size} favoris locaux</Text>
-          <Pressable accessibilityRole="button" style={styles.button} onPress={() => setCriteria(EMPTY)}><Text>Réinitialiser les critères démo</Text></Pressable>
         </View>}
         extraComponent={<PopularShopsSection preview={shopsPreview} />} /></View>
       <Modal visible={panel != null} transparent animationType="slide" onRequestClose={() => setPanel(null)}>
@@ -107,7 +115,7 @@ export function HomeDemoScreen({ onExit }: { onExit: () => void }) {
                 {panel !== 'city' && <><Text>Recherche</Text><TextInput style={styles.input} accessibilityLabel="Recherche démo" value={draft.query} onChangeText={query => setDraft(prev => ({ ...prev, query }))} /></>}
                 <Text>Ville</Text><TextInput style={styles.input} accessibilityLabel="Ville démo" placeholder="Ex. Douala" value={draft.city} onChangeText={city => setDraft(prev => ({ ...prev, city }))} />
                 <View style={styles.chips}>{DEMO_CITIES.map(city => <Pressable style={styles.chip} key={city} accessibilityRole="button" onPress={() => setDraft(prev => ({ ...prev, city }))}><Text>{city}</Text></Pressable>)}</View>
-                {panel === 'filters' && <><Text>Catégorie</Text><View style={styles.chips}>{DEMO_CATEGORIES.map((name, i) => <Pressable style={styles.chip} key={name} accessibilityRole="button" onPress={() => setDraft(prev => ({ ...prev, category: prev.category === i + 1 ? null : i + 1 }))}><Text>{draft.category === i + 1 ? '✓ ' : ''}{name}</Text></Pressable>)}</View>
+                {panel === 'filters' && <><Text>Catégorie</Text><View style={styles.chips}>{rootCategories.map(category => <Pressable style={styles.chip} key={category.id} accessibilityRole="button" onPress={() => setDraft(prev => ({ ...prev, category: prev.category === category.id ? null : category.id }))}><Text>{draft.category === category.id ? '✓ ' : ''}{category.name}</Text></Pressable>)}</View>
                   <Text>Prix min</Text><TextInput style={styles.input} accessibilityLabel="Prix minimum démo" keyboardType="number-pad" value={min} onChangeText={setMin} />
                   <Text>Prix max</Text><TextInput style={styles.input} accessibilityLabel="Prix maximum démo" keyboardType="number-pad" value={max} onChangeText={setMax} /></>}
                 {!!error && <Text accessibilityRole="alert">{error}</Text>}
@@ -124,6 +132,7 @@ export function HomeDemoScreen({ onExit }: { onExit: () => void }) {
           <Text style={styles.banner}>BOUTIQUE FICTIVE · destination simulée</Text>
           <Text style={styles.title}>{shopDetail?.name}</Text>
           <Text>{shopDetail?.city} · {shopDetail?.active_listings_count} annonces fictives</Text>
+          <Text>Vendeur Pro · déclaré (démonstration)</Text>
           <Text>Aucun contact, achat ou accès à une boutique réelle.</Text>
           <Pressable style={styles.button} accessibilityRole="button" onPress={() => setShopDetail(null)}><Text>Retour au fil</Text></Pressable>
         </ScrollView></View></View>
@@ -140,7 +149,9 @@ export function HomeDemoScreen({ onExit }: { onExit: () => void }) {
   );
 }
 const styles = StyleSheet.create({
-  exit: { minHeight: 44, justifyContent: 'center', paddingHorizontal: 16 },
+  demoIndicator: { minHeight: 44, paddingHorizontal: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#FFF8E2' },
+  demoIndicatorText: { fontSize: 12, color: '#614700' },
+  devPanel: { padding: 16, backgroundColor: '#FFF8E2' },
   feed: { flex: 1, backgroundColor: colors.surface },
   screen: { flex: 1, backgroundColor: '#0B4D3C' }, chrome: { paddingBottom: 12 },
   search: { minHeight: 56, borderRadius: 16, paddingHorizontal: 12, paddingVertical: 5, marginHorizontal: 16, marginTop: 8, backgroundColor: '#FFF', flexDirection: 'row', alignItems: 'center', gap: 8 },

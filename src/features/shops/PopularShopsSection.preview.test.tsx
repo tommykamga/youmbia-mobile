@@ -22,9 +22,12 @@ it('reuses the real rail and cards with local shops, banners and destinations wi
   await act(async () => { r = create(<PopularShopsSection preview={{ shops: DEMO_SHOPS, onOpen: open, banners: { [DEMO_SHOPS[0].id]: 42 } }} />); });
   expect(m.load).not.toHaveBeenCalled();
   const rail = r.root.findByType('FlatList' as never);
-  expect(rail.props.horizontal).toBe(true); expect(rail.props.data).toHaveLength(3);
+  expect(rail.props.horizontal).toBe(true); expect(rail.props.snapToInterval).toBe(284); expect(rail.props.data).toHaveLength(3);
   act(() => { card = create(rail.props.renderItem({ item: DEMO_SHOPS[0] })); });
   expect(card.root.findByType('Image' as never).props.source).toBe(42);
+  expect(card.root.findAllByType('Pressable' as never)).toHaveLength(1);
+  expect(card.root.findAllByType('Text' as never).some(node => node.props.children === 'Douala · 8 annonces')).toBe(true);
+  expect(card.root.findAllByType('Badge' as never)).toHaveLength(0);
   act(() => card.root.findAllByType('Pressable' as never)[0].props.onPress());
   expect(open).toHaveBeenCalledWith(DEMO_SHOPS[0]); expect(m.push).not.toHaveBeenCalled();
   act(() => { card.unmount(); r.unmount(); });
@@ -51,4 +54,18 @@ it('never routes a fictitious shop accidentally rendered without its preview des
   act(() => r.root.findAllByType('Pressable' as never)[0].props.onPress());
   expect(m.push).not.toHaveBeenCalled();
   act(() => r.unmount());
+});
+
+
+it('keeps the declared status and Voir button on the non-home variant and uses a cover fallback on home', () => {
+  let legacy!: ReactTestRenderer; let home!: ReactTestRenderer;
+  act(() => {
+    legacy = create(<ShopCard shop={DEMO_SHOPS[0]} />);
+    home = create(<ShopCard variant="home" shop={DEMO_SHOPS[0]} preview={{ onOpen: vi.fn() }} />);
+  });
+  expect(legacy.root.findAllByType('Badge' as never)).toHaveLength(1);
+  expect(legacy.root.findAllByType('Text' as never).some(node => node.props.children === 'Voir')).toBe(true);
+  expect(home.root.findAllByType('Image' as never)).toHaveLength(0);
+  expect(home.root.findAllByType('Icon' as never).some(node => node.props.name === 'storefront-outline')).toBe(true);
+  act(() => { legacy.unmount(); home.unmount(); });
 });

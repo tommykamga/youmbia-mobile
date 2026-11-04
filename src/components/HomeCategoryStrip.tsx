@@ -1,6 +1,6 @@
 /**
  * Bande catégories — scroll horizontal, états actif/inactif (tuiles compactes type Leboncoin).
- * Icônes rendues directement dans la tuile : pas de wrapper, pas de fond / radius sous l’icône.
+ * Variante accueil : pictogrammes sur support menthe, libellés dessous ; mêmes données métier.
  */
 
 import React, { useMemo } from 'react';
@@ -15,6 +15,7 @@ import {
 import Ionicons from '@expo/vector-icons/Ionicons';
 import type { WindowSizeBucket } from '@/lib/responsiveLayout';
 import { getRootMarketplaceCategories, getSellParentIcon } from '@/lib/marketplaceCategories';
+import type { MarketplaceCategory } from '@/services/categories';
 import { useMarketplaceCategories } from '@/hooks/useMarketplaceCategories';
 import { colors, getShadowStyle, semantic } from '@/theme';
 
@@ -103,7 +104,13 @@ export type HomeCategoryStripProps = {
   compact?: boolean;
 };
 
-export function HomeCategoryStrip({
+export function HomeCategoryStrip(props: HomeCategoryStripProps) {
+  const { categories } = useMarketplaceCategories();
+  return <HomeCategoryStripContent {...props} categories={categories} />;
+}
+
+/** Shared visual component; callers supply the same business taxonomy. */
+export function HomeCategoryStripContent({
   bucket,
   onCategoryPress,
   onAutresPress,
@@ -111,9 +118,9 @@ export function HomeCategoryStrip({
   parentContentPad,
   selectedCategoryId = null,
   compact = false,
-}: HomeCategoryStripProps) {
-  const { categories } = useMarketplaceCategories();
-  const rootCategories = useMemo(() => getRootMarketplaceCategories(categories), [categories]);
+  categories,
+}: HomeCategoryStripProps & { categories: readonly MarketplaceCategory[] }) {
+  const rootCategories = useMemo(() => getRootMarketplaceCategories([...categories]), [categories]);
   const insetTarget = targetScreenInset(bucket);
 
   const outerStyle = useMemo(() => {
@@ -139,6 +146,27 @@ export function HomeCategoryStrip({
     Platform.OS === 'android'
       ? { color: 'rgba(15, 23, 42, 0.08)', borderless: false }
       : undefined;
+
+  if (compact) {
+    const options = rootCategories.filter(category => category.slug !== 'autres');
+    return <View style={[styles.wrap, outerStyle]}><ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.homeScroll}>
+      {options.map(category => {
+        const active = selectedCategoryId === category.id;
+        return <Pressable key={category.id} accessibilityRole="button" accessibilityLabel={category.name}
+          accessibilityState={{ selected: active }} style={styles.homeCell}
+          onPress={() => onCategoryPress(String(category.id), category.name)}>
+          <View style={[styles.homeIcon, active && styles.homeIconActive]}>
+            <Ionicons name={stripIcon(category, active)} size={25} color="#0B4D3C" />
+          </View>
+          <Text style={[styles.homeLabel, active && styles.homeLabelActive]} numberOfLines={2}>{stripLabel(category)}</Text>
+        </Pressable>;
+      })}
+      <Pressable accessibilityRole="button" accessibilityLabel={AUTRES_LABEL} style={styles.homeCell} onPress={onAutresPress}>
+        <View style={styles.homeIcon}><Ionicons name="grid-outline" size={25} color="#0B4D3C" /></View>
+        <Text style={styles.homeLabel}>{AUTRES_LABEL}</Text>
+      </Pressable>
+    </ScrollView></View>;
+  }
 
   return (
     <View style={[styles.wrap, outerStyle]}>
@@ -244,6 +272,12 @@ export function HomeCategoryStrip({
 }
 
 const styles = StyleSheet.create({
+  homeScroll: { gap: 4, paddingVertical: 8, alignItems: 'flex-start' },
+  homeCell: { width: 76, minHeight: 80, alignItems: 'center', gap: 6 },
+  homeIcon: { width: 48, height: 48, borderRadius: 14, backgroundColor: '#E9F5EF', borderWidth: 1.5, borderColor: 'transparent', alignItems: 'center', justifyContent: 'center' },
+  homeIconActive: { backgroundColor: '#CFEBDF', borderColor: '#0B4D3C' },
+  homeLabel: { width: '100%', fontSize: 12, lineHeight: 16, textAlign: 'center', color: '#334155', fontWeight: '500' },
+  homeLabelActive: { color: '#0B4D3C', fontWeight: '700' },
   wrap: {
     marginBottom: 0,
   },
