@@ -122,6 +122,8 @@ export default function SearchScreen() {
   const [recentSearches, setRecentSearches] = useState<RecentSearch[]>([]);
   const [savedSearchFeedback, setSavedSearchFeedback] = useState<string | null>(null);
   const [filtersOpen, setFiltersOpen] = useState(false);
+  const [cityPickerOpen, setCityPickerOpen] = useState(false);
+  const [cityPickerDraft, setCityPickerDraft] = useState('');
   const [searchOverlayOpen, setSearchOverlayOpen] = useState(false);
   const [overlayDraft, setOverlayDraft] = useState('');
   const { overlaySuggestions, setOverlaySuggestions } = useSearchOverlaySuggestions(
@@ -845,6 +847,31 @@ export default function SearchScreen() {
 
   const closeFilters = useCallback(() => setFiltersOpen(false), []);
 
+  const openCityPicker = useCallback(() => {
+    Keyboard.dismiss();
+    setCityPickerDraft(appliedSearchFilters.city ?? '');
+    setCityPickerOpen(true);
+  }, [appliedSearchFilters.city]);
+
+  const closeCityPicker = useCallback(() => {
+    Keyboard.dismiss();
+    setCityPickerOpen(false);
+  }, []);
+
+  const applyCityPicker = useCallback((value: string) => {
+    const nextCity = normalizeFilterText(value);
+    clearPendingMainSearchDebounce();
+    setCity(nextCity ?? '');
+    setAppliedSearchFilters({ ...appliedSearchFilters, city: nextCity });
+    Keyboard.dismiss();
+    setCityPickerOpen(false);
+    void runSearch(submittedQuery, {
+      ...appliedSearchFilters,
+      ...appliedPriceFilters,
+      city: nextCity,
+    });
+  }, [appliedSearchFilters, appliedPriceFilters, submittedQuery, runSearch, clearPendingMainSearchDebounce]);
+
   const openSaved = useCallback(() => {
     Keyboard.dismiss();
     setSavedOpen(true);
@@ -1442,7 +1469,7 @@ export default function SearchScreen() {
                 unreadCount={0}
                 searchTabLayout
                 homePresentation={showMarketplaceHomeFeed}
-                location={showMarketplaceHomeFeed ? { label: appliedSearchFilters.city || 'Toutes les villes', onPress: openFilters } : undefined}
+                location={showMarketplaceHomeFeed ? { label: appliedSearchFilters.city || 'Toutes les villes', onPress: openCityPicker } : undefined}
               />
               <MarketingConsentBanner />
               <View
@@ -1753,6 +1780,68 @@ export default function SearchScreen() {
               </KeyboardSafeView>
             </Pressable>
           </Pressable>
+        </Modal>
+
+        {/* Le raccourci de localisation ne modifie que la ville. */}
+        <Modal
+          visible={cityPickerOpen}
+          transparent
+          animationType="slide"
+          onRequestClose={closeCityPicker}
+        >
+          <KeyboardSafeView androidInsetPadding subtractSafeAreaBottom={false}>
+            <Pressable style={styles.sheetOverlay} onPress={closeCityPicker}>
+              <Pressable style={styles.sheet} onPress={(e) => e.stopPropagation()}>
+                <ScrollView
+                  style={styles.filtersScroll}
+                  keyboardShouldPersistTaps="handled"
+                  keyboardDismissMode="on-drag"
+                >
+                  <View style={styles.sheetCard}>
+                    <View style={styles.sheetHeader}>
+                      <Text style={styles.sheetTitle}>Ville</Text>
+                      <Pressable
+                        onPress={closeCityPicker}
+                        hitSlop={12}
+                        accessibilityRole="button"
+                        accessibilityLabel="Fermer le choix de ville"
+                        style={({ pressed }) => [styles.sheetCloseBtn, pressed && styles.sheetCloseBtnPressed]}
+                      >
+                        <Ionicons name="close" size={22} color={colors.textMuted} />
+                      </Pressable>
+                    </View>
+                    <TextInput
+                      style={styles.filterInput}
+                      accessibilityLabel="Ville"
+                      value={cityPickerDraft}
+                      onChangeText={setCityPickerDraft}
+                      placeholder="Ex. Douala"
+                      placeholderTextColor={colors.textMuted}
+                      autoCapitalize="words"
+                      returnKeyType="done"
+                      onSubmitEditing={() => applyCityPicker(cityPickerDraft)}
+                    />
+                    <View style={styles.filterActions}>
+                      <Pressable
+                        accessibilityRole="button"
+                        onPress={() => applyCityPicker(cityPickerDraft)}
+                        style={({ pressed }) => [styles.filterActionPrimary, pressed && styles.filterActionPrimaryPressed]}
+                      >
+                        <Text style={styles.filterActionPrimaryText}>Appliquer</Text>
+                      </Pressable>
+                      <Pressable
+                        accessibilityRole="button"
+                        onPress={() => applyCityPicker('')}
+                        style={({ pressed }) => [styles.filterActionSecondary, pressed && styles.filterActionSecondaryPressed]}
+                      >
+                        <Text style={styles.filterActionSecondaryText}>Toutes les villes</Text>
+                      </Pressable>
+                    </View>
+                  </View>
+                </ScrollView>
+              </Pressable>
+            </Pressable>
+          </KeyboardSafeView>
         </Modal>
 
         {/* Bottom sheet: filtres */}

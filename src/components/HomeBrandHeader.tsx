@@ -121,8 +121,8 @@ export function HomeBrandHeader({
           onPress={location.onPress}
           style={styles.location}
           accessibilityRole="button"
-          accessibilityLabel={`Localisation : ${location.label}. Ouvrir les filtres`}
-          accessibilityHint="Choisissez une ville dans les filtres"
+          accessibilityLabel={`Localisation : ${location.label}. Choisir une ville`}
+          accessibilityHint="Saisissez une ville ou choisissez toutes les villes"
         >
           <Ionicons name="location-outline" size={18} color={colors.surface} />
           <Text style={styles.locationText} numberOfLines={1}>{location.label}</Text>
