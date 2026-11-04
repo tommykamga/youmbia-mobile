@@ -4,15 +4,9 @@ import {
   Text,
   StyleSheet,
   FlatList,
-  TextInput,
-  Pressable,
-  Platform,
   Alert,
+  Platform,
 } from 'react-native';
-import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Screen, AppHeader, EmptyState, KeyboardSafeView, UserAvatar, Button } from '@/components';
-import { useKeyboardInset } from '@/hooks/useKeyboardInset';
 import {
   getMessages,
   sendMessage,
@@ -37,45 +31,30 @@ import type { Message } from '@/services/conversations';
 import { spacing, colors, typography, fontWeights } from '@/theme';
 import { Ionicons } from '@expo/vector-icons';
 import { trackConversationViewed } from '@/lib/analytics';
-
-function formatMessageTime(iso: string): string {
-  try {
-    const d = new Date(iso);
-    const now = new Date();
-    const isToday = d.toDateString() === now.toDateString();
-    if (isToday) {
-      return d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
-    }
-    const yesterday = new Date(now);
-    yesterday.setDate(yesterday.getDate() - 1);
-    if (d.toDateString() === yesterday.toDateString()) {
-      return `Hier ${d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}`;
-    }
-    return d.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' }) + ' ' +
-      d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
-  } catch {
-    return '';
-  }
-}
-
-function getThreadErrorMessage(message: string, fallback: string): string {
-  const msg = message.toLowerCase();
-  if (msg.includes('non connecté') || msg.includes('jwt') || msg.includes('auth')) return 'Connexion requise';
-  if (msg.includes('network') || msg.includes('fetch') || msg.includes('internet')) return 'Réseau indisponible';
-  return fallback;
-}
+import { formatPrice } from '@/lib/format';
+import { ConversationHeader } from '@/features/conversation/ConversationHeader';
+import { ConversationListingBanner } from '@/features/conversation/ConversationListingBanner';
+import { ConversationMessageBubble } from '@/features/conversation/ConversationMessageBubble';
+import { ConversationComposer } from '@/features/conversation/ConversationComposer';
+import {
+  formatMessageDaySeparator,
+  getThreadErrorMessage,
+  isSameCalendarDay,
+} from '@/features/conversation/conversationThreadDisplay';
+import { useConversationListingPresentation } from '@/features/conversation/useConversationListingPresentation';
+import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Screen, EmptyState, KeyboardSafeView, Button } from '@/components';
+import { useKeyboardInset } from '@/hooks/useKeyboardInset';
 
 function MessagesSkeleton() {
   return (
     <View style={{ flex: 1, paddingHorizontal: spacing.base, paddingTop: spacing.base }}>
-      <View style={[styles.bubbleWrap, styles.bubbleWrapThem, { opacity: 0.6 }]}>
-        <View style={[styles.bubble, styles.bubbleThem, { height: 60, width: '60%' }]} />
+      <View style={[threadStyles.bubbleWrap, threadStyles.bubbleWrapThem, { opacity: 0.6 }]}>
+        <View style={[threadStyles.skeletonBubble, { height: 60, width: '60%' }]} />
       </View>
-      <View style={[styles.bubbleWrap, styles.bubbleWrapMe, { marginTop: spacing.md, opacity: 0.6 }]}>
-        <View style={[styles.bubble, styles.bubbleMe, { height: 40, width: '40%' }]} />
-      </View>
-      <View style={[styles.bubbleWrap, styles.bubbleWrapThem, { marginTop: spacing.md, opacity: 0.4 }]}>
-        <View style={[styles.bubble, styles.bubbleThem, { height: 80, width: '70%' }]} />
+      <View style={[threadStyles.bubbleWrap, threadStyles.bubbleWrapMe, { marginTop: spacing.md, opacity: 0.6 }]}>
+        <View style={[threadStyles.skeletonBubble, { height: 40, width: '40%' }]} />
       </View>
     </View>
   );
@@ -86,7 +65,8 @@ export default function ConversationThreadScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const [messages, setMessages] = useState<Message[]>([]);
-  const [title, setTitle] = useState<string>('Conversation');
+  const [listingId, setListingId] = useState<string | null>(null);
+  const [listingTitle, setListingTitle] = useState<string>('Conversation');
   const [peerName, setPeerName] = useState<string>('Conversation');
   const [peerAvatarUrl, setPeerAvatarUrl] = useState<string | null>(null);
   const [peerAvatarVersion, setPeerAvatarVersion] = useState<string>('');
@@ -104,6 +84,14 @@ export default function ConversationThreadScreen() {
   const [reportComment, setReportComment] = useState('');
   const [reportedConversationId, setReportedConversationId] = useState<string | null>(null);
 
+  const { thumbUrl, price, thumbPending } = useConversationListingPresentation(
+    listingId,
+    status === 'success'
+  );
+  const priceLabel = price != null ? formatPrice(price) : null;
+
+  const keyboardVerticalOffset = insets.top + 118;
+
   const load = useCallback(async () => {
     try {
       if (!id) {
@@ -113,9 +101,7 @@ export default function ConversationThreadScreen() {
       }
       const session = await getSession();
       if (!session?.user) {
-        router.replace(
-          buildAuthGateHref('messages', { redirect: `/conversation/${id}` })
-        );
+        router.replace(buildAuthGateHref('messages', { redirect: `/conversation/${id}` }));
         return;
       }
       setUserId(session.user.id);
@@ -124,28 +110,25 @@ export default function ConversationThreadScreen() {
         getConversations(),
         getMessages(id),
       ]);
-      // Vraie erreur Supabase / session invalide lors de l'accès à la conversation.
       if (convResult.error) {
         setStatus('error');
-        setErrorMessage(getThreadErrorMessage(convResult.error.message, 'Nous n\'arrivons pas à charger cette discussion.'));
+        setErrorMessage(
+          getThreadErrorMessage(convResult.error.message, "Nous n'arrivons pas à charger cette discussion.")
+        );
         return;
       }
-      // Conversation absente ou non autorisée (RLS masque la ligne) → introuvable.
       if (!convResult.data) {
         setStatus('error');
         setErrorMessage('Cette conversation est introuvable.');
         return;
       }
       const conv = convResult.data;
-      const displayTitle = conv.listing_title ?? conv.other_party_name ?? 'Conversation';
-      setTitle(displayTitle);
+      setListingId(conv.listing_id);
+      setListingTitle(conv.listing_title?.trim() || 'Annonce supprimée');
       setPeerName(conv.other_party_name ?? 'Utilisateur');
       setPeerAvatarUrl(conv.other_party_avatar_url ?? null);
       setPeerAvatarVersion(conv.other_party_avatar_version ?? '');
       setPeerAvatarDisplayUrl(conv.other_party_avatar_display_url ?? null);
-      // Une conversation valide sans message n'est PAS une erreur : on affiche le fil
-      // (état vide + champ de saisie actif). Un échec non bloquant du chargement des
-      // messages dégrade comme le web : fil vide plutôt qu'écran d'erreur.
       setMessages(messagesResult.data ?? []);
       void syncMessageNotificationSnapshot(convListResult.data ?? []);
       setStatus('success');
@@ -168,8 +151,6 @@ export default function ConversationThreadScreen() {
     load();
   }, [load]);
 
-  // Refetch silencieux : capte l'évolution de read_at (ex. l'autre partie a lu nos
-  // messages) sans repasser par l'état de chargement, donc sans flicker.
   const refreshMessages = useCallback(async () => {
     if (!id) return;
     const res = await getMessages(id);
@@ -207,7 +188,6 @@ export default function ConversationThreadScreen() {
     }, [id, status, refreshMessages, applyReadOptimistic])
   );
 
-  // Canal Realtime global (INSERT/UPDATE) — fil ouvert + accusés de lecture.
   useEffect(() => {
     if (!id || status !== 'success') return;
 
@@ -246,7 +226,7 @@ export default function ConversationThreadScreen() {
           network ? 'Connexion instable' : 'Message non envoyé',
           network
             ? 'Votre texte a été conservé. Réessayez quand la connexion est rétablie.'
-            : 'Votre message n\'a pas pu être envoyé. Le texte a été conservé.'
+            : "Votre message n'a pas pu être envoyé. Le texte a été conservé."
         );
         return;
       }
@@ -264,7 +244,7 @@ export default function ConversationThreadScreen() {
         network ? 'Connexion instable' : 'Message non envoyé',
         network
           ? 'Votre texte a été conservé. Réessayez quand la connexion est rétablie.'
-          : 'Votre message n\'a pas pu être envoyé. Le texte a été conservé.'
+          : "Votre message n'a pas pu être envoyé. Le texte a été conservé."
       );
     } finally {
       setSending(false);
@@ -284,51 +264,34 @@ export default function ConversationThreadScreen() {
 
   const handleReportSubmit = useCallback(() => {
     if (!id || !reportReason || reportLoading) return;
-    Alert.alert(
-      'Confirmer le signalement',
-      'Votre signalement sera envoyé pour modération.',
-      [
-        { text: 'Annuler', style: 'cancel' },
-        {
-          text: 'Envoyer',
-          onPress: async () => {
-            if (reportLoading) return;
-            setReportLoading(true);
-            const result = await submitReport({
-              targetType: 'conversation',
-              targetId: id,
-              reason: reportReason,
-              comment: reportComment,
-            });
-            setReportLoading(false);
-            if (result.error) {
-              Alert.alert('Erreur', result.error.message);
-              return;
-            }
-            setReportModalVisible(false);
-            setReportedConversationId(id);
-            Alert.alert('Merci', REPORT_SUCCESS_MESSAGE);
-          },
+    Alert.alert('Confirmer le signalement', 'Votre signalement sera envoyé pour modération.', [
+      { text: 'Annuler', style: 'cancel' },
+      {
+        text: 'Envoyer',
+        onPress: async () => {
+          if (reportLoading) return;
+          setReportLoading(true);
+          const result = await submitReport({
+            targetType: 'conversation',
+            targetId: id,
+            reason: reportReason,
+            comment: reportComment,
+          });
+          setReportLoading(false);
+          if (result.error) {
+            Alert.alert('Erreur', result.error.message);
+            return;
+          }
+          setReportModalVisible(false);
+          setReportedConversationId(id);
+          Alert.alert('Merci', REPORT_SUCCESS_MESSAGE);
         },
-      ]
-    );
+      },
+    ]);
   }, [id, reportReason, reportComment, reportLoading]);
 
   const keyExtractor = useCallback((item: Message) => item.id, []);
-  
-  const listEmptyComponent = useCallback(
-    () => (
-      <View style={styles.emptyWrap}>
-        <Ionicons name="chatbubbles-outline" size={48} color={colors.primaryLight} style={{ marginBottom: spacing.sm }} />
-        <Text style={styles.emptyTextTitle}>Aucun message</Text>
-        <Text style={styles.emptyText}>Lancez la discussion en envoyant votre premier message ci-dessous.</Text>
-      </View>
-    ),
-    []
-  );
 
-  // Confirmation de lecture affichée uniquement sous le DERNIER message envoyé par
-  // l'utilisateur connecté (évite de surcharger l'interface).
   const lastSentMessageId = useMemo(() => {
     if (!userId) return null;
     for (let i = messages.length - 1; i >= 0; i -= 1) {
@@ -337,49 +300,60 @@ export default function ConversationThreadScreen() {
     return null;
   }, [messages, userId]);
 
-  const renderItemWithUser = useCallback(
+  const renderItem = useCallback(
     ({ item, index }: { item: Message; index: number }) => {
       const isMe = item.sender_id === userId;
-      // Show spacing if previous message was from a different sender
       const prevMsg = messages[index - 1];
       const showExtraSpace = prevMsg && prevMsg.sender_id !== item.sender_id;
       const showReadStatus = isMe && item.id === lastSentMessageId;
+      const daySeparatorLabel =
+        !prevMsg || !isSameCalendarDay(prevMsg.created_at, item.created_at)
+          ? formatMessageDaySeparator(item.created_at)
+          : null;
 
       return (
-        <View style={[
-          styles.bubbleWrap, 
-          isMe ? styles.bubbleWrapMe : styles.bubbleWrapThem,
-          { marginTop: showExtraSpace ? spacing.md : spacing.xs }
-        ]}>
-          <View style={[styles.bubbleColumn, { alignItems: isMe ? 'flex-end' : 'flex-start' }]}>
-            <View style={[styles.bubble, isMe ? styles.bubbleMe : styles.bubbleThem]}>
-              <Text style={isMe ? styles.bubbleTextMe : styles.bubbleText}>{item.body}</Text>
-              <Text style={[styles.bubbleTime, isMe && { color: 'rgba(255,255,255,0.7)' }]}>
-                {formatMessageTime(item.created_at)}
-              </Text>
-            </View>
-            {showReadStatus && (
-              <Text style={styles.readStatus}>{item.read_at ? 'Lu' : 'Envoyé'}</Text>
-            )}
-          </View>
-        </View>
+        <ConversationMessageBubble
+          message={item}
+          isMe={!!isMe}
+          showReadStatus={!!showReadStatus}
+          daySeparatorLabel={daySeparatorLabel}
+          extraTopMargin={!!showExtraSpace}
+        />
       );
     },
     [userId, messages, lastSentMessageId]
   );
 
+  const listEmptyComponent = useCallback(
+    () => (
+      <View style={threadStyles.emptyWrap}>
+        <Ionicons name="chatbubbles-outline" size={48} color={colors.primaryLight} style={{ marginBottom: spacing.sm }} />
+        <Text style={threadStyles.emptyTextTitle}>Aucun message</Text>
+        <Text style={threadStyles.emptyText}>
+          Lancez la discussion en envoyant votre premier message ci-dessous.
+        </Text>
+      </View>
+    ),
+    []
+  );
+
+  const openListing = useCallback(() => {
+    if (!listingId) return;
+    router.push(`/listing/${listingId}` as const);
+  }, [listingId, router]);
+
   if (status === 'error') {
     return (
       <Screen safe={false}>
-        <AppHeader title="Conversation" showBack noBorder density="compact" />
-        <View style={styles.contentArea}>
+        <ConversationHeader peerName="Conversation" showReport={false} />
+        <View style={threadStyles.contentArea}>
           <EmptyState
             variant="plain"
             icon={<Ionicons name="alert-circle-outline" size={24} color={colors.textSecondary} />}
             title="Impossible de charger la conversation"
             message={errorMessage}
             action={
-              <View style={styles.threadErrorAction}>
+              <View style={threadStyles.threadErrorAction}>
                 <Button variant="secondary" onPress={() => void load()}>
                   Réessayer
                 </Button>
@@ -392,89 +366,52 @@ export default function ConversationThreadScreen() {
   }
 
   const inputPaddingBottom =
-    keyboardInset > 0 ? 0 : insets.bottom > 0 ? insets.bottom : spacing.base;
+    keyboardInset > 0 ? spacing.sm : insets.bottom > 0 ? insets.bottom : spacing.base;
 
   return (
     <Screen scroll={false} noPadding safe={false}>
-      <AppHeader
-        title={title}
-        titleNode={
-          <View style={styles.headerTitleRow}>
-            <UserAvatar
-              name={peerName}
-              avatarUrl={peerAvatarUrl}
-              avatarVersion={peerAvatarVersion}
-              displayUrl={peerAvatarDisplayUrl}
-              size={28}
-            />
-            <Text style={styles.headerTitleText} numberOfLines={1}>
-              {title}
-            </Text>
-          </View>
-        }
-        showBack
-        noBorder
-        density="compact"
-        right={
-          status === 'success' ? (
-            <Pressable
-              onPress={handleReportPress}
-              hitSlop={8}
-              accessibilityRole="button"
-              accessibilityLabel="Signaler"
-              style={({ pressed }) => [styles.reportHeaderBtn, pressed && styles.reportHeaderBtnPressed]}
-            >
-              <Text style={styles.reportHeaderText}>Signaler</Text>
-            </Pressable>
-          ) : undefined
-        }
+      <ConversationHeader
+        peerName={peerName}
+        peerAvatarUrl={peerAvatarUrl}
+        peerAvatarVersion={peerAvatarVersion}
+        peerAvatarDisplayUrl={peerAvatarDisplayUrl}
+        showReport={status === 'success'}
+        onReportPress={handleReportPress}
       />
-      
+      {status === 'success' && listingId ? (
+        <ConversationListingBanner
+          listingTitle={listingTitle}
+          priceLabel={priceLabel}
+          thumbUrl={thumbUrl}
+          thumbPending={thumbPending}
+          onPress={openListing}
+        />
+      ) : null}
+
       {status === 'loading' && <MessagesSkeleton />}
 
       {status === 'success' && (
-        <KeyboardSafeView style={styles.keyboard}>
+        <KeyboardSafeView style={threadStyles.keyboard} keyboardVerticalOffset={keyboardVerticalOffset}>
           <FlatList
             ref={listRef}
             data={messages}
             keyExtractor={keyExtractor}
-            renderItem={renderItemWithUser}
+            renderItem={renderItem}
             ListEmptyComponent={listEmptyComponent}
-            contentContainerStyle={[styles.listContent, { paddingBottom: spacing.lg }]}
+            contentContainerStyle={[threadStyles.listContent, { paddingBottom: spacing.lg }]}
             showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
             onContentSizeChange={() => {
               if (messages.length > 0) listRef.current?.scrollToEnd({ animated: true });
             }}
           />
-          <View style={[styles.inputContainer, { paddingBottom: inputPaddingBottom }]}>
-            <View style={styles.inputRow}>
-              <TextInput
-                style={styles.input}
-                placeholder="Écrivez un message…"
-                placeholderTextColor={colors.textMuted}
-                value={inputText}
-                onChangeText={setInputText}
-                multiline
-                maxLength={2000}
-                editable={!sending}
-              />
-              <Pressable
-                style={({ pressed }) => [
-                  styles.sendBtn,
-                  pressed && styles.sendBtnPressed,
-                  (!inputText.trim() || sending) && styles.sendBtnDisabled,
-                ]}
-                onPress={handleSend}
-                disabled={!inputText.trim() || sending}
-                accessibilityRole="button"
-                accessibilityLabel="Envoyer"
-                hitSlop={4}
-              >
-                <Ionicons name="paper-plane" size={20} color={colors.surface} />
-              </Pressable>
-            </View>
-          </View>
+          <ConversationComposer
+            value={inputText}
+            onChangeText={setInputText}
+            onSend={() => void handleSend()}
+            sending={sending}
+            paddingBottom={inputPaddingBottom}
+          />
         </KeyboardSafeView>
       )}
       <ReportComposerModal
@@ -493,40 +430,13 @@ export default function ConversationThreadScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  headerTitleRow: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: spacing.sm,
-    paddingHorizontal: spacing.xs,
-  },
-  headerTitleText: {
-    flexShrink: 1,
-    ...typography.lg,
-    fontWeight: fontWeights.bold,
-    color: colors.text,
-  },
-  reportHeaderBtn: {
-    minHeight: 40,
-    justifyContent: 'center',
-    paddingLeft: spacing.xs,
-  },
-  reportHeaderBtnPressed: {
-    opacity: 0.7,
-  },
-  reportHeaderText: {
-    ...typography.sm,
-    color: colors.textMuted,
-    fontWeight: fontWeights.medium,
-  },
+const threadStyles = StyleSheet.create({
   keyboard: { flex: 1, backgroundColor: colors.background },
   listContent: {
     maxWidth: 760,
     width: '100%',
     alignSelf: 'center',
-    paddingHorizontal: spacing.base,
+    paddingHorizontal: spacing.sm,
     paddingTop: spacing.base,
     flexGrow: 1,
   },
@@ -534,7 +444,7 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: spacing.xl, // ~24
+    paddingHorizontal: spacing.xl,
     paddingBottom: spacing.xl,
     transform: [{ translateY: -24 }],
   },
@@ -561,108 +471,11 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     textAlign: 'center',
   },
-  bubbleWrap: {
-    flexDirection: 'row',
-  },
-  bubbleWrapMe: {
-    justifyContent: 'flex-end',
-  },
-  bubbleWrapThem: {
-    justifyContent: 'flex-start',
-  },
-  bubbleColumn: {
-    maxWidth: '85%',
-  },
-  bubble: {
-    maxWidth: '100%',
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-    borderRadius: 20,
-    shadowColor: colors.text,
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 1,
-  },
-  bubbleMe: {
-    backgroundColor: colors.primary,
-    borderBottomRightRadius: 4,
-  },
-  bubbleThem: {
-    backgroundColor: colors.surface,
-    borderBottomLeftRadius: 4,
-    borderWidth: 1,
-    borderColor: colors.borderLight,
-  },
-  bubbleText: {
-    ...typography.base,
-    color: colors.text,
-    lineHeight: 22,
-  },
-  bubbleTextMe: {
-    ...typography.base,
-    color: colors.surface,
-    lineHeight: 22,
-  },
-  bubbleTime: {
-    ...typography.xs,
-    color: colors.textMuted,
-    marginTop: 4,
-    alignSelf: 'flex-end',
-  },
-  readStatus: {
-    ...typography.xs,
-    color: colors.textMuted,
-    marginTop: 2,
-    marginRight: 4,
-  },
-  inputContainer: {
-    backgroundColor: colors.surface,
-    borderTopWidth: 1,
-    borderTopColor: colors.borderLight,
-    paddingTop: spacing.sm,
-    paddingHorizontal: spacing.base,
-  },
-  inputRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    gap: spacing.sm,
-  },
-  input: {
-    flex: 1,
-    minHeight: 44,
-    maxHeight: 120,
+  bubbleWrap: { flexDirection: 'row' },
+  bubbleWrapMe: { justifyContent: 'flex-end' },
+  bubbleWrapThem: { justifyContent: 'flex-start' },
+  skeletonBubble: {
     backgroundColor: colors.surfaceSubtle,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    borderRadius: 22,
-    paddingHorizontal: spacing.lg,
-    paddingTop: 12, // Needs explicit padding for multiline to center align visually
-    paddingBottom: 12,
-    ...typography.base,
-    color: colors.text,
-  },
-  sendBtn: {
-    backgroundColor: colors.primary,
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: colors.primary,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  sendBtnPressed: {
-    opacity: 0.8,
-    transform: [{ scale: 0.95 }],
-  },
-  sendBtnDisabled: {
-    opacity: 0.5,
-    backgroundColor: colors.textMuted,
-    shadowOpacity: 0,
-    elevation: 0,
+    borderRadius: 18,
   },
 });

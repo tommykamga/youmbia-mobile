@@ -6,6 +6,14 @@ vi.mock('./messagesDemoImages', () => ({
   messagesDemoImageUri: (key: string) => `https://demo.local/${key}`,
 }));
 
+vi.mock('./ConversationThreadDemoScreen', () => ({
+  ConversationThreadDemoScreen: 'ConversationThreadDemoScreen',
+}));
+
+vi.mock('./useDemoThreadTabBarHidden', () => ({
+  useDemoThreadTabBarHidden: vi.fn(),
+}));
+
 const alertSpy = vi.fn();
 
 vi.mock('react-native', () => ({

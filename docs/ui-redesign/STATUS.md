@@ -782,7 +782,7 @@ Alternative au lancement Metro : `EXPO_PUBLIC_MESSAGES_DEMO=1` (avec `__DEV__` u
 - Aucun `getConversations`, cache inbox, Realtime, RPC masquage, `emitConversationRead`, navigation `/conversation/[id]` en démo.
 - Vignettes = JPEG locaux déjà utilisés par la démo Accueil (`assets/demo/listings/`).
 - Swipe = retrait **mémoire** ; **Réinitialiser** restaure les 8 fixtures.
-- Tap = Modal « Conversation de démonstration » — pas d’envoi, pas de badge onglet global modifié.
+- Tap = Modal « Conversation de démonstration » — **remplacé en dev par fil premium local** (Visual QA Demo) ; pas d’envoi, pas de badge onglet global modifié.
 
 ### Contrôles exécutés
 - `npx tsc --noEmit` : **PASS**
@@ -944,19 +944,414 @@ Alternative au lancement Metro : `EXPO_PUBLIC_MESSAGES_DEMO=1` (avec `__DEV__` u
 
 ---
 
-## UI-MESSAGES-02 — Fil de discussion (audit only — pas de dev)
+## UI-MESSAGES-02 — Phase A (audit fil de conversation) — 4 novembre 2026
 
-### Objectif phase A
-- Audit read-only du fil `app/conversation/[id].tsx` et dépendances (envoi, Realtime, read receipts, pièces jointes, header annonce).
-- Alignement design marketplace avec inbox UI-MESSAGES-01 **sans** modifier RPC, RLS, bus Realtime, badge global onglet, ni règles de masquage inbox.
+**Worktree** : `youmbia-ui-home` · **Branche** : `feat/ui-home-first-slice` · **HEAD audit** : `41993ed43c4c7c5f4aefe7f44ae3cef117047c65`
+**Périmètre** : lecture seule — **aucune modification** du fil, backend, ni commit Phase B.
 
-### Périmètre audit proposé
-1. **Cartographie** : composants, hooks, services (`messages`, `conversations`), cache, subscriptions.
-2. **Flux** : chargement initial, pagination / scroll, envoi, échecs réseau, optimistic UI existante.
-3. **État lu / non lu** : cohérence avec inbox et badge (documenter écarts connus Phase A inbox).
-4. **Accessibilité & densité** : barre saisie, bulles, timestamps, safe areas.
-5. **Dette & risques** : éléments hors scope redesign vs quick wins UI pure.
-6. **Livrable** : section STATUS + GO/NO-GO doc redesign fil (comme UI-MESSAGES-01 Phase A).
+### A. Cartographie technique
+
+| Couche | Fichiers / rôle |
+|--------|------------------|
+| **Route** | `app/conversation/[id].tsx` (~670 lignes) — écran monolithique : chargement, fil, composer, signalement, styles inline. |
+| **Navigation** | Stack racine `app/_layout.tsx` (`conversation/[id]`, `headerShown: false`) — **hors onglets** → pas de tab bar sur le fil. Entrées : inbox `router.push(\`/conversation/${id}\`)`, fiche `getOrCreateConversation` → `/conversation/:id`, deep link auth `redirect=/conversation/:id`. |
+| **UI partagée** | `@/components` : `Screen`, `AppHeader` (compact), `EmptyState`, `Button`, `KeyboardSafeView`, `UserAvatar`. `@/features/reports` : `ReportComposerModal`. `@expo/vector-icons`. |
+| **Services (intouchables Phase B UI)** | `getConversationById`, `getConversations`, `getMessages`, `sendMessage`, `markConversationRead` — `src/services/conversations/*`. Signalement : `submitReport` (`targetType: 'conversation'`). Notifications : `syncMessageNotificationSnapshot`, `markConversationNotificationAsRead`. |
+| **Realtime** | `src/lib/messagingRealtime.ts` — canal unique INSERT/UPDATE `public.messages` ; bus `message_inserted` / `message_updated` / `conversation_read` ; `setOpenConversationId` / `getOpenConversationId` ; `appendMessageDeduped`. |
+| **Hooks globaux** | `useKeyboardInset` (padding bas composer si clavier fermé) ; `_layout` tabs : `useMessagingRealtime`, `useUnreadConversationsCount` (badge onglet, **≠** fil). |
+| **Analytics** | `trackConversationViewed`, `trackMessageSent` / `trackMessageSendFailed` (via `sendMessage`). |
+| **Cache métier fil** | **Aucun** cache local des messages ; inbox seule utilise `lightCache` (`MessagesInboxScreen`). |
+| **Types** | `Message` : texte seul (`body`, `read_at`) — **pas de pièces jointes** au modèle. `Conversation` enrichie côté `getConversationById` (titre annonce, avatar interlocuteur). |
+
+**Flux chargement (`load`)**
+1. Gate auth → `buildAuthGateHref('messages', { redirect })`.
+2. Parallèle : `getConversationById`, `getConversations`, `getMessages`.
+3. Erreur conversation → écran `EmptyState` ; conversation absente → introuvable ; messages en échec non bloquant → fil vide + composer actif.
+4. `syncMessageNotificationSnapshot` depuis liste inbox.
+
+**Flux focus / lu**
+- `setOpenConversationId(id)` à l’ouverture/fermeture du fil.
+- `useFocusEffect` : `applyReadOptimistic` (read_at local + **`emitConversationRead`**) → `markConversationRead` (RPC `mark_conversation_read` + reset compteurs buyer/seller) → `markConversationNotificationAsRead` → `refreshMessages` (accusés « Lu » distants).
+- Realtime fil : INSERT → append + read si message entrant + scroll fin ; UPDATE → fusion `read_at`.
+
+**Flux envoi**
+- Pas d’optimistic message avant réponse serveur ; `sendMessage` INSERT + update `last_message_at` + push edge (non bloquant). Succès → append + scroll ; échec → restore texte + `Alert`.
+
+**Couplages inbox ↔ fil ↔ badge**
+
+```
+Inbox (MessagesInboxScreen)
+  subscribeMessagingEvents → patchInboxOnIncoming / patchInboxOnRead
+  emitConversationRead au masquage swipe (dette documentée UI-MESSAGES-01)
+  tap → /conversation/[id]
+
+Fil (conversation/[id].tsx)
+  applyReadOptimistic → emitConversationRead → inbox patch + badge conversation_read
+  markConversationRead RPC (source vérité serveur)
+  setOpenConversationId → badge n’incrémente pas si message entrant sur fil ouvert
+
+Badge onglet (useUnreadConversationsCount)
+  getUnreadConversationsCount + Realtime + conversation_read
+  indépendant du sous-titre inbox « X conversations non lues »
+```
+
+**Dette inbox (documentée séparément, hors Phase B fil)** : `emitConversationRead` au masquage sans attendre RPC ; sémantique badge vs pastille ligne ; cache stale possible — **ne pas corriger dans UI-MESSAGES-02 sans ticket dédié**.
+
+---
+
+### B. Fonctionnalités existantes à préserver (contrat produit)
+
+- Auth gate + retour post-login vers le fil.
+- Chargement conversation + messages ; états loading (skeleton bulles), error (retry), empty (CTA premier message).
+- Affichage bulles moi / interlocuteur ; horodatage dans bulle ; « Envoyé » / « Lu » sous **dernier** message envoyé par moi uniquement.
+- Envoi texte multiline (max 2000), désactivation pendant envoi, erreurs réseau/métier avec conservation du texte.
+- Realtime réception + mise à jour read receipts.
+- Marquage lu à l’ouverture (optimiste + RPC) cohérent badge/inbox via bus existant.
+- Signalement conversation (`ReportComposerModal`, anti double signalement session).
+- `keyboardShouldPersistTaps="handled"`, `KeyboardSafeView` iOS padding.
+- Largeur max contenu 760 (aligné inbox).
+- **Aucune** pièce jointe, offre, paiement, typing indicator, édition/suppression message — ne pas inventer.
+
+---
+
+### C. Risques de régression (Phase B UI)
+
+| Risque | Sévérité | Mitigation tests |
+|--------|----------|------------------|
+| Casser `applyReadOptimistic` / ordre focus effects | **P0** | Contrats : conserver appels `emitConversationRead`, `markConversationRead`, `setOpenConversationId`. |
+| Casser subscription Realtime / dedup | **P0** | Conserver `appendMessageDeduped`, handlers INSERT/UPDATE inchangés. |
+| Modifier `handleSend` / flux `sendMessage` | **P0** | Conserver signature et séquence ; tests release existants `sendMessage.test.ts`. |
+| Déplacer état messages hors route sans précaution | **P1** | Extraction pure presentational ; hooks métier restent colocalisés ou copiés à l’identique. |
+| `keyboardVerticalOffset` / safe area composer | **P1** | Recette iPhone clavier ouvert/fermé, petit device. |
+| Scroll auto agressif (`onContentSizeChange` + Realtime) | **P2** | Recette scroll manuel puis message entrant. |
+| Signalement / modals | **P2** | Smoke test modal visible + submit inchangé. |
+
+---
+
+### D. Audit UI/UX actuel — **note : 5,5 / 10**
+
+| # | Thème | Constat |
+|---|--------|---------|
+| 1 | En-tête | `AppHeader` blanc générique ; `titleNode` = avatar 28 + **titre annonce** tronqué (`numberOfLines={1}`) — **nom interlocuteur absent** du titre visible. |
+| 2 | Bandeau annonce | **Absent** — pas de lien vers `listing/[id]`, pas de miniature annonce (`listing_id` disponible via `getConversationById` mais non stocké dans l’état écran). |
+| 3 | Bulles | Vert `colors.primary` (moi) vs surface bordée (eux) — lisible ; ombre légère ; coins marketplace partiels. |
+| 4 | Date/heure | Dans chaque bulle (`formatMessageTime`) — pas de séparateurs de jour ; hier/date longue OK. |
+| 5 | Statuts | « Envoyé » / « Lu » texte xs sous dernière bulle sortante — pas d’icône ; cohérent métier. |
+| 6 | Composer | Pill grise + bouton rond avion — fonctionnel ; `minHeight` 44. |
+| 7 | Clavier / safe area | `KeyboardSafeView` sans `keyboardVerticalOffset` explicite (header compact ~40+safe) → **risque chevauchement iOS** à valider device ; `inputPaddingBottom` gère home indicator si clavier fermé. |
+| 8 | Tab bar | Masquée (stack) — OK pour fil. |
+| 9 | Scroll | `scrollToEnd` sur content size + nouveau message — **pas de préservation position** si l’utilisateur lit l’historique (comportement actuel à préserver ou améliorer en UX-only avec garde-fou). |
+| 10 | Messages longs | `Text` body sans limite visuelle — OK ; pas de lien auto-detect. |
+| 11 | Erreurs envoi | Alert + texte restauré — **OK** (correction audit launch). |
+| 12 | A11y / texte agrandi | Tailles `typography.base/xs` fixes ; pas de `maxFontSizeMultiplier` ; labels send/signaler partiels — **perfectible**. |
+| 13 | Petit iPhone | `maxWidth: 85%` bulles ; header dense — acceptable ; composer prioritaire. |
+
+**Écart vs famille UI** : inbox Messages = bandeau vert `#0B4D3C`, marketplace ; fil = **AppHeader standard** → rupture visuelle forte.
+
+---
+
+### E. Design cible premium (10/10 visé — Phase B)
+
+- **Header fil** : bandeau vert YOUMBIA (`#0B4D3C`, aligné `MessagesScreenHeader` / Favoris) — retour, **interlocuteur** (nom + avatar), action Signaler discrète.
+- **Bandeau annonce** : carte compacte sous header — miniature listing (réutiliser pattern `InboxListingThumb` / service thumbs **sans** nouveau fetch si `listing_id` + titre déjà en conv) ; titre 2 lignes ; chevron → `listing/[id]` (navigation seule).
+- **Fil** : fond `colors.background` neutre ; bulles moi vert maîtrisé (même famille que primary inbox) ; bulles eux blanc/surface, bordure light ; **séparateurs de jour** optionnels (UI pure, tri existant `created_at`).
+- **Composer** : barre fixe surface + bordure top ; champ et CTA alignés inbox density ; safe area explicite.
+- **Interdictions design** : faux badge vendeur, étoiles, CTA achat/paiement/offre, pièces jointes fictives, animations décoratives.
+
+---
+
+### F. Architecture composants minimale (Phase B proposée)
+
+```
+app/conversation/[id].tsx          → orchestration (hooks métier inchangés)
+src/features/conversation/
+  ConversationThreadHeader.tsx   → vert + peer + report
+  ConversationListingBand.tsx    → contexte annonce (press → listing)
+  ConversationMessageList.tsx    → FlatList + skeleton/empty
+  ConversationMessageBubble.tsx  → item + time + read label
+  ConversationComposer.tsx       → input + send
+  conversationThread.styles.ts   → StyleSheet partagé
+  conversationThread.contract.test.ts → non-régression bus/RPC/appels
+```
+
+Logique **`load` / Realtime / send / read / report** reste dans la route ou un hook `useConversationThread(id)` **copie fidèle** des callbacks actuels (pas de refactor métier).
+
+---
+
+### G. Fichiers à modifier (Phase B — liste prévisionnelle)
+
+| Action | Fichier |
+|--------|---------|
+| Refactor route fine | `app/conversation/[id].tsx` |
+| **Créer** | `src/features/conversation/*` (ci-dessus) |
+| **Créer** | `src/features/conversation/conversationThread.contract.test.ts` (+ tests rendu bulles/composer si utile) |
+| **Ne pas modifier** | `src/services/conversations/*`, `src/lib/messagingRealtime.ts`, `src/hooks/useUnreadConversationsCount.ts`, `app/(tabs)/_layout.tsx`, `MessagesInboxScreen.tsx`, Supabase, RPC, RLS |
+| Doc | `docs/ui-redesign/STATUS.md`, éventuellement `DEMO.md` (note : pas de démo fil Phase B sauf décision ultérieure) |
+
+---
+
+### H. Plan tests automatisés + recette iPhone
+
+**Automatisé**
+- Contrat fil : présence `subscribeMessagingEvents`, `appendMessageDeduped`, `emitConversationRead`, `markConversationRead`, `sendMessage`, `setOpenConversationId`, pas de import demo.
+- Tests rendu : bulles moi/eux, dernier message « Lu », composer disabled while sending (react-test-renderer + mocks RN).
+- Régression : `sendMessage.test.ts`, `releaseCritical.contract.test.ts`, `hideConversationForMe.test.ts` — **PASS sans changement**.
+
+**Recette iPhone (Phase B)**
+1. Inbox → ouvrir fil QA ; header vert + bandeau annonce + retour.
+2. Fil vide → premier envoi → bulle + scroll bas.
+3. Réception simulée (autre client / Realtime) → append + read auto si fil ouvert.
+4. « Lu » après lecture distante (UPDATE).
+5. Erreur réseau envoi → texte conservé.
+6. Signaler → modal → succès.
+7. Clavier iOS ouvert/fermé — composer visible ; retour inbox → badge cohérent.
+8. Texte agrandi iOS — pas de clipping critique.
+9. Lien bandeau → fiche annonce.
+
+---
+
+### I. Verdict Phase A → implémentation UI
+
+| Verdict | **GO** — refonte **UI/UX uniquement**, sous contrats stricts |
+|---------|----------------------------------------------------------------|
+| Conditions | Aucun changement services/RPC/Realtime/badge/masquage ; extraction presentational ; tests contrat fil obligatoires avant merge ; dette inbox inchangée ; reset démo KO reste accepté (UI-MESSAGES-01). |
+| NO-GO si | Tentative d’ajouter PJ, offres, pagination serveur, ou correction dette badge/masquage dans le même lot. |
+
+**État Git audit** : HEAD `41993ed` ; non suivis locaux inchangés (`.cursor/`, logs QA, Metro local) — **aucun commit Phase A** (documentation STATUS uniquement).
+
+---
+
+## UI-MESSAGES-02 — Phase B (fil premium) — 4 novembre 2026
+
+### Avant / après
+
+| Zone | Avant (baseline) | Après Phase B |
+|------|------------------|---------------|
+| En-tête | `AppHeader` blanc, titre = annonce | **`ConversationHeader`** vert `#0B4D3C`, **interlocuteur** + avatar, Signaler |
+| Contexte annonce | Absent | **`ConversationListingBanner`** — titre, prix si `getListingsByIds`, vignette ou placeholder, tap → `/listing/[id]` |
+| Bulles | Inline styles route | **`ConversationMessageBubble`** — séparateurs jour, a11y, « Lu » / « Envoyé » inchangés |
+| Composer | Inline | **`ConversationComposer`** — même validation / envoi / erreurs |
+| Métier | — | **Identique** (load, Realtime, read RPC, signalement, pas d’optimistic send inventé) |
+
+### Fichiers modifiés / créés
+
+- `app/conversation/[id].tsx` — orchestration allégée
+- `src/features/conversation/ConversationHeader.tsx`
+- `src/features/conversation/ConversationListingBanner.tsx`
+- `src/features/conversation/ConversationMessageBubble.tsx`
+- `src/features/conversation/ConversationComposer.tsx`
+- `src/features/conversation/conversationThreadDisplay.ts`
+- `src/features/conversation/useConversationListingPresentation.ts` — **1× `getListingsByIds`** (service listings existant, hors conversations)
+- Tests : `conversationThread.contract.test.ts`, `ConversationMessageBubble.test.tsx`, `ConversationListingBanner.test.tsx`
+
+**Non modifiés** : `src/services/conversations/*`, `messagingRealtime.ts`, hooks badge, inbox, Supabase, RPC, RLS.
+
+### Contrôles exécutés
+
+- `npx tsc --noEmit` : **PASS**
+- ESLint `app/conversation` + `src/features/conversation` : **PASS**
+- `npx vitest run src/features/conversation/ src/features/messages/` : **PASS** (73 tests agrégés sur les deux dossiers)
+- `npx vitest run src/services/conversations/sendMessage.test.ts` : **PASS**
+- `git diff --check` : **PASS**
+
+### Évaluation UI/UX (cible)
+
+- Cohérence marketplace avec inbox Messages : **forte** (header vert, bandeau annonce).
+- Note estimée post-Phase B : **8,5 / 10** en statique — **10/10** subjectif après recette iPhone (clavier offset, texte agrandi, QA visuelle).
+
+### Réserves QA / recette iPhone (non exécutée par l’agent)
+
+- **PASS iPhone non attesté** — Dev Client QA + reload Metro requis.
+- Protocole : ouverture fil → bandeau (photo/prix si catalogue QA) → envoi → Realtime → lu après focus → clavier/scroll → retour inbox badge → erreur réseau → texte agrandi.
+- Données QA vides : bandeau placeholder + prix absent = acceptable ; pas de démo fil auto (hors scope).
+- Dette inbox / reset démo UI-MESSAGES-01 : **inchangée**.
+
+### État Git
+
+- **HEAD commit** : `41993ed43c4c7c5f4aefe7f44ae3cef117047c65`
+- **Modifications locales non commitées** : Phase B code + Visual QA Demo fil + `STATUS.md` (incl. audit Phase A)
+- **Aucun commit / push** (arrêt avant validation iPhone définitive)
 
 ### Hors scope immédiat
-- Implémentation UI, démo fil, changements Supabase, refonte navigation.
+- Pagination messages, PJ, correction dette badge/masquage inbox.
+
+---
+
+## UI-MESSAGES-02 — Visual QA Demo (fil local) — 4 novembre 2026
+
+### Objectif
+
+Remplacer la **modal descriptive** UI-MESSAGES-01 par une **prévisualisation plein écran** du fil premium (composants Phase B), **Dev Client + `EXPO_PUBLIC_MESSAGES_DEMO=1` uniquement**, sans `router.push('/conversation/msg-demo-…')` ni appel Supabase.
+
+### Comportement
+
+- Tap ligne inbox démo → **`ConversationThreadDemoScreen`** (header, bandeau annonce, bulles, composer).
+- Messages seed **`messagesThreadDemoFixtures.ts`** (8 conversations : entrants/sortants, multiligne, dates variées, conv-05 vide, conv-08 sans prix miniature).
+- Prix bandeau : **map locale FCFA** (`getDemoThreadListingPriceLabel`) — pas de `getListingsByIds`.
+- Envoi : **`createLocalDemoSentMessage`** — état React uniquement, statut « Envoyé ».
+- Retour : **`onBackPress`** sur `ConversationHeader` → inbox démo.
+- Bandeau jaune : « Prévisualisation fil — aucun envoi Supabase ».
+- Tap annonce : **Alert** (pas de navigation listing fictive).
+
+### Fichiers
+
+- `src/features/messages/demo/ConversationThreadDemoScreen.tsx`
+- `src/features/messages/demo/messagesThreadDemoFixtures.ts`
+- `src/features/messages/demo/MessagesDemoScreen.tsx` — branche preview
+- `src/features/conversation/ConversationHeader.tsx` — prop optionnelle `onBackPress`
+- Tests : `messagesThreadDemo.test.ts`
+
+### Contrôles exécutés
+
+- `npx tsc --noEmit` : **PASS**
+- `npx vitest run src/features/messages/demo/messagesThreadDemo.test.ts` (+ agrégat demo/conversation) : **PASS** (28 tests sur périmètre exécuté)
+
+### Recette iPhone Visual QA (non attestée agent)
+
+1. Dev Client, `EXPO_PUBLIC_MESSAGES_DEMO=1`, onglet Messages → **Démonstration**.
+2. Ouvrir conv-01 (photo + échanges), conv-04 (titre long + FCFA), conv-05 (placeholder + fil vide + envoi simulé), conv-06 (multiligne).
+3. Vérifier scroll, clavier, retour inbox, absence crash / requête réseau fil.
+
+### État Git
+
+- **HEAD commit** inchangé : `41993ed43c4c7c5f4aefe7f44ae3cef117047c65`
+- **Non commité** : Phase B + Visual QA Demo + STATUS
+- **Aucun commit / push** sans GO explicite
+
+---
+
+## UI-MESSAGES-02 — Verify Device Preview — 4 novembre 2026 (soir)
+
+### Constat agent (sans modification métier)
+
+| Point | Résultat |
+|-------|----------|
+| Metro **8082** | **Actif** — cwd `/Users/tommy/APP TESKA/YOUMBIA/youmbia-ui-home`, commande `expo start --dev-client --lan --port 8082` |
+| Metro **8081** | **Aucun** second bundler |
+| `MessagesDemoScreen.tsx` | Branche `if (preview)` → **`ConversationThreadDemoScreen`** ; **pas de `Modal`** |
+| `React.lazy` | **Absent** du périmètre `messages/demo/` |
+| Bundle iOS servi par 8082 | URL `…/node_modules/expo-router/entry.bundle?platform=ios&dev=true` — **~18 Mo**, HTTP 200 |
+| Contenu bundle — fil démo | **`ConversationThreadDemoScreen` présent** ; module `MessagesDemoScreen` **sans `Modal`** |
+| Chaîne « Conversation de démonstration » | Toujours dans le bundle via **`MESSAGE_DEMO_PREVIEW_BODY`** (fixtures, **non utilisé** par l’UI fil) — **ne prouve pas** la modal |
+| Worktree Cursor `youmbia-mobile` | **Ne contient pas** Visual QA Demo — le Dev Client doit pointer le Metro **ui-home** |
+
+### Cause probable iPhone (modal encore visible)
+
+**Bundle JS obsolète sur l’appareil** (reload non effectué après déploiement du fil démo), ou Dev Client connecté à **un autre hôte/port** que `192.168.1.89:8082`. Le code et le bundler 8082 servent déjà le fil premium.
+
+### Procédure exacte — fil premium sur iPhone
+
+1. **Un seul Metro** : depuis `youmbia-ui-home`, script local `node scripts/start-ui-home-metro.local.cjs` (ou équivalent `expo start --dev-client --lan --port 8082` avec **cwd ui-home**).
+2. Vérifier dans le terminal Metro : **« Serving …/youmbia-ui-home »** (pas `youmbia-mobile` seul sans worktree).
+3. Sur iPhone, Dev Client YOUMBIA : menu développeur → **Change bundle location** / URL → `http://<IP-LAN-Mac>:8082` (ex. `192.168.1.89:8082`).
+4. **Recharger le JS** : secouer l’app → **Reload**, ou touche **`r`** dans le terminal Metro (clients connectés). En cas de doute : **fermer complètement** l’app puis rouvrir depuis le Dev Client (sans lancer un second Metro).
+5. Onglet **Messages** → **Ouvrir la démonstration locale** (ou démarrage direct si `EXPO_PUBLIC_MESSAGES_DEMO=1` au lancement Metro).
+6. Tap une ligne (ex. conv-01) → attendu : **header vert**, bandeau jaune **« Prévisualisation fil — aucun envoi Supabase »**, bulles, composer — **pas** de sheet « Conversation de démonstration ».
+
+### Contrôles exécutés (verify pass)
+
+- `npx tsc --noEmit` : **PASS**
+- ESLint ciblé demo fil + `MessagesDemoScreen.threadPreview.test.tsx` : **PASS** (1 warning `import/first` test, même pattern que reset test)
+- `npx vitest run src/features/messages/demo/` : **PASS** (incl. **`MessagesDemoScreen.threadPreview.test.tsx`** — chemin inbox → fil → retour)
+- `git diff --check` : **PASS**
+
+### Aucun changement code métier
+
+Supabase, Realtime, routes conversation réelles, cache et badges : **inchangés**. Seuls ajouts : test de montage + doc STATUS/DEMO.
+
+---
+
+## UI-MESSAGES-02 — Final Visual Polish — 4 novembre 2026 (soir)
+
+### Finitions appliquées (UI-only)
+
+| Zone | Ajustement |
+|------|------------|
+| **Bulles sortantes** | Fond `colors.primaryDark`, texte `colors.surface`, horodatage `colors.primaryLight` — tokens uniquement, contraste renforcé vs `#16A34A` + hex blanc |
+| **Largeur / padding bulles** | Colonne max **`83 %`** (`CONVERSATION_BUBBLE_MAX_WIDTH`), padding `spacing.sm` / `spacing.md` |
+| **Liste messages** | Marge horizontale fil `spacing.sm` (route réelle + démo) |
+| **Bandeau annonce** | Kicker **« Annonce »** (plus léger visuellement) ; `accessibilityLabel` complet inchangé (`Annonce : …`) |
+| **Composer** | Padding horizontal `spacing.screenHorizontal` + champ `spacing.base` / `spacing.sm` — **props `onSend` / `sending` inchangées** |
+| **Démo fil sans tab bar** | `useDemoThreadTabBarHidden` dans **`MessagesDemoScreen` uniquement** (`__DEV__`, `tabBarStyle: { display: 'none' }` pendant preview) — routes `/conversation/[id]` intactes |
+| **Bandeau jaune démo fil** | Tokens `warningLight` / `badgeWarningText`, padding vertical réduit |
+
+### Métier préservé
+
+Envoi, Realtime, lu/non lu, signalement, cache inbox, badge, navigation conversation réelle : **non modifiés** (hors padding liste UI partagée).
+
+### Tests
+
+- `conversationThreadVisual.test.ts` — tokens bulles, kicker, hook tab bar démo, composer
+- Mocks `useDemoThreadTabBarHidden` sur tests `MessagesDemoScreen` existants
+
+### Contrôles
+
+- `npx tsc --noEmit` : **PASS**
+- ESLint ciblé conversation + demo hook : **PASS**
+- `npx vitest run src/features/conversation/ src/features/messages/` : **PASS** (73 tests)
+- `git diff --check` : **PASS**
+
+### Checklist validation iPhone (dont clavier ouvert)
+
+- [ ] Démo Messages → ouvrir conv-01 : **pas de tab bar** sous le fil (aligné stack réelle).
+- [ ] Bulles sortantes vert **plus profond** (`primaryDark`), texte lisible, largeur ~83 % max.
+- [ ] Bandeau annonce : libellé **« Annonce »** discret ; titre + prix toujours lisibles (VoiceOver : « Annonce : … »).
+- [ ] Composer : champ et bouton envoi alignés bords écran ; **44 pt** min conservés.
+- [ ] **Clavier ouvert** : composer collé au clavier, pas de trou blanc excessif ; liste scrollable jusqu’au dernier message ; dismiss clavier OK.
+- [ ] Retour header → tab bar **réapparaît** sur inbox démo.
+- [ ] Fil **réel** QA (hors démo) : même rendu bulles/bandeau/composer ; envoi + Realtime inchangés.
+
+### État Git
+
+- **HEAD** : `41993ed43c4c7c5f4aefe7f44ae3cef117047c65` — **aucun commit**
+
+---
+
+## UI-MESSAGES-02 — Recette iPhone validée — 4 novembre 2026 (nuit)
+
+### Verdict propriétaire
+
+**8 scénarios / 8 PASS** sur Dev Client (Metro `youmbia-ui-home`, port 8082).
+
+| # | Scénario | Résultat |
+|---|----------|----------|
+| 1 | Tab bar masquée dans le fil démo, restaurée au retour inbox | **PASS** |
+| 2 | Bulles vert profond, largeur ~83 %, alignements | **PASS** |
+| 3 | Bandeau annonce, titre long, prix FCFA | **PASS** |
+| 4 | Composer visible avec clavier iOS ouvert | **PASS** |
+| 5 | Scroll jusqu’au dernier message, clavier ouvert | **PASS** |
+| 6 | Envoi simulé démo affiché, sans appel Supabase | **PASS** |
+| 7 | Retour inbox démo correct | **PASS** |
+| 8 | Navigation / tab bar OK après fermeture et réouverture app | **PASS** |
+
+### Contrôles automatisés (préflight commit)
+
+- `npx tsc --noEmit` : **PASS**
+- ESLint ciblé UI-MESSAGES-02 : **PASS** (warnings `import/first` sur fichiers de test Vitest mockés uniquement)
+- `npx vitest run src/features/conversation/ src/features/messages/ src/services/conversations/sendMessage.test.ts` : **PASS** (16 fichiers, **74** tests)
+- `git diff --check` / `git diff --cached --check` : **PASS** (après staging)
+- Contrats route : `conversationThread.contract.test.ts` (Realtime, read, `sendMessage`, composants premium)
+- Isolation démo : `messagesThreadDemo.test.ts`, `MessagesDemoScreen.threadPreview.test.ts`, `messagesDemo.test.ts`
+- **Aucun** `React.lazy` sur le périmètre fil / démo
+
+### Réserves QA connectée (hors commit)
+
+- Fil **réel** Supabase : recette complète Realtime / badge / erreur réseau **non re-jouée** dans ce GO (UI démo + refonte visuelle route validées séparément).
+- Bandeau annonce réel : prix/image dépendent toujours de `getListingsByIds` (hook existant, inchangé côté conversations).
+
+### Limitations mode démonstration
+
+- Messages seed + envoi **mémoire locale** uniquement ; pas de RPC, Realtime, badge global, notification.
+- Pas de navigation `/conversation/msg-demo-*` ni `/listing/msg-demo-*` (Alert ou no-op).
+- Activation : `__DEV__` + entrée explicite ou `EXPO_PUBLIC_MESSAGES_DEMO=1` (refusé si `__DEV__` false).
+
+### Dette historique non traitée (documentée, non rouverte)
+
+- **UI-MESSAGES-01** : bouton « Réinitialiser les 8 conversations » **KO iPhone** (anomalie mineure acceptée CTO) — **inchangé** dans UI-MESSAGES-02.
+- Inbox : sémantique badge vs pastille, `emitConversationRead` au masquage, cache stale possible — tickets séparés.
+
+### Décision préflight
+
+- **GO préflight / staging** — commit atomique proposé, **en attente autorisation CTO explicite**.
+- Périmètre staged : Phase B fil premium + Visual QA Demo + finitions visuelles + docs ; **exclus** logs QA, `.cursor/`, Metro local, secrets.
+- Message proposé : `feat(ui): refondre le fil de conversation premium (UI-MESSAGES-02)`

@@ -2,9 +2,7 @@ import React, { useCallback, useMemo, useState } from 'react';
 import {
   Alert,
   FlatList,
-  Modal,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   View,
@@ -16,10 +14,10 @@ import { InboxConversationRow } from '@/features/messages/InboxConversationRow';
 import { countUnreadConversations, INBOX_ROW_SEPARATOR_MARGIN_LEFT } from '@/features/messages/inboxDisplay';
 import type { Conversation } from '@/services/conversations/types';
 import { spacing, colors, typography, fontWeights } from '@/theme';
-import {
-  createMessagesDemoSnapshot,
-  MESSAGE_DEMO_PREVIEW_BODY,
-} from '@/features/messages/demo/messagesDemoFixtures';
+import { createMessagesDemoSnapshot } from '@/features/messages/demo/messagesDemoFixtures';
+import { ConversationThreadDemoScreen } from '@/features/messages/demo/ConversationThreadDemoScreen';
+import { getDemoThreadListingPriceLabel } from '@/features/messages/demo/messagesThreadDemoFixtures';
+import { useDemoThreadTabBarHidden } from '@/features/messages/demo/useDemoThreadTabBarHidden';
 
 type Props = { onExit: () => void };
 
@@ -85,6 +83,8 @@ export function MessagesDemoScreen({ onExit }: Props) {
   const [devPanelOpen, setDevPanelOpen] = useState(false);
 
   const headerUnreadCount = countUnreadConversations(conversations);
+
+  useDemoThreadTabBarHidden(preview != null);
 
   const resetLocal = useCallback(() => {
     const snap = createMessagesDemoSnapshot();
@@ -156,6 +156,17 @@ export function MessagesDemoScreen({ onExit }: Props) {
     />
   );
 
+  if (preview) {
+    return (
+      <ConversationThreadDemoScreen
+        conversation={preview}
+        listingThumbUrl={thumbByListingId[preview.listing_id] ?? null}
+        listingPriceLabel={getDemoThreadListingPriceLabel(preview.listing_id)}
+        onClose={() => setPreview(null)}
+      />
+    );
+  }
+
   return (
     <Screen noPadding safe={false}>
       <FlatList
@@ -169,30 +180,6 @@ export function MessagesDemoScreen({ onExit }: Props) {
         contentContainerStyle={styles.listContent}
         showsVerticalScrollIndicator={false}
       />
-      <Modal visible={preview != null} animationType="slide" transparent onRequestClose={() => setPreview(null)}>
-        <View style={styles.modalBackdrop}>
-          <View style={styles.modalSheet}>
-            <Text style={styles.modalTitle}>Conversation de démonstration</Text>
-            {preview ? (
-              <>
-                <Text style={styles.modalListing}>
-                  {preview.listing_title?.trim() || 'Annonce supprimée'}
-                </Text>
-                <Text style={styles.modalPeer}>{preview.other_party_name || 'Utilisateur'}</Text>
-                <ScrollView style={styles.modalScroll}>
-                  <Text style={styles.modalBody}>
-                    {MESSAGE_DEMO_PREVIEW_BODY[preview.id] ??
-                      'Aperçu local — aucun envoi ni lecture réelle.'}
-                  </Text>
-                </ScrollView>
-              </>
-            ) : null}
-            <Pressable style={styles.devBtn} onPress={() => setPreview(null)} accessibilityRole="button">
-              <Text style={styles.devBtnText}>Fermer</Text>
-            </Pressable>
-          </View>
-        </View>
-      </Modal>
     </Screen>
   );
 }
@@ -237,22 +224,4 @@ const styles = StyleSheet.create({
     backgroundColor: colors.borderLight,
     marginLeft: INBOX_ROW_SEPARATOR_MARGIN_LEFT,
   },
-  modalBackdrop: {
-    flex: 1,
-    justifyContent: 'flex-end',
-    backgroundColor: 'rgba(0,0,0,0.35)',
-  },
-  modalSheet: {
-    maxHeight: '70%',
-    backgroundColor: colors.surface,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    padding: spacing.lg,
-    paddingBottom: spacing['3xl'],
-  },
-  modalTitle: { ...typography.lg, fontWeight: fontWeights.bold, color: colors.text },
-  modalListing: { ...typography.base, fontWeight: fontWeights.semibold, marginTop: spacing.sm },
-  modalPeer: { ...typography.sm, color: colors.textSecondary, marginTop: 4 },
-  modalScroll: { maxHeight: 200, marginVertical: spacing.md },
-  modalBody: { ...typography.sm, color: colors.text, lineHeight: 22 },
 });
