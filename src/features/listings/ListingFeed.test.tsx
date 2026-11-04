@@ -138,3 +138,26 @@ it('isolates preview pagination from network and cache, then restores the normal
   expect(m.write.mock.calls[0][1].listings).toEqual([{ id: 'real-qa-id' }]);
   act(() => r.unmount());
 });
+
+it('keeps the shops block as one full-width row after six listings across following lots', async () => {
+  const items = Array.from({ length: 12 }, (_, i) => ({ id: `home-demo-${i + 1}` }));
+  const provider = { loadPage: vi.fn().mockResolvedValueOnce({ data: items.slice(0, 6), pagination: { nextOffset: 6, hasMore: true } })
+    .mockResolvedValueOnce({ data: items.slice(6), pagination: { nextOffset: 12, hasMore: false } }) };
+  const shops = <React.Fragment>Boutiques populaires</React.Fragment>;
+  let r!: ReactTestRenderer;
+  await act(async () => { r = create(<ListingFeed previewProvider={provider} listingCardFeedPresentation="home" fetchPageSize={6} extraComponent={shops} />); });
+  const original = list(r);
+  const first = original.props.data;
+  expect(first.map((row: { kind: string }) => row.kind)).toEqual(['cells', 'cells', 'cells', 'extra']);
+  // Extra is rendered directly, outside the grid's cells wrapper.
+  expect(original.props.renderItem({ item: first[3] })).toBe(shops);
+  await act(async () => original.props.onEndReached());
+  const rows = list(r).props.data;
+  expect(list(r)).toBe(original);
+  expect(rows.filter((row: { kind: string }) => row.kind === 'extra')).toHaveLength(1);
+  expect(rows[3].kind).toBe('extra'); expect(rows[4].kind).toBe('cells');
+  expect(rows.flatMap((row: { cells?: { id: string }[] }) => row.cells ?? []).map((x: { id: string }) => x.id)).toEqual(items.map(x => x.id));
+  expect(provider.loadPage.mock.calls).toEqual([[0, 6], [6, 6]]);
+  expect(m.fetch).not.toHaveBeenCalled(); expect(m.write).not.toHaveBeenCalled();
+  act(() => r.unmount());
+});

@@ -3,7 +3,7 @@
  */
 
 import React, { memo, useEffect, useState } from 'react';
-import { View, Text, StyleSheet, Pressable, Image } from 'react-native';
+import { View, Text, StyleSheet, Pressable, Image, type ImageSourcePropType } from 'react-native';
 import { useRouter } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { ProSellerBadge } from './ProSellerBadge';
@@ -17,10 +17,11 @@ export const SHOP_CARD_RAIL_STRIDE = SHOP_CARD_RAIL_WIDTH + SHOP_CARD_RAIL_MARGI
 
 type ShopCardProps = {
   shop: PopularShop;
+  preview?: { onOpen: () => void; bannerSource?: ImageSourcePropType };
   variant?: 'default' | 'compact';
 };
 
-function ShopCardInner({ shop, variant = 'default' }: ShopCardProps) {
+function ShopCardInner({ shop, preview, variant = 'default' }: ShopCardProps) {
   const router = useRouter();
   const initials = getShopInitials(shop.name);
   const isCompact = variant === 'compact';
@@ -30,7 +31,11 @@ function ShopCardInner({ shop, variant = 'default' }: ShopCardProps) {
       ? `${shop.active_listings_count} annonce${shop.active_listings_count > 1 ? 's' : ''}`
       : 'Boutique pro';
 
+  const bannerSource = preview ? preview.bannerSource : shop.banner_url ? { uri: shop.banner_url } : undefined;
+
   const onPress = () => {
+    if (preview) { preview.onOpen(); return; }
+    if (shop.id.startsWith('home-demo-shop-')) return;
     if (!shop.slug?.trim()) return;
     router.push(`/shop/${shop.slug.trim()}`);
   };
@@ -42,7 +47,7 @@ function ShopCardInner({ shop, variant = 'default' }: ShopCardProps) {
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={`Voir la boutique ${shop.name}`}
+      accessibilityLabel={`${preview ? 'Voir la boutique fictive' : 'Voir la boutique'} ${shop.name}`}
       onPress={onPress}
       style={({ pressed }) => [
         styles.card,
@@ -52,8 +57,8 @@ function ShopCardInner({ shop, variant = 'default' }: ShopCardProps) {
       ]}
     >
       <View style={[styles.banner, isCompact && styles.bannerCompact]}>
-        {shop.banner_url ? (
-          <Image source={{ uri: shop.banner_url }} style={styles.bannerImage} resizeMode="cover" />
+        {bannerSource ? (
+          <Image source={bannerSource} style={styles.bannerImage} resizeMode="cover" />
         ) : (
           <View style={styles.bannerFallback} />
         )}
@@ -62,7 +67,7 @@ function ShopCardInner({ shop, variant = 'default' }: ShopCardProps) {
 
       <View style={[styles.body, isCompact && styles.bodyCompact]}>
         <View style={styles.logoRow}>
-          {shop.logo_url && !logoFailed ? (
+          {!preview && shop.logo_url && !logoFailed ? (
             <Image
               source={{ uri: shop.logo_url }}
               style={[styles.logo, isCompact && styles.logoCompact]}

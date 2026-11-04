@@ -1,3 +1,4 @@
+import type { PopularShop } from '@/services/shops/getPopularShops';
 import type { PublicListing } from '@/services/listings';
 import type { DiscoveryPage } from '@/features/listings/discoveryFeedController';
 
@@ -19,6 +20,17 @@ export const DEMO_LISTINGS: readonly PublicListing[] = Array.from({ length: 48 }
   created_at: '2026-10-01T12:00:00.000Z', updated_at: '2026-10-01T12:00:00.000Z',
   images: i % 11 === 10 ? [] : [photos[i % 6]], views_count: i * 3,
 }));
+export const DEMO_SHOPS: readonly PopularShop[] = [
+  { name: 'Téléphones Démo', city: 'Douala' },
+  { name: 'Atelier Mode Démo', city: 'Yaoundé' },
+  { name: 'Maison Démo', city: 'Bafoussam' },
+].map((shop, i) => ({
+  ...shop, id: `home-demo-shop-${i + 1}`, slug: `home-demo-shop-${i + 1}`,
+  owner_id: 'home-demo-local', status: 'active', description: 'Boutique fictive de démonstration locale.',
+  logo_url: null, banner_url: null, whatsapp_phone: null, phone: null,
+  is_verified: false, verification_proven: false, is_featured: i === 0,
+  created_at: '2026-10-01T12:00:00.000Z', active_listings_count: 8,
+}));
 export function createDemoProvider(criteria: DemoCriteria) {
   const normalize = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
   const words = normalize(criteria.query).split(/\s+/).filter(Boolean);
@@ -35,5 +47,6 @@ export function createDemoProvider(criteria: DemoCriteria) {
       return { data, pagination: { nextOffset: from + data.length, hasMore: data.length === size } };
     },
     total: matches.length,
+    shops: DEMO_SHOPS,
   };
 }

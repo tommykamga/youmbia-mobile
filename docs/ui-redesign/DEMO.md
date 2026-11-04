@@ -24,3 +24,12 @@ Aucun mélange avec le cache réel. Les favoris démo sont un Set local ; les fi
 6. Quitter la démo puis constater le retour aux annonces QA réelles ; reprendre séparément leur recette.
 
 Ni une compilation Metro ni un test React avec mocks ne vaut une capture iPhone ou un PASS physique. STATUS.md consigne les retours réellement reçus.
+
+
+## Boutiques populaires réutilisées
+
+Le bloc de texte provisoire est remplacé par le composant existant **PopularShopsSection**, son rail horizontal et ses **ShopCard**. Le fournisseur local expose trois boutiques fictives (Téléphones Démo, Atelier Mode Démo, Maison Démo), avec visuels locaux existants, initiales, villes et compteurs. Le rail garde son titre habituel ; son sous-titre précise « Démonstration · destinations simulées ».
+
+L’insertion existante reste après les six premières annonces, en rangée pleine largeur, une seule fois même après chargement des lots suivants. Il faut défiler au-delà des trois premières rangées en grille deux colonnes. Si les critères laissent moins de six annonces, le seuil d’insertion existant masque toujours le bloc ; Réinitialiser pour la démonstration complète.
+
+Toucher une carte ou Voir ouvre une Modal locale « BOUTIQUE FICTIVE · destination simulée », puis Retour au fil. Aucun slug/ID démo envoyé à la route /shop ou au backend, aucun contact/achat réel. Sans option preview, le composant conserve son service/cache et sa navigation réelle habituels. La présence de ces boutiques démo ne prouve pas la présence de boutiques actives dans les données QA.

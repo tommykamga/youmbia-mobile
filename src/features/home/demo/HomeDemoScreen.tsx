@@ -4,6 +4,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { HomeBrandHeader } from '@/components/HomeBrandHeader';
 import { KeyboardSafeView } from '@/components/KeyboardSafeView';
+import { PopularShopsSection } from '@/features/shops/PopularShopsSection';
+import type { PopularShop } from '@/services/shops/getPopularShops';
 import { ListingFeed } from '@/features/listings/ListingFeed';
 import { ListingCard } from '@/features/listings/ListingCard';
 import type { PublicListing } from '@/services/listings';
@@ -24,9 +26,14 @@ export function HomeDemoScreen({ onExit }: { onExit: () => void }) {
   const [error, setError] = useState('');
   const [panel, setPanel] = useState<Panel>(null);
   const [detail, setDetail] = useState<PublicListing | null>(null);
+  const [shopDetail, setShopDetail] = useState<PopularShop | null>(null);
   const [notice, setNotice] = useState(false);
   const [favorites, setFavorites] = useState<Set<string>>(() => new Set());
   const provider = useMemo(() => createDemoProvider(criteria), [criteria]);
+  const shopsPreview = useMemo(() => ({
+    shops: provider.shops, onOpen: setShopDetail,
+    banners: { 'home-demo-shop-1': DEMO_IMAGES.phone_01, 'home-demo-shop-2': DEMO_IMAGES.fashion_01, 'home-demo-shop-3': DEMO_IMAGES.home_01 },
+  }), [provider.shops]);
   const open = (next: Panel) => {
     setDraft(criteria); setMin(criteria.min == null ? '' : String(criteria.min));
     setMax(criteria.max == null ? '' : String(criteria.max)); setError(''); setPanel(next);
@@ -90,7 +97,7 @@ export function HomeDemoScreen({ onExit }: { onExit: () => void }) {
           <Text>{provider.total} annonces fictives · {favorites.size} favoris locaux</Text>
           <Pressable accessibilityRole="button" style={styles.button} onPress={() => setCriteria(EMPTY)}><Text>Réinitialiser les critères démo</Text></Pressable>
         </View>}
-        extraComponent={<View style={styles.shops}><Text style={styles.title}>Boutiques fictives</Text><Text>Maison Démo · Atelier Démo — bloc pleine largeur</Text></View>} /></View>
+        extraComponent={<PopularShopsSection preview={shopsPreview} />} /></View>
       <Modal visible={panel != null} transparent animationType="slide" onRequestClose={() => setPanel(null)}>
         <KeyboardSafeView androidInsetPadding subtractSafeAreaBottom={false}>
           <View style={styles.backdrop}>
@@ -111,6 +118,15 @@ export function HomeDemoScreen({ onExit }: { onExit: () => void }) {
             </View>
           </View>
         </KeyboardSafeView>
+      </Modal>
+      <Modal visible={shopDetail != null} transparent animationType="slide" onRequestClose={() => setShopDetail(null)}>
+        <View style={styles.backdrop}><View style={styles.sheet}><ScrollView>
+          <Text style={styles.banner}>BOUTIQUE FICTIVE · destination simulée</Text>
+          <Text style={styles.title}>{shopDetail?.name}</Text>
+          <Text>{shopDetail?.city} · {shopDetail?.active_listings_count} annonces fictives</Text>
+          <Text>Aucun contact, achat ou accès à une boutique réelle.</Text>
+          <Pressable style={styles.button} accessibilityRole="button" onPress={() => setShopDetail(null)}><Text>Retour au fil</Text></Pressable>
+        </ScrollView></View></View>
       </Modal>
       <Modal visible={detail != null || notice} transparent animationType="slide" onRequestClose={() => { setDetail(null); setNotice(false); }}>
         <View style={styles.backdrop}><View style={styles.sheet}><ScrollView>
@@ -136,7 +152,6 @@ const styles = StyleSheet.create({
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 }, chip: { minHeight: 44, justifyContent: 'center', paddingHorizontal: 10, backgroundColor: '#E9F5EF', borderRadius: 12 },
   button: { minHeight: 44, padding: 12, backgroundColor: '#E9F5EF', borderRadius: 12, marginTop: 8 },
   heart: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#FFF', alignItems: 'center', justifyContent: 'center' },
-  shops: { padding: 16, backgroundColor: '#FFF', gap: 8 },
   backdrop: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.35)' },
   sheet: { maxHeight: '84%', backgroundColor: '#FFF', borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 16, paddingBottom: 36 },
   input: { minHeight: 48, borderWidth: 1, borderColor: '#CBD5E1', borderRadius: 12, padding: 12, marginVertical: 8, fontSize: 16 },

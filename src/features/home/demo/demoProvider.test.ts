@@ -42,3 +42,16 @@ describe('isolated home demonstration', () => {
     expect(createDemoProvider({ query: 'introuvable', city: '', category: null }).total).toBe(0);
   });
 });
+
+it('exposes stable local shops without remote media, contact details or verification claims', () => {
+  const first = createDemoProvider({ query: '', city: '', category: null }).shops;
+  const filtered = createDemoProvider({ query: 'smartphone', city: 'Douala', category: 1 }).shops;
+  expect(first).toHaveLength(3); expect(filtered).toBe(first);
+  expect(new Set(first.map(shop => shop.id)).size).toBe(3);
+  for (const shop of first) {
+    expect(shop.id).toMatch(/^home-demo-shop-/); expect(shop.is_verified).toBe(false);
+    expect(shop.verification_proven).toBe(false); expect(shop.active_listings_count).toBe(8);
+    expect(shop.banner_url).toBeNull(); expect(shop.logo_url).toBeNull();
+    expect(shop.phone).toBeNull(); expect(shop.whatsapp_phone).toBeNull();
+  }
+});
