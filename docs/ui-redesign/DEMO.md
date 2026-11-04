@@ -26,6 +26,11 @@ Aucun mélange avec le cache réel. Les favoris démo sont un Set local ; les fi
 Ni une compilation Metro ni un test React avec mocks ne vaut une capture iPhone ou un PASS physique. STATUS.md consigne les retours réellement reçus.
 
 
+## Démonstration locale — boîte de réception (Messages)
+
+Exclusivement `__DEV__`. Sur l’onglet Messages connecté, toucher **Ouvrir la démonstration locale** (sous l’en-tête ou l’état vide). Alternative : `EXPO_PUBLIC_MESSAGES_DEMO=1` au lancement Metro (refusé en production). Bandeau **Démonstration locale — aucune conversation réelle** ; panneau **Démonstration** pour réinitialiser les 8 fixtures ou **Quitter la démonstration** (retour immédiat à l’inbox Supabase). Aucun appel `getConversations`, cache inbox, Realtime, RPC masquage ni route `/conversation/[id]`. Tap = modal locale ; swipe = retrait mémoire uniquement. Photos = JPEG `assets/demo/listings/` déjà utilisés par la démo Accueil.
+
+
 ## Boutiques populaires réutilisées
 
 Le bloc de texte provisoire est remplacé par le composant existant **PopularShopsSection**, son rail horizontal et ses **ShopCard**. Le fournisseur local expose trois boutiques fictives (Téléphones Démo, Atelier Mode Démo, Maison Démo), avec visuels locaux existants, initiales, villes et compteurs. Le rail affiche « Boutiques à découvrir » ; son sous-titre précise « Démonstration · destinations simulées ».

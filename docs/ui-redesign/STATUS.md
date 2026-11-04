@@ -550,7 +550,35 @@ Aucun scénario physique n’est validé : ouverture depuis l’accueil, photos,
 - Revalidation iPhone rapide recommandée pour **1 favori en grille** et **sync compteur** après cette finition.
 
 
-## UI-FAVORITES-01 — Préflight commit local — 4 novembre 2026
+## UI-FAVORITES-01 — Commit local — 4 novembre 2026
+
+### Identité
+- Worktree `/Users/tommy/APP TESKA/YOUMBIA/youmbia-ui-home`, branche `feat/ui-home-first-slice`.
+- **HEAD `7fa8fc362510d3969285c49180a49a284dda649b`** — `feat(ui): refondre les favoris et synchroniser les coeurs (UI-FAVORITES-01)`.
+- Parent immédiat : `204aa9b` (UI-DETAIL-01). Aucun push, merge, déploiement ni modification backend dans ce lot.
+
+### Contenu livré (rappel)
+- Onglet Favoris premium (en-tête vert `#0B4D3C`, grille `ListingCard` home, états empty / erreur / indisponible).
+- Sync cœurs via `FavoritesContext` sur fiche annonce ; factorisation `homeFeedGridRows` ; layout cellule impaire favoris (`getHomeFeedGridCellLayout`).
+
+### Réserves QA — **toujours ouvertes** (non résolues par le commit)
+Les captures propriétaire valident la direction artistique ; les scénarios suivants restent **documentés comme réserves** jusqu’à PASS explicite sur build connecté QA (Metro 8082, démo off) :
+
+| Scénario | Attendu | Statut |
+| --- | --- | --- |
+| **Retrait synchronisé** | Cœur accueil, fiche et onglet Favoris + **compteur** cohérents après add/remove | **NON re-certifié** iPhone sur HEAD `7fa8fc3` (code + tests unitaires OK) |
+| **Empty / error** | Dernier favori retiré → empty premium ; panne réseau → **Réessayer** | **NON re-certifié** iPhone |
+| **Retour fiche + scroll** | Position `FlatList` conservée au `router.back()` | **NON re-certifié** iPhone |
+| **Photos QA** | Placeholders attendus si bucket Storage absent | **Réserve infrastructure QA** (audit connecté) |
+
+Impact grille : `getHomeFeedGridCellLayout` **uniquement** favoris ; accueil inchangé (`ListingFeed`).
+
+### Contrôles au commit
+- `npx tsc --noEmit`, ESLint ciblé favoris, Vitest ciblé : **PASS** au préflight du commit.
+- Fichiers locaux historiques (`.cursor/`, logs/captures QA, `scripts/start-ui-home-metro.local.cjs`) **hors** commit.
+
+
+## UI-FAVORITES-01 — Préflight commit local — 4 novembre 2026 (historique)
 
 ### Réserves recette iPhone (post-validation DA, hors périmètre commit)
 Les captures propriétaire valident la **direction artistique** de l’onglet Favoris. Les scénarios suivants restent **documentés comme réserves QA** jusqu’à PASS explicite sur build connecté QA (Metro 8082, démo off) :
@@ -575,4 +603,360 @@ Les captures propriétaire valident la **direction artistique** de l’onglet Fa
 
 **Exclus** : `.cursor/`, logs/captures QA, `scripts/start-ui-home-metro.local.cjs`.
 
-**En attente** : autorisation explicite avant `git commit`. Aucun push.
+**Statut** : commit local réalisé — voir section **UI-FAVORITES-01 — Commit local** (`7fa8fc3`). Aucun push.
+
+
+## UI-MESSAGES-01 — Phase A (audit + GO doc) — 4 novembre 2026
+
+### Identité et garde-fous
+- Worktree `/Users/tommy/APP TESKA/YOUMBIA/youmbia-ui-home`, branche `feat/ui-home-first-slice`, **HEAD `7fa8fc362510d3969285c49180a49a284dda649b`**.
+- **Phase A uniquement** : documentation, audit profond, architecture cible et recommandation GO/NO-GO — **aucune** nouvelle interface implémentée dans ce lot.
+- **Périmètre Phase B (futur)** : **boîte de réception uniquement** — `app/(tabs)/messages.tsx` et composants UI extraits associés (en-tête, rangées, états vides/erreur, swipe masquer).
+- **Hors périmètre explicite Phase B** : fil `app/conversation/[id].tsx`, services Supabase conversations/messages, RLS, RPC, canal `messagingRealtime.ts`, push, configuration (`app.json`, `eas.json`, env).
+- Aucun commit, push, merge, PR ni déploiement dans cette phase A.
+
+### État actuel (résumé audit)
+- Écran inbox monolithique (~470 lignes) : cache `lightCache` (`inbox.{userId}`), `getConversations()` au focus, patch Realtime local (`patchInboxOnIncoming` / `patchInboxOnRead`), swipe `SwipeToDeleteRow` + `hideConversationForMe`.
+- Badge onglet Messages : `useUnreadConversationsCount` (conversations distinctes non lues) — sémantique **≠** pastille par ligne (`unread_count` = messages non lus dans la conversation).
+- **Tests automatisés inbox UI** : absents ; contrats partiels dans `hideConversationForMe.test.ts` (références fichier UI seulement).
+
+### Risques de désynchronisation identifiés (à traiter en Phase B UI ou tests)
+1. **`emitConversationRead` lors du masquage swipe** : optimisme retire la conversation de la liste **et** émet `conversation_read`, ce qui peut **abaisser le badge onglet sans marquer lu côté serveur** si des non-lus restent.
+2. **Message entrant Realtime avec fil ouvert** : le hook badge ignore `getOpenConversationId()` côté inbox row mais l’inbox **incrémente quand même** `unread_count` sur la rangée si l’utilisateur revient à la liste sans refetch.
+3. **Cache inbox** : patches Realtime ne réécrivent pas systématiquement `lightCache` → réouverture possible avec compteurs/previews obsolètes jusqu’au prochain `getConversations`.
+4. **`getConversations` fallback** : erreurs Supabase → `{ data: [], error: null }` → empty state **sans** écran erreur (comportement service existant ; risque de confusion QA).
+5. **`message_updated` (read_at)** : ignoré par l’inbox ; badge rafraîchi via `refreshFromServer(true)` dans le hook, pas la liste inbox.
+
+### Architecture UI premium cible (Phase B — réutilisation tokens/composants)
+- En-tête : composant dédié calqué sur `FavoritesScreenHeader` (`#0B4D3C`, titre « Messages » ou « Boîte de réception », sous-titre optionnel compteur conversations).
+- Liste : extraire `InboxConversationRow` (avatar `UserAvatar`, typo `typography` / `fontWeights`, séparateurs `colors.borderLight`, pastille non-lu `colors.primary`).
+- Logique pure : `inboxPatches.ts` (`sortConversationsInbox`, patch insert/read) + tests Vitest **avant** retouches visuelles lourdes.
+- Conserver `SwipeToDeleteRow`, `EmptyState`, `Button`, `Screen`, `RefreshControl` ; remplacer couleurs avatar en dur (`#EEF2FF`) par tokens surface existants.
+- **Ne pas** dupliquer le canal Realtime ; s’abonner via `subscribeMessagingEvents` comme aujourd’hui.
+
+### Fichiers prévus Phase B (modification)
+| Fichier | Rôle |
+| --- | --- |
+| `app/(tabs)/messages.tsx` | Orchestration allégée, branchement header/row |
+| `src/features/messages/MessagesScreenHeader.tsx` | Bandeau vert marketplace |
+| `src/features/messages/InboxConversationRow.tsx` | Rangée + accessibilité |
+| `src/features/messages/inboxPatches.ts` | Fonctions pures extraites de l’écran |
+| `src/features/messages/inboxPatches.test.ts` | Couverture sync insert/read/tri |
+| `src/features/messages/MessagesScreen.test.tsx` | États empty/error/cache stub (optionnel, mock services) |
+| `docs/ui-redesign/STATUS.md` | Suivi recette iPhone Phase B |
+
+**Non modifiés (sauf correction UI-local explicitement validée)** : `src/services/conversations/*`, `src/lib/messagingRealtime.ts`, `app/conversation/[id].tsx`, `app/(tabs)/_layout.tsx` (badge).
+
+### Tests nécessaires Phase B
+- Unitaires : patches inbox (message autre vs soi, tri, `refetch`, read zéro compteur).
+- Régression : masquer conversation **ne doit pas** fausser le badge (test + correction `emitConversationRead` au swipe si validé).
+- Contrat : persistance cache après fetch réussi et après masquage optimiste.
+- Recette iPhone : focus inbox + message entrant, ouverture fil + retour, swipe masquer, pull-to-refresh, badge vs pastille ligne.
+
+### Recommandation Phase B
+- **GO conditionnel** pour l’implémentation UI inbox premium **si** la Phase B démarre par l’extraction `inboxPatches` + tests et inclut la correction du point (1) swipe/badge dans le même lot UI (sans toucher RPC/RLS).
+- **NO-GO** pour un simple reskin sans tests ni correction badge/masquage — risque de régression sync élevé.
+
+### Recette iPhone Phase B
+- **NON VALIDÉE** — protocole ci-dessus ; Metro QA 8082, démo off, compte avec au moins une conversation et messages non lus.
+
+
+## UI-MESSAGES-01 — Phase B (Design V2 inbox premium) — 4 novembre 2026
+
+### Baseline
+- **HEAD de départ** : `7fa8fc362510d3969285c49180a49a284dda649b` (UI-FAVORITES-01). Worktree/branche conformes.
+- **Données conversation** : le type `Conversation` expose `listing_title`, interlocuteur, preview, dates, `unread_count` — **aucune URL d’image d’annonce** sans modifier `getConversations`. Miniature = **placeholder marketplace** (icône `image-outline`, fond `surfaceSubtle`), aligné ListingCard « sans photo ».
+- **Comportements métier conservés** : cache `lightCache`, focus `fetchInbox`, patches Realtime (`inboxPatches.ts`, logique identique Phase A), swipe `SwipeToDeleteRow`, `hideConversationForMe`, `emitConversationRead` au masquage (**dette documentée, non corrigée**), navigation `/conversation/[id]`, gate auth, états empty/error/network, sémantique badge onglet inchangée.
+- **Tests baseline** : `hideConversationForMe.test.ts` 11 PASS avant implémentation.
+
+### Implémentation Design V2
+- **En-tête** : `MessagesScreenHeader` — vert `#0B4D3C`, titre « Messages », sous-titre « N conversation(s) non lue(s) » dérivé des lignes (`unread_count > 0`), pas du badge onglet.
+- **Ligne** : `InboxConversationRow` — ordre lecture annonce (titre 2 lignes) → interlocuteur → aperçu → date à droite → badge si non-lu ; miniature 72 pt placeholder ; densité réduite vs ancienne carte avatar 56 pt + corps vertical participant-first.
+- **Orchestration** : `app/(tabs)/messages.tsx` allégé ; extraction `inboxDisplay.ts`, `inboxPatches.ts` (caractérisation tests, sémantique inchangée).
+
+### Fichiers touchés
+| Fichier | Action |
+| --- | --- |
+| `app/(tabs)/messages.tsx` | Refonte présentation + imports |
+| `src/features/messages/MessagesScreenHeader.tsx` | Créé |
+| `src/features/messages/InboxConversationRow.tsx` | Créé |
+| `src/features/messages/inboxDisplay.ts` | Créé |
+| `src/features/messages/inboxPatches.ts` | Créé (extrait identique) |
+| `src/features/messages/*.test.ts(x)` | Créés |
+| `docs/ui-redesign/STATUS.md` | Ce relevé |
+
+**Non modifiés** : services Supabase, `messagingRealtime.ts`, `app/conversation/[id].tsx`, `_layout` badge, Accueil (`search.tsx`), Fiche (`listing/[id].tsx`), Favoris.
+
+### Contrôles exécutés
+- `npx tsc --noEmit` : **PASS**
+- ESLint ciblé `messages.tsx` + `src/features/messages/**` : **PASS** (0 erreur)
+- Vitest : **6 fichiers / 30 tests PASS** (`inboxDisplay`, `inboxPatches`, header, row, contract inbox, `hideConversationForMe` 11)
+- `git diff --check` : **PASS**
+
+### Dette métier séparée (inchangée volontairement)
+1. `emitConversationRead` lors du masquage swipe — peut fausser le badge sans `markConversationRead` serveur (audit Phase A).
+2. Cache inbox non réécrit sur chaque patch Realtime.
+3. `getConversations` fallback liste vide masque certaines erreurs serveur.
+4. Pas de miniature annonce réelle tant que le service n’expose pas d’image (évolution backend hors scope).
+
+### Risques résiduels UI
+- Placeholder systématique sur miniature : l’annonce est identifiable par **titre**, pas par photo réelle en QA.
+- Sous-titre header = conversations non lues **lignes** ; pastille ligne = **messages** non lus — distinction produit conservée.
+
+### Recette iPhone Design V2 — **NON VALIDÉE**
+Protocole : Metro QA existant port **8082**, Supabase `wagvrytcguutgbjzhvak`, démo off. Scénarios 1–15 de la spec (liste dense, non-lu, fil/retour, swipe, refresh, badge, empty/error, texte agrandi/VoiceOver). **Captures à fournir par le propriétaire** — aucun PASS physique inventé.
+
+### Sortie
+- Refonte **présentation inbox uniquement** ; métier et sync **non modifiés** sauf extraction testée des patches.
+- **Pas de commit / push / PR** sur cette livraison.
+
+
+## UI-MESSAGES-01 — Enrichissement miniatures annonces — 4 novembre 2026
+
+### Audit (services existants suffisants)
+- **`Conversation.listing_id`** : clé annonce ; pas d’URL image sur le modèle métier.
+- **`getConversations`** : charge `listings.id, title, user_id` uniquement — **pas** de `listing_images`.
+- **`getListingsByIds(ids)`** : annonces **actives** (`status = active`), sélect public + **`listingStoragePathsForCardCover`** / **`getSignedUrlsMap`** (vignette `thumb_path` prioritaire, cache mémoire session `listingImageUrl.ts`).
+- Annonce **inactive/supprimée** : absente du batch → placeholder ; titre peut rester « Annonce supprimée » via join conversation existant.
+- **RLS** : inchangée ; échec Storage/sign → pas d’URL, placeholder (pas de disparition de conversation).
+
+### Implémentation
+- État UI **`thumbByListingId`** via `useInboxListingThumbs` + `loadInboxListingThumbsForIds` — **1 appel `getListingsByIds` par ensemble distinct d’IDs** (clé stable `idsKey`), pas de re-fetch Realtime si les IDs inchangés.
+- **`InboxListingThumb`** : 72 pt, `resizeMode cover`, placeholder identique, `onError` → placeholder, hauteur fixe.
+- **`messages.tsx`** : `sessionUserId` pour invalider les requêtes obsolètes au changement de compte ; enrichissement **non bloquant** pour inbox/cache/realtime.
+
+### Requêtes réseau additionnelles (scénarios)
+| Scénario | Appels `getConversations` | Appels `getListingsByIds` |
+| --- | --- | --- |
+| Focus inbox N conv, K annonces distinctes | 1 (existant) | **+1** batch `.in(id)` + sign URLs internes |
+| Realtime message (mêmes annonces) | 0–1 si refetch conv inconnue | **0** |
+| Pull-to-refresh | 1 | **+1** si IDs identiques (re-sign cache mémoire possible) |
+| 3 conv, 2 même `listing_id` | 1 | **+1** avec 2 IDs max |
+
+### Contrôles exécutés
+- `npx tsc --noEmit` : **PASS**
+- ESLint ciblé messages : **PASS**
+- Vitest messages + hide contract : **PASS** (voir journal ci-dessous)
+- `git diff --check` : **PASS**
+
+### Limites / réserves
+- **Catalogue QA** : souvent 0 image Storage → placeholders attendus ; **PASS photos réelles = recette connectée avec annonces illustrées**, non déclaré ici.
+- **`getListingsByIds`** ignore annonces non actives : pas de photo même si conversation historique existe.
+- Dette Phase A (**`emitConversationRead` au masquage**, etc.) **inchangée**.
+
+### Checklist iPhone (propriétaire — NON VALIDÉE)
+1. Liste dense + photos réelles si annonces QA avec images
+2. Placeholder sans photo
+3. Non-lu / lu
+4. Textes longs
+5. Fil + retour scroll
+6. Swipe / annulation
+7. Pull-to-refresh
+8. Badge vs pastille
+9. Texte agrandi / VoiceOver
+10. Pas de clignotement scroll
+
+Metro **8082**, QA `wagvrytcguutgbjzhvak`, démo off.
+
+
+## UI-MESSAGES-01 — Démonstration locale inbox (Dev Client) — 4 novembre 2026
+
+### Fichiers créés
+- `src/features/messages/demo/messagesDemo.ts` — garde `__DEV__` + `EXPO_PUBLIC_MESSAGES_DEMO=1`
+- `src/features/messages/demo/messagesDemoFixtures.ts` — 8 conversations + vignettes locales
+- `src/features/messages/demo/messagesDemoImages.ts` — URIs bundle (`assets/demo/listings/*`)
+- `src/features/messages/demo/MessagesDemoScreen.tsx` — liste réutilisant header/row/thumb réels
+- `src/features/messages/demo/messagesDemo.test.ts`
+- `src/features/messages/MessagesInboxDemoEntry.tsx` — bouton d’activation
+- `src/features/messages/MessagesInboxScreen.tsx` — inbox connectée extraite
+- `app/(tabs)/messages.tsx` — aiguillage démo / réel uniquement
+
+### Activation (Dev Client, Metro 8082)
+1. Se connecter à l’onglet **Messages** (gate auth inchangé).
+2. Toucher **Ouvrir la démonstration locale** sous l’en-tête (liste non vide) ou sous l’empty state.
+3. Bandeau : **« Démonstration locale — aucune conversation réelle »** ; panneau **Démonstration** → réinitialiser / quitter.
+
+Alternative au lancement Metro : `EXPO_PUBLIC_MESSAGES_DEMO=1` (avec `__DEV__` uniquement ; **inactif en production**).
+
+### Garanties d’isolation
+- Aucun `getConversations`, cache inbox, Realtime, RPC masquage, `emitConversationRead`, navigation `/conversation/[id]` en démo.
+- Vignettes = JPEG locaux déjà utilisés par la démo Accueil (`assets/demo/listings/`).
+- Swipe = retrait **mémoire** ; **Réinitialiser** restaure les 8 fixtures.
+- Tap = Modal « Conversation de démonstration » — pas d’envoi, pas de badge onglet global modifié.
+
+### Contrôles exécutés
+- `npx tsc --noEmit` : **PASS**
+- ESLint ciblé messages : **PASS**
+- Vitest messages + hide contract : **8 fichiers / 44 tests PASS**
+- `git diff --check` : **PASS**
+
+### Captures attendues (propriétaire)
+- Haut inbox démo + bandeau jaune
+- Grille de 8 lignes (photos + 2 placeholders)
+- Pastilles non lus (conv 1 et 3)
+- Modal aperçu + swipe local
+- Retour inbox QA après **Quitter la démonstration**
+
+### Risques résiduels
+- **PASS iPhone non déclaré** ici.
+- Catalogue QA réel peut rester vide ; la démo ne le remplace pas tant qu’elle n’est pas activée.
+- Dette métier inbox réelle (masquage/badge) inchangée hors démo.
+
+
+## UI-MESSAGES-01 — P0 crash iPhone (lazy démo) — 4 novembre 2026
+
+### Symptôme
+- Onglet **Messages** : `Element type is invalid… Lazy element type must resolve to: undefined` (stack `app/(tabs)/messages.tsx`).
+
+### Cause racine confirmée
+- `React.lazy` + `import()` avec remapping `{ default: m.MessagesDemoScreen }` alors que le module n’expose qu’un **export nommé** `MessagesDemoScreen`.
+- Au runtime Metro/Hermes, `m.MessagesDemoScreen` pouvait être **`undefined`** → promesse lazy résolue sans composant valide (y compris à l’activation démo).
+
+### Correctif
+- **`app/(tabs)/messages.tsx`** : import **statique** de `MessagesDemoScreen` ; suppression de `React.lazy` / `Suspense`.
+- **`src/features/messages/messagesScreenRoute.test.tsx`** : montage route inbox réelle vs démo ; garde « pas de lazy » + export nommé présent.
+
+### Fichiers touchés (P0)
+- `app/(tabs)/messages.tsx`
+- `src/features/messages/messagesScreenRoute.test.tsx`
+- `docs/ui-redesign/STATUS.md` (cette section)
+
+### Contrôles exécutés (P0)
+- `npx vitest run src/features/messages/` : **PASS** (8 fichiers / 37 tests)
+- `npx tsc --noEmit` : **PASS**
+- ESLint ciblé messages : **PASS** (warnings import/first sur fichiers de test uniquement)
+- `git diff --check` : **PASS**
+- Bundle Metro 8082 : serveur **UP** (`/status` 200) ; rechargement app Dev Client requis pour valider le chunk Messages (pas de `React.lazy` dans `app/(tabs)/messages.tsx`)
+
+### Recette iPhone (Metro QA **8082**)
+1. Ouvrir **Messages** → pas de crash ; inbox QA si connecté.
+2. **Ouvrir la démonstration locale** → 8 conversations, photos/placeholders.
+3. Swipe local, tap → modal démo, **Quitter** → retour inbox réelle.
+4. Vérifier absence d’appels messagerie Supabase en démo (logs réseau / comportement).
+
+### Réserves
+- **PASS iPhone non attesté** par l’agent (validation device requise).
+- Import statique inclut le code démo dans le chunk de l’onglet (acceptable en Dev Client ; prod reste gated par `__DEV__` + env).
+
+
+## UI-MESSAGES-01 — Final polish (inbox + démo) — 4 novembre 2026
+
+### Finitions appliquées
+1. **Séparateurs** — constante partagée `INBOX_ROW_SEPARATOR_MARGIN_LEFT` (`inboxDisplay.ts`) : alignement sur la colonne texte (padding + miniature 72 + gap) ; inbox réelle et démo synchronisées.
+2. **Titres longs** — `InboxConversationRow` : `numberOfLines={2}` + ellipsize ; libellé VoiceOver **complet** ; fixture démo conv-04 ; modal démo sans troncature.
+3. **Badges / sous-titre démo** — `countUnreadConversations` sur fixtures → **2 conversations non lues** (conv 01 et 03) ; pastilles ligne inchangées (dont 9+).
+4. **Tactile / pressé** — `hitSlop={8}` sur la ligne ; fond `rowPressed` ; boutons démo et entrée démo `minHeight: 44`.
+5. **Isolation démo** — swipe / réinitialisation = `setConversations` + `createMessagesDemoSnapshot` uniquement (tests source).
+6. **Quitter la démo** — `onExit` → `setDemoActive(false)` → `MessagesInboxScreen` (test route).
+7. **Production** — rendu démo `__DEV__ && demoActive` ; activation `onRequestDemo` seulement si `__DEV__` ; `isMessagesDemoEnabled(false, …)` → false.
+
+### Métier préservé (non modifié)
+- Services Supabase conversations, cache inbox, Realtime, badge onglet global, `hideConversationForMe`, fil `/conversation/[id]`, swipe métier inbox réelle.
+
+### Fichiers touchés (polish)
+- `src/features/messages/inboxDisplay.ts` (+ tests)
+- `src/features/messages/MessagesInboxScreen.tsx`, `demo/MessagesDemoScreen.tsx`
+- `InboxConversationRow.tsx` (+ tests), `MessagesInboxDemoEntry.tsx`
+- `demo/messagesDemo.test.ts`, `messagesScreenRoute.test.tsx`, `messagesInbox.contract.test.ts`
+- `docs/ui-redesign/STATUS.md`
+
+### Contrôles exécutés
+- `npx vitest run src/features/messages/` : **PASS** (8 fichiers / **49** tests)
+- `npx tsc --noEmit` : **PASS**
+- ESLint ciblé `src/features/messages` + `app/(tabs)/messages.tsx` : **PASS** (warnings `import/first` tests mockés)
+- `git diff --check` : **PASS**
+
+### Recette iPhone à confirmer (Metro QA **8082**, reload après pull)
+| # | Scénario | Attendu |
+|---|----------|---------|
+| 1 | Onglet Messages (démo off) | Inbox QA, séparateurs alignés sous le texte |
+| 2 | Ligne conv-04 démo | Titre sur 2 lignes max ; tap → modal titre complet |
+| 3 | Démo activée | Sous-titre header « 2 conversations non lues » ; pastilles conv 01 / 03 |
+| 4 | Pressé ligne + boutons panneau démo | Retour visuel ; cibles ≥ 44 pt |
+| 5 | Swipe + Réinitialiser | Liste locale ; **aucun** appel réseau messagerie |
+| 6 | Quitter la démonstration | Inbox QA réelle (getConversations si session) |
+| 7 | Build release / prod | Pas d’entrée « Ouvrir la démonstration locale » |
+
+### Réserves
+- Ajustement visuel séparateurs : vérifier sur device après correction d’inset (−16 pt vs ancienne formule).
+- **PASS iPhone polish non signé** ici.
+
+
+## UI-MESSAGES-01 — Fix réinitialisation démo — 4 novembre 2026
+
+### Symptôme (recette iPhone)
+- Swipe supprimer, fermeture swipe, miniatures, retour inbox QA : **PASS**.
+- **Réinitialiser les 8 conversations** : **FAIL** — la liste restait à 7 lignes après reset (état React mis à jour mais **FlatList** / lignes `SwipeToDeleteRow` non remontées).
+
+### Cause racine
+- Après suppression locale, `setConversations` avec un nouveau snapshot de 8 éléments ne forçait pas le **remontage** de la liste virtualisée ni des lignes swipe (clés / `extraData` inchangés) → UI iPhone stale malgré un handler `onPress` correct.
+
+### Correctif (`MessagesDemoScreen.tsx`)
+- `resetLocal` : copies immuables des conversations, `openRowId` / preview / `swipeGuardRef` remis à zéro, **`listEpoch++`**.
+- `FlatList` : `key={messages-demo-list-${listEpoch}}`, `extraData={listEpoch}`.
+- Lignes : `key={${listEpoch}-${item.id}}` sur `SwipeToDeleteRow`.
+- En-tête panneau extrait (`MessagesDemoListHeader`) + `accessibilityLabel` explicite sur le bouton Reset.
+
+### Tests
+- **`MessagesDemoScreen.reset.test.tsx`** : scénario interaction delete → 7 lignes → Reset → 8 lignes + epoch liste.
+- Contrats `messagesDemo.test.ts` enrichis (`setListEpoch`, clé liste).
+
+### Contrôles exécutés
+- `npx vitest run src/features/messages/` : **PASS** (9 fichiers / **51** tests)
+- `npx tsc --noEmit` : **PASS**
+- ESLint ciblé messages : **PASS**
+- `git diff --check` : **PASS**
+
+### Revalidation iPhone (Metro **8082**, reload)
+1. Démo → panneau **Démonstration** ouvert.
+2. Swipe **Supprimer** sur une ligne → confirmer → **7** lignes.
+3. **Réinitialiser les 8 conversations** → **8** lignes, ordre fixtures, pastilles/sous-titre cohérents.
+4. Aucun appel Supabase / RPC / Realtime / cache inbox.
+
+### Métier
+- Inchangé (services, badge global, masquage réel, fil).
+
+
+## UI-MESSAGES-01 — Clôture (décision CTO) — 4 novembre 2026
+
+### Statut livrable
+- **Inbox premium Design V2**, miniatures annonces, démo locale Dev Client, correctif crash lazy (P0) : **livrés**.
+- Recette iPhone (hors reset démo) : **PASS** rapporté par le propriétaire (swipe démo, modal, retour inbox QA, etc.).
+
+### Anomalie acceptée (non bloquante)
+- **Reset des 8 conversations démo KO sur iPhone** — anomalie mineure acceptée, sans impact métier démontré.
+- Hors parcours utilisateur réel ; pas de nouvelle investigation ni instrumentation DEV prévue.
+- Tentative technique `listEpoch` / remontage liste : **non confirmée sur appareil** ; conservée comme meilleur effort sans garantie UX reset.
+
+### Garde-fous vérifiés (préflight clôture)
+- **Inbox réelle** : `MessagesInboxScreen.tsx` — `getConversations`, cache, Realtime, `hideConversationForMe`, navigation fil inchangés (contrats Vitest).
+- **Production** : démo gated `__DEV__` + `isMessagesDemoEnabled` ; pas d’entrée démo sans `onRequestDemo` (tests route + `messagesDemo.test.ts`).
+
+### Contrôles préflight (à rejouer avant commit)
+- `npx tsc --noEmit`
+- ESLint : `app/(tabs)/messages.tsx`, `src/features/messages/**`
+- `npx vitest run src/features/messages/`
+- `git diff --check`
+
+### Commit local proposé (non exécuté — validation préflight requise)
+- **Message suggéré** : `feat(ui): inbox Messages premium, démo locale et tests UI-MESSAGES-01`
+- **Périmètre** : voir liste fichiers `git status` ci-dessous ; **exclure** `.cursor/`, logs QA, captures, `scripts/start-ui-home-metro.local.cjs` (outil local Metro).
+
+---
+
+## UI-MESSAGES-02 — Fil de discussion (audit only — pas de dev)
+
+### Objectif phase A
+- Audit read-only du fil `app/conversation/[id].tsx` et dépendances (envoi, Realtime, read receipts, pièces jointes, header annonce).
+- Alignement design marketplace avec inbox UI-MESSAGES-01 **sans** modifier RPC, RLS, bus Realtime, badge global onglet, ni règles de masquage inbox.
+
+### Périmètre audit proposé
+1. **Cartographie** : composants, hooks, services (`messages`, `conversations`), cache, subscriptions.
+2. **Flux** : chargement initial, pagination / scroll, envoi, échecs réseau, optimistic UI existante.
+3. **État lu / non lu** : cohérence avec inbox et badge (documenter écarts connus Phase A inbox).
+4. **Accessibilité & densité** : barre saisie, bulles, timestamps, safe areas.
+5. **Dette & risques** : éléments hors scope redesign vs quick wins UI pure.
+6. **Livrable** : section STATUS + GO/NO-GO doc redesign fil (comme UI-MESSAGES-01 Phase A).
+
+### Hors scope immédiat
+- Implémentation UI, démo fil, changements Supabase, refonte navigation.
