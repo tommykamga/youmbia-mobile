@@ -2,7 +2,7 @@
 
 Chemin actif : `/Users/tommy/APP TESKA/YOUMBIA/youmbia-ui-home`. Développement exclusivement sous `/Users/tommy/APP TESKA/YOUMBIA`. Les chemins /private/tmp ci-dessous décrivent l’historique avant relocalisation.
 
-État courant — 4 novembre 2026 : en-tête compact et mode de démonstration local ajoutés sur demande explicite. TypeScript PASS, 54 tests ciblés PASS. Photos, deux colonnes, libellé Ville et prix long physiquement observés en démonstration ; scénarios démo regroupés confirmés PASS par le propriétaire ; recette réelle distincte et partielle. Déclinaison officielle blanche/transparente du logo non trouvée : réserve ouverte. Le dernier relevé en fin de document fait autorité ; les étapes précédentes restent historiques.
+État courant — 4 novembre 2026 : contrôle accueil **catalogue connecté QA** documenté en fin de fichier (réf. Git `df9087f`). En-tête compact et démonstration locale restent disponibles mais **hors parcours** de ce contrôle. Déclinaison officielle blanche/transparente du logo : réserve ouverte. Le dernier relevé en fin de document fait autorité ; les étapes précédentes restent historiques.
 
 
 ## Base source retenue et qualification
@@ -363,3 +363,127 @@ Chemin actif : `/Users/tommy/APP TESKA/YOUMBIA/youmbia-ui-home`. Développement 
 - **Contrôle iPhone distinct des tests** : diagnostic Hermes en lecture seule sur les deux exports formatPrice chargés : tous deux renvoient exactement **1 234 567 890 FCFA** pour 1234567890. Ce contrôle du runtime ne prétend pas mesurer une disposition visuelle.
 - **Recette physique rapportée par le propriétaire : PASS**. Réponse explicite **« pass »** au protocole regroupant : Électronique/pictogramme et filtre large inchangé ; feuille Ville identique en démo et mode normal, fermeture sans appliquer, Appliquer puis Réinitialiser ; montant français à dix chiffres, FCFA entier et texte OS agrandi. Aucun niveau exact de fontScale, autre prix ou parcours supplémentaire inventé. Aucun PASS global du catalogue QA déduit de ces trois cas.
 - **Verdict** : les trois corrections ciblées sont vérifiées automatiquement et confirmées sur iPhone par le propriétaire. Réserves historiques hors périmètre, dont l’actif officiel blanc transparent du logo et les captures du lot esthétique précédent, non requalifiées par ce test. Aucune nouvelle retouche graphique générale, version, dépendance, exclusion TypeScript ou backend. Documentation DEMO.md actualisée ; commit local ciblé, aucun push/déploiement.
+
+
+## Contrôle accueil catalogue connecté QA — 4 novembre 2026
+
+### Contexte Git et périmètre
+- Worktree `/Users/tommy/APP TESKA/YOUMBIA/youmbia-ui-home`, branche `feat/ui-home-first-slice`, Git commun canonique, ascendance RC2 (`d2e6c122…`) vérifiée. **HEAD `df9087f831b0ab6b9b410e6d90ea38eccc554b6d`** (« Align home category labels, city sheet and French prices »), conforme à la référence demandée.
+- Aucune retouche esthétique, backend, déploiement, version ni dépendance pendant ce contrôle. Fichiers locaux non suivis préservés (`connected-qa-read-audit-2026-11-04.json`, capture recherche, journal contrats, lanceur Metro local, `.cursor/`).
+- Metro qualifié historiquement : PID **21098**, port **8082**, cwd ce worktree, lanceur `scripts/start-ui-home-metro.local.cjs` (profil **development** eas.json, garde QA sans basculer vers Production).
+
+### Environnement et services (sans secrets)
+- **Cible QA confirmée** : identité **YOUMBIA Dev** / slug QA, `APP_ENV` et `EXPO_PUBLIC_APP_ENV` = **development**, projet Supabase **`wagvrytcguutgbjzhvak`** (`https://wagvrytcguutgbjzhvak.supabase.co`). Ref Production **`ainzxommczlyjhymuwgu`** interdite par `scripts/qa-build-guard.cjs`. EAS QA (profil development) distinct du projet Production.
+- Clés client chargées comme Metro : uniquement URL et clé anon publiques depuis `youmbia-mobile/.env.development.local` puis `.env` ; ref/url QA depuis `eas.json` **development** — **aucune substitution Production**.
+- **Mode démonstration désactivé** pour ce parcours : `isHomeDemoEnabled` exige `__DEV__` **et** `EXPO_PUBLIC_HOME_DEMO === '1'` ; drapeau absent des fichiers env canoniques ; l’accueil réel monte `MarketplaceSearchScreen`, pas `HomeDemoScreen` sauf action explicite « Ouvrir la démonstration locale ». Audit runtime : **`demoMounted: false`**, fil **15 annonces** sans IDs `home-demo-*`.
+- **Services réellement sollicités** (lecture publique, non authentifié) : `getMarketplaceCategories`, tentative RPC discovery puis repli **`getPublicListings`** (pagination par range), **`searchListings`** (recherche combinée / vide / tris), **`getListingById`** (fiche), **`getPopularShops`** et **`getPopularShopsCached`** (bloc accueil). Preuve agrégée : `docs/ui-redesign/connected-qa-read-audit-2026-11-04.json` (appels Hermes iPhone + agrégats SQL read-only séparés).
+- **Mixpanel** : `mixpanelTokenConfigured: false` en development QA — les appels `trackEvent` ne partent pas en prod analytics depuis ce build ; relevé code ci-dessous pour contrôle Production ciblé.
+
+### Distinction données / vide / erreur (QA)
+| Observation | Interprétation |
+| --- | --- |
+| 15 annonces actives, titres/villes/prix valides, 0 ligne image | **Données absentes** côté médias ; placeholders attendus, pas erreur de lecture fil |
+| 0 boutique active (fresh + cache) | **Résultat vide légitime** ; `PopularShopsSection` retourne null — pas d’erreur service |
+| RPC discovery `PGRST202` | **Compatibilité QA** ; repli `getPublicListings` utilisé, pagination 6+6+3 = 15 distinctes |
+| Requête `zzzzqaabsent…` → total 0 | **Vide légitime** |
+| Échec réseau accueil (historique propriétaire) + Réessayer | **Erreur de lecture** traitée par l’UI — PASS physique antérieur, non rejoué dans ce lot |
+
+### Parcours public — attendu / observé / verdict
+| Scénario | Verdict | Preuve |
+| --- | --- | --- |
+| Annonces et infos (titre, ville, prix) depuis QA | **PASS** | Audit JSON : 15 distinctes, `validTitleCityAndFinitePrice`, pas d’IDs synthétiques |
+| Photos sur cartes QA | **NON TESTÉ** | `withImages: 0` / 0 lignes image SQL — rendu placeholder non capturé en connecté |
+| Ville + catégorie + recherche combinées (smartphone + Douala) | **PASS** | Audit + capture `iphone-connected-search-2026-11-04.png` |
+| Ville seule exhaustive | **NON TESTÉ** | Historique partiel (2 cartes) ; non rejoué connecté |
+| Tris recent / price_asc / price_desc | **PASS** | Audit : 15 distinctes, ordonnées |
+| Pagination accueil, fin des résultats, pas de doublons | **PASS** (lecture + contrats) | Pages 6+6+3, `hasMore` final false ; Vitest discovery/search 55 PASS ; défilement physique **PASS historique** |
+| Fiche puis retour même contexte | **PASS historique** | Propriétaire « même position et cartes conservées » ; **NON TESTÉ** sur HEAD `df9087f` connecté |
+| Bloc boutiques (lecture + affichage) | **NON TESTÉ** affichage | Service OK, liste vide légitime — pas de rail à lire physiquement |
+| Grille 2 col. / prix sous image en connecté | **NON TESTÉ** | Qualification visuelle antérieure surtout en démo ; bundle connecté non re-capturé ici |
+
+Contrats regroupés rejoués : **4 fichiers / 55 tests PASS**, journal `connected-qa-contract-tests-2026-11-04.log`.
+
+### Analytics et compteurs — préparation contrôle Production
+Événements Mixpanel déclenchés par les consultations publiques de ce parcours (via `src/lib/analytics.ts`, propriété `platform` ajoutée automatiquement) :
+- **`home_feed_viewed`** — focus/refresh accueil (`ListingFeed`, `feed_context` default | refresh ; pas en mode démo fil).
+- **`listing_searched`** — chaque recherche appliquée (`search.tsx`, `search_query`, ville/catégorie, `result_count`, `search_outcome`).
+- **`listing_viewed`** — ouverture fiche (`app/listing/[id].tsx`, `listing_id`, catégorie/ville, `source` home/search/…).
+- **`recent_search_selected`** — si l’utilisateur reprend une recherche récente.
+- **`listing_favorited` / `listing_unfavorited`** — si favori depuis carte/fiche (hors scope audit anonyme).
+- **`listing_gallery_swiped`** — si galerie avec images (QA sans images : improbable).
+- Pas d’événement dédié au seul chargement du rail boutiques ; navigation **`/shop/[slug]`** n’a pas été parcourue (0 boutique QA).
+
+Compteur métier **`views_count`** lu en fiche (audit : 0) ; RPC **`increment_listing_views`** présente au schéma — à corréler en Production si les vues backend doivent monter à chaque consultation.
+
+### Verdict global catalogue connecté
+- **Environnement QA : conforme**, démo **désactivée**, catalogue **réel** (15 annonces QA).
+- **Lecture services : PASS** sur fil, recherche, tris, pagination logique, fiche, catégories ; **vide légitime** boutiques ; **données absentes** images.
+- **Recette physique connectée : PARTIELLE** — PASS recherche combinée capturée ; photos, rail boutiques vide, retour fiche et grille sur ce HEAD : **NON TESTÉ** ou **historique seulement**.
+- **Obstacles** : jeu QA sans images ni boutiques actives ; RPC discovery absente (repli OK) ; analytics inactives en dev QA.
+- **Réserves Production** : comparer volumes `home_feed_viewed`, `listing_searched`, `listing_viewed` ; vérifier RPC discovery si déployée ; ne pas confondre placeholders QA avec panne CDN ; ne pas transférer les PASS démo au catalogue réel.
+
+
+## UI-DETAIL-01 — Fiche annonce — 4 novembre 2026
+
+### Identité
+- Worktree `/Users/tommy/APP TESKA/YOUMBIA/youmbia-ui-home`, branche `feat/ui-home-first-slice`, HEAD `df9087f831b0ab6b9b410e6d90ea38eccc554b6d`. `df9087f` est HEAD, pas un ancêtre distant. Le checkout canonique `youmbia-mobile` (HEAD `55d7f49`) n’a pas été modifié. Aucun reset, rebase, merge ni push.
+
+### Audit (avant modification)
+- Route réelle : `app/listing/[id].tsx`, ouverte par `ListingCard` via `/listing/${id}`. Édition séparée : `app/listing/[id]/edit.tsx` (pas sur la fiche publique).
+- Rendu : `ListingGallery`, `ListingMeta`, `ListingSeller`, `ListingCharacteristics`, `ListingDescription`, `SecondaryActions`, `ListingActions`, `MarketplaceTrustTips`, `ReportComposerModal`, similaires via `ListingCard` si `FF_SIMILAR_LISTINGS`.
+- Données : `getListingById`, `getListingDynamicAttributesForDisplay`, `getFavoriteIds` / `toggleFavorite`, `getSellerStats`, `getSimilarListings`, `getSession`. Aucun schéma, RLS ni Edge Function touché.
+- Actions déjà réelles : favori (auth gate), message (`getOrCreateConversation`), WhatsApp / appel / SMS (`sellerContact` + intent), partage (`shareListing`), profil `/user/[id]`, boutique `/shop/[slug]` si publique, signalement, disponibilité, vendue / réactivation / renouvellement propriétaire.
+- Retour : `AppHeader` faisait `router.back()` si possible, sinon accueil. Le fil conserve sa position tant que l’écran recherche reste monté. Ce contrat n’est pas changé.
+- Réserves d’audit : titre tronqué à 2 lignes, photo en `cover`, favori dupliqué, propriétaire pouvait voir la barre de contact, erreur sans reprise explicite, compteur `1 / 1` même pour une seule photo.
+
+### Modifications
+- `ListingGallery` : photo en `contain` (pas de recadrage), compteur `1 / N` seulement s’il y a plusieurs photos, zoom plein écran inchangé, retour et favori flottants, « Aucune photo » / « Photo indisponible ».
+- `ListingMeta` : prix FCFA via `formatPrice` en tête, titre complet, lieu réel, ancienneté via `timeAgo` sur `last_published_at` sinon `created_at` (date future ou invalide omise), catégorie seulement si le libellé taxonomie existe. Badges Urgent / À la une seulement si les drapeaux sont vrais.
+- `ListingDescription` : sauts de ligne conservés ; « Lire la suite » / « Réduire » au-delà de 280 caractères, réversible.
+- `ListingSeller` : nom ou boutique publique en titre, nom de personne en sous-titre si distinct, « Voir la boutique » dans la carte. Badges de confiance existants conservés, aucun badge inventé. Signal de réponse toujours conditionné à `response_hint`.
+- `ListingActions` : action principale « Contacter le vendeur » (messagerie existante), puis WhatsApp, Appeler et SMS seulement si le numéro existe. Barre absente pour le propriétaire et pour une annonce vendue. Hauteur mesurée pour ne pas couvrir le contenu. Texte agrandi : colonne, boutons qui grandissent.
+- `SecondaryActions` : partage conservé. Favori retiré du corps (il est sur la photo). Appel / SMS restent dans le corps quand la barre ne les porte pas (annonce vendue, vendeur restreint).
+- Écran : en-tête « Annonce » retiré sur le succès au profit de la photo ; chargement et erreur gardent `AppHeader`. Erreur : Réessayer relance `getListingById`. Message réseau reconnu → « Connexion indisponible ».
+- Propriétaire : marquer vendue, renouveler, réactiver, disponibilité et signalement tiers inchangés. Pas d’auto-contact.
+
+### Contrôles exécutés
+- `npx tsc --noEmit` : **PASS**, 0 erreur.
+- ESLint ciblé des fichiers de la tranche : **PASS**, 0 erreur, 0 avertissement.
+- Vitest : `ListingGallery` 8, `ListingDescription` 3, `ListingActions` 3, `sellerResponseSignal` 1, `listingSoldDiscovery` 8 : **PASS**. Avertissement historique de dépréciation `react-test-renderer`, sans échec.
+- `git diff --check` : **PASS**.
+- Metro relancé pour cette tranche : PID du lanceur **47213**, cwd `youmbia-ui-home`, port **8082** seul, `/status` = `packager-status:running`. Lien dev : `exp+youmbia-mobile://expo-development-client/?url=http%3A%2F%2F192.168.1.89%3A8082`. Bundle iOS HTTP, 16 702 667 octets, contient « Contacter le vendeur », « Lire la suite », « Ajouter aux favoris » et `resizeMode: "contain"` sur la photo de galerie. Cela ne valide pas l’affichage iPhone. Avertissement Sentry « Missing config for organization, project » déjà émis par le plugin au démarrage, hors de cette tranche. Avertissements Node `NO_COLOR` / `FORCE_COLOR` au lancement, sans échec du packager.
+
+### iPhone — tous NON TESTÉS pour cette tranche
+Aucun scénario physique n’est validé : ouverture depuis l’accueil, photos, favori, description, vendeur, canaux, partage, données partielles, retour avec position, texte agrandi, erreur réseau, débordement. Captures haut / milieu / bas : **non jointes**. La validation doit être confirmée sur l’appareil, pas déduite des tests.
+
+### Réserves
+- Le jeu QA historique n’a pas de photos d’annonces : le cas « plusieurs photos » ne sera visible que sur une annonce qui en a.
+- Aucun commit, push, PR ni déploiement.
+
+### Finition premium Harrier — exécution finale (4 novembre 2026, soir)
+- Direction : photo immersive, chrome flottant (Retour · Partager · Favori), feuille blanche arrondie chevauchant la galerie (`contentSheet`), grille de caractéristiques pilotée par attributs dynamiques + legacy dédupliqué, barre fixe **WhatsApp + Envoyer un message** (messagerie prioritaire côté produit), Appeler/SMS conservés dans le corps via `SecondaryActions`.
+- **Démo locale** : cause du zoom chaussure = `resizeMode="cover"` + ratio 4:3 dans `HomeDemoScreen` (modal fiche démo). Correction : conteneur 240 pt, `contain`, fond neutre — sans toucher au fil réel ni aux fixtures.
+- **Sans photo** : hauteur galerie compacte `LISTING_GALLERY_PLACEHOLDER_HEIGHT` = 168 pt (plus de grand vide avant le prix).
+- Fichiers ajoutés : `src/lib/listingAttributeIcon.ts` (+ test), tests galerie/actions/description inchangés en nombre mais enrichis.
+- Fichiers touchés en plus de la tranche matin : `ListingCharacteristics.tsx`, `HomeDemoScreen.tsx`, `SecondaryActions.tsx` (`showShare`), `app/listing/[id].tsx` (partage galerie, feuille), `ListingGallery.tsx`, `ListingActions.tsx`, `ListingSeller.tsx`.
+- Contrôles rejoués : `tsc` PASS ; ESLint ciblé PASS (0 erreur) ; Vitest ciblé **26 PASS** (galerie 10, actions 3, description 3, attribut-icon 2, sold contract 8, TOM-101 1) ; bundle iOS 8082 **16 705 257** octets avec `Envoyer un message`, `contentSheet`, tuiles caractéristiques.
+- iPhone réel : **NON VALIDÉ** — protocole prêt ci-dessous ; captures haut / milieu / bas **à joindre** par le propriétaire après reload `exp+youmbia-mobile://expo-development-client/?url=http%3A%2F%2F192.168.1.89%3A8082`.
+
+### Finition polish UI-DETAIL-01 — 4 novembre 2026 (post-captures satisfaisantes)
+- **Densité verticale** : `ListingMeta` marge basse `lg` → `md` ; `ListingSeller` marge haute `base` → `xs` (écart meta → vendeur ~16 pt au lieu de ~36 pt). Caractéristiques dynamiques et texte agrandi non régressés.
+- **Carte vendeur adaptative** : mode compact (avatar 40 pt, padding réduit) si seuls nom + avatar ; carte complète si membre depuis, compteur d’annonces, badges réels, boutique, Pro, signal réponse, etc. `statsRow` et `ProSellerBadge` omis lorsqu’ils seraient vides.
+- **Prix démo** : fil (`ListingCard` + `formatPrice` `@/lib/format`) et modal démo ; test catalogue `1 234 567 890 FCFA` ; non-régression `ListingCard.preview.test` (libellé carte = `formatPrice`, séparateurs `\u202f` présents).
+- **Validation fonctionnelle (code / tests, sans écriture base)** : galerie multi + zoom (`ListingGallery.test`) ; favori/partage (handlers fiche + galerie) ; WhatsApp + message et message seul (`ListingActions.test`) ; propriétaire sans barre (`ListingActions.test`) ; retour fil (`ListingFeed` sans `key` sur FlatList). Fixtures démo **ne valident pas** Supabase, messagerie ni WhatsApp natif.
+- **Contrôles polish** : `tsc` PASS ; ESLint ciblé PASS ; Vitest ciblé **26 PASS** (6 fichiers : galerie 9, actions 3, description 3, vendeur 2, attribut-icon 2, démo 7) ; `git diff --check` PASS.
+- **iPhone encore à confirmer explicitement** : voir **Réserves QA** ci-dessous.
+- Aucun commit, push, PR ni déploiement.
+
+### Réserves QA — UI-DETAIL-01 (non bloquantes pour commit local)
+1. **Galerie réelle multi-images** — parcours zoom/swipe sur annonce connectée avec plusieurs photos (le catalogue QA et une partie des fixtures n’en ont pas ; la démo locale ne remplace pas Supabase/CDN).
+2. **Contact vendeur sur iPhone** — WhatsApp, messagerie YOUMBIA, barre fixe + clavier, message seul sans numéro ; validation native, pas seulement tests composants.
+3. **Retour accueil avec conservation du scroll** — ouvrir une fiche depuis le fil connecté, revenir, vérifier la position de scroll (contrat `ListingFeed` conservé ; confirmation physique recommandée).
+
+### Préflight commit local UI-DETAIL-01
+- Périmètre staged : fiche annonce, composants listing, démo (affichage prix + zoom modal), tests, `listingAttributeIcon`, `STATUS.md` — **exclus** : `.cursor/`, logs/captures QA, `scripts/start-ui-home-metro.local.cjs`.
+- Contrôles pré-commit : voir rapport agent (tsc, ESLint ciblé, Vitest, `git diff --check`).
+- **En attente** : confirmation propriétaire puis `git commit` local uniquement ; pas de push.

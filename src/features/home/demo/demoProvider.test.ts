@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { createDemoProvider, DEMO_LISTINGS, isHomeDemoEnabled } from './demoProvider';
 import { createDiscoveryFeedController } from '@/features/listings/discoveryFeedController';
-import { formatPrice } from '@/utils/formatPrice';
+import { formatPrice } from '@/lib/format';
 
 describe('isolated home demonstration', () => {
   it('is off unless development AND the exact explicit flag are enabled', () => {
@@ -16,8 +16,9 @@ describe('isolated home demonstration', () => {
     expect(new Set(DEMO_LISTINGS.map(x => x.fixtureCategorySlug)).size).toBe(6);
     expect(DEMO_LISTINGS.some(x => x.images.length === 0)).toBe(true);
     expect(DEMO_LISTINGS.some(x => x.title.length > 140)).toBe(true);
-    expect(formatPrice(DEMO_LISTINGS[0].price)).toContain('FCFA');
     expect(DEMO_LISTINGS[0].price).toBe(1234567890);
+    expect(formatPrice(DEMO_LISTINGS[0].price)).toBe('1\u202f234\u202f567\u202f890\u00a0FCFA');
+    expect(formatPrice(DEMO_LISTINGS[7].price)).toMatch(/^\d[\d\u202f]*\u00a0FCFA$/);
   });
   it('uses the real progressive controller across all eight lots and the exhaustion probe', async () => {
     const provider = createDemoProvider({ query: '', city: '', category: null });

@@ -1,15 +1,14 @@
 /**
- * ListingMeta – title, price, city, date or views for listing detail.
+ * ListingMeta – prix, titre, lieu et ancienneté de la fiche annonce.
+ * Le favori est porté par la galerie, pas par ce bloc.
  */
 
 import React from 'react';
-import { View, Text, StyleSheet, Pressable } from 'react-native';
+import { View, Text, StyleSheet } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { colors, spacing, typography, fontWeights, radius } from '@/theme';
 import { formatPrice, timeAgo } from '@/lib/format';
 import { getDisplayUrgent, getDisplayLocationLine } from '@/lib/listingSchemaFeatures';
-
-const HEART_SIZE = 26;
 
 type ListingMetaProps = {
   title: string;
@@ -24,7 +23,16 @@ type ListingMetaProps = {
   urgent?: boolean;
   /** Badge "À la une" (boosted). */
   boosted?: boolean;
+  /** Libellé de catégorie déjà résolu. Absent si la taxonomie ne le connaît pas. */
+  categoryLabel?: string | null;
 };
+
+function reliableTimeLabel(iso: string | null | undefined): string {
+  if (!iso) return '';
+  const time = new Date(iso).getTime();
+  if (!Number.isFinite(time) || time > Date.now() + 60_000) return '';
+  return timeAgo(iso);
+}
 
 export function ListingMeta({
   title,
@@ -32,116 +40,102 @@ export function ListingMeta({
   city,
   created_at,
   views_count,
-  isFavorite = false,
-  onFavoritePress,
   district,
   urgent,
   boosted,
+  categoryLabel,
 }: ListingMetaProps) {
-  const locationLine = getDisplayLocationLine(city, district);
+  const locationLine = getDisplayLocationLine(city, district).trim();
   const showUrgentBadge = getDisplayUrgent({ urgent });
   const showBoostedBadge = boosted === true;
-  const timeLabel = timeAgo(created_at);
-  const locationLabel = (locationLine || city || '').trim();
-  const viewsLabel = views_count > 0 ? `${views_count} vues` : '';
-  const metaLine = [locationLabel, viewsLabel, timeLabel].filter(Boolean).join(' · ');
+  const timeLabel = reliableTimeLabel(created_at);
+  const viewsLabel = views_count > 0 ? `${views_count} ${views_count > 1 ? 'vues' : 'vue'}` : '';
+  const category = categoryLabel?.trim() ?? '';
+  const hasBadges = showUrgentBadge || showBoostedBadge;
 
   return (
     <View style={styles.block}>
-      <View style={styles.titleRow}>
-        <Text style={styles.title} numberOfLines={2} ellipsizeMode="tail">
-          {title}
+      <Text style={styles.price} accessibilityRole="text">
+        {formatPrice(price)}
+      </Text>
+
+      <Text style={styles.title}>{title}</Text>
+
+      {locationLine ? (
+        <View style={styles.factRow}>
+          <Ionicons name="location-outline" size={16} color={colors.textSecondary} />
+          <Text style={styles.factText}>{locationLine}</Text>
+        </View>
+      ) : null}
+
+      {timeLabel || viewsLabel || category ? (
+        <Text style={styles.metaLine}>
+          {[timeLabel, viewsLabel, category].filter(Boolean).join(' · ')}
         </Text>
-        {onFavoritePress != null ? (
-          <Pressable
-            onPress={onFavoritePress}
-            hitSlop={12}
-            style={({ pressed }) => [styles.heartButton, pressed && styles.heartButtonPressed]}
-          >
-            <Ionicons
-              name={isFavorite ? 'heart' : 'heart-outline'}
-              size={HEART_SIZE}
-              color={isFavorite ? colors.error : colors.textTertiary}
-            />
-          </Pressable>
-        ) : null}
-      </View>
+      ) : null}
 
-      <Text style={styles.price}>{formatPrice(price)}</Text>
-
-      <View style={styles.badgesRow}>
-        {showUrgentBadge && (
-          <View style={[styles.badge, styles.urgentBadge]}>
-            <Ionicons name="flash" size={12} color={colors.surface} style={styles.badgeIcon} />
-            <Text style={styles.badgeText}>Urgent</Text>
-          </View>
-        )}
-
-        {showBoostedBadge && (
-          <View style={[styles.badge, styles.boostedBadge]}>
-            <Ionicons name="star" size={12} color={colors.surface} style={styles.badgeIcon} />
-            <Text style={styles.badgeText}>À la une</Text>
-          </View>
-        )}
-      </View>
-
-      <View style={styles.essentialInfo}>
-        {metaLine ? (
-          <Text style={styles.metaLine} numberOfLines={1} ellipsizeMode="tail">
-            {metaLine}
-          </Text>
-        ) : null}
-      </View>
+      {hasBadges ? (
+        <View style={styles.badgesRow}>
+          {showUrgentBadge ? (
+            <View style={[styles.badge, styles.urgentBadge]}>
+              <Text style={styles.badgeText}>Urgent</Text>
+            </View>
+          ) : null}
+          {showBoostedBadge ? (
+            <View style={[styles.badge, styles.boostedBadge]}>
+              <Text style={styles.badgeText}>À la une</Text>
+            </View>
+          ) : null}
+        </View>
+      ) : null}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   block: {
-    marginBottom: spacing.sm,
-  },
-  titleRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    justifyContent: 'space-between',
-    gap: spacing.sm,
-    marginBottom: 6,
-  },
-  title: {
-    flex: 1,
-    ...typography.lg,
-    fontWeight: fontWeights.semibold,
-    color: colors.text,
-    lineHeight: 26,
-  },
-  heartButton: {
-    padding: spacing.xs,
-  },
-  heartButtonPressed: {
-    opacity: 0.85,
+    marginBottom: spacing.md,
+    gap: spacing.xs,
   },
   price: {
-    ...typography['2xl'],
-    fontWeight: fontWeights.bold,
+    ...typography.price.detail,
     color: colors.primary,
-    marginBottom: spacing.sm,
+  },
+  title: {
+    ...typography.xl,
+    fontWeight: fontWeights.semibold,
+    color: colors.text,
+    lineHeight: 28,
+  },
+  factRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.xs,
+    marginTop: spacing.xs,
+  },
+  factText: {
+    ...typography.base,
+    flex: 1,
+    color: colors.textSecondary,
+    fontWeight: fontWeights.medium,
+  },
+  metaLine: {
+    ...typography.sm,
+    color: colors.textMuted,
+    fontWeight: fontWeights.medium,
+    marginTop: spacing.xs,
   },
   badgesRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
     flexWrap: 'wrap',
-    marginBottom: spacing.sm,
+    marginTop: spacing.sm,
   },
   badge: {
-    flexDirection: 'row',
-    alignItems: 'center',
     paddingHorizontal: spacing.sm,
     paddingVertical: 4,
     borderRadius: radius.full,
-  },
-  badgeIcon: {
-    marginRight: 4,
   },
   urgentBadge: {
     backgroundColor: colors.error,
@@ -153,14 +147,5 @@ const styles = StyleSheet.create({
     ...typography.xs,
     fontWeight: fontWeights.bold,
     color: colors.surface,
-  },
-  essentialInfo: {
-    marginTop: 0,
-  },
-  metaLine: {
-    ...typography.sm,
-    color: colors.textMuted,
-    fontWeight: fontWeights.medium,
-    letterSpacing: -0.1,
   },
 });

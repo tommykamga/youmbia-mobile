@@ -3,6 +3,7 @@ import { act, create, type ReactTestRenderer } from 'react-test-renderer';
 import { expect, it, vi } from 'vitest';
 import { ListingCard } from './ListingCard';
 import { DEMO_LISTINGS } from '@/features/home/demo/demoProvider';
+import { formatPrice } from '@/lib/format';
 
 const m = vi.hoisted(() => ({ push: vi.fn(), favorite: vi.fn(), source: vi.fn() }));
 vi.mock('react-native', () => ({
@@ -28,8 +29,14 @@ it('uses a bundled photo and local detail/favorite controls without touching rea
   expect(r.root.findByType('ImageBackground' as never).props.source).toBe(42);
   act(() => r.root.findByType('AnimatedPressable' as never).props.onPress());
   expect(open).toHaveBeenCalledTimes(1); expect(m.push).not.toHaveBeenCalled(); expect(m.source).not.toHaveBeenCalled(); expect(m.favorite).not.toHaveBeenCalled();
-  const price = r.root.findAllByType('Text' as never).find(x => typeof x.props.children === 'string' && x.props.children.includes('FCFA'));
-  expect(price?.props.children.replace(/\s/g, '')).toBe('1234567890FCFA'); expect(price?.props.numberOfLines).toBeUndefined(); expect(price?.props.ellipsizeMode).toBeUndefined();
+  const expected = formatPrice(DEMO_LISTINGS[0].price);
+  const price = r.root.findAllByType('Text' as never).find(
+    (x) => typeof x.props.children === 'string' && x.props.children === expected,
+  );
+  expect(price).toBeDefined();
+  expect(expected).toMatch(/\u202f/);
+  expect(price?.props.numberOfLines).toBeUndefined();
+  expect(price?.props.ellipsizeMode).toBeUndefined();
   act(() => r.unmount());
 });
 

@@ -1,7 +1,7 @@
 import React from 'react';
 import { act, create, type ReactTestRenderer } from 'react-test-renderer';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { ListingGallery } from './ListingGallery';
+import { ListingGallery, LISTING_GALLERY_PLACEHOLDER_HEIGHT } from './ListingGallery';
 
 const runtime = vi.hoisted(() => ({ width: 400, height: 800, resolve: vi.fn(), scrollTo: vi.fn() }));
 vi.mock('react-native', () => ({
@@ -18,12 +18,21 @@ vi.mock('@/lib/analytics', () => ({ trackListingGallerySwiped: vi.fn() }));
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 function nodes(r: ReactTestRenderer, type: string) { return r.root.findAll(n => n.type === type); }
-function mount(images = ['one', 'two', 'three', 'four'], lazySourcePaths?: string[]) {
+function mount(
+  images = ['one', 'two', 'three', 'four'],
+  lazySourcePaths?: string[],
+  extra?: { onBackPress?: () => void; onFavoritePress?: () => void; onSharePress?: () => void }
+) {
   let renderer!: ReactTestRenderer;
-  act(() => { renderer = create(<ListingGallery images={images} lazySourcePaths={lazySourcePaths} />, {
+  act(() => { renderer = create(<ListingGallery images={images} lazySourcePaths={lazySourcePaths} {...extra} />, {
     createNodeMock: e => e.type === 'ScrollView' ? { scrollTo: runtime.scrollTo } : null,
   }); });
   return renderer;
+}
+function textOf(node: { props: { children?: unknown } }): string {
+  const children = node.props.children;
+  if (Array.isArray(children)) return children.map((part) => (Array.isArray(part) ? part.join('') : String(part ?? ''))).join('');
+  return children == null ? '' : String(children);
 }
 function open(r: ReactTestRenderer, index: number) { act(() => nodes(r, 'Pressable')[index].props.onPress()); }
 function swipe(r: ReactTestRenderer, index: number) {
@@ -109,5 +118,36 @@ describe('full screen listing photos', () => {
     act(() => nodes(image, 'Image')[0].props.onError());
     expect(nodes(image, 'Text')[0].props.children).toBe('Photo indisponible');
     act(() => { image.unmount(); r.unmount(); });
+  });
+  it('shows each photo in full and a counter only when several photos exist', () => {
+    const single = mount(['only']);
+    expect(nodes(single, 'Image')[0].props.resizeMode).toBe('contain');
+    expect(nodes(single, 'Text').map(textOf).join(' ')).not.toContain('1 / 1');
+    act(() => single.unmount());
+    const many = mount();
+    expect(nodes(many, 'Image')[0].props.resizeMode).toBe('contain');
+    expect(nodes(many, 'Text').map(textOf)).toContain('1 / 4');
+    act(() => many.unmount());
+  });
+  it('uses a compact height when there are no photos', () => {
+    const empty = mount([]);
+    const container = nodes(empty, 'View')[0];
+    expect(container.props.style).toEqual(expect.arrayContaining([expect.objectContaining({ height: LISTING_GALLERY_PLACEHOLDER_HEIGHT })]));
+    act(() => empty.unmount());
+  });
+  it('keeps the first photo press ahead of the floating back and favorite controls', () => {
+    const back = vi.fn();
+    const favorite = vi.fn();
+    const share = vi.fn();
+    const r = mount(['one', 'two'], undefined, { onBackPress: back, onFavoritePress: favorite, onSharePress: share });
+    act(() => nodes(r, 'Pressable')[0].props.onPress());
+    expect(nodes(r, 'FlatList')[0].props.initialScrollIndex).toBe(0);
+    act(() => r.root.find((n) => n.props.accessibilityLabel === 'Retour').props.onPress());
+    act(() => r.root.find((n) => n.props.accessibilityLabel === 'Ajouter aux favoris').props.onPress());
+    act(() => r.root.find((n) => n.props.accessibilityLabel === "Partager l'annonce").props.onPress());
+    expect(back).toHaveBeenCalledTimes(1);
+    expect(favorite).toHaveBeenCalledTimes(1);
+    expect(share).toHaveBeenCalledTimes(1);
+    act(() => r.unmount());
   });
 });

@@ -14,7 +14,7 @@ import type { PopularShop } from '@/services/shops/getPopularShops';
 import { ListingFeed } from '@/features/listings/ListingFeed';
 import { ListingCard } from '@/features/listings/ListingCard';
 import type { PublicListing } from '@/services/listings';
-import { colors } from '@/theme';
+import { colors, spacing } from '@/theme';
 import { formatPrice } from '@/lib/format';
 import { DEMO_IMAGES } from './demoImages';
 import { createDemoProvider, DEMO_CITIES, type DemoCriteria } from './demoProvider';
@@ -142,8 +142,16 @@ export function HomeDemoScreen({ onExit }: { onExit: () => void }) {
       <Modal visible={detail != null || notice} transparent animationType="slide" onRequestClose={() => { setDetail(null); setNotice(false); }}>
         <View style={styles.backdrop}><View style={styles.sheet}><ScrollView>
           <Text style={styles.banner}>DÉMONSTRATION — aucune transaction</Text>
-          {detail ? <>{DEMO_IMAGES[detail.images[0]] && <Image source={DEMO_IMAGES[detail.images[0]]} style={styles.detailImage} resizeMode="cover" />}
-            <Text style={styles.title}>{detail.title}</Text><Text>{formatPrice(detail.price)} · {detail.city}</Text></> : <Text>Notifications simulées, aucun envoi.</Text>}
+          {detail ? <>{DEMO_IMAGES[detail.images[0]] ? (
+            <View style={styles.detailImageWrap}>
+              <Image source={DEMO_IMAGES[detail.images[0]]} style={styles.detailImage} resizeMode="contain" accessibilityLabel="Photo de démonstration" />
+            </View>
+          ) : null}
+            <Text style={styles.title}>{detail.title}</Text>
+            <Text style={styles.detailMetaLine}>
+              <Text style={styles.detailPrice}>{formatPrice(detail.price)}</Text>
+              {detail.city ? ` · ${detail.city}` : ''}
+            </Text></> : <Text>Notifications simulées, aucun envoi.</Text>}
           <Pressable style={styles.button} accessibilityRole="button" onPress={() => { setDetail(null); setNotice(false); }}><Text>Retour au fil</Text></Pressable>
         </ScrollView></View></View>
       </Modal>
@@ -168,5 +176,17 @@ const styles = StyleSheet.create({
   backdrop: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.35)' },
   sheet: { maxHeight: '84%', backgroundColor: '#FFF', borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 16, paddingBottom: 36 },
   input: { minHeight: 48, borderWidth: 1, borderColor: '#CBD5E1', borderRadius: 12, padding: 12, marginVertical: 8, fontSize: 16 },
-  detailImage: { width: '100%', aspectRatio: 4 / 3, borderRadius: 16 },
+  detailImageWrap: {
+    width: '100%',
+    height: 240,
+    borderRadius: 16,
+    overflow: 'hidden',
+    backgroundColor: colors.surfaceMuted,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: spacing.sm,
+  },
+  detailImage: { width: '100%', height: '100%' },
+  detailMetaLine: { fontSize: 15, lineHeight: 22, color: '#64748B', marginTop: 4 },
+  detailPrice: { color: colors.primary, fontWeight: '700' },
 });

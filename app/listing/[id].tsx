@@ -16,8 +16,8 @@ import {
   type NativeScrollEvent,
 } from 'react-native';
 import { useLocalSearchParams, useRouter, useFocusEffect, type Href } from 'expo-router';
-import Ionicons from '@expo/vector-icons/Ionicons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useAppUpdateBannerInset } from '@/context/AppUpdateBannerInsetContext';
 import { Screen, Button, Loader, EmptyState, AppHeader } from '@/components';
 import {
   getListingById,
@@ -63,6 +63,7 @@ import {
   openWhatsAppForListing,
 } from '@/lib/sellerContact';
 import { useResponsiveLayout } from '@/lib/responsiveLayout';
+import { shareListing } from '@/lib/shareListing';
 import { FF_SIMILAR_LISTINGS } from '@/lib/featureFlags';
 import { peekListingDetailSession, putListingDetailSession } from '@/services/listings/listingDetailSessionCache';
 import {
@@ -142,6 +143,19 @@ function getListingErrorDisplay(message: string): { title: string; body: string 
   if (message === 'Identifiant manquant') {
     return { title: 'Erreur', body: message };
   }
+  const lowered = message.toLowerCase();
+  if (
+    lowered.includes('network') ||
+    lowered.includes('fetch') ||
+    lowered.includes('réseau') ||
+    lowered.includes('internet') ||
+    lowered.includes('failed to')
+  ) {
+    return {
+      title: 'Connexion indisponible',
+      body: 'Vérifiez votre connexion, puis réessayez.',
+    };
+  }
   return { title: 'Erreur', body: message };
 }
 
@@ -176,7 +190,11 @@ export default function ListingDetailScreen() {
   const contactParam = useMemo(() => coalesceRouteParam(params.contact), [params.contact]);
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const appUpdateBannerInset = useAppUpdateBannerInset();
   const [state, setState] = useState<State>({ status: 'loading' });
+  const [reloadNonce, setReloadNonce] = useState(0);
+  const [contactBarHeight, setContactBarHeight] = useState(0);
+  const [shareLoading, setShareLoading] = useState(false);
   const [isFavorite, setIsFavorite] = useState(false);
   const lastFavoriteIdsFetchAtRef = useRef<number>(0);
   const FAVORITES_FETCH_TTL_MS = 120_000;
@@ -272,6 +290,7 @@ export default function ListingDetailScreen() {
     const authEpoch = authEpochRef.current;
     const cached = peekListingDetailSession(id);
     if (cached) setState({ status: 'success', listing: cached.listing, dynamicAttributes: cached.dynamicAttributes });
+    else setState({ status: 'loading' });
 
     (async () => {
       const [listingResult, favResult, dynamicAttributes] = await Promise.all([
@@ -305,7 +324,7 @@ export default function ListingDetailScreen() {
     return () => {
       cancelled = true;
     };
-  }, [id]);
+  }, [id, reloadNonce]);
 
   const tryBeginSimilarLoad = useCallback(() => {
     if (!FF_SIMILAR_LISTINGS) return;
@@ -415,6 +434,45 @@ export default function ListingDetailScreen() {
       };
     }, [])
   );
+
+  const handleBack = useCallback(() => {
+    const navigation = router as {
+      canGoBack?: () => boolean;
+      back: () => void;
+      replace: (href: Href) => void;
+    };
+    if (typeof navigation.canGoBack === 'function' && navigation.canGoBack()) {
+      navigation.back();
+      return;
+    }
+    router.replace('/(tabs)/home');
+  }, [router]);
+
+  const retryListing = useCallback(() => {
+    setState({ status: 'loading' });
+    setReloadNonce((value) => value + 1);
+  }, []);
+
+  const handleSharePress = useCallback(async () => {
+    if (state.status !== 'success' || shareLoading) return;
+    const current = state.listing;
+    setShareLoading(true);
+    try {
+      const result = await shareListing({
+        id: current.id,
+        title: current.title,
+        price: current.price,
+        city: current.city,
+      });
+      if (!result.success && result.error) {
+        Alert.alert('Partage', result.error);
+      }
+    } catch {
+      Alert.alert('Partage', 'Impossible de partager cette annonce.');
+    } finally {
+      setShareLoading(false);
+    }
+  }, [shareLoading, state]);
 
   const handleFavoritePress = useCallback(async () => {
     if (!id || favoriteLoading) return;
@@ -779,9 +837,12 @@ export default function ListingDetailScreen() {
             title={title}
             message={body}
             action={
-              <Button variant="secondary" onPress={() => router.back()}>
-                Retour
-              </Button>
+              <View style={styles.errorActions}>
+                <Button onPress={retryListing}>Réessayer</Button>
+                <Button variant="secondary" onPress={handleBack}>
+                  Retour
+                </Button>
+              </View>
             }
           />
         </View>
@@ -801,6 +862,16 @@ export default function ListingDetailScreen() {
     isOwnListing && canSellerRenewListing(listing.status) && isListingRenewalDue(listing);
   const ownerMutating = markSoldLoading || reactivateLoading || renewLoading;
   const maskedPhone = maskPhoneForPreview(listing.seller?.phone ?? null);
+  const showContactBar = !isSoldListing && sessionStatus !== 'loading' && !isOwnListing;
+  const showPhoneInBody =
+    !isOwnListing && Boolean(listing.seller?.phone) && sessionStatus !== 'loading';
+  const categoryLabel = resolveMarketplaceCategoryLabel(marketplaceCategories, listing.category_id);
+  const publishedAt = listing.last_published_at || listing.created_at;
+  const galleryChromeTop = appUpdateBannerInset > 0 ? spacing.xs : insets.top + 2;
+  const footerPad = showContactBar
+    ? (contactBarHeight > 0 ? contactBarHeight + spacing.base : 220 + insets.bottom)
+    : spacing['3xl'] + insets.bottom;
+  const publicShop = listing.shop?.slug && isShopPubliclyActive(listing.shop) ? listing.shop : null;
 
   const renderSimilarItem = ({ item }: { item: PublicListing }) => (
     <View style={{ width: CARD_WIDTH }}>
@@ -818,12 +889,11 @@ export default function ListingDetailScreen() {
 
   return (
     <Screen scroll={false} noPadding safe={false}>
-      <AppHeader title="Annonce" showBack density="compact" />
       <ScrollView
         style={styles.scroll}
         contentContainerStyle={[
           styles.scrollContent,
-          { paddingBottom: 120 + insets.bottom },
+          { paddingBottom: footerPad },
         ]}
         showsVerticalScrollIndicator={false}
         onLayout={(ev) => {
@@ -838,37 +908,37 @@ export default function ListingDetailScreen() {
           listingId={listing.id}
           images={listing.images}
           lazySourcePaths={listing.galleryLazySourcePaths}
+          onBackPress={handleBack}
+          isFavorite={isFavorite}
+          onFavoritePress={() => { void handleFavoritePress(); }}
+          onSharePress={() => { void handleSharePress(); }}
+          shareLoading={shareLoading}
+          overlayTopInset={galleryChromeTop}
         />
+        <View style={[styles.contentSheet, isCompact && styles.contentSheetCompact]}>
         <View style={[styles.body, isCompact && styles.bodyCompact]}>
           <ListingMeta
             title={listing.title}
             price={listing.price}
             city={listing.city}
-            created_at={listing.created_at}
+            created_at={publishedAt}
             views_count={listing.views_count}
-            isFavorite={isFavorite}
-            onFavoritePress={handleFavoritePress}
             district={listing.district}
             urgent={listing.urgent}
             boosted={listing.boosted}
+            categoryLabel={categoryLabel}
           />
           <ListingSeller
             listing={listing}
             memberSince={sellerStats.memberSince}
             listingCount={sellerStats.listingCount}
             onPress={listing.seller_id ? () => router.push(`/user/${listing.seller_id}` as const) : undefined}
+            onShopPress={
+              publicShop
+                ? () => router.push(`/shop/${publicShop.slug}` as Href)
+                : undefined
+            }
           />
-          {listing.shop?.slug && isShopPubliclyActive(listing.shop) ? (
-            <Button
-              variant="outline"
-              size="md"
-              onPress={() => router.push(`/shop/${listing.shop!.slug}` as Href)}
-              leftIcon={<Ionicons name="storefront-outline" size={18} color={colors.primary} />}
-              style={styles.shopLinkBtn}
-            >
-              Voir la boutique
-            </Button>
-          ) : null}
           <ListingCharacteristics
             condition={listing.condition}
             brand={listing.brand}
@@ -892,6 +962,9 @@ export default function ListingDetailScreen() {
             sellerPhone={listing.seller?.phone}
             onCallPress={handleSecureCall}
             onSmsPress={handleSecureSms}
+            showFavorite={false}
+            showShare={false}
+            showPhoneActions={showPhoneInBody}
           />
           {FF_SIMILAR_LISTINGS && (similarLoading || similarListings.length > 0) ? (
             <View style={styles.similarSection}>
@@ -958,6 +1031,7 @@ export default function ListingDetailScreen() {
             </View>
           ) : null}
         </View>
+        </View>
       </ScrollView>
       <ReportComposerModal
         visible={reportModalVisible}
@@ -971,20 +1045,20 @@ export default function ListingDetailScreen() {
         onCancel={() => !reportLoading && setReportModalVisible(false)}
         onSubmit={handleReportSubmit}
       />
-      {!isSoldListing ? (
+      {showContactBar ? (
       <ListingActions
         listing={listing}
         sellerId={listing.seller_id}
         sellerName={listing.seller?.full_name ?? null}
         sellerPhone={listing.seller?.phone ?? null}
         safeBottom={insets.bottom}
-        isFavorite={isFavorite}
-        onFavorisPress={handleFavoritePress}
         onMessagePress={handleMessagePress}
         onWhatsAppPress={handleSecureWhatsApp}
         messageLoading={messageLoading}
         showAuthHint={isGuest}
         maskedPhone={maskedPhone}
+        isOwnListing={isOwnListing}
+        onBarHeight={setContactBarHeight}
       />
       ) : null}
     </Screen>
@@ -1000,26 +1074,40 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.xl,
     paddingBottom: spacing.xl,
   },
-  scroll: { flex: 1 },
+  errorActions: {
+    width: 280,
+    maxWidth: '100%',
+    gap: spacing.sm,
+    marginTop: spacing.sm,
+  },
+  scroll: { flex: 1, backgroundColor: colors.surfaceMuted },
   scrollContent: {
     paddingBottom: FOOTER_HEIGHT_ESTIMATE + spacing['4xl'],
+  },
+  contentSheet: {
+    marginTop: -spacing['2xl'],
+    borderTopLeftRadius: radius['3xl'],
+    borderTopRightRadius: radius['3xl'],
+    backgroundColor: colors.surface,
+    paddingTop: spacing.lg,
+    overflow: 'hidden',
+  },
+  contentSheetCompact: {
+    marginTop: -spacing.xl,
+    paddingTop: spacing.base,
   },
   body: {
     maxWidth: 900,
     width: '100%',
     alignSelf: 'center',
     paddingHorizontal: spacing.screenHorizontal,
-    paddingTop: spacing.sm,
+    paddingTop: 0,
     paddingBottom: spacing.base,
   },
   bodyCompact: {
     paddingHorizontal: spacing.sm,
     paddingTop: spacing.xs,
     paddingBottom: spacing.sm,
-  },
-  shopLinkBtn: {
-    marginBottom: spacing.base,
-    alignSelf: 'flex-start',
   },
   similarSection: {
     marginTop: spacing.lg,
