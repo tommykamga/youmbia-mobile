@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import {
   FlatList,
   RefreshControl,
@@ -9,6 +9,8 @@ import {
   ActivityIndicator,
   Platform,
   InteractionManager,
+  PixelRatio,
+  useWindowDimensions,
   type NativeSyntheticEvent,
   type NativeScrollEvent,
 } from 'react-native';
@@ -24,19 +26,53 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { useFavorites } from '@/context/FavoritesContext';
 import { lightCacheKeys, lightCacheRead, lightCacheWrite } from '@/lib/lightCache';
 import { trackHomeFeedViewed } from '@/lib/analytics';
+import { createDiscoveryFeedController, type DiscoveryFeedCache } from './discoveryFeedController';
+import {
+  getHomeFeedColumnCount,
+  HOME_FEED_GRID_COLUMN_GAP,
+} from '@/lib/responsiveLayout';
 
 const PAGE_SIZE = 15;
 const FAVORITES_FOCUS_REFRESH_MIN_INTERVAL_MS = 120_000;
 
-type HomeFeedCachePayload = { listings: PublicListing[] };
 const INITIAL_NUM_TO_RENDER = Platform.OS === 'ios' ? 8 : 10;
 const WINDOW_SIZE = Platform.OS === 'ios' ? 5 : 10;
 
-type FeedState =
-  | { status: 'loading' }
-  | { status: 'empty' }
-  | { status: 'error'; message: string }
-  | { status: 'success'; data: PublicListing[] };
+type HomeFeedGridRow =
+  | { key: string; kind: 'cells'; cells: Array<PublicListing | number> }
+  | { key: string; kind: 'extra' };
+
+function buildHomeFeedGridRows(entries: readonly unknown[], columnCount: 2): HomeFeedGridRow[] {
+  const rows: HomeFeedGridRow[] = [];
+  let batch: Array<PublicListing | number> = [];
+
+  const flush = () => {
+    if (batch.length === 0) return;
+    rows.push({
+      key: batch.map((c) => (typeof c === 'number' ? `sk-${c}` : c.id)).join('|'),
+      kind: 'cells',
+      cells: [...batch],
+    });
+    batch = [];
+  };
+
+  for (const entry of entries) {
+    if (
+      entry != null &&
+      typeof entry === 'object' &&
+      'type' in entry &&
+      (entry as { type?: string }).type === 'extra'
+    ) {
+      flush();
+      rows.push({ key: 'extra-component', kind: 'extra' });
+      continue;
+    }
+    batch.push(entry as PublicListing | number);
+    if (batch.length >= columnCount) flush();
+  }
+  flush();
+  return rows;
+}
 
 export type ListingFeedProps = {
   /** Rendered at the top of the list (e.g. home header). Enables single scroll + reliable pull-to-refresh. */
@@ -59,10 +95,6 @@ export type ListingFeedProps = {
   extraComponent?: React.ReactElement | null;
   /** Index (après combien d'items) intercaler le composant (défaut 6). */
   extraComponentIndex?: number;
-  /** Limite maximale d'annonces à afficher. */
-  limit?: number;
-  /** Action à afficher en fin de flux (si limité). */
-  footerAction?: { label: string; onPress: () => void };
   /** Taille de page réseau (défaut 15). Home peut passer 6 pour limiter l’egress. */
   fetchPageSize?: number;
   /**
@@ -70,8 +102,6 @@ export type ListingFeedProps = {
    * ne pas relancer `getPublicListings` au montage (pull-to-refresh recharge toujours).
    */
   skipNetworkRevalidateWithinMs?: number;
-  /** Pas de chargement au scroll du fil (ex. Home plafonné à `limit`). */
-  disableInfiniteScroll?: boolean;
   /** Surcharge `initialNumToRender` FlatList (listes courtes Home). */
   listInitialNumToRender?: number;
   /**
@@ -93,15 +123,20 @@ export function ListingFeed({
   reanimatedScrollHandler,
   extraComponent,
   extraComponentIndex = 6,
-  limit,
-  footerAction,
   fetchPageSize,
   skipNetworkRevalidateWithinMs,
-  disableInfiniteScroll = false,
   listInitialNumToRender,
   contentBottomInset = 0,
   externalScrollRef,
 }: ListingFeedProps) {
+  const { width: windowWidth } = useWindowDimensions();
+  const fontScale = PixelRatio.getFontScale();
+  const homeFeedColumns =
+    listingCardFeedPresentation === 'home'
+      ? getHomeFeedColumnCount(windowWidth, fontScale)
+      : 1;
+  const useHomeGrid = listingCardFeedPresentation === 'home' && homeFeedColumns === 2;
+
   const listRef = useRef<any>(null);
   useScrollToTop(listRef);
   const setListNode = useCallback(
@@ -113,98 +148,40 @@ export function ListingFeed({
   );
 
   const { refresh: refreshFavorites } = useFavorites();
-  const [state, setState] = useState<FeedState>({ status: 'loading' });
   const [sortBy, setSortBy] = useState<DiscoverySortOption>('discovery');
-  const [refreshing, setRefreshing] = useState(false);
-  const hasLoadedListingsRef = useRef(false);
-  const loadingMoreRef = useRef(false);
-  const [loadingMore, setLoadingMore] = useState(false);
-  const [hasMore, setHasMore] = useState(true);
-  const [loadMoreError, setLoadMoreError] = useState<string | null>(null);
-  const hasMoreRef = useRef(true);
   const lastFavoritesFocusRefreshRef = useRef(0);
 
   const effectivePageSize = fetchPageSize ?? PAGE_SIZE;
 
-  const feedSuccessData = state.status === 'success' ? state.data : null;
-  const feedDataLength = feedSuccessData?.length ?? 0;
-  const errorMessage = state.status === 'error' ? state.message : null;
+  const controller = useMemo(() => createDiscoveryFeedController<PublicListing>(
+    effectivePageSize,
+    async (offset, size) => {
+      const result = await getPublicListings(offset, size);
+      if (result.error) throw new Error(result.error.message);
+      return result;
+    },
+    cache => { void lightCacheWrite<DiscoveryFeedCache<PublicListing>>(
+      lightCacheKeys.homeFeedPublic, cache,
+    ).catch(() => {}); },
+  ), [effectivePageSize]);
+  const state = useSyncExternalStore(controller.subscribe, controller.getSnapshot, controller.getSnapshot);
+  const { refreshing, loadingMore, hasMore, loadMoreError } = state;
+  const feedSuccessData = state.data;
+  const feedDataLength = state.data.length;
+  const errorMessage = state.message;
 
-  const load = useCallback(async (pageOffset: number = 0, append: boolean = false) => {
-    const listResult = await getPublicListings(pageOffset, effectivePageSize);
-    if (listResult.error) {
-      if (!append) {
-        setState((prev) => {
-          if (prev.status === 'success' && prev.data.length > 0) {
-            return prev;
-          }
-          return { status: 'error', message: listResult.error.message };
-        });
-      } else setLoadMoreError(listResult.error.message);
-      return;
-    }
-    const list = listResult.data ?? [];
-    const reachedEnd = list.length < effectivePageSize;
-    if (append) {
-      setLoadMoreError(null);
-      if (reachedEnd) {
-        hasMoreRef.current = false;
-        setHasMore(false);
-      }
-      setState((prev) => {
-        if (prev.status !== 'success') return prev;
-        const seen = new Set(prev.data.map((i) => i.id));
-        const added = list.filter((i) => !seen.has(i.id));
-        if (added.length === 0) return prev;
-        return { status: 'success' as const, data: [...prev.data, ...added] };
-      });
-    } else {
-      setLoadMoreError(null);
-      setState(
-        list.length === 0
-          ? { status: 'empty' }
-          : { status: 'success', data: list }
-      );
-      if (disableInfiniteScroll) {
-        hasMoreRef.current = false;
-        setHasMore(false);
-      } else {
-        hasMoreRef.current = !reachedEnd;
-        setHasMore(!reachedEnd);
-      }
-      if (list.length > 0) {
-        void lightCacheWrite<HomeFeedCachePayload>(lightCacheKeys.homeFeedPublic, { listings: list });
-      }
-    }
-  }, [disableInfiniteScroll, effectivePageSize]);
-
-  /** Load listings only once on mount. Ref guards against strict-mode double mount. */
   useEffect(() => {
-    if (hasLoadedListingsRef.current) return;
-    hasLoadedListingsRef.current = true;
-    let cancelled = false;
+    const generation = controller.generation();
     void (async () => {
-      const snap = await lightCacheRead<HomeFeedCachePayload>(lightCacheKeys.homeFeedPublic);
-      if (!cancelled && snap?.payload?.listings?.length) {
-        setState({ status: 'success', data: snap.payload.listings });
-      }
-      const skipNetwork =
-        skipNetworkRevalidateWithinMs != null &&
-        snap != null &&
-        snap.payload.listings.length > 0 &&
-        snap.ageMs < skipNetworkRevalidateWithinMs;
-      if (!cancelled && skipNetwork) {
-        hasMoreRef.current = false;
-        setHasMore(false);
-      } else if (!cancelled) {
-        await load(0, false);
-      }
-      if (!cancelled) setRefreshing(false);
+      const snap = await lightCacheRead<unknown>(lightCacheKeys.homeFeedPublic);
+      if (generation !== controller.generation()) return;
+      const compatible = controller.restoreCache(snap?.payload);
+      const skipNetwork = compatible && skipNetworkRevalidateWithinMs != null &&
+        snap != null && snap.ageMs < skipNetworkRevalidateWithinMs;
+      if (!skipNetwork) await controller.refresh();
     })();
-    return () => {
-      cancelled = true;
-    };
-  }, [load, skipNetworkRevalidateWithinMs]);
+    return controller.cancel;
+  }, [controller, skipNetworkRevalidateWithinMs]);
 
   useFocusEffect(
     useCallback(() => {
@@ -228,14 +205,12 @@ export function ListingFeed({
   );
 
   const onRefresh = useCallback(() => {
-    setRefreshing(true);
-    load(0, false).finally(() => {
-      setRefreshing(false);
+    void controller.refresh().then(() => {
       if (listingCardFeedPresentation === 'home') {
         trackHomeFeedViewed({ feed_context: 'refresh', favorites_only: false });
       }
     });
-  }, [load, listingCardFeedPresentation]);
+  }, [controller, listingCardFeedPresentation]);
 
   const isHomeCardInset =
     listingCardFeedPresentation === 'home' && homeFeedCardInset != null;
@@ -255,48 +230,7 @@ export function ListingFeed({
     [isHomeCardInset, homeInsetStyle]
   );
 
-  const keyExtractor = useCallback((item: any) => String(item.id ?? item), []);
-  const renderItem = useCallback(
-    ({ item }: { item: any }) => {
-      if (typeof item === 'number') {
-        return wrapHomeFeedItem(
-          <SkeletonListingCard feedPresentation={listingCardFeedPresentation} />
-        );
-      }
-      if (item.type === 'extra') {
-        return extraComponent || null;
-      }
-      return wrapHomeFeedItem(
-        <ListingCard
-          listing={item as PublicListing}
-          feedPresentation={listingCardFeedPresentation}
-          source={listingCardFeedPresentation === 'home' ? 'home' : 'other'}
-        />
-      );
-    },
-    [listingCardFeedPresentation, extraComponent, wrapHomeFeedItem]
-  );
-  const itemSeparator = useCallback(
-    () => <View style={styles.separator} />,
-    []
-  );
-
-  const loadMore = useCallback(() => {
-    if (state.status !== 'success' || loadingMoreRef.current || !hasMoreRef.current) return;
-
-    const currentLength = feedDataLength;
-    if (currentLength === 0) return;
-
-    // Si on a atteint la limite, on ne charge plus
-    if (limit && currentLength >= limit) return;
-
-    loadingMoreRef.current = true;
-    setLoadingMore(true);
-    load(currentLength, true).finally(() => {
-      loadingMoreRef.current = false;
-      setLoadingMore(false);
-    });
-  }, [state.status, feedDataLength, load, limit]);
+  const loadMore = useCallback(() => { void controller.loadMore(); }, [controller]);
 
   const sortedListings = useMemo(() => {
     const list = feedSuccessData ?? [];
@@ -306,18 +240,76 @@ export function ListingFeed({
   const feedData = useMemo(() => {
     if (state.status === 'loading') return [1, 2, 3, 4, 5, 6];
 
-    let list = [...sortedListings];
-
-    // Application de la limite si présente
-    if (limit && list.length > limit) {
-      list = list.slice(0, limit);
-    }
+    const list = [...sortedListings];
 
     if (extraComponent && list.length >= extraComponentIndex) {
       list.splice(extraComponentIndex, 0, { id: 'extra-component-marker', type: 'extra' } as any);
     }
     return list;
-  }, [state.status, sortedListings, extraComponent, extraComponentIndex, limit]);
+  }, [state.status, sortedListings, extraComponent, extraComponentIndex]);
+
+  const homeGridRows = useMemo(() => {
+    if (!useHomeGrid) return null;
+    return buildHomeFeedGridRows(feedData, 2);
+  }, [useHomeGrid, feedData]);
+
+  const renderListingCard = useCallback(
+    (listing: PublicListing) => (
+      <ListingCard
+        listing={listing}
+        feedPresentation={listingCardFeedPresentation}
+        homeGridCell={useHomeGrid}
+        source={listingCardFeedPresentation === 'home' ? 'home' : 'other'}
+      />
+    ),
+    [listingCardFeedPresentation, useHomeGrid]
+  );
+
+  const renderSkeletonCard = useCallback(
+    () => <SkeletonListingCard feedPresentation={listingCardFeedPresentation} />,
+    [listingCardFeedPresentation]
+  );
+
+  const renderGridRow = useCallback(
+    ({ item }: { item: HomeFeedGridRow }) => {
+      if (item.kind === 'extra') {
+        return wrapHomeFeedItem(extraComponent ?? <View />);
+      }
+      return wrapHomeFeedItem(
+        <View style={[styles.homeGridRow, { gap: HOME_FEED_GRID_COLUMN_GAP }]}>
+          {item.cells.map((cell) => (
+            <View
+              key={typeof cell === 'number' ? `skeleton-${cell}` : cell.id}
+              style={styles.homeGridCell}
+            >
+              {typeof cell === 'number' ? renderSkeletonCard() : renderListingCard(cell)}
+            </View>
+          ))}
+        </View>
+      );
+    },
+    [extraComponent, renderListingCard, renderSkeletonCard, wrapHomeFeedItem]
+  );
+
+  const gridKeyExtractor = useCallback((item: HomeFeedGridRow) => item.key, []);
+
+  const keyExtractor = useCallback((item: any) => String(item.id ?? item), []);
+  const renderItem = useCallback(
+    ({ item }: { item: any }) => {
+      if (typeof item === 'number') {
+        return wrapHomeFeedItem(renderSkeletonCard());
+      }
+      if (item.type === 'extra') {
+        return wrapHomeFeedItem(extraComponent ?? <View />);
+      }
+      return wrapHomeFeedItem(renderListingCard(item as PublicListing));
+    },
+    [extraComponent, renderListingCard, renderSkeletonCard, wrapHomeFeedItem]
+  );
+  const itemSeparator = useCallback(
+    () => <View style={styles.separator} />,
+    []
+  );
 
   const sortHeader = useMemo(
     () => (
@@ -370,7 +362,7 @@ export function ListingFeed({
           message={errorMessage ?? ''}
           icon={<Ionicons name="alert-circle-outline" size={32} color={colors.error} />}
           action={
-            <Button variant="secondary" onPress={() => load(0, false)}>
+            <Button variant="secondary" onPress={() => { void controller.refresh(); }}>
               Réessayer
             </Button>
           }
@@ -389,33 +381,11 @@ export function ListingFeed({
       );
     }
     return null;
-  }, [state.status, errorMessage, load]);
+  }, [state.status, errorMessage, controller]);
 
   const listFooter = useMemo(() => {
     const dataLength = feedDataLength;
     if (state.status !== 'success' || dataLength === 0) return null;
-
-    // Cas spécifique : Limite atteinte (Home contrôlée)
-    if (limit && dataLength >= limit) {
-      return (
-        <View style={[styles.limitFooter, homeInsetStyle]}>
-          <View style={styles.limitDivider} />
-          {footerAction && (
-            <Button
-              variant="outline"
-              onPress={footerAction.onPress}
-              style={styles.limitButton}
-            >
-              {footerAction.label}
-            </Button>
-          )}
-          <View style={[styles.footerEndWrap, styles.footerEndWrapFlush]}>
-            <Ionicons name="checkmark-circle-outline" size={18} color={colors.textTertiary} />
-            <Text style={styles.footerEnd}>Vous avez vu toutes les annonces du moment</Text>
-          </View>
-        </View>
-      );
-    }
 
     if (loadingMore) {
       return (
@@ -428,20 +398,21 @@ export function ListingFeed({
     if (loadMoreError) {
       return (
         <View style={styles.footer}>
-          <Text style={styles.footerError}>{loadMoreError}</Text>
+          <Text style={styles.footerError}>
+            Impossible de charger la suite des annonces. Vérifiez votre connexion, puis réessayez.
+          </Text>
           <Pressable
             style={({ pressed }) => [styles.footerRetry, pressed && styles.footerRetryPressed]}
-            onPress={() => {
-              setLoadMoreError(null);
-              load(dataLength, true);
-            }}
+            onPress={() => { void controller.retry(); }}
+            accessibilityRole="button"
+            accessibilityLabel="Réessayer le chargement des annonces"
           >
             <Text style={styles.footerRetryText}>Réessayer</Text>
           </Pressable>
         </View>
       );
     }
-    if (!hasMore && state.status === 'success' && dataLength > 0) {
+    if (state.ready && !hasMore && state.status === 'success' && dataLength > 0) {
       return (
         <View style={styles.footerEndWrap}>
           <Ionicons name="checkmark-circle-outline" size={18} color={colors.textTertiary} />
@@ -450,7 +421,7 @@ export function ListingFeed({
       );
     }
     return null;
-  }, [state.status, feedDataLength, loadingMore, hasMore, loadMoreError, load, limit, footerAction, homeInsetStyle]);
+  }, [state.status, feedDataLength, loadingMore, hasMore, loadMoreError, controller, state.ready]);
 
   const listContentStyle = useMemo(
     () => [
@@ -465,21 +436,23 @@ export function ListingFeed({
 
   const listProps = useMemo(
     () => ({
-      data: feedData,
-      keyExtractor,
-      renderItem,
-      ItemSeparatorComponent: itemSeparator,
+      data: useHomeGrid && homeGridRows ? homeGridRows : feedData,
+      keyExtractor: useHomeGrid ? gridKeyExtractor : keyExtractor,
+      renderItem: useHomeGrid ? renderGridRow : renderItem,
+      ItemSeparatorComponent: useHomeGrid ? undefined : itemSeparator,
       ListHeaderComponent: listHeader,
       ListFooterComponent: listFooter,
       ListEmptyComponent: listEmpty,
       contentContainerStyle: listContentStyle,
       showsVerticalScrollIndicator: false,
-      initialNumToRender: listInitialNumToRender ?? INITIAL_NUM_TO_RENDER,
-      maxToRenderPerBatch: 6,
+      initialNumToRender: useHomeGrid
+        ? Math.max(2, Math.ceil((listInitialNumToRender ?? INITIAL_NUM_TO_RENDER) / 2))
+        : listInitialNumToRender ?? INITIAL_NUM_TO_RENDER,
+      maxToRenderPerBatch: useHomeGrid ? 4 : 6,
       windowSize: WINDOW_SIZE,
       removeClippedSubviews: Platform.OS === 'ios',
-      onEndReached: disableInfiniteScroll ? undefined : loadMore,
-      onEndReachedThreshold: disableInfiniteScroll ? undefined : 0.4,
+      onEndReached: loadMore,
+      onEndReachedThreshold: 0.4,
       refreshControl: (
         <RefreshControl
           refreshing={refreshing}
@@ -489,8 +462,12 @@ export function ListingFeed({
       ),
     }),
     [
+      useHomeGrid,
+      homeGridRows,
       feedData,
+      gridKeyExtractor,
       keyExtractor,
+      renderGridRow,
       renderItem,
       itemSeparator,
       listHeader,
@@ -498,7 +475,6 @@ export function ListingFeed({
       listEmpty,
       listContentStyle,
       loadMore,
-      disableInfiniteScroll,
       listInitialNumToRender,
       refreshing,
       onRefresh,
@@ -510,7 +486,7 @@ export function ListingFeed({
     return (
       <Animated.FlatList
         ref={setListNode}
-        {...listProps}
+        {...(listProps as any)}
         style={styles.listFlex}
         onScroll={reanimatedScrollHandler}
         scrollEventThrottle={16}
@@ -518,7 +494,7 @@ export function ListingFeed({
     );
   }
 
-  return <FlatList ref={setListNode} {...listProps} style={styles.listFlex} />;
+  return <FlatList ref={setListNode} {...(listProps as any)} style={styles.listFlex} />;
 }
 
 const styles = StyleSheet.create({
@@ -535,6 +511,16 @@ const styles = StyleSheet.create({
   homeFeedItemInset: {
     width: '100%',
     alignSelf: 'center',
+  },
+  homeGridRow: {
+    flexDirection: 'row',
+    alignItems: 'stretch',
+    width: '100%',
+    marginBottom: HOME_FEED_GRID_COLUMN_GAP,
+  },
+  homeGridCell: {
+    flex: 1,
+    minWidth: 0,
   },
   separator: {
     height: ui.spacing.md,
@@ -607,29 +593,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: spacing.xs,
   },
-  footerEndWrapFlush: {
-    paddingHorizontal: 0,
-  },
   footerEnd: {
     ...typography.xs,
     color: colors.textTertiary,
   },
   emptyWrap: {
     marginTop: spacing['2xl'],
-  },
-  limitFooter: {
-    paddingVertical: spacing['3xl'],
-    paddingHorizontal: spacing.screenHorizontal,
-    alignItems: 'center',
-  },
-  limitDivider: {
-    width: '40%',
-    height: 1,
-    backgroundColor: colors.borderLight,
-    marginBottom: spacing['2xl'],
-  },
-  limitButton: {
-    minWidth: 220,
-    marginBottom: spacing.xl,
   },
 });

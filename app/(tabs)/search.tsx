@@ -1026,6 +1026,7 @@ export default function SearchScreen() {
         onCategoryPress={handleQuickCategoryPress}
         onCategoriesVoirTout={handleCategoriesVoirTout}
         onSellPress={handleSellPress}
+        homePresentation
         showCategoryStrip={false}
         showSellCta={false}
       />
@@ -1433,18 +1434,21 @@ export default function SearchScreen() {
   return (
     <Screen noPadding safe={false}>
       <KeyboardSafeView style={styles.keyboard}>
-        <SafeAreaView style={styles.safeMarketplace} edges={marketplaceSafeEdges}>
+        <SafeAreaView style={[styles.safeMarketplace, showMarketplaceHomeFeed && styles.homeSurface]} edges={marketplaceSafeEdges}>
           <View style={styles.marketplaceColumn}>
-            <View style={styles.topStackMarketplace}>
+            <View style={[styles.topStackMarketplace, showMarketplaceHomeFeed && styles.homeTopStack]}>
               <HomeBrandHeader
                 onNotificationsPress={handleNotificationsPress}
                 unreadCount={0}
                 searchTabLayout
+                homePresentation={showMarketplaceHomeFeed}
+                location={showMarketplaceHomeFeed ? { label: appliedSearchFilters.city || 'Toutes les villes', onPress: openFilters } : undefined}
               />
               <MarketingConsentBanner />
               <View
                 style={[
                   styles.searchStripMarketplace,
+                  showMarketplaceHomeFeed && styles.homeSearchStrip,
                   {
                     paddingHorizontal: searchChrome.hPad,
                     paddingTop: searchChrome.stripPadTop,
@@ -1456,10 +1460,10 @@ export default function SearchScreen() {
                     styles.searchRow,
                     searchChrome.rowShadow,
                     {
-                      minHeight: searchChrome.searchMinH,
+                      minHeight: showMarketplaceHomeFeed ? Math.max(52, searchChrome.searchMinH) : searchChrome.searchMinH,
                       paddingVertical: searchChrome.searchPadV,
                       paddingHorizontal: Math.min(searchChrome.hPad, 18),
-                      backgroundColor: searchChrome.searchBg,
+                      backgroundColor: showMarketplaceHomeFeed ? colors.surface : searchChrome.searchBg,
                       borderColor: searchChrome.borderColor,
                       borderWidth: 1,
                       borderRadius: searchChrome.searchRadius,
@@ -1473,7 +1477,7 @@ export default function SearchScreen() {
                     style={styles.searchIcon}
                   />
                   <Pressable
-                    style={styles.searchFieldPressable}
+                    style={[styles.searchFieldPressable, showMarketplaceHomeFeed && styles.homeSearchTarget]}
                     onPress={openSearchOverlay}
                     accessibilityRole="button"
                     accessibilityLabel="Ouvrir la recherche"
@@ -1481,15 +1485,27 @@ export default function SearchScreen() {
                     <Text
                       style={[
                         styles.searchFieldText,
+                        showMarketplaceHomeFeed && styles.homeSearchText,
                         !(searchOverlayOpen ? overlayDraft : query).trim() && styles.searchFieldPlaceholder,
                       ]}
                       numberOfLines={1}
                     >
                       {(searchOverlayOpen ? overlayDraft : query).trim()
                         ? (searchOverlayOpen ? overlayDraft : query).trim()
-                        : SEARCH_FIELD_PLACEHOLDER}
+                        : showMarketplaceHomeFeed ? 'Que cherchez-vous ?' : SEARCH_FIELD_PLACEHOLDER}
                     </Text>
                   </Pressable>
+                  {showMarketplaceHomeFeed ? (
+                    <Pressable
+                      onPress={openFilters}
+                      style={styles.homeFilter}
+                      accessibilityRole="button"
+                      accessibilityLabel="Ouvrir les filtres"
+                    >
+                      <Ionicons name="options-outline" size={20} color="#0B4D3C" />
+                      <Text style={styles.homeFilterText}>Filtres</Text>
+                    </Pressable>
+                  ) : null}
                   {query.trim().length > 0 ? (
                     <Pressable
                       onPress={() => {
@@ -1511,15 +1527,18 @@ export default function SearchScreen() {
                     </Pressable>
                   ) : null}
                 </View>
-                <HomeCategoryStrip
-                  bucket={bucket}
-                  onCategoryPress={handleQuickCategoryPress}
-                  onAutresPress={handleCategoriesVoirTout}
-                  insetHorizontal={screenHorizontal}
-                  selectedCategoryId={appliedSearchFilters.categoryId}
-                />
+                <View style={showMarketplaceHomeFeed ? [styles.homeCategories, { marginHorizontal: -searchChrome.hPad }] : undefined}>
+                  <HomeCategoryStrip
+                    bucket={bucket}
+                    compact={showMarketplaceHomeFeed}
+                    onCategoryPress={handleQuickCategoryPress}
+                    onAutresPress={handleCategoriesVoirTout}
+                    insetHorizontal={screenHorizontal}
+                    selectedCategoryId={appliedSearchFilters.categoryId}
+                  />
+                </View>
                 {savedSearches.length > 0 ? (
-                  <View style={styles.savedQuickRow}>
+                  <View style={[styles.savedQuickRow, showMarketplaceHomeFeed && styles.homeSavedRow]}>
                     <Pressable
                       style={({ pressed }) => [
                         styles.savedQuickBtn,
@@ -1543,28 +1562,9 @@ export default function SearchScreen() {
                   listHeaderComponent={marketplaceListHeader}
                   extraComponent={<PopularShopsSection />}
                   extraComponentIndex={HOME_FEED_PAGE_SIZE}
-                  limit={HOME_FEED_PAGE_SIZE}
                   fetchPageSize={HOME_FEED_PAGE_SIZE}
                   skipNetworkRevalidateWithinMs={HOME_LISTING_FEED_NETWORK_COOLDOWN_MS}
-                  disableInfiniteScroll
                   listInitialNumToRender={4}
-                  footerAction={{
-                    label: LABEL_VOIR_PLUS_ANNONCES,
-                    onPress: () => {
-                      clearPendingMainSearchDebounce();
-                      lastDisplayedPage1KeyRef.current = null;
-                      setQuery('');
-                      setOverlayDraft('');
-                      browseFromHomeFooterRef.current = true;
-                      void runSearchRef.current('', {
-                        categoryId: appliedSearchFilters.categoryId,
-                        category: appliedSearchFilters.category,
-                        city: appliedSearchFilters.city,
-                        min: appliedPriceFilters.min,
-                        max: appliedPriceFilters.max,
-                      });
-                    },
-                  }}
                   contentPaddingHorizontal={0}
                   homeFeedCardInset={screenHorizontal}
                   listingCardFeedPresentation="home"
@@ -1810,6 +1810,15 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.surface,
   },
+  homeSurface: { backgroundColor: '#0B4D3C' },
+  homeTopStack: { backgroundColor: '#0B4D3C', borderBottomWidth: 0 },
+  homeFilter: { minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: spacing.xs, borderLeftWidth: 1, borderLeftColor: colors.border, marginLeft: spacing.sm, paddingLeft: spacing.sm },
+  homeFilterText: { ...typography.sm, fontWeight: fontWeights.semibold, color: '#0B4D3C' },
+  homeSearchText: { ...typography.sm },
+  homeSearchTarget: { minHeight: 44 },
+  homeSearchStrip: { paddingBottom: 0 },
+  homeSavedRow: { backgroundColor: colors.surface, borderRadius: radius.lg, paddingHorizontal: spacing.sm },
+  homeCategories: { backgroundColor: colors.background, marginTop: spacing.md, paddingVertical: spacing.sm },
   marketplaceColumn: {
     flex: 1,
   },

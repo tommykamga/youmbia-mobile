@@ -16,7 +16,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import type { WindowSizeBucket } from '@/lib/responsiveLayout';
 import { getRootMarketplaceCategories, getSellParentIcon } from '@/lib/marketplaceCategories';
 import { useMarketplaceCategories } from '@/hooks/useMarketplaceCategories';
-import { colors, getShadowStyle } from '@/theme';
+import { colors, getShadowStyle, semantic } from '@/theme';
 
 const AUTRES_LABEL = 'Autres';
 
@@ -99,6 +99,8 @@ export type HomeCategoryStripProps = {
   insetHorizontal?: number;
   parentContentPad?: number;
   selectedCategoryId?: number | null;
+  /** Variante compacte activée uniquement par l’accueil. */
+  compact?: boolean;
 };
 
 export function HomeCategoryStrip({
@@ -108,6 +110,7 @@ export function HomeCategoryStrip({
   insetHorizontal,
   parentContentPad,
   selectedCategoryId = null,
+  compact = false,
 }: HomeCategoryStripProps) {
   const { categories } = useMarketplaceCategories();
   const rootCategories = useMemo(() => getRootMarketplaceCategories(categories), [categories]);
@@ -127,7 +130,9 @@ export function HomeCategoryStrip({
     return { paddingHorizontal: insetTarget };
   }, [parentContentPad, insetHorizontal, insetTarget]);
 
-  const { itemWidth, minHeight, iconSize } = stripDimensions(bucket);
+  const { itemWidth, minHeight, iconSize } = compact
+    ? { itemWidth: 68, minHeight: 52, iconSize: 18 }
+    : stripDimensions(bucket);
 
   /** Pas de `foreground: true` (évite une plaque / carré clair derrière le glyphe sur Android). */
   const ripple =
@@ -156,17 +161,17 @@ export function HomeCategoryStrip({
               hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
               style={({ pressed }) => [
                 styles.cell,
-                cellShadow,
+                !compact && cellShadow,
                 {
                   width: itemWidth,
-                  marginRight: STRIP.itemGap,
+                  marginRight: compact ? 8 : STRIP.itemGap,
                   minHeight,
-                  paddingVertical: 9,
+                  paddingVertical: compact ? 6 : 9,
                   paddingHorizontal: 7,
-                  backgroundColor: isActive ? STRIP.activeBg : STRIP.inactiveBg,
+                  backgroundColor: compact ? (isActive ? STRIP.activeBg : 'transparent') : isActive ? STRIP.activeBg : STRIP.inactiveBg,
                   borderColor: isActive ? STRIP.activeBorder : STRIP.inactiveBorder,
-                  borderWidth: isActive ? STRIP.activeBorderWidth : STRIP.inactiveBorderWidth,
-                  borderRadius: STRIP.radius,
+                  borderWidth: compact ? 0 : isActive ? STRIP.activeBorderWidth : STRIP.inactiveBorderWidth,
+                  borderRadius: compact ? 12 : STRIP.radius,
                 },
                 pressed && styles.cellPressed,
               ]}
@@ -178,7 +183,7 @@ export function HomeCategoryStrip({
               <Ionicons
                 name={iconName}
                 size={iconSize}
-                color={isActive ? STRIP.iconActive : STRIP.iconInactive}
+                color={compact ? semantic.successText : isActive ? STRIP.iconActive : STRIP.iconInactive}
                 style={androidIconStyle ?? undefined}
               />
               <Text
@@ -200,17 +205,17 @@ export function HomeCategoryStrip({
           hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
           style={({ pressed }) => [
             styles.cell,
-            cellShadow,
+            !compact && cellShadow,
             {
               width: itemWidth,
               marginRight: 0,
               minHeight,
-              paddingVertical: 9,
+              paddingVertical: compact ? 6 : 9,
               paddingHorizontal: 7,
-              backgroundColor: STRIP.inactiveBg,
+              backgroundColor: compact ? 'transparent' : STRIP.inactiveBg,
               borderColor: STRIP.inactiveBorder,
-              borderWidth: STRIP.inactiveBorderWidth,
-              borderRadius: STRIP.radius,
+              borderWidth: compact ? 0 : STRIP.inactiveBorderWidth,
+              borderRadius: compact ? 12 : STRIP.radius,
             },
             pressed && styles.cellPressed,
           ]}
@@ -221,7 +226,7 @@ export function HomeCategoryStrip({
           <Ionicons
             name="grid-outline"
             size={iconSize}
-            color={STRIP.iconInactive}
+            color={compact ? semantic.successText : STRIP.iconInactive}
             style={androidIconStyle ?? undefined}
           />
           <Text

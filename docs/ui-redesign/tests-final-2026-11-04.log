@@ -1,0 +1,27 @@
+
+ RUN  v3.2.7 /Users/tommy/APP TESKA/YOUMBIA/youmbia-ui-home
+
+ ✓ src/features/listings/discoveryFeedController.test.ts (14 tests) 6ms
+ ✓ src/services/releaseCritical.contract.test.ts (9 tests) 5ms
+ ✓ src/services/listings/getPublicListings.test.ts (8 tests) 4ms
+ ✓ src/lib/link01.contract.test.ts (2 tests) 1ms
+ ✓ src/features/search/searchSession.test.ts (3 tests) 2ms
+stderr | src/features/listings/ListingFeed.test.tsx > wires cached pagination to a virtualized stable list and serializes endReached
+react-test-renderer is deprecated. See https://react.dev/warnings/react-test-renderer
+
+stderr | src/features/listings/ListingFeed.test.tsx > revalidates a legacy cache in StrictMode and ignores the old next page after unmount
+react-test-renderer is deprecated. See https://react.dev/warnings/react-test-renderer
+
+stderr | src/features/listings/ListingFeed.test.tsx > presents a readable next-page error and keeps the same list through an explicit retry
+react-test-renderer is deprecated. See https://react.dev/warnings/react-test-renderer
+
+stderr | src/features/listings/ListingFeed.test.tsx > cancels the old home page when leaving for criteria and keeps a fresh feed intact on return
+react-test-renderer is deprecated. See https://react.dev/warnings/react-test-renderer
+
+ ✓ src/features/listings/ListingFeed.test.tsx (4 tests) 15ms
+ ✓ src/lib/responsiveLayout.test.ts (3 tests) 1ms
+
+ Test Files  7 passed (7)
+      Tests  43 passed (43)
+   Start at  13:37:53
+   Duration  416ms (transform 468ms, setup 60ms, collect 862ms, tests 34ms, environment 1ms, prepare 455ms)

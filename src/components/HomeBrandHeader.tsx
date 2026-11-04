@@ -51,12 +51,17 @@ export type HomeBrandHeaderProps = {
   unreadCount: number;
   /** Onglet Chercher : cloche plus compacte + marge sous le header (écart avec la search bar). */
   searchTabLayout?: boolean;
+  /** Présentation réservée au bloc supérieur de l’accueil. */
+  homePresentation?: boolean;
+  location?: { label: string; onPress: () => void };
 };
 
 export function HomeBrandHeader({
   onNotificationsPress,
   unreadCount,
   searchTabLayout = false,
+  homePresentation = false,
+  location,
 }: HomeBrandHeaderProps) {
   const { width } = useWindowDimensions();
 
@@ -94,6 +99,7 @@ export function HomeBrandHeader({
       style={[
         styles.row,
         searchTabLayout && styles.rowSearchTab,
+        homePresentation && styles.rowHome,
         {
           minHeight: layout.rowMinHeight,
           paddingVertical: layout.rowPadV,
@@ -101,15 +107,28 @@ export function HomeBrandHeader({
         },
       ]}
     >
-      <View style={[styles.sideSlot, styles.sideSlotStart, { width: layout.sideSlot }]} />
-      <View style={styles.logoWrap} accessibilityRole="header">
+      {!homePresentation ? <View style={[styles.sideSlot, styles.sideSlotStart, { width: layout.sideSlot }]} /> : null}
+      <View style={[styles.logoWrap, homePresentation && styles.logoHome]} accessibilityRole="header">
         <Image
           source={require('../../assets/images/youmbia-logo-header.svg')}
-          style={[styles.logo, { width: layout.logoWidth, height: layout.logoHeight }]}
+          style={[styles.logo, { width: homePresentation ? 132 : layout.logoWidth, height: homePresentation ? 36 : layout.logoHeight }]}
           contentFit="contain"
           accessibilityLabel="YOUMBIA"
         />
       </View>
+      {homePresentation && location ? (
+        <Pressable
+          onPress={location.onPress}
+          style={styles.location}
+          accessibilityRole="button"
+          accessibilityLabel={`Localisation : ${location.label}. Ouvrir les filtres`}
+          accessibilityHint="Choisissez une ville dans les filtres"
+        >
+          <Ionicons name="location-outline" size={18} color={colors.surface} />
+          <Text style={styles.locationText} numberOfLines={1}>{location.label}</Text>
+          <Ionicons name="chevron-down" size={14} color={colors.surface} />
+        </Pressable>
+      ) : null}
       <View style={[styles.sideSlot, styles.sideSlotEnd, { width: layout.sideSlot }]}>
         <Pressable
           onPress={onNotificationsPress}
@@ -117,6 +136,7 @@ export function HomeBrandHeader({
             styles.msgBtn,
             searchTabLayout ? styles.msgBtnSearchTab : null,
             { minWidth: layout.btnSize, minHeight: layout.btnSize },
+            homePresentation && styles.notificationHome,
             pressed && styles.msgBtnPressed,
           ]}
           hitSlop={searchTabLayout ? 8 : 12}
@@ -127,7 +147,7 @@ export function HomeBrandHeader({
             <Ionicons
               name="notifications-outline"
               size={layout.notifIcon}
-              color={ui.colors.textSecondary}
+              color={homePresentation ? colors.surface : ui.colors.textSecondary}
             />
             {unreadCount > 0 ? (
               <View style={styles.msgBadge}>
@@ -150,6 +170,11 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     backgroundColor: colors.surface,
   },
+  rowHome: { backgroundColor: '#0B4D3C', gap: spacing.sm },
+  logoHome: { flex: 0, alignItems: 'flex-start', backgroundColor: colors.surface, borderRadius: 8, paddingHorizontal: 6, paddingVertical: 2 },
+  location: { flex: 1, minWidth: 0, minHeight: 44, flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center', gap: spacing.xs },
+  locationText: { color: colors.surface, flexShrink: 1, fontSize: 13, fontWeight: '600' },
+  notificationHome: { minWidth: 44, minHeight: 44, backgroundColor: 'transparent', borderWidth: 0, elevation: 0, shadowOpacity: 0 },
   rowSearchTab: {
     marginBottom: 6,
   },

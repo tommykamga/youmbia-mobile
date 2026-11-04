@@ -39,8 +39,8 @@ export const LISTING_CARD_RAIL_STRIDE_FEATURED =
 
 /** Zone image home : ratio largeur/hauteur ≈ 1 / 1.2 (image plus haute). */
 const HOME_IMAGE_ASPECT_RATIO = 1 / 1.2;
-/** Home feed : ratio premium constant (image moins haute, densité). */
-const HOME_FEED_IMAGE_ASPECT_RATIO = 1 / 1.0;
+/** Home feed : ratio photo commun 4:3 (width / height). */
+const HOME_FEED_IMAGE_ASPECT_RATIO = 4 / 3;
 
 const IMAGE_HEIGHT = 146;
 /** Fils rail standard (hauteur fixe). */
@@ -64,6 +64,8 @@ export type ListingCardProps = {
    * Ne pas utiliser hors ListingFeed home pour garder les autres écrans inchangés.
    */
   feedPresentation?: 'standard' | 'home';
+  /** Grille 2 colonnes accueil : typographie légèrement plus compacte. */
+  homeGridCell?: boolean;
   source?: ListingViewSource;
 };
 
@@ -86,6 +88,7 @@ function listingCardCoverImageKey(listing: PublicListing): string {
 function listingCardPropsAreEqual(prev: ListingCardProps, next: ListingCardProps): boolean {
   if ((prev.railPresentation ?? 'default') !== (next.railPresentation ?? 'default')) return false;
   if (prev.feedPresentation !== next.feedPresentation) return false;
+  if (prev.homeGridCell !== next.homeGridCell) return false;
   if (prev.variant !== next.variant) return false;
   if ((prev.source ?? '') !== (next.source ?? '')) return false;
   const a = prev.listing;
@@ -119,6 +122,7 @@ function ListingCardInner({
   variant = 'feed',
   railPresentation = 'default',
   feedPresentation = 'standard',
+  homeGridCell = false,
   source,
 }: ListingCardProps) {
   const router = useRouter();
@@ -215,6 +219,7 @@ function ListingCardInner({
     );
 
   const isHomeFeed = feedPresentation === 'home' && variant === 'feed';
+  const isHomeGrid = isHomeFeed && homeGridCell;
   const isFeaturedRail = variant === 'rail' && railPresentation === 'featured';
   /**
    * Entering FadeInDown + FlatList removeClippedSubviews (iOS) crée des blancs entre items.
@@ -248,13 +253,6 @@ function ListingCardInner({
           />
         </View>
       </View>
-      {priceLabel && isHomeFeed ? (
-        <View style={styles.priceOverlayHome} pointerEvents="none">
-          <Text style={styles.priceOverlayHomeText} numberOfLines={1} ellipsizeMode="tail">
-            {priceLabel}
-          </Text>
-        </View>
-      ) : null}
       {priceLabel && !isHomeFeed && !isFeaturedRail ? (
         <View style={styles.priceOverlay}>
           <Text style={styles.priceText}>{priceLabel}</Text>
@@ -281,6 +279,7 @@ function ListingCardInner({
       {firstImage && !imageFailed ? (
         <ImageBackground
           source={{ uri: firstImage }}
+          resizeMode="cover"
           style={[
             styles.imageBase,
             !isHomeFeed && !isFeaturedRail && styles.imageHeightFeed,
@@ -338,8 +337,24 @@ function ListingCardInner({
             {priceLabel}
           </Text>
         ) : null}
+        {isHomeFeed && priceLabel ? (
+          <Text
+            style={[styles.priceHomePrimary, isHomeGrid && styles.priceHomePrimaryGrid]}
+            numberOfLines={2}
+            ellipsizeMode="tail"
+            adjustsFontSizeToFit
+            minimumFontScale={0.88}
+          >
+            {priceLabel}
+          </Text>
+        ) : null}
         <Text
-          style={[styles.title, isHomeFeed && styles.titleHome, isFeaturedRail && styles.titleRailFeatured]}
+          style={[
+            styles.title,
+            isHomeFeed && styles.titleHome,
+            isHomeGrid && styles.titleHomeGrid,
+            isFeaturedRail && styles.titleRailFeatured,
+          ]}
           numberOfLines={2}
           ellipsizeMode="tail"
         >
@@ -592,6 +607,19 @@ const styles = StyleSheet.create({
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 2,
   },
+  priceHomePrimary: {
+    fontSize: 16,
+    lineHeight: 21,
+    fontWeight: fontWeights.black,
+    color: colors.primaryDark,
+    letterSpacing: -0.35,
+    marginBottom: 4,
+    maxWidth: '100%',
+  },
+  priceHomePrimaryGrid: {
+    fontSize: 15,
+    lineHeight: 20,
+  },
   priceOverlay: {
     position: 'absolute',
     bottom: 10,
@@ -654,6 +682,11 @@ const styles = StyleSheet.create({
     color: ui.colors.textPrimary,
     marginBottom: 3,
     letterSpacing: -0.08,
+  },
+  titleHomeGrid: {
+    fontSize: 12,
+    lineHeight: 16,
+    marginBottom: 2,
   },
   metaHome: {
     fontSize: 11,

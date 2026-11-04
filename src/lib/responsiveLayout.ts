@@ -5,8 +5,17 @@
  * Aligné produit : petit téléphone < 380 ; moyen [380, 430) ; grand ≥ 430.
  */
 import { useMemo } from 'react';
-import { useWindowDimensions } from 'react-native';
+import { PixelRatio, useWindowDimensions } from 'react-native';
 import { spacing } from '@/theme';
+
+/** Espacement horizontal entre cartes du fil accueil (grille 2 colonnes). */
+export const HOME_FEED_GRID_COLUMN_GAP = spacing.sm;
+
+/**
+ * Au-delà de ce ratio de police système, le fil accueil repasse en 1 colonne
+ * (Dynamic Type / texte agrandi iOS & Android).
+ */
+export const HOME_FEED_GRID_MAX_FONT_SCALE = 1.2;
 
 export type WindowSizeBucket = 'compact' | 'regular' | 'large';
 
@@ -86,6 +95,16 @@ export function getHomeMarketplaceHorizontalPadding(_width?: number): number {
   return spacing.screenHorizontal;
 }
 
+/** Colonnes du fil d’accueil (cartes) : 2 si largeur suffisante et texte OS normal, sinon 1. */
+export function getHomeFeedColumnCount(
+  width: number,
+  fontScale: number = PixelRatio.getFontScale()
+): 1 | 2 {
+  if (width < WIDTH_COMPACT_BOUND) return 1;
+  if (fontScale > HOME_FEED_GRID_MAX_FONT_SCALE) return 1;
+  return 2;
+}
+
 /** @deprecated Alias — préférer `getHomeMarketplaceHorizontalPadding`. */
 export const getHomeFeedListingCardInset = getHomeMarketplaceHorizontalPadding;
 
@@ -104,10 +123,13 @@ export function useResponsiveLayout() {
   const { width, height } = useWindowDimensions();
   const bucket = getWindowSizeBucket(width);
   const phone = getPhoneSizeFlags(width);
+  const fontScale = PixelRatio.getFontScale();
   return {
     width,
     height,
     bucket,
+    fontScale,
+    homeFeedColumns: getHomeFeedColumnCount(width, fontScale),
     isCompact: bucket === 'compact',
     isRegular: bucket === 'regular',
     isLarge: bucket === 'large',

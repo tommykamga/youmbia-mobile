@@ -99,7 +99,7 @@ function mapRow(row: ListingRow, signedMap: Map<string, string>): PublicListing 
 }
 
 export type GetPublicListingsResult =
-  | { data: PublicListing[]; error: null }
+  | { data: PublicListing[]; error: null; pagination: { nextOffset: number; hasMore: boolean } }
   | { data: null; error: { message: string } };
 
 /**
@@ -111,13 +111,15 @@ export async function getPublicListings(
   limit: number = PAGE_SIZE
 ): Promise<GetPublicListingsResult> {
   const from = Math.max(0, offset);
-  const to = from + Math.max(1, limit) - 1;
+  // Match the RPC per-call bound; this is not a total catalogue limit.
+  const pageSize = Math.min(50, Math.max(1, limit));
+  const to = from + pageSize - 1;
 
   // V5-03B : classement global et pagination côté PostgreSQL.
   // Fallback legacy uniquement si la RPC n'est pas encore déployée.
   const { data: ranked, error: rankingError } = await supabase.rpc(
     'get_v5_discovery_listing_ids',
-    { p_offset: from, p_limit: Math.max(1, limit) }
+    { p_offset: from, p_limit: pageSize }
   );
 
   if (!rankingError && !Array.isArray(ranked)) {
@@ -146,6 +148,7 @@ export async function getPublicListings(
   const { data, error } = rankedIds === null
     ? await query
         .order(LISTING_DISCOVERY_ORDER_COLUMN, { ascending: false })
+        .order('id', { ascending: false })
         .range(from, to)
     : rankedIds.length === 0
       ? { data: [], error: null }
@@ -211,5 +214,11 @@ export async function getPublicListings(
     return { ...listing, shop };
   });
 
-  return { data: dataWithFallback, error: null };
+  // Hydration can lose a row (e.g. listing withdrawn between the two reads).
+  // Advance by RPC rows consumed, even when fewer cards remain visible.
+  const consumed = rankedIds === null ? fetched.length : rankedIds.length;
+  return {
+    data: dataWithFallback, error: null,
+    pagination: { nextOffset: from + consumed, hasMore: consumed === pageSize },
+  };
 }

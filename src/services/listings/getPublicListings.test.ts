@@ -14,7 +14,20 @@ it('hydrates in RPC order instead of hydration order and forwards pagination',as
 });
 it('returns exhausted pages without hydration',async()=>{m.rpc.mockResolvedValue({data:[],error:null});expect((await getPublicListings()).data).toEqual([]);expect(m.from).toHaveBeenCalledTimes(1);});
 for(const code of ['PGRST202','42883'])it(`falls back only for absent RPC: ${code}`,async()=>{
- m.rpc.mockResolvedValue({data:null,error:{code,message:'missing'}});expect((await getPublicListings(6,6)).error).toBeNull();expect(m.ranges).toEqual([[6,11]]);expect(m.orders).toEqual(['last_published_at']);
+ m.rpc.mockResolvedValue({data:null,error:{code,message:'missing'}});expect((await getPublicListings(6,6)).error).toBeNull();expect(m.ranges).toEqual([[6,11]]);expect(m.orders).toEqual(['last_published_at','id']);
 });
 it('never bypasses permission errors with legacy fallback',async()=>{m.rpc.mockResolvedValue({data:null,error:{code:'42501',message:'denied'}});expect((await getPublicListings()).error?.message).toBe('denied');expect(m.from).not.toHaveBeenCalled();});
 it('rejects an invalid RPC response',async()=>{m.rpc.mockResolvedValue({data:null,error:null});expect((await getPublicListings()).error).not.toBeNull();});
+
+it('uses ranked row count for offset and end detection, not hydrated card count',async()=>{
+ m.rpc.mockResolvedValue({data:[{listing_id:'a',rank_position:7},{listing_id:'b',rank_position:8},{listing_id:'withdrawn',rank_position:9}],error:null});
+ const result=await getPublicListings(6,3);
+ expect(result.data?.map(x=>x.id)).toEqual(['a','b']);
+ expect(result.error===null && result.pagination).toEqual({nextOffset:9,hasMore:true});
+});
+it('caps individual requests to the actual RPC limit without imposing a catalogue cap',async()=>{
+ m.rpc.mockResolvedValue({data:[],error:null});
+ const result=await getPublicListings(100,100);
+ expect(m.rpc).toHaveBeenCalledWith('get_v5_discovery_listing_ids',{p_offset:100,p_limit:50});
+ expect(result.error===null && result.pagination).toEqual({nextOffset:100,hasMore:false});
+});
