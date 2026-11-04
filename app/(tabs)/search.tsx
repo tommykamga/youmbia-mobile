@@ -1762,11 +1762,19 @@ export default function SearchScreen() {
           animationType="slide"
           onRequestClose={closeFilters}
         >
-          <Pressable style={styles.sheetOverlay} onPress={closeFilters}>
-            <Pressable style={styles.sheet} onPress={(e) => e.stopPropagation()}>
-              {filtersSheetContent}
+          <KeyboardSafeView androidInsetPadding subtractSafeAreaBottom={false}>
+            <Pressable style={styles.sheetOverlay} onPress={closeFilters}>
+              <Pressable style={styles.sheet} onPress={(e) => e.stopPropagation()}>
+                <ScrollView
+                  style={styles.filtersScroll}
+                  keyboardShouldPersistTaps="handled"
+                  keyboardDismissMode="on-drag"
+                >
+                  {filtersSheetContent}
+                </ScrollView>
+              </Pressable>
             </Pressable>
-          </Pressable>
+          </KeyboardSafeView>
         </Modal>
 
         {/* Bottom sheet: recherches enregistrées */}
@@ -2175,6 +2183,10 @@ const styles = StyleSheet.create({
     borderTopRightRadius: radius['2xl'],
     paddingBottom: spacing.lg,
     maxHeight: '84%',
+  },
+  filtersScroll: {
+    flexGrow: 0,
+    flexShrink: 1,
   },
   sheetCard: {
     paddingHorizontal: spacing.screenHorizontal,
