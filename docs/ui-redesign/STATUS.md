@@ -487,3 +487,92 @@ Aucun scénario physique n’est validé : ouverture depuis l’accueil, photos,
 - Périmètre staged : fiche annonce, composants listing, démo (affichage prix + zoom modal), tests, `listingAttributeIcon`, `STATUS.md` — **exclus** : `.cursor/`, logs/captures QA, `scripts/start-ui-home-metro.local.cjs`.
 - Contrôles pré-commit : voir rapport agent (tsc, ESLint ciblé, Vitest, `git diff --check`).
 - **En attente** : confirmation propriétaire puis `git commit` local uniquement ; pas de push.
+
+
+## UI-FAVORITES-01 — Onglet Favoris premium — 4 novembre 2026 (Phase B)
+
+### Identité et garde-fous
+- Worktree `/Users/tommy/APP TESKA/YOUMBIA/youmbia-ui-home`, branche `feat/ui-home-first-slice`, HEAD de référence `204aa9bc4bbae019b8d01501834f17fd49d213a9` (inchangé pendant l’implémentation locale).
+- Cible Supabase QA inchangée : `wagvrytcguutgbjzhvak` via `eas.json` development + lanceur Metro local ; garde anti-PROD `qa-build-guard.cjs` non contournée ; **aucune modification** des fichiers d’environnement.
+- Aucun commit, push, merge, déploiement, changement backend/RLS/API.
+
+### Implémentation (Option A audit)
+- `app/(tabs)/favorites.tsx` : en-tête vert `#0B4D3C`, compteur d’annonces visibles, grille premium `ListingCard` (`feedPresentation="home"`, `source="favorites"`), repli 1 colonne (`getHomeFeedColumnCount`), pull-to-refresh, états empty / indisponible / erreur distincts, CTA « Découvrir des annonces ».
+- `src/features/favorites/FavoritesScreenHeader.tsx`, `favoritesDisplay.ts` (dérivation affichage sans purge des favoris distants).
+- `src/features/listings/homeFeedGridRows.ts` : factorisation des rangées grille (réutilisée par `ListingFeed.tsx`).
+- `app/listing/[id].tsx` : cœur fiche branché sur `FavoritesContext` (sync accueil ↔ fiche ↔ onglet).
+
+### Synchronisation favoris
+- Onglet : `refresh()` du contexte puis `getFavorites()` au focus / refresh ; pool hydraté + filtre optimiste sur le Set global ; fetch incrémental `getListingsByIds` pour ids manquants.
+- Favoris enregistrés sans annonce active : écran ou bandeau « indisponible », **sans** suppression en base.
+- Fiche : `toggleFavorite` contextuel (plus d’état local divergent).
+
+### Contrôles exécutés
+- `npx tsc --noEmit` : **PASS**
+- ESLint ciblé (favoris + fiche + grille) : **PASS** (0 erreur)
+- Vitest ciblé : **4 fichiers / 14 tests PASS** (`favoritesDisplay`, `FavoritesScreenHeader`, `FavoritesScreen`, `homeFeedGridRows`)
+- `git diff --check` : **PASS**
+
+### Recette iPhone — **NON VALIDÉE** (protocole prêt)
+- Metro QA existant port **8082** (`scripts/start-ui-home-metro.local.cjs`), démo **désactivée**, compte acheteur QA.
+- Scénarios : favori accueil → onglet → fiche → retrait ; retour/scroll ; empty ; erreur + Réessayer.
+- **Réserve distincte** : photos QA absentes / bucket Storage (placeholders attendus).
+
+### Réserves
+- Validation physique onglet Favoris et sync multi-écrans : **en attente propriétaire**.
+- Images Supabase QA : hors périmètre de cette tranche (documenté audit QA connecté).
+
+
+## UI-FAVORITES-01 — Finition polish — 4 novembre 2026
+
+### Corrections ciblées
+- **Grille 2 col., dernière ligne impaire** : `getHomeFeedGridCellLayout` (`responsiveLayout.ts`) — une carte seule (1, 3 ou 5 favoris) garde **la largeur d’une colonne**, sans étirement pleine largeur (`favorites.tsx`).
+- **En-tête** : `paddingBottom: 6` aligné sur `AppHeader` compact ; `paddingTop` liste réduit à `spacing.xs` sous le bandeau vert.
+
+### Vérifications (automatisées + protocole iPhone)
+| Point | Automatisé | iPhone (captures OK direction DA) |
+| --- | --- | --- |
+| Grille 1–5 favoris | Vitest : rangées `[1]`, `[2]`, `[2,1]`, `[2,2]`, `[2,2,1]` + layout cellule seule | **À reconfirmer** après fix largeur 1 carte |
+| Retrait + compteur | Vitest `deriveFavoritesDisplay` (retrait optimiste → `empty_none`) | Sync accueil/fiche/onglet : **re-vérifier** sur device |
+| Empty dernier favori | Vitest | Protocole iPhone |
+| Erreur + Réessayer | Vitest `FavoritesScreen` | Protocole iPhone |
+| Scroll retour fiche | Contrat inchangé (`FlatList` sans remontage) | Protocole iPhone |
+| Texte agrandi | Vitest `getHomeFeedColumnCount` → 1 col. | Protocole iPhone |
+
+### Contrôles exécutés
+- `npx tsc --noEmit` : **PASS**
+- ESLint ciblé favoris : **PASS**
+- Vitest : favoris + `responsiveLayout` + `homeFeedGridRows` : **PASS** (voir rapport agent)
+- `git diff --check` : **PASS**
+
+### Réserves QA ouvertes
+- Photos / bucket Storage QA absents (placeholders).
+- Revalidation iPhone rapide recommandée pour **1 favori en grille** et **sync compteur** après cette finition.
+
+
+## UI-FAVORITES-01 — Préflight commit local — 4 novembre 2026
+
+### Réserves recette iPhone (post-validation DA, hors périmètre commit)
+Les captures propriétaire valident la **direction artistique** de l’onglet Favoris. Les scénarios suivants restent **documentés comme réserves QA** jusqu’à PASS explicite sur build connecté QA (Metro 8082, démo off) :
+
+| Scénario | Attendu | Statut |
+| --- | --- | --- |
+| **Retrait synchronisé** | Cœur accueil, fiche (`FavoritesContext`) et onglet Favoris + **compteur** cohérents après add/remove | **NON re-certifié** sur HEAD de commit (sync code + tests unitaires OK) |
+| **Empty / error** | Dernier favori retiré → empty premium ; panne réseau → message + **Réessayer** (pas d’empty trompeur) | **NON re-certifié** iPhone sur ce lot |
+| **Retour fiche + scroll** | `FlatList` favoris sans remontage ; position conservée au `router.back()` depuis une fiche | **NON re-certifié** iPhone |
+| **Photos QA** | Catalogue QA sans images / bucket Storage absent → placeholders ; ne pas interpréter comme bug Favoris | **Réserve infrastructure QA** (audit connecté) |
+
+### Impact grille sur les autres écrans
+- `getHomeFeedGridCellLayout` est consommé **uniquement** par `app/(tabs)/favorites.tsx`.
+- Accueil (`ListingFeed`) conserve `homeGridCell: { flex: 1 }` ; extraction `homeFeedGridRows.ts` sans changement de rendu accueil (tests `ListingFeed` rejoués au préflight).
+
+### Fichiers prévus pour le commit UI-FAVORITES-01
+- `app/(tabs)/favorites.tsx`, `app/listing/[id].tsx`
+- `src/features/favorites/**`, `src/features/listings/homeFeedGridRows.ts`, `homeFeedGridRows.test.ts`
+- `src/features/listings/ListingFeed.tsx`
+- `src/lib/responsiveLayout.ts`, `responsiveLayout.test.ts`
+- `docs/ui-redesign/STATUS.md`
+
+**Exclus** : `.cursor/`, logs/captures QA, `scripts/start-ui-home-metro.local.cjs`.
+
+**En attente** : autorisation explicite avant `git commit`. Aucun push.

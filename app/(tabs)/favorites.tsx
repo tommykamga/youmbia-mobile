@@ -1,83 +1,110 @@
 /**
- * Favorites tab – Sprint 3.1.
+ * Favorites tab – premium marketplace presentation (UI-FAVORITES-01).
  * Non connecté : Redirect vers /(auth)/gate?context=favorites (tab bar intercepte aussi).
  */
 
-import React, { useCallback, useEffect, useState, useMemo, useRef } from 'react';
-import { FlatList, View, StyleSheet, RefreshControl, Platform, Text } from 'react-native';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  FlatList,
+  View,
+  StyleSheet,
+  RefreshControl,
+  Platform,
+  Text,
+  PixelRatio,
+  useWindowDimensions,
+  InteractionManager,
+} from 'react-native';
 import { useRouter, Redirect, useFocusEffect } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { Screen, EmptyState, Button, AppHeader, LoadingState } from '@/components';
+import { Screen, EmptyState, Button, LoadingState } from '@/components';
 import { getFavorites } from '@/services/favorites';
 import { getSession } from '@/services/auth';
 import { ListingCard } from '@/features/listings';
+import { buildHomeFeedGridRows, type HomeFeedGridRow } from '@/features/listings/homeFeedGridRows';
 import { getListingsByIds, type PublicListing } from '@/services/listings';
 import { spacing, colors, typography, fontWeights } from '@/theme';
 import { useFavorites } from '@/context/FavoritesContext';
 import { buildAuthGateHref } from '@/lib/authGateNavigation';
+import {
+  FavoritesScreenHeader,
+  FAVORITES_MARKETPLACE_SURFACE,
+} from '@/features/favorites/FavoritesScreenHeader';
+import { deriveFavoritesDisplay } from '@/features/favorites/favoritesDisplay';
+import {
+  getHomeFeedColumnCount,
+  getHomeFeedGridCellLayout,
+  getHomeFeedGridInnerWidth,
+  HOME_FEED_GRID_COLUMN_GAP,
+} from '@/lib/responsiveLayout';
 
 type FavoritesState =
   | { status: 'loading' }
   | { status: 'unauthenticated' }
   | { status: 'error'; message: string }
-  // `ready` = pool d'annonces chargées (peut être vide). L'affichage réel est
-  // dérivé du Set global de favoris → voir `displayData`.
   | { status: 'ready'; data: PublicListing[] };
 
+function DiscoverListingsButton({ onPress }: { onPress: () => void }) {
+  return (
+    <View style={styles.emptyAction}>
+      <Button variant="secondary" onPress={onPress} style={styles.emptyCta}>
+        <Text style={styles.emptyCtaText} numberOfLines={1} adjustsFontSizeToFit>
+          Découvrir des annonces
+        </Text>
+      </Button>
+    </View>
+  );
+}
+
 export default function FavoritesScreen() {
-  const { favorites, loading: favoritesLoading } = useFavorites();
+  const { favorites, refresh } = useFavorites();
   const router = useRouter();
+  const { width: windowWidth } = useWindowDimensions();
+  const fontScale = PixelRatio.getFontScale();
+  const columnCount = getHomeFeedColumnCount(windowWidth, fontScale);
+  const useGrid = columnCount === 2;
+  const gridInnerWidth = useMemo(() => getHomeFeedGridInnerWidth(windowWidth), [windowWidth]);
+
   const [state, setState] = useState<FavoritesState>({ status: 'loading' });
   const [refreshing, setRefreshing] = useState(false);
-
   const load = useCallback(async () => {
     try {
-      if (favoritesLoading) return;
       const session = await getSession();
       if (!session?.user) {
         setState({ status: 'unauthenticated' });
         return;
       }
+      await refresh();
       const result = await getFavorites();
       if (result.error) {
         setState({ status: 'error', message: 'Impossible de charger' });
         return;
       }
-      // `getFavorites` renvoie déjà les annonces triées par favori le plus récent.
       setState({ status: 'ready', data: result.data ?? [] });
     } catch {
       setState({ status: 'error', message: 'Impossible de charger' });
     }
-  }, [favoritesLoading]);
+  }, [refresh]);
 
   useFocusEffect(
     useCallback(() => {
-      void load();
+      const task = InteractionManager.runAfterInteractions(() => {
+        void load();
+      });
+      return () => task.cancel();
     }, [load])
   );
 
   const stateRef = useRef(state);
   stateRef.current = state;
 
-  // Synchronisation incrémentale : le Set global est la source de vérité.
-  // - Ajout d'un favori absent du pool → fetch ciblé de l'annonce manquante.
-  // - Retrait → géré sans fetch par le filtre `displayData` (pas de reset/flicker).
   useEffect(() => {
-    if (favoritesLoading) return;
     const current = stateRef.current;
     if (current.status !== 'ready') return;
     if (favorites.size === 0) return;
 
     const knownIds = new Set(current.data.map((item) => item.id));
     const missingIds = [...favorites].filter((id) => !knownIds.has(id));
-
-    if (__DEV__) {
-      console.log(
-        '[Favorites] sync — favorites:', favorites.size,
-        '| missingIds:', missingIds.length ? missingIds : '∅'
-      );
-    }
-
     if (missingIds.length === 0) return;
 
     let cancelled = false;
@@ -89,7 +116,6 @@ export default function FavoritesScreen() {
         const known = new Set(prev.data.map((item) => item.id));
         const newItems = result.data!.filter((item) => !known.has(item.id));
         if (!newItems.length) return prev;
-        // Annonces fraîchement ajoutées en tête (favori le plus récent).
         return { status: 'ready', data: [...newItems, ...prev.data] };
       });
     })();
@@ -97,47 +123,78 @@ export default function FavoritesScreen() {
     return () => {
       cancelled = true;
     };
-  }, [favorites, favoritesLoading]);
+  }, [favorites]);
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
     load().finally(() => setRefreshing(false));
   }, [load]);
 
-  // Affichage dérivé du Set global : filtré + dédupliqué, ordre du pool conservé
-  // (récents en tête). Retraits reflétés immédiatement, sans toucher au pool.
-  const displayData = useMemo(() => {
-    if (state.status !== 'ready') return [];
-    const seen = new Set<string>();
-    const out: PublicListing[] = [];
-    for (const item of state.data) {
-      if (favorites.has(item.id) && !seen.has(item.id)) {
-        seen.add(item.id);
-        out.push(item);
-      }
+  const display = useMemo(() => {
+    if (state.status !== 'ready') {
+      return deriveFavoritesDisplay([], favorites);
     }
-    return out;
+    return deriveFavoritesDisplay(state.data, favorites);
   }, [state, favorites]);
 
-  useEffect(() => {
-    if (__DEV__ && state.status === 'ready') {
-      console.log('[Favorites] affichées:', displayData.length, '/', favorites.size);
-    }
-  }, [displayData.length, favorites.size, state.status]);
+  const gridRows = useMemo(() => {
+    if (!useGrid || display.mode !== 'list') return null;
+    return buildHomeFeedGridRows(display.visibleListings, 2);
+  }, [display.mode, display.visibleListings, useGrid]);
 
-  const keyExtractor = useCallback((item: PublicListing) => item.id, []);
-  const renderItem = useCallback(
-    ({ item }: { item: PublicListing }) => (
-      <ListingCard listing={item} source="favorites" />
+  const goDiscover = useCallback(() => {
+    router.replace('/(tabs)/home');
+  }, [router]);
+
+  const renderListingCard = useCallback(
+    (listing: PublicListing) => (
+      <ListingCard
+        listing={listing}
+        feedPresentation="home"
+        homeGridCell={useGrid}
+        source="favorites"
+      />
     ),
-    []
+    [useGrid]
   );
-  const itemSeparator = useCallback(() => <View style={styles.separator} />, []);
+
+  const renderGridRow = useCallback(
+    ({ item }: { item: HomeFeedGridRow }) => {
+      const cellCount = item.kind === 'cells' ? item.cells.length : 0;
+      return (
+        <View style={[styles.homeGridRow, { gap: HOME_FEED_GRID_COLUMN_GAP }]}>
+          {item.kind === 'cells'
+            ? item.cells.map((cell) => {
+                const cellLayout = getHomeFeedGridCellLayout(gridInnerWidth, columnCount, cellCount);
+                return (
+                  <View
+                    key={typeof cell === 'number' ? `sk-${cell}` : cell.id}
+                    style={[styles.homeGridCell, cellLayout]}
+                  >
+                    {typeof cell === 'number' ? null : renderListingCard(cell)}
+                  </View>
+                );
+              })
+            : null}
+        </View>
+      );
+    },
+    [columnCount, gridInnerWidth, renderListingCard]
+  );
+
+  const renderSingleColumnItem = useCallback(
+    ({ item }: { item: PublicListing }) => renderListingCard(item),
+    [renderListingCard]
+  );
+
+  const listHeader = <FavoritesScreenHeader count={display.headerCount} />;
+
+  const shellStyle = styles.screenSurface;
 
   if (state.status === 'loading') {
     return (
-      <Screen noPadding safe={false}>
-        <AppHeader title="Favoris" noBorder density="compact" />
+      <Screen noPadding safe={false} style={shellStyle}>
+        <FavoritesScreenHeader count={0} />
         <LoadingState message="Chargement de vos favoris…" />
       </Screen>
     );
@@ -149,8 +206,8 @@ export default function FavoritesScreen() {
 
   if (state.status === 'error') {
     return (
-      <Screen noPadding safe={false}>
-        <AppHeader title="Favoris" noBorder density="compact" />
+      <Screen noPadding safe={false} style={shellStyle}>
+        <FavoritesScreenHeader count={0} />
         <View style={styles.emptyWrap}>
           <EmptyState
             variant="plain"
@@ -170,44 +227,106 @@ export default function FavoritesScreen() {
     );
   }
 
-  if (state.status === 'ready' && displayData.length === 0) {
+  if (display.mode === 'empty_none') {
     return (
-      <Screen noPadding safe={false}>
-        <AppHeader title="Favoris" noBorder density="compact" />
+      <Screen noPadding safe={false} style={shellStyle}>
+        <FavoritesScreenHeader count={0} />
         <View style={styles.emptyWrap}>
           <EmptyState
             variant="plain"
-            icon={<Ionicons name="heart-outline" size={24} color={colors.primary} />}
+            icon={<Ionicons name="heart-outline" size={28} color={colors.primary} />}
             title="Aucun favori pour le moment"
             message="Les annonces que vous aimez apparaîtront ici."
-            action={
-              <View style={styles.emptyAction}>
-                <Button variant="secondary" onPress={() => router.replace('/(tabs)/home')} style={styles.emptyCta}>
-                  <Text style={styles.emptyCtaText} numberOfLines={1} adjustsFontSizeToFit>
-                    Découvrir les annonces
-                  </Text>
-                </Button>
-              </View>
-            }
+            action={<DiscoverListingsButton onPress={goDiscover} />}
           />
         </View>
       </Screen>
     );
   }
 
-  const listHeader = <AppHeader title="Favoris" noBorder density="compact" />;
+  if (display.mode === 'empty_unavailable') {
+    return (
+      <Screen noPadding safe={false} style={shellStyle}>
+        <FavoritesScreenHeader count={0} />
+        <View style={styles.emptyWrap}>
+          <EmptyState
+            variant="plain"
+            icon={<Ionicons name="heart" size={28} color={colors.primary} />}
+            title="Annonces indisponibles"
+            message={
+              display.registeredCount === 1
+                ? 'Vous avez 1 favori enregistré, mais cette annonce n’est plus disponible pour le moment. Votre favori est conservé.'
+                : `Vous avez ${display.registeredCount} favoris enregistrés, mais ces annonces ne sont plus disponibles pour le moment. Vos favoris sont conservés.`
+            }
+            action={<DiscoverListingsButton onPress={goDiscover} />}
+          />
+        </View>
+      </Screen>
+    );
+  }
+
+  if (useGrid && gridRows) {
+    return (
+      <Screen noPadding safe={false} style={shellStyle}>
+        <FlatList
+          data={gridRows}
+          keyExtractor={(item) => item.key}
+          renderItem={renderGridRow}
+          ListHeaderComponent={listHeader}
+          ListFooterComponent={
+            display.unavailableCount > 0 ? (
+              <View style={styles.unavailableBanner} accessibilityRole="text">
+                <Ionicons name="information-circle-outline" size={18} color={colors.textSecondary} />
+                <Text style={styles.unavailableBannerText}>
+                  {display.unavailableCount === 1
+                    ? '1 autre favori enregistré n’est pas affiché car l’annonce n’est plus disponible.'
+                    : `${display.unavailableCount} autres favoris enregistrés ne sont pas affichés car les annonces ne sont plus disponibles.`}
+                </Text>
+              </View>
+            ) : null
+          }
+          ItemSeparatorComponent={() => <View style={styles.gridRowSeparator} />}
+          contentContainerStyle={styles.listContent}
+          showsVerticalScrollIndicator={false}
+          initialNumToRender={4}
+          maxToRenderPerBatch={6}
+          windowSize={Platform.OS === 'ios' ? 6 : 10}
+          removeClippedSubviews={Platform.OS === 'ios'}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              tintColor={FAVORITES_MARKETPLACE_SURFACE}
+            />
+          }
+        />
+      </Screen>
+    );
+  }
 
   return (
-    <Screen noPadding safe={false}>
+    <Screen noPadding safe={false} style={shellStyle}>
       <FlatList
-        data={displayData}
-        keyExtractor={keyExtractor}
-        renderItem={renderItem}
-        ItemSeparatorComponent={itemSeparator}
+        data={display.visibleListings}
+        keyExtractor={(item) => item.id}
+        renderItem={renderSingleColumnItem}
         ListHeaderComponent={listHeader}
+        ListFooterComponent={
+          display.unavailableCount > 0 ? (
+            <View style={styles.unavailableBanner} accessibilityRole="text">
+              <Ionicons name="information-circle-outline" size={18} color={colors.textSecondary} />
+              <Text style={styles.unavailableBannerText}>
+                {display.unavailableCount === 1
+                  ? '1 autre favori enregistré n’est pas affiché car l’annonce n’est plus disponible.'
+                  : `${display.unavailableCount} autres favoris enregistrés ne sont pas affichés car les annonces ne sont plus disponibles.`}
+              </Text>
+            </View>
+          ) : null
+        }
+        ItemSeparatorComponent={() => <View style={styles.separator} />}
         contentContainerStyle={styles.listContent}
         showsVerticalScrollIndicator={false}
-        initialNumToRender={10}
+        initialNumToRender={8}
         maxToRenderPerBatch={6}
         windowSize={Platform.OS === 'ios' ? 6 : 10}
         removeClippedSubviews={Platform.OS === 'ios'}
@@ -215,7 +334,7 @@ export default function FavoritesScreen() {
           <RefreshControl
             refreshing={refreshing}
             onRefresh={onRefresh}
-            tintColor={colors.primary}
+            tintColor={FAVORITES_MARKETPLACE_SURFACE}
           />
         }
       />
@@ -224,6 +343,9 @@ export default function FavoritesScreen() {
 }
 
 const styles = StyleSheet.create({
+  screenSurface: {
+    backgroundColor: colors.surface,
+  },
   emptyWrap: {
     flex: 1,
     justifyContent: 'center',
@@ -244,6 +366,16 @@ const styles = StyleSheet.create({
   separator: {
     height: spacing.base,
   },
+  gridRowSeparator: {
+    height: HOME_FEED_GRID_COLUMN_GAP,
+  },
+  homeGridRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+  },
+  homeGridCell: {
+    minWidth: 0,
+  },
   emptyAction: {
     width: '100%',
     alignItems: 'center',
@@ -261,5 +393,19 @@ const styles = StyleSheet.create({
     fontSize: 16,
     lineHeight: 24,
     fontWeight: fontWeights.bold,
+  },
+  unavailableBanner: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.sm,
+    marginTop: spacing.lg,
+    padding: spacing.md,
+    borderRadius: 16,
+    backgroundColor: colors.background,
+  },
+  unavailableBannerText: {
+    ...typography.sm,
+    color: colors.textSecondary,
+    flex: 1,
   },
 });

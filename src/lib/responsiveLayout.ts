@@ -105,6 +105,48 @@ export function getHomeFeedColumnCount(
   return 2;
 }
 
+const HOME_FEED_LIST_MAX_WIDTH = 760;
+
+/** Largeur utile du conteneur liste (aligné maxWidth des onglets marketplace). */
+export function getHomeFeedListContentWidth(windowWidth: number): number {
+  return Math.min(windowWidth, HOME_FEED_LIST_MAX_WIDTH);
+}
+
+/** Largeur intérieure d’une rangée grille après gouttières `screenHorizontal`. */
+export function getHomeFeedGridInnerWidth(windowWidth: number): number {
+  return getHomeFeedListContentWidth(windowWidth) - spacing.screenHorizontal * 2;
+}
+
+/** Largeur d’une cellule en grille 2 colonnes (inter-colonne = `HOME_FEED_GRID_COLUMN_GAP`). */
+export function getHomeFeedTwoColumnCellWidth(gridInnerWidth: number): number {
+  return (gridInnerWidth - HOME_FEED_GRID_COLUMN_GAP) / 2;
+}
+
+export type HomeFeedGridCellLayoutStyle = {
+  flex: number;
+  width?: number;
+  minWidth: number;
+};
+
+/**
+ * Évite qu’une carte seule en grille 2 col. s’étire sur toute la rangée (dernière ligne impaire).
+ */
+export function getHomeFeedGridCellLayout(
+  gridInnerWidth: number,
+  columnCount: 1 | 2,
+  cellsInRow: number
+): HomeFeedGridCellLayoutStyle {
+  const minWidth = 0;
+  if (columnCount === 1 || cellsInRow >= 2) {
+    return { flex: 1, minWidth };
+  }
+  return {
+    flex: 0,
+    width: getHomeFeedTwoColumnCellWidth(gridInnerWidth),
+    minWidth,
+  };
+}
+
 /** @deprecated Alias — préférer `getHomeMarketplaceHorizontalPadding`. */
 export const getHomeFeedListingCardInset = getHomeMarketplaceHorizontalPadding;
 

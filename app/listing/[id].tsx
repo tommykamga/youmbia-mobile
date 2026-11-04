@@ -30,7 +30,7 @@ import {
   type ListingDynamicAttributeDisplay,
   type PublicListing,
 } from '@/services/listings';
-import { getFavoriteIds, toggleFavorite } from '@/services/favorites';
+import { useFavorites } from '@/context/FavoritesContext';
 import { addRecentlyViewedListingId } from '@/services/recentlyViewed';
 import { resolveMarketplaceCategoryLabel } from '@/lib/marketplaceCategories';
 import { useMarketplaceCategories } from '@/hooks/useMarketplaceCategories';
@@ -195,14 +195,12 @@ export default function ListingDetailScreen() {
   const [reloadNonce, setReloadNonce] = useState(0);
   const [contactBarHeight, setContactBarHeight] = useState(0);
   const [shareLoading, setShareLoading] = useState(false);
-  const [isFavorite, setIsFavorite] = useState(false);
-  const lastFavoriteIdsFetchAtRef = useRef<number>(0);
-  const FAVORITES_FETCH_TTL_MS = 120_000;
+  const { isFavorite: isListingFavorite, toggleFavorite: toggleFavoriteContext } = useFavorites();
+  const [favoriteLoading, setFavoriteLoading] = useState(false);
   const [reportModalVisible, setReportModalVisible] = useState(false);
   const [reportLoading, setReportLoading] = useState(false);
   const [reportReason, setReportReason] = useState<ReportReasonCode | null>(null);
   const [reportComment, setReportComment] = useState('');
-  const [favoriteLoading, setFavoriteLoading] = useState(false);
   const [messageLoading, setMessageLoading] = useState(false);
   const [markSoldLoading, setMarkSoldLoading] = useState(false);
   const [reactivateLoading, setReactivateLoading] = useState(false);
@@ -215,8 +213,6 @@ export default function ListingDetailScreen() {
       const epoch = ++authEpochRef.current;
       setSessionStatus(session?.user ? 'authed' : 'guest');
       setSessionUserId(session?.user?.id ?? null);
-      setIsFavorite(false);
-      lastFavoriteIdsFetchAtRef.current = 0;
       setReportModalVisible(false);
       setReportComment('');
       setReportReason(null);
@@ -293,9 +289,8 @@ export default function ListingDetailScreen() {
     else setState({ status: 'loading' });
 
     (async () => {
-      const [listingResult, favResult, dynamicAttributes] = await Promise.all([
+      const [listingResult, dynamicAttributes] = await Promise.all([
         getListingById(id),
-        getFavoriteIds(),
         getListingDynamicAttributesForDisplay(id),
       ]);
       if (cancelled || authEpoch !== authEpochRef.current) return;
@@ -307,10 +302,6 @@ export default function ListingDetailScreen() {
       setState({ status: 'success', listing, dynamicAttributes });
       putListingDetailSession(id, listing, dynamicAttributes);
       addRecentlyViewedListingId(id);
-      if (favResult.data && id) {
-        setIsFavorite(favResult.data.includes(id));
-      }
-      lastFavoriteIdsFetchAtRef.current = Date.now();
       if (listing.seller_id) {
         const statsResult = await getSellerStats(listing.seller_id);
         if (!cancelled && !statsResult.error) {
@@ -399,20 +390,6 @@ export default function ListingDetailScreen() {
     return () => { active = false; clearInterval(timer); subscription.remove(); };
   }, [id]));
 
-  /** Refresh favorite state when screen gains focus (e.g. return from Favorites tab). */
-  useFocusEffect(
-    useCallback(() => {
-      if (state.status !== 'success' || !id) return;
-      const now = Date.now();
-      if (now - lastFavoriteIdsFetchAtRef.current < FAVORITES_FETCH_TTL_MS) return;
-      lastFavoriteIdsFetchAtRef.current = now;
-      const epoch = authEpochRef.current;
-      getFavoriteIds().then((res) => {
-        if (epoch === authEpochRef.current && res.data) setIsFavorite(res.data.includes(id));
-      });
-    }, [id, state.status])
-  );
-
   useFocusEffect(
     useCallback(() => {
       let active = true;
@@ -474,31 +451,17 @@ export default function ListingDetailScreen() {
     }
   }, [shareLoading, state]);
 
+  const isFavorite = Boolean(id && isListingFavorite(id));
+
   const handleFavoritePress = useCallback(async () => {
     if (!id || favoriteLoading) return;
-    const nextFavorite = !isFavorite;
-    setIsFavorite(nextFavorite);
     setFavoriteLoading(true);
     try {
-      const result = await toggleFavorite(id, { source: 'listing_detail' });
-      if (!result.error) return;
-
-      setIsFavorite(!nextFavorite);
-      if (result.error.message === 'Non connecté') {
-        router.replace(buildAuthGateHref('favorites', { redirect: `/listing/${id}` }));
-        return;
-      }
-      Alert.alert(
-        'Erreur',
-        getActionErrorMessage(result.error.message, 'Impossible de mettre à jour le favori.')
-      );
-    } catch {
-      setIsFavorite(!nextFavorite);
-      Alert.alert('Erreur', 'Impossible de mettre à jour le favori.');
+      await toggleFavoriteContext(id, 'listing_detail');
     } finally {
       setFavoriteLoading(false);
     }
-  }, [favoriteLoading, id, isFavorite, router]);
+  }, [favoriteLoading, id, toggleFavoriteContext]);
 
   const openConversationForListing = useCallback(async (entryPoint: 'listing_detail' | 'auth_return' = 'listing_detail'): Promise<boolean> => {
     if (!id) return false;

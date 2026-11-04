@@ -31,48 +31,13 @@ import {
   getHomeFeedColumnCount,
   HOME_FEED_GRID_COLUMN_GAP,
 } from '@/lib/responsiveLayout';
+import { buildHomeFeedGridRows, type HomeFeedGridRow } from './homeFeedGridRows';
 
 const PAGE_SIZE = 15;
 const FAVORITES_FOCUS_REFRESH_MIN_INTERVAL_MS = 120_000;
 
 const INITIAL_NUM_TO_RENDER = Platform.OS === 'ios' ? 8 : 10;
 const WINDOW_SIZE = Platform.OS === 'ios' ? 5 : 10;
-
-type HomeFeedGridRow =
-  | { key: string; kind: 'cells'; cells: Array<PublicListing | number> }
-  | { key: string; kind: 'extra' };
-
-function buildHomeFeedGridRows(entries: readonly unknown[], columnCount: 2): HomeFeedGridRow[] {
-  const rows: HomeFeedGridRow[] = [];
-  let batch: Array<PublicListing | number> = [];
-
-  const flush = () => {
-    if (batch.length === 0) return;
-    rows.push({
-      key: batch.map((c) => (typeof c === 'number' ? `sk-${c}` : c.id)).join('|'),
-      kind: 'cells',
-      cells: [...batch],
-    });
-    batch = [];
-  };
-
-  for (const entry of entries) {
-    if (
-      entry != null &&
-      typeof entry === 'object' &&
-      'type' in entry &&
-      (entry as { type?: string }).type === 'extra'
-    ) {
-      flush();
-      rows.push({ key: 'extra-component', kind: 'extra' });
-      continue;
-    }
-    batch.push(entry as PublicListing | number);
-    if (batch.length >= columnCount) flush();
-  }
-  flush();
-  return rows;
-}
 
 export type ListingFeedProps = {
   /** Explicit local development preview; never shares the normal cache or analytics. */
