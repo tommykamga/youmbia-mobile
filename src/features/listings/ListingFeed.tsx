@@ -26,7 +26,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { useFavorites } from '@/context/FavoritesContext';
 import { lightCacheKeys, lightCacheRead, lightCacheWrite } from '@/lib/lightCache';
 import { trackHomeFeedViewed } from '@/lib/analytics';
-import { createDiscoveryFeedController, type DiscoveryFeedCache } from './discoveryFeedController';
+import { createDiscoveryFeedController, type DiscoveryPage, type DiscoveryFeedCache } from './discoveryFeedController';
 import {
   getHomeFeedColumnCount,
   HOME_FEED_GRID_COLUMN_GAP,
@@ -75,6 +75,10 @@ function buildHomeFeedGridRows(entries: readonly unknown[], columnCount: 2): Hom
 }
 
 export type ListingFeedProps = {
+  /** Explicit local development preview; never shares the normal cache or analytics. */
+  previewProvider?: { loadPage: (offset: number, limit: number) => Promise<DiscoveryPage<PublicListing>> };
+  renderPreviewCard?: (listing: PublicListing, grid: boolean) => React.ReactElement;
+
   /** Rendered at the top of the list (e.g. home header). Enables single scroll + reliable pull-to-refresh. */
   listHeaderComponent?: React.ReactElement | null;
   /** Padding horizontal du contenu liste (hors mode home item-inset). */
@@ -116,6 +120,8 @@ export type ListingFeedProps = {
 };
 
 export function ListingFeed({
+  previewProvider,
+  renderPreviewCard,
   listHeaderComponent,
   contentPaddingHorizontal = spacing.screenHorizontal,
   homeFeedCardInset,
@@ -156,14 +162,15 @@ export function ListingFeed({
   const controller = useMemo(() => createDiscoveryFeedController<PublicListing>(
     effectivePageSize,
     async (offset, size) => {
+      if (previewProvider) return previewProvider.loadPage(offset, size);
       const result = await getPublicListings(offset, size);
       if (result.error) throw new Error(result.error.message);
       return result;
     },
-    cache => { void lightCacheWrite<DiscoveryFeedCache<PublicListing>>(
+    cache => { if (previewProvider) return; void lightCacheWrite<DiscoveryFeedCache<PublicListing>>(
       lightCacheKeys.homeFeedPublic, cache,
     ).catch(() => {}); },
-  ), [effectivePageSize]);
+  ), [effectivePageSize, previewProvider]);
   const state = useSyncExternalStore(controller.subscribe, controller.getSnapshot, controller.getSnapshot);
   const { refreshing, loadingMore, hasMore, loadMoreError } = state;
   const feedSuccessData = state.data;
@@ -173,7 +180,7 @@ export function ListingFeed({
   useEffect(() => {
     const generation = controller.generation();
     void (async () => {
-      const snap = await lightCacheRead<unknown>(lightCacheKeys.homeFeedPublic);
+      const snap = previewProvider ? null : await lightCacheRead<unknown>(lightCacheKeys.homeFeedPublic);
       if (generation !== controller.generation()) return;
       const compatible = controller.restoreCache(snap?.payload);
       const skipNetwork = compatible && skipNetworkRevalidateWithinMs != null &&
@@ -181,10 +188,11 @@ export function ListingFeed({
       if (!skipNetwork) await controller.refresh();
     })();
     return controller.cancel;
-  }, [controller, skipNetworkRevalidateWithinMs]);
+  }, [controller, skipNetworkRevalidateWithinMs, previewProvider]);
 
   useFocusEffect(
     useCallback(() => {
+      if (previewProvider) return;
       const now = Date.now();
       if (now - lastFavoritesFocusRefreshRef.current < FAVORITES_FOCUS_REFRESH_MIN_INTERVAL_MS) {
         return;
@@ -194,23 +202,23 @@ export function ListingFeed({
         void refreshFavorites();
       });
       return () => task.cancel();
-    }, [refreshFavorites])
+    }, [refreshFavorites, previewProvider])
   );
 
   useFocusEffect(
     useCallback(() => {
-      if (listingCardFeedPresentation !== 'home') return;
+      if (previewProvider || listingCardFeedPresentation !== 'home') return;
       trackHomeFeedViewed({ feed_context: 'default', favorites_only: false });
-    }, [listingCardFeedPresentation])
+    }, [listingCardFeedPresentation, previewProvider])
   );
 
   const onRefresh = useCallback(() => {
     void controller.refresh().then(() => {
-      if (listingCardFeedPresentation === 'home') {
+      if (!previewProvider && listingCardFeedPresentation === 'home') {
         trackHomeFeedViewed({ feed_context: 'refresh', favorites_only: false });
       }
     });
-  }, [controller, listingCardFeedPresentation]);
+  }, [controller, listingCardFeedPresentation, previewProvider]);
 
   const isHomeCardInset =
     listingCardFeedPresentation === 'home' && homeFeedCardInset != null;
@@ -254,7 +262,7 @@ export function ListingFeed({
   }, [useHomeGrid, feedData]);
 
   const renderListingCard = useCallback(
-    (listing: PublicListing) => (
+    (listing: PublicListing) => renderPreviewCard ? renderPreviewCard(listing, useHomeGrid) : (
       <ListingCard
         listing={listing}
         feedPresentation={listingCardFeedPresentation}
@@ -262,7 +270,7 @@ export function ListingFeed({
         source={listingCardFeedPresentation === 'home' ? 'home' : 'other'}
       />
     ),
-    [listingCardFeedPresentation, useHomeGrid]
+    [listingCardFeedPresentation, useHomeGrid, renderPreviewCard]
   );
 
   const renderSkeletonCard = useCallback(

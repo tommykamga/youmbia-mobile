@@ -83,9 +83,23 @@ import {
   SearchFilteredEmptyPanel,
 } from '@/features/search/SearchStatusPanels';
 
+import { isHomeDemoEnabled } from '@/features/home/demo/demoProvider';
+
+const HomeDemo = React.lazy(() => import('@/features/home/demo/HomeDemoScreen').then(m => ({ default: m.HomeDemoScreen })));
+
 const SEARCH_FIELD_PLACEHOLDER = 'Rechercher un téléphone, une voiture…';
 
 export default function SearchScreen() {
+  const [demoActive, setDemoActive] = useState(() => isHomeDemoEnabled(__DEV__, process.env.EXPO_PUBLIC_HOME_DEMO));
+  if (__DEV__ && demoActive) {
+    return <React.Suspense fallback={<LoadingState message="Chargement de la démonstration…" />}>
+      <HomeDemo onExit={() => setDemoActive(false)} />
+    </React.Suspense>;
+  }
+  return <MarketplaceSearchScreen onOpenDemo={__DEV__ ? () => setDemoActive(true) : undefined} />;
+}
+
+function MarketplaceSearchScreen({ onOpenDemo }: { onOpenDemo?: () => void }) {
   const router = useRouter();
   const params = useLocalSearchParams<{
     q?: string;
@@ -883,7 +897,7 @@ export default function SearchScreen() {
     router.push('/notifications' as Href);
   }, [router]);
 
-  const { width, bucket } = useResponsiveLayout();
+  const { width, bucket, fontScale } = useResponsiveLayout();
   const insets = useSafeAreaInsets();
   const appUpdateBannerInset = useAppUpdateBannerInset();
   const marketplaceSafeEdges = useMemo(
@@ -1469,8 +1483,11 @@ export default function SearchScreen() {
                 unreadCount={0}
                 searchTabLayout
                 homePresentation={showMarketplaceHomeFeed}
-                location={showMarketplaceHomeFeed ? { label: appliedSearchFilters.city || 'Toutes les villes', onPress: openCityPicker } : undefined}
+                location={{ label: appliedSearchFilters.city || 'Ville', onPress: openCityPicker }}
               />
+              {onOpenDemo && <Pressable onPress={onOpenDemo} accessibilityRole="button" style={{ minHeight: 44, justifyContent: 'center', paddingHorizontal: 16 }}>
+                <Text style={{ color: showMarketplaceHomeFeed ? '#FFF' : '#0B4D3C' }}>Ouvrir la démonstration locale</Text>
+              </Pressable>}
               <MarketingConsentBanner />
               <View
                 style={[
@@ -1486,14 +1503,15 @@ export default function SearchScreen() {
                   style={[
                     styles.searchRow,
                     searchChrome.rowShadow,
+                    showMarketplaceHomeFeed && fontScale > 1.2 && styles.homeSearchExpanded,
                     {
-                      minHeight: showMarketplaceHomeFeed ? Math.max(52, searchChrome.searchMinH) : searchChrome.searchMinH,
-                      paddingVertical: searchChrome.searchPadV,
+                      minHeight: showMarketplaceHomeFeed ? 56 : searchChrome.searchMinH,
+                      paddingVertical: showMarketplaceHomeFeed ? 5 : searchChrome.searchPadV,
                       paddingHorizontal: Math.min(searchChrome.hPad, 18),
                       backgroundColor: showMarketplaceHomeFeed ? colors.surface : searchChrome.searchBg,
                       borderColor: searchChrome.borderColor,
                       borderWidth: 1,
-                      borderRadius: searchChrome.searchRadius,
+                      borderRadius: showMarketplaceHomeFeed ? 16 : searchChrome.searchRadius,
                     },
                   ]}
                 >
@@ -1515,7 +1533,7 @@ export default function SearchScreen() {
                         showMarketplaceHomeFeed && styles.homeSearchText,
                         !(searchOverlayOpen ? overlayDraft : query).trim() && styles.searchFieldPlaceholder,
                       ]}
-                      numberOfLines={1}
+                      numberOfLines={showMarketplaceHomeFeed ? undefined : 1}
                     >
                       {(searchOverlayOpen ? overlayDraft : query).trim()
                         ? (searchOverlayOpen ? overlayDraft : query).trim()
@@ -1525,7 +1543,7 @@ export default function SearchScreen() {
                   {showMarketplaceHomeFeed ? (
                     <Pressable
                       onPress={openFilters}
-                      style={styles.homeFilter}
+                      style={[styles.homeFilter, fontScale > 1.2 && styles.homeFilterExpanded]}
                       accessibilityRole="button"
                       accessibilityLabel="Ouvrir les filtres"
                     >
@@ -1909,8 +1927,10 @@ const styles = StyleSheet.create({
   },
   homeSurface: { backgroundColor: '#0B4D3C' },
   homeTopStack: { backgroundColor: '#0B4D3C', borderBottomWidth: 0 },
-  homeFilter: { minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: spacing.xs, borderLeftWidth: 1, borderLeftColor: colors.border, marginLeft: spacing.sm, paddingLeft: spacing.sm },
+  homeFilter: { flexShrink: 0, minWidth: 44, minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: spacing.xs, borderLeftWidth: 1, borderLeftColor: colors.border, marginLeft: spacing.sm, paddingLeft: spacing.sm },
   homeFilterText: { ...typography.sm, fontWeight: fontWeights.semibold, color: '#0B4D3C' },
+  homeSearchExpanded: { flexWrap: 'wrap' },
+  homeFilterExpanded: { width: '100%', borderLeftWidth: 0, borderTopWidth: 1, borderTopColor: colors.border, marginLeft: 0, paddingLeft: 0, justifyContent: 'center' },
   homeSearchText: { ...typography.sm },
   homeSearchTarget: { minHeight: 44 },
   homeSearchStrip: { paddingBottom: 0 },

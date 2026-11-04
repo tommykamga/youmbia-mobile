@@ -107,16 +107,16 @@ export function HomeBrandHeader({
         },
       ]}
     >
-      {!homePresentation ? <View style={[styles.sideSlot, styles.sideSlotStart, { width: layout.sideSlot }]} /> : null}
-      <View style={[styles.logoWrap, homePresentation && styles.logoHome]} accessibilityRole="header">
+      {!homePresentation && !location ? <View style={[styles.sideSlot, styles.sideSlotStart, { width: layout.sideSlot }]} /> : null}
+      <View style={[styles.logoWrap, location && styles.logoWithLocation, homePresentation && styles.logoHome]} accessibilityRole="header">
         <Image
           source={require('../../assets/images/youmbia-logo-header.svg')}
-          style={[styles.logo, { width: homePresentation ? 132 : layout.logoWidth, height: homePresentation ? 36 : layout.logoHeight }]}
+          style={[styles.logo, { width: homePresentation || location ? 132 : layout.logoWidth, height: homePresentation || location ? 36 : layout.logoHeight }]}
           contentFit="contain"
           accessibilityLabel="YOUMBIA"
         />
       </View>
-      {homePresentation && location ? (
+      {location ? (
         <Pressable
           onPress={location.onPress}
           style={styles.location}
@@ -124,9 +124,9 @@ export function HomeBrandHeader({
           accessibilityLabel={`Localisation : ${location.label}. Choisir une ville`}
           accessibilityHint="Saisissez une ville ou choisissez toutes les villes"
         >
-          <Ionicons name="location-outline" size={18} color={colors.surface} />
-          <Text style={styles.locationText} numberOfLines={1}>{location.label}</Text>
-          <Ionicons name="chevron-down" size={14} color={colors.surface} />
+          <Ionicons name="location-outline" size={18} color={homePresentation ? colors.surface : ui.colors.textSecondary} />
+          <Text style={[styles.locationText, !homePresentation && { color: ui.colors.textSecondary }]} numberOfLines={1}>{location.label}</Text>
+          <Ionicons name="chevron-down" size={14} color={homePresentation ? colors.surface : ui.colors.textSecondary} />
         </Pressable>
       ) : null}
       <View style={[styles.sideSlot, styles.sideSlotEnd, { width: layout.sideSlot }]}>
@@ -171,6 +171,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
   },
   rowHome: { backgroundColor: '#0B4D3C', gap: spacing.sm },
+  logoWithLocation: { flex: 0 },
   logoHome: { flex: 0, alignItems: 'flex-start', backgroundColor: colors.surface, borderRadius: 8, paddingHorizontal: 6, paddingVertical: 2 },
   location: { flex: 1, minWidth: 0, minHeight: 44, flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center', gap: spacing.xs },
   locationText: { color: colors.surface, flexShrink: 1, fontSize: 13, fontWeight: '600' },

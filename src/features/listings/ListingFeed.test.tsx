@@ -121,3 +121,20 @@ it('cancels the old home page when leaving for criteria and keeps a fresh feed i
   ]);
   act(() => r.unmount());
 });
+
+it('isolates preview pagination from network and cache, then restores the normal service when removed', async () => {
+  const previewProvider = { loadPage: vi.fn().mockResolvedValue({
+    data: [{ id: 'home-demo-01' }], pagination: { nextOffset: 1, hasMore: false },
+  }) };
+  let r!: ReactTestRenderer;
+  await act(async () => { r = create(<ListingFeed previewProvider={previewProvider} fetchPageSize={6} />); });
+  expect(previewProvider.loadPage).toHaveBeenCalledWith(0, 6);
+  expect(m.fetch).not.toHaveBeenCalled(); expect(m.read).not.toHaveBeenCalled(); expect(m.write).not.toHaveBeenCalled();
+  m.fetch.mockResolvedValueOnce(result(['real-qa-id'], 1, false));
+  await act(async () => { r.update(<ListingFeed fetchPageSize={6} />); });
+  expect(m.fetch).toHaveBeenCalledWith(0, 6); expect(m.read).toHaveBeenCalledTimes(1);
+  expect(list(r).props.data.map((x: { id: string }) => x.id)).toEqual(['real-qa-id']);
+  expect(m.write).toHaveBeenCalledTimes(1);
+  expect(m.write.mock.calls[0][1].listings).toEqual([{ id: 'real-qa-id' }]);
+  act(() => r.unmount());
+});

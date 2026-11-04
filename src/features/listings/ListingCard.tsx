@@ -5,6 +5,7 @@ import {
   StyleSheet,
   Pressable,
   ImageBackground,
+  type ImageSourcePropType,
   useWindowDimensions,
 } from 'react-native';
 import Animated, {
@@ -55,6 +56,9 @@ const OVERLAY_INSET = spacing.sm;
 export type ListingCardVariant = 'feed' | 'rail';
 
 export type ListingCardProps = {
+  /** Local preview replaces navigation, photo and favorite control together. */
+  preview?: { image?: ImageSourcePropType; onOpen: () => void; favorite: React.ReactNode };
+
   listing: PublicListing;
   variant?: ListingCardVariant;
   /** Rail « À la une » : carte plus large + image plus haute. */
@@ -86,6 +90,7 @@ function listingCardCoverImageKey(listing: PublicListing): string {
 }
 
 function listingCardPropsAreEqual(prev: ListingCardProps, next: ListingCardProps): boolean {
+  if (prev.preview !== next.preview) return false;
   if ((prev.railPresentation ?? 'default') !== (next.railPresentation ?? 'default')) return false;
   if (prev.feedPresentation !== next.feedPresentation) return false;
   if (prev.homeGridCell !== next.homeGridCell) return false;
@@ -118,6 +123,7 @@ function listingCardPropsAreEqual(prev: ListingCardProps, next: ListingCardProps
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
 function ListingCardInner({
+  preview,
   listing,
   variant = 'feed',
   railPresentation = 'default',
@@ -136,6 +142,7 @@ function ListingCardInner({
 
   const coverKey = listingCardCoverImageKey(listing);
   const firstImage = coverKey.length > 0 ? coverKey : undefined;
+  const imageSource = preview ? preview.image : firstImage ? { uri: firstImage } : undefined;
 
   useEffect(() => {
     // Si l’URL change (refresh / nouvelles signed URLs), on retente le chargement.
@@ -170,11 +177,12 @@ function ListingCardInner({
   const priceLabel = formatPrice(listing.price);
 
   const handlePress = useCallback(() => {
+    if (preview) { preview.onOpen(); return; }
     const resolvedSource: ListingViewSource =
       source ?? (feedPresentation === 'home' ? 'home' : 'other');
     setListingViewSource(resolvedSource);
     router.push(`/listing/${listing.id}`);
-  }, [feedPresentation, listing.id, router, source]);
+  }, [feedPresentation, listing.id, router, source, preview]);
 
   const onPressIn = () => {
     scale.value = withTiming(0.97, { duration: 100, easing: Easing.out(Easing.quad) });
@@ -245,12 +253,12 @@ function ListingCardInner({
       <View style={[styles.topRow, isHomeFeed && styles.topRowHome]}>
         {renderBadges()}
         <View style={[styles.heartSlot, isHomeFeed && styles.heartSlotHome]}>
-          <FavoriteButton
+          {preview ? preview.favorite : <FavoriteButton
             listingId={listing.id}
             size={isHomeFeed ? HEART_SIZE_HOME : HEART_SIZE}
             surface={isHomeFeed ? 'home' : 'default'}
             source={source ?? (feedPresentation === 'home' ? 'home' : 'listing_card')}
-          />
+          />}
         </View>
       </View>
       {priceLabel && !isHomeFeed && !isFeaturedRail ? (
@@ -260,6 +268,9 @@ function ListingCardInner({
       ) : null}
     </>
   );
+
+  // A fixture must never fall through to the real detail or FavoriteButton.
+  if (listing.id.startsWith('home-demo-') && !preview) return null;
 
   return (
     <AnimatedPressable
@@ -276,9 +287,9 @@ function ListingCardInner({
         animatedStyle,
       ]}
     >
-      {firstImage && !imageFailed ? (
+      {imageSource && !imageFailed ? (
         <ImageBackground
-          source={{ uri: firstImage }}
+          source={imageSource}
           resizeMode="cover"
           style={[
             styles.imageBase,
