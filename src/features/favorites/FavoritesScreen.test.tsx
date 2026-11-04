@@ -108,7 +108,10 @@ describe('FavoritesScreen', () => {
     const tree = await renderScreen();
     const list = tree.root.findByType('FlatList' as unknown as React.ComponentType);
     expect(list).toBeTruthy();
-    expect(list.props.ListHeaderComponent.props.count).toBe(2);
+    const listHeader = list.props.ListHeaderComponent as {
+      props: { count: number };
+    };
+    expect(listHeader.props.count).toBe(2);
   });
 
   it('shows unavailable empty when favorites exist but no active listing is hydrated', async () => {

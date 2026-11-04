@@ -1,6 +1,12 @@
 export { Screen } from './Screen';
 export { KeyboardSafeView } from './KeyboardSafeView';
 export { AppHeader } from './AppHeader';
+export {
+  MarketplaceTabHeader,
+  MARKETPLACE_TAB_SURFACE,
+  MARKETPLACE_TAB_HEADER_LAYOUT,
+  getMarketplaceTabHeaderWrapStyle,
+} from './MarketplaceTabHeader';
 export { AppLogo } from './AppLogo';
 export { BrandSymbol } from './BrandSymbol';
 export { Button } from './Button';

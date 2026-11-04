@@ -1355,3 +1355,595 @@ Envoi, Realtime, lu/non lu, signalement, cache inbox, badge, navigation conversa
 - **GO préflight / staging** — commit atomique proposé, **en attente autorisation CTO explicite**.
 - Périmètre staged : Phase B fil premium + Visual QA Demo + finitions visuelles + docs ; **exclus** logs QA, `.cursor/`, Metro local, secrets.
 - Message proposé : `feat(ui): refondre le fil de conversation premium (UI-MESSAGES-02)`
+
+---
+
+## UI-ACCOUNT-01 — Phase A (audit espace Compte) — 4 novembre 2026
+
+**Worktree** : `/Users/tommy/APP TESKA/YOUMBIA/youmbia-ui-home` · **Branche** : `feat/ui-home-first-slice` · **HEAD audit** : `be0876b006cf5b6c93e3da5e19515a6ed57428b8`
+**Périmètre** : lecture seule — **aucune modification** de l’écran Compte, backend, navigation, ni commit Phase B.
+
+### Contrôles Git préalables
+
+| Contrôle | Résultat |
+|----------|----------|
+| Branche active | `feat/ui-home-first-slice` ✓ |
+| HEAD | `be0876b006cf5b6c93e3da5e19515a6ed57428b8` ✓ (clôture UI-MESSAGES-02) |
+| Worktree | `youmbia-ui-home` ✓ |
+| Fichiers modifiés suivis | **Aucun** |
+| Non suivis locaux | `.cursor/`, logs QA (`connected-qa-*`, `pagination-tests.log`, etc.), `scripts/start-ui-home-metro.local.cjs` — **inchangés** depuis UI-MESSAGES-02 |
+| Delta code Compte depuis UI-MESSAGES-02 | **`app/(tabs)/account.tsx` inchangé** au SHA `be0876b` (dernière retouche fonctionnelle antérieure : carte notifications, avatar premium) |
+
+**Phase A doc** : mise à jour **uniquement** de cette section STATUS — pas de commit.
+
+### A. Cartographie technique
+
+| Couche | Fichiers / rôle |
+|--------|------------------|
+| **Route onglet** | `app/(tabs)/account.tsx` (~514 lignes) — dashboard Compte connecté ; invité → `<Redirect href={buildAuthGateHref('account')} />`. Tab : `app/(tabs)/_layout.tsx` (`name="account"`, `navigateProtectedTab` → `/(tabs)/account`). |
+| **Stack sous-routes** | `app/account/_layout.tsx` (Stack, headers off) : `listings`, `profile`, `settings`, `saved-searches`, `pro-shop`, `delete-account`. |
+| **Routes sœurs (hors stack)** | `app/privacy.tsx`, `app/help.tsx`, `app/terms.tsx` (`WebPageScreen` youmbia.com). **Profil public vendeur** : `app/user/[id].tsx` — **non référencé** depuis le dashboard Compte. |
+| **UI partagée** | `@/components` : `Screen`, `Loader`, `AppHeader`, `UserAvatar`, `NotificationsActivationCard`. `@/features/shops` : `ProSellerActivationCard`. `@/theme`, Reanimated micro-interactions (`AccountRow`, bouton Modifier). |
+| **Auth / session** | `getSession`, `signOut` (`@/services/auth`) ; gate `buildAuthGateHref('account')`. Déconnexion : `Alert` natif puis `signOut()` → `router.replace('/(auth)/login')`. |
+| **Profil / avatar** | `getCurrentProfile`, `getUserDisplayName`, `isApplePrivateRelayEmail` ; cache `lightCacheKeys.profile(userId)` ; résolution `resolveSingleAvatarUrl` ; bus `subscribeProfileEvents` (`avatar_updated`). Édition : `app/account/profile.tsx` (upload Storage, crop, `updateProfile`). |
+| **Boutique vendeur** | `ProSellerActivationCard` → `getMySellerProStatus()` ; création `router.push('/account/pro-shop')` ; boutique existante → `/shop/${slug}`, partage `shareShop`. |
+| **Push** | `NotificationsActivationCard` → `@/services/notifications` (permission, token, dismiss). |
+| **Version app** | `Constants.expoConfig?.version ?? Constants.nativeAppVersion` — libellé bas de scroll Compte. |
+
+**Flux chargement dashboard (`fetchSession`)**
+1. `getSession()` — absent → `unauthenticated` + Redirect gate.
+2. Email session + `user_metadata.full_name` (Apple).
+3. Paint cache `lightCache` (nom, avatar) → `authenticated`.
+4. Revalidation `getCurrentProfile()` + rewrite cache ; erreur réseau → garde cache (pas d’écran erreur dédié sur le dashboard).
+
+### B. Inventaire fonctionnel (entrées menu + cartes)
+
+| Entrée UI | Composant / zone | Route / action | Visibilité | Loading / erreur | Tests auto |
+|-----------|------------------|----------------|------------|------------------|------------|
+| Header « Compte » | `AppHeader` compact blanc | — | Connecté | Loading global `Loader` avant paint | Aucun UI |
+| Carte identité | `UserAvatar` + nom + email masqué Apple | « Modifier » → `/account/profile` | Connecté | Avatar cache puis revalidate ; pas de bandeau profil incomplet ici | `profileProvisioning.test.ts` (service) |
+| Boutique PRO | `ProSellerActivationCard` | Sans shop → `/account/pro-shop` ; avec shop → voir/partager | Connecté ; carte promo masquée pendant `loading` (`return null`) | Erreur service → traité comme sans boutique | Aucun UI |
+| Notifications | `NotificationsActivationCard` | CTA activation / réglages / dismiss | Si permission ≠ granted ou échec token | Non bloquant | Aucun UI |
+| Mes annonces | `AccountRow` | `/account/listings` | Toujours (connecté) | Sous-écran : loading / empty / error / stats vendeur | Contrats listings ailleurs, pas dashboard |
+| Messages | `AccountRow` | `/(tabs)/messages` | Toujours | Onglet protégé (gate si invité) | Inbox tests UI-MESSAGES-01 |
+| Favoris | `AccountRow` | `/(tabs)/favorites` | Toujours | Idem gate | `FavoritesScreen.test.tsx` |
+| Recherches sauvegardées | `AccountRow` | `/account/saved-searches` | Toujours | Liste Supabase ; gate si invité sur écran | Aucun UI |
+| **Profil public** (libellé) | `AccountRow` | **`/account/profile`** (écran **Modifier profil**, pas `/user/[id]`) | Toujours | Édition profil + alerte incomplet si nom **et** téléphone vides | Aucun UI |
+| Préférences e-mail | `AccountRow` | `/account/settings` | Toujours | Switches marketing / brouillon / favoris push ; **aussi** logout + lien suppression | Aucun UI |
+| Sécurité & confidentialité | `AccountRow` | `/privacy` | Toujours | WebView | Aucun |
+| Centre d'aide | `AccountRow` | `/help` | WebView | Aucun |
+| Conditions | `AccountRow` | `/terms` | WebView | Aucun |
+| Supprimer mon compte | `AccountRow` destructif | `/account/delete-account` | Toujours | Mot `SUPPRIMER` + double `Alert` + RPC `deleteAccount` | Aucun UI (service non testé dédié) |
+| Se déconnecter | Carte séparée | `Alert` → `signOut` → login | Connecté | `signingOut` spinner | `releaseCritical.contract.test.ts` (ordre cleanup/signOut) |
+| Version | `Text` footer | — | Connecté | — | — |
+| **Masqué (code commenté)** | — | Historique `/history`, Notifications `/settings/notifications` | Non exposé | — | — |
+
+**Mes annonces (sous-écran)** : `getMyListings`, stats `getMySellerStats` / contact intents ; statuts actif / brouillon / vendu / masqué via `listingStatus` ; **pas d’onglets filtre Expirés** — liste unique + section brouillons ; compteurs stats vendeur **réels** si API OK.
+
+**Boutique** : fonctionnalité **existante** (`createProShop`, `shops` + `profiles.shop_id`) ; badge **PRO** = label marketing carte promo (pas monétisation in-app auditée) ; `seller_type` pro/individuel en base **non affiché** sur le dashboard.
+
+### C. Matrice risques de régression (Phase B UI)
+
+| Risque | Sévérité | Mitigation |
+|--------|----------|------------|
+| Altérer séquence `signOut` / textes `Alert` déconnexion | **P0** | Ne pas toucher handlers ; tests contrat import `signOut` inchangé |
+| Modifier flux `delete-account.tsx` / `deleteAccount()` | **P0** | Aucun changement écran suppression ; QA UI sans RPC réelle |
+| Casser `fetchSession` / cache profil / `subscribeProfileEvents` | **P0** | Conserver ordre cache → network ; recette avatar après edit |
+| Redirect gate invité (`buildAuthGateHref('account')`) | **P0** | Recette invité + tab press `navigateProtectedTab` |
+| Régression `ProSellerActivationCard` / routes shop | **P1** | Conserver props `variant="account"` ; recette avec/sans shop |
+| Doublons navigation (Messages/Favoris onglets + lignes) | **P1** | Décision produit avant retrait de lignes |
+| Libellé « Profil public » vs route édition | **P1** | Décision produit (renommer ou ajouter lien `/user/:id`) |
+| Padding scroll vs tab bar (Compte **sans** `tabsBottomPad` 72) | **P2** | Aligner sur Favoris/Messages en Phase B |
+| Couleurs en dur (`#F9FAFB`, `#FEE2E2`, `#EEF2FF` avatar) | **P2** | Remplacer par tokens à l’occasion du reskin |
+| Accessibilité `AccountRow` (pas de `accessibilityRole`/label) | **P2** | Ajouter labels Phase B |
+
+### D. Audit UX actuel — **note : 5 / 10**
+
+| # | Thème | Constat |
+|---|--------|---------|
+| 1 | Hiérarchie | Bandeau blanc `AppHeader` + carte profil plate — **rupture** vs Accueil / Favoris / Messages (`#0B4D3C`). |
+| 2 | Densité | Sections empilées correctes ; carte promo boutique **haute** si pas de shop. |
+| 3 | Identité | Nom + email OK ; avatar 56 vs style 64 ; initiales via `UserAvatar` si pas de photo. |
+| 4 | Profil incomplet | **Invisible** sur dashboard ; visible seulement sur `/account/profile`. |
+| 5 | Doublons UX | Messages + Favoris dans menu **et** tab bar ; déconnexion **aussi** dans Paramètres. |
+| 6 | Libellés | « Profil public » → écran **modification** ; pas d’accès profil vendeur public. |
+| 7 | Paramètres | Groupes lisibles ; titre section « Paramètres » vs entrée « Préférences e-mail ». |
+| 8 | Actions sensibles | Déconnexion en carte rouge distincte ; suppression isolée en section — **OK métier**. |
+| 9 | Cohérence famille UI | Fond gris `#F9FAFB` hors tokens ; pas de header marketplace vert. |
+| 10 | A11y / Dynamic Type | Peu de labels VoiceOver sur rangées ; typo fixe `typography.*`. |
+| 11 | Safe area / scroll | Top via `AppHeader` ; **`Screen safe={false}`** ; bas scroll `spacing['3xl']` **sans** pad tab 72 (Favoris/Messages utilisent 72) → risque chevauchement version / dernière carte. |
+| 12 | Fonction vs polish | **Fonctionnellement riche** (boutique, notifications, saved searches) ; polish marketplace en retard. |
+
+**Distinction** : score **fonctionnel ~8/10** (parcours complets) ; score **UI marketplace cible ~5/10**.
+
+### E. Maquette cible 10/10 (Phase B — spec uniquement)
+
+1. **Header** : bandeau `#0B4D3C` (constant locale type `FAVORITES_MARKETPLACE_SURFACE` / `AccountScreenHeader`), titre « Compte », safe area + inset bannière MAJ app — **sans** dupliquer la logique métier.
+2. **Profil** : carte premium compacte sous header (photo, nom, email masqué Apple, CTA Modifier) — **pas** de badge inventé (vérif / pro) sur la carte identité.
+3. **Espace vendeur** : conserver `ProSellerActivationCard` ; présentation contextualisée (compacte si shop existante) — **ne pas** promettre monétisation ; copy existante sauf décision produit.
+4. **Activité** : groupe « Mes annonces & activité » — conserver toutes les routes ; option produit : raccourcis Messages/Favoris en secondaire ou sous-titre « aussi dans la barre du bas ».
+5. **Paramètres** : regroupements visuels homogènes (icônes 36px, hauteur ligne ≥ 48) ; aligner sémantique libellés/routes.
+6. **Actions sensibles** : déconnexion + suppression — **mêmes** confirmations et destinations.
+7. **Bas** : version réelle + **`paddingBottom` tab bar** (~72 + safe) ; fond `colors.background`.
+
+### F. Architecture composants minimale (Phase B proposée)
+
+```
+app/(tabs)/account.tsx              → orchestration (fetchSession, SECTIONS, handlers inchangés)
+src/features/account/
+  AccountScreenHeader.tsx           → vert #0B4D3C, titre (pattern FavoritesScreenHeader)
+  AccountProfileSummaryCard.tsx     → avatar, nom, email, Modifier
+  AccountMenuSection.tsx            → titre section + carte
+  AccountMenuRow.tsx                → extrait de AccountRow (+ a11y)
+  accountScreen.constants.ts        → SECTIONS (optionnel, évite diff bruyant)
+  AccountScreen.test.tsx            → rendu sections, redirect stub, pas de signOut réel
+```
+
+**Réutiliser sans dupliquer métier** : `ProSellerActivationCard`, `NotificationsActivationCard`, `UserAvatar`, tokens `@/theme`. **Ne pas** déplacer `fetchSession` vers un service.
+
+### G. Fichiers Phase B (liste prévisionnelle)
+
+| Action | Fichier |
+|--------|---------|
+| Refactor UI | `app/(tabs)/account.tsx` |
+| **Créer** | `src/features/account/*` (ci-dessus) |
+| **Ne pas modifier** (sauf copy validée) | `app/account/profile.tsx`, `delete-account.tsx`, `settings.tsx`, `listings.tsx`, `pro-shop.tsx`, `saved-searches.tsx`, `src/features/shops/ProSellerActivationCard.tsx`, `src/services/**`, `app/(tabs)/_layout.tsx`, Supabase |
+| Doc | `docs/ui-redesign/STATUS.md` (Phase B) |
+
+### H. Stratégie tests + recette iPhone
+
+**Automatisé Phase B**
+- `AccountScreen.test.tsx` : sections rendues, libellés clés, pas d’appel `signOut`/`deleteAccount` sans mock.
+- Régression : `releaseCritical.contract.test.ts`, `profileProvisioning.test.ts` — **PASS sans changement services**.
+
+**Matrice recette iPhone**
+
+| Cas | Session / data | Attendu |
+|-----|----------------|---------|
+| Invité | Déconnecté | Tab Compte → gate ; pas de dashboard |
+| Connecté standard | QA Supabase | Header, nom, email, menu complet |
+| Sans avatar | Profil sans `avatar_url` | Initiales `UserAvatar` |
+| Nom long / Dynamic Type | Texte agrandi iOS | Troncature contrôlée, scroll OK |
+| Apple relay | Compte `@privaterelay` | « Adresse masquée par Apple » |
+| Profil incomplet | Nom + tel vides | Bandeau **sur** écran Modifier ; décision si rappel dashboard |
+| Sans boutique | `shop_id` null | Carte promo → pro-shop |
+| Avec boutique | Shop QA | Voir / Partager ; slug OK |
+| Mes annonces | ≥1 annonce + brouillon | Navigation ; stats si données |
+| Chaque entrée menu | — | Route correcte (dont WebView aide/terms/privacy) |
+| Messages / Favoris | — | Onglet + retour Compte |
+| Déconnexion | — | Alert identique → login (**pas** de test parallèle settings sans protocole) |
+| Suppression | — | **UI seulement** jusqu’avant RPC ; **jamais** confirmer suppression réelle |
+| Notifications card | Permission denied | Carte réglages ou dismiss |
+| Loading | Réseau lent | Loader initial puis contenu |
+| Scroll bas | — | Version visible au-dessus tab bar |
+| VoiceOver | — | Header + rangées nommées |
+
+**Session Supabase QA requise** : connecté, boutique on/off, annonces actives/brouillon, saved searches, préférences e-mail.
+
+### I. Décisions produit nécessaires
+
+1. **« Profil public »** : renommer en « Modifier mon profil » **ou** ajouter entrée distincte vers `/user/{session.user.id}` (profil vendeur public).
+2. **Doublons Messages / Favoris** : conserver les deux raccourcis (hub Compte) **ou** retirer les lignes (navigation basse suffisante) — **ne pas supprimer sans validation**.
+3. **Rappel profil incomplet** sur dashboard : oui/non (données déjà dans cache `incomplete`).
+4. **Carte promo boutique** : garder en l’état **ou** variante compacte pour acheteurs sans intention vendeur (UI only).
+5. **Déconnexion double** (Compte + Paramètres) : conserver les deux **ou** centraliser (UX copy, même handler).
+6. **Entrées commentées** (Historique, Notifications settings) : rester masquées Phase B.
+
+### J. Verdict Phase A → Phase B
+
+| Verdict | **GO conditionnel** — refonte **UI/UX dashboard Compte uniquement** |
+|---------|---------------------------------------------------------------------|
+| Conditions | Aucun changement auth/suppression/déconnexion/services ; décisions (I) tranchées ou defaults conservateurs (toutes routes gardées, libellés inchangés si pas de GO produit) ; pad tab bar + header vert ; tests `AccountScreen` + recette iPhone ci-dessus. |
+| NO-GO si | Refonte Paramètres/suppression/boutique métier, retrait routes sans validation, ou modification RPC/RLS/Storage dans le même lot. |
+
+**Améliorations UI sûres immédiates (Phase B)** : header vert, tokens fond, pad scroll 72, extraction rangées + a11y, carte profil premium — **sans** toucher handlers sensibles.
+
+**Interdit dans cette tranche** : monétisation, nouvelles dépendances, changement comportement `deleteAccount` / `signOut`, navigation globale.
+
+**Recette iPhone Phase B** : **NON VALIDÉE** — protocole section H ; Metro QA 8082, compte connecté QA.
+
+---
+
+## UI-ACCOUNT-01 — Phase B (dashboard Compte premium) — 4 novembre 2026
+
+**Baseline implémentation** : HEAD départ `be0876b` · **Périmètre** : UI dashboard `app/(tabs)/account.tsx` + `src/features/account/*` uniquement.
+
+### Fichiers modifiés / créés
+
+| Fichier | Changement |
+|---------|------------|
+| `app/(tabs)/account.tsx` | Orchestration conservée (`fetchSession`, cache, avatar events, `handleSignOut` inchangés) ; layout premium header vert + scroll |
+| `src/features/account/AccountScreenHeader.tsx` | **Créé** — bandeau `#0B4D3C`, safe area + bannière MAJ |
+| `src/features/account/AccountProfileSummaryCard.tsx` | **Créé** — carte profil compacte, CTA Modifier → `/account/profile` |
+| `src/features/account/AccountMenuSection.tsx` | **Créé** |
+| `src/features/account/AccountMenuRow.tsx` | **Créé** — lignes ≥ 48 pt, a11y, `AccountLogoutRow` |
+| `src/features/account/accountScreen.constants.ts` | **Créé** — sections menu, pad tab 72, libellé **Modifier mon profil** (CTO) |
+| `src/features/account/index.ts` | **Créé** |
+| `src/features/account/AccountScreen.test.tsx` | **Créé** |
+| `src/features/account/AccountScreen.components.test.tsx` | **Créé** |
+| `docs/ui-redesign/STATUS.md` | Phase B |
+
+**Non modifiés (contrats)** : `app/account/*`, `src/services/**`, `ProSellerActivationCard` (logique), `_layout.tsx`, auth gate, suppression, RPC/RLS.
+
+### Arbitrages CTO appliqués
+
+- Libellé menu : **« Modifier mon profil »** → route **`/account/profile`** (inchangée).
+- Routes activité + paramètres + suppression : **toutes conservées**.
+- `ProSellerActivationCard variant="account"` réutilisé ; slot visuel resserré (`proSellerSlot`).
+- Handlers déconnexion : textes `Alert` et séquence `signOut` → login **identiques**.
+
+### Contrôles automatisés exécutés
+
+| Commande | Résultat |
+|----------|----------|
+| `npx tsc --noEmit` | **PASS** |
+| `npx eslint app/(tabs)/account.tsx src/features/account/**/*.{ts,tsx}` | **PASS** |
+| `npx vitest run src/features/account/ src/services/releaseCritical.contract.test.ts` | **PASS** — 3 fichiers, **21** tests |
+| `git diff --check` | **PASS** (après correction whitespace Phase A) |
+
+### Recette iPhone (Dev Client, Metro 8082)
+
+| # | Scénario | Statut |
+|---|----------|--------|
+| 1–12 | Protocole Phase A section H (connecté, avatar, boutique, menus, scroll, Dynamic Type, déconnexion **non exécutée** si session préservée, suppression **parcours UI seulement**) | **NON EXÉCUTÉE** — arrêt avant validation device (consigne mission) |
+
+### Réserves
+
+- **Recette device** : en attente propriétaire sur iPhone QA.
+- Carte promo boutique : copy/marketing **inchangés** (composant shops non modifié) ; compaction limitée au marging slot Compte.
+- Profil incomplet : toujours **absent** du dashboard (comportement Phase A conservé).
+- Doublons Messages/Favoris + déconnexion Paramètres : **conservés** (CTO).
+
+### État Git (fin Phase B locale)
+
+- Branche : `feat/ui-home-first-slice`
+- HEAD commit : **`be0876b`** (inchangé — **aucun commit** Phase B)
+- Modifiés : `app/(tabs)/account.tsx`, `docs/ui-redesign/STATUS.md`, `src/features/account/*` (nouveaux)
+- Non suivis locaux : inchangés (`.cursor/`, logs QA, Metro local)
+
+**Prochaine étape** : recette iPhone puis commit atomique sur autorisation CTO (`feat(ui): refondre l’espace Compte premium (UI-ACCOUNT-01)`).
+
+---
+
+## UI-ACCOUNT-01 — Premium polish (densité dashboard) — 4 novembre 2026
+
+**Objectif** : réduire la hauteur visuelle du bloc boutique (~30–40 %) et harmoniser la densité header / profil / menus **sans** toucher session, auth, Supabase, déconnexion, suppression ni routes.
+
+### Changements
+
+| Zone | Détail |
+|------|--------|
+| `ProSellerActivationCard` | Nouvelle variante **`accountCompact`** (logique métier inchangée : `getMySellerProStatus`, routes `/account/pro-shop`, `/shop/:slug`, partage). Promo sans illustration ; typo/padding/gaps réduits ; CTA « Créer ma boutique » conservé (hauteur 40). État boutique existante : icône/texte/boutons identiques, carte plus serrée. Variantes **`account`** (legacy) et **`listings`** inchangées visuellement. |
+| `app/(tabs)/account.tsx` | `variant="accountCompact"` ; pad scroll bas `72 + spacing.lg` (tab bar préservée) ; version footer resserrée. |
+| Header / profil | `AccountScreenHeader` `paddingBottom` réduit ; carte profil chevauchement `-spacing.md`, padding vertical `sm`. |
+| Menus | Titres sections en `typography.xs`, interlignes rangées 6 px vertical (min 48 pt conservé). |
+
+### Contrats préservés
+
+Textes métier boutique, conditions loading/null, handlers navigation, `listings` variant, services — **identiques**.
+
+### Tests
+
+| Commande | Résultat |
+|----------|----------|
+| `npx tsc --noEmit` | **PASS** |
+| ESLint ciblé (`account`, `account/*`, `ProSellerActivationCard*`) | **PASS** |
+| `npx vitest run src/features/account/ src/features/shops/ProSellerActivationCard.test.ts src/services/releaseCritical.contract.test.ts` | **PASS** — 4 fichiers, **27** tests (dont 5 états boutique compact / legacy / loading) |
+| `git diff --check` | **PASS** |
+
+### Recette iPhone
+
+**NON EXÉCUTÉE** — valider visuellement : hauteur carte boutique (avec/sans shop), enchaînement header → profil → boutique, scroll bas + tab bar, Dynamic Type.
+
+### État Git
+
+- HEAD commit : **`be0876b`** (aucun commit polish)
+- Fichiers touchés : `ProSellerActivationCard.tsx`, `ProSellerActivationCard.test.tsx`, composants `account/*`, `app/(tabs)/account.tsx`, `STATUS.md`
+
+---
+
+## UI-ACCOUNT-01 — Excellence Pass (hiérarchie & anti-duplication boutique) — 5 novembre 2026
+
+### Identité
+
+- Worktree : `/Users/tommy/APP TESKA/YOUMBIA/youmbia-ui-home`
+- Branche : `feat/ui-home-first-slice`
+- HEAD commit (inchangé) : **`be0876b006cf5b6c93e3da5e19515a6ed57428b8`**
+- **Aucun commit / push / merge / déploiement / mutation Supabase**
+
+### Avant → Après
+
+| Zone | Avant | Après |
+|------|--------|--------|
+| Profil | Carte chevauchant le bandeau vert (`marginTop` négatif) | Marge positive + `paddingTop` scroll ; rien masqué |
+| Priorités | `ProSellerActivationCard` compact (CTA boutique + doublon menu « Mes annonces ») | **`AccountPriorityActions`** : tuiles **Mes annonces** + **Ma boutique / Créer ma boutique** + partage si boutique |
+| Menus | Section « Mes annonces & activités » | **Activité** (Messages, Favoris, Recherches) ; **Actions sensibles** (suppression) |
+| Boutique Compte | Carte ProSeller dupliquée | Hook partagé `useProSellerActivation` ; carte ProSeller conservée sur **Mes annonces** (`listings`) |
+
+### Fichiers modifiés / ajoutés (Compte)
+
+- `app/(tabs)/account.tsx` — ordre profil → priorités → notifications → menus
+- `src/features/account/AccountPriorityActions.tsx` (**nouveau**)
+- `src/features/account/AccountProfileSummaryCard.tsx` — chevauchement corrigé
+- `src/features/account/accountScreen.constants.ts` — regroupement menus
+- `src/features/account/index.ts` — export
+- `src/features/shops/useProSellerActivation.ts` (**nouveau**, logique extraite sans changer services)
+- `src/features/shops/ProSellerActivationCard.tsx` — consomme le hook (variants inchangés)
+- Tests : `AccountPriorityActions.test.tsx`, mises à jour `AccountScreen.test.tsx`, `AccountScreen.components.test.tsx`
+- `ProSellerActivationCard.test.tsx` — inchangé fonctionnellement (mock services via hook)
+
+**UI-SHOP-01** : fichiers shop media **non modifiés** dans cette passe (correctifs antérieurs préservés).
+
+### Contrats préservés
+
+- Routes : `/account/listings`, `/account/pro-shop`, `/shop/{slug}`, messages/favoris/recherches/paramètres/aide/suppression, gate invité, `fetchSession`, cache avatar, Alert déconnexion identique.
+- Pas de nouvelle route ni feature métier.
+
+### Tests exécutés
+
+| Commande | Résultat |
+|----------|----------|
+| `npx tsc --noEmit` | **PASS** |
+| ESLint ciblé account + hook | **PASS** |
+| `npx vitest run src/features/account/ src/features/shops/ProSellerActivationCard.test.ts src/services/releaseCritical.contract.test.ts` | **PASS** — 5 fichiers, **33** tests |
+| `git diff --check` | **PASS** |
+
+### Réserves
+
+- Recette **VoiceOver / Dynamic Type / iPhone SE** non exécutée par l’agent ; checklist ci-dessous pour le propriétaire.
+- Deux appels `useProSellerActivation` si écran Mes annonces monte aussi le hook (comportement identique à l’ancien double fetch focus) — acceptable, pas de changement service.
+
+### Checklist iPhone (Compte)
+
+1. Bandeau vert + carte profil : nom, email, avatar, **Modifier** entièrement visibles.
+2. Tuiles **Mes annonces** et boutique (création ou fiche) juste sous le profil.
+3. Boutique existante : sous-titre nom boutique + action **Partager** dans la tuile (deux zones tactiles), sans bouton pleine largeur.
+4. Menus : Activité / Paramètres / Aide / Actions sensibles ; déconnexion + version en bas, scroll jusqu’au bout avec tab bar.
+5. Email long / nom boutique long : troncature `numberOfLines`, pas de chevauchement.
+
+### État Git (local)
+
+- Modifiés : `account.tsx`, package account, `ProSellerActivationCard.tsx`, `useProSellerActivation.ts`, tests, `STATUS.md` (+ UI-SHOP-01 et account antérieurs déjà locaux)
+- **Stop avant commit** — en attente GO CTO.
+
+## UI-CONSISTENCY-01 — Finition Favoris + Compte — 5 novembre 2026
+
+### Identité
+
+- Worktree : `/Users/tommy/APP TESKA/YOUMBIA/youmbia-ui-home` · branche `feat/ui-home-first-slice` · HEAD **`be0876b`** (inchangé)
+- **UI-only** — pas de commit / push / déploiement · **UI-SHOP-01 non touché** dans cette tranche
+
+### Avant → Après
+
+| Zone | Avant | Après |
+|------|--------|--------|
+| Favoris header | `paddingBottom: 6` en dur ; `paddingTop` liste créait un bandeau blanc au-dessus du vert | Constante partagée `MARKETPLACE_TAB_TITLE_PADDING_BOTTOM` ; `paddingTop` liste **0** + interstice `spacing.sm` sous le header |
+| Compte header / profil | Carte sous le bandeau sans chevauchement | Bandeau avec réserve vert (`6 + ACCOUNT_PROFILE_CARD_OVERLAP`) ; carte **marginTop négatif** + `zIndex: 1` |
+| Partager boutique | Bouton outline pleine largeur sous les tuiles | Ligne **Partager** (48 pt) dans la tuile boutique ; tap boutique vs partage séparés |
+
+### Fichiers modifiés
+
+- `app/(tabs)/favorites.tsx`, `src/features/favorites/FavoritesScreenHeader.tsx` (+ tests)
+- `src/features/account/accountScreen.constants.ts` (constantes chrome onglets)
+- `AccountScreenHeader.tsx`, `AccountProfileSummaryCard.tsx`, `AccountPriorityActions.tsx` (+ tests)
+- `app/(tabs)/account.tsx` (scroll `paddingTop: 0`)
+- `docs/ui-redesign/STATUS.md`
+
+### Tests exécutés
+
+| Commande | Résultat |
+|----------|----------|
+| `npx tsc --noEmit` | **PASS** |
+| ESLint ciblé Favoris + Compte | **PASS** |
+| Vitest `src/features/favorites/`, `src/features/account/`, `ProSellerActivationCard.test.ts`, `releaseCritical.contract.test.ts` | **PASS** — 49 tests |
+| `git diff --check` | **PASS** |
+
+Cas ajoutés : géométrie header Favoris, overlap profil, partage intégré tuile, absence partage sans boutique, email/nom longs.
+
+### Réserves
+
+- Recette iPhone Metro **8082** (checklist ci-dessous) **non exécutée** par l’agent.
+- Chevauchement profil : vérifier qu’aucun clipping iOS sur ScrollView avec Dynamic Type max.
+
+### Checklist iPhone (UI-CONSISTENCY-01)
+
+1. **Favoris** : bandeau `#0B4D3C`, compteur, grille 1/2 col, espace blanc régulier avant 1ʳᵉ rangée.
+2. **Compte** : profil jamais masqué (scroll + texte agrandi).
+3. **Boutique** : tap tuile → fiche ; tap **Partager** → share sheet (sans ouvrir la fiche).
+4. **Sans boutique** : pas de ligne Partager.
+5. Scroll bas + tab bar + version.
+
+### État Git
+
+- Locaux inchangés vs Excellence Pass + cette finition ; HEAD toujours **`be0876b`**
+- **Stop pour validation iPhone**
+
+## UI-CONSISTENCY-01-P0 — Clipping carte profil Compte — 5 novembre 2026
+
+### Cause racine
+
+La carte profil était **premier enfant d’une `ScrollView`**. Sur iOS, le chevauchement (`marginTop` négatif) est **clippé** au bord supérieur du scroll : l’avatar et le haut de la carte passaient **derrière** le bandeau vert (sibling au-dessus du scroll), d’où la capture tronquée.
+
+### Correction (minimale)
+
+- `app/(tabs)/account.tsx` : bloc **`accountHero`** (`overflow: 'visible'`, `zIndex: 1`) regroupant `AccountScreenHeader` + `AccountProfileSummaryCard` **hors** scroll.
+- `ScrollView` (`mainScroll`) ne contient plus que le contenu sous le profil (tuiles, menus, déconnexion).
+- `AccountProfileSummaryCard` : `zIndex: 2` + `elevation: 3` pour empilement stable au-dessus du vert.
+
+Aucun changement métier, routes, tuiles ou partage.
+
+### Tests
+
+| Commande | Résultat |
+|----------|----------|
+| `npx tsc --noEmit` | **PASS** |
+| ESLint ciblé Compte | **PASS** |
+| Vitest `src/features/account/` | **PASS** — 24 tests |
+| `git diff --check` | **PASS** |
+
+Nouveau cas : profil **absent** de l’arbre `ScrollView` (test `AccountScreen`).
+
+### Recette iPhone (P0)
+
+1. Avatar et carte **entièrement visibles** au chargement.
+2. Chevauchement premium sur le vert, sans bande coupée.
+3. Scroll fluide sans saut ; Dynamic Type sans clipping.
+4. Tuiles / Partager / tab bar inchangés.
+
+**HEAD** : `be0876b` · **sans commit**
+
+## UI-ACCOUNT-01 + UI-CONSISTENCY-01 — Préflight commit — 5 novembre 2026
+
+### Identité Git
+
+| Élément | Valeur |
+|---------|--------|
+| Worktree | `/Users/tommy/APP TESKA/YOUMBIA/youmbia-ui-home` |
+| Branche | `feat/ui-home-first-slice` |
+| HEAD (réf.) | `be0876b006cf5b6c93e3da5e19515a6ed57428b8` |
+| Statut | **Préflight prêt — commit non exécuté** |
+
+### Validations automatiques (préflight agent)
+
+| Contrôle | Résultat |
+|----------|----------|
+| `npx tsc --noEmit` | **PASS** |
+| ESLint ciblé lot Compte / Favoris / hook ProSeller | **PASS** (0 erreur ; 1 avertissement `@typescript-eslint/array-type` sur fichier du lot) |
+| Vitest account + favoris modifiés + ProSeller + releaseCritical | **PASS** — 45 tests |
+| `git diff --check` | **PASS** |
+| `git diff --cached --check` | **PASS** (post-staging) |
+
+### Validations iPhone
+
+| Scénario | Statut |
+|----------|--------|
+| Rendu initial Compte (profil visible, clipping corrigé) | **PASS propriétaire** (capture antérieure) |
+| Scroll complet, Dynamic Type max, tab bar bas | **Réserve QA** — non attesté post-P0 |
+| Favoris header + grille après harmonisation | **Réserve QA** — non re-certifié sur ce préflight |
+| Share sheet native (tap Partager tuile) | **Réserve QA** |
+
+### Périmètre indexé (UI-ACCOUNT-01 + UI-CONSISTENCY-01)
+
+- `app/(tabs)/account.tsx`
+- `app/(tabs)/favorites.tsx`
+- `src/features/account/**` (package Compte + tests)
+- `src/features/favorites/FavoritesScreenHeader.tsx` (+ tests `FavoritesScreenHeader.test.tsx`, `FavoritesScreen.test.tsx`)
+- `src/features/shops/ProSellerActivationCard.tsx`, `useProSellerActivation.ts`, `ProSellerActivationCard.test.tsx`
+- `docs/ui-redesign/STATUS.md` — **sections Compte / Cohérence / P0 / préflight uniquement** (bloc **UI-SHOP-01 exclu** de l’index)
+
+### Exclus de l’index (conservés en working tree)
+
+- `app/shop/[slug].tsx`, `ShopCard.tsx`, `shopMediaUrl.ts`, `createProShop.ts`, `shopMediaUrl.test.ts`
+- `.cursor/`, scripts Metro locaux, logs / captures / JSON QA
+- Section **UI-SHOP-01** dans `STATUS.md` (reste en local non indexée)
+
+### UI-SHOP-01
+
+Chantier **séparé** — aucun fichier UI-SHOP-01 dans le staging de ce commit.
+
+### Message de commit proposé
+
+```text
+feat(ui): refondre le Compte premium et harmoniser les onglets (UI-ACCOUNT-01)
+
+Dashboard Compte, profil premium, tuiles vendeur, partage intégré,
+correction du clipping iOS et harmonisation de l'en-tête Favoris.
+Contrats métier préservés et tests de non-régression.
+```
+
+**En attente GO CTO explicite avant `git commit`.**
+
+## UI-CONSISTENCY-01 — HEADER ALIGNMENT P0 (Favoris ≡ Messages) — 5 novembre 2026
+
+### Avant → Après
+
+| Aspect | Avant | Après |
+|--------|--------|--------|
+| Implémentation | Deux headers dupliqués ; sous-titre **absent** si compteur = 0 | **`MarketplaceTabHeader`** partagé (`src/components/MarketplaceTabHeader.tsx`) |
+| Hauteur bandeau | Variable (1 ou 2 lignes) | **Stable** : titre + sous-titre **toujours** rendus |
+| Padding bas | Messages `6` ; Favoris constante partagée | **`MARKETPLACE_TAB_TITLE_PADDING_BOTTOM` = 6** pour les deux |
+| Favoris compteur 0 | Pas de 2ᵉ ligne | **`0 annonce`** (copy neutre, a11y « 0 annonces ») |
+| Messages 0 non lu | Pas de 2ᵉ ligne | **`Aucune conversation non lue`** |
+| Pleine largeur | Risque de gouttière via `paddingHorizontal` liste | Inchangé côté liste (fix précédent) ; header vert **bord à bord** dans le bandeau |
+
+### Dimensions retenues (contrat `MARKETPLACE_TAB_HEADER_LAYOUT`)
+
+| Token | Valeur |
+|-------|--------|
+| Surface | `#0B4D3C` |
+| `paddingHorizontal` | `spacing.screenHorizontal` (16) |
+| `paddingBottom` | `6` |
+| `paddingTop` (bandeau) | `insets.top + 2` ou `spacing.xs` si bannière MAJ app |
+| Titre | `typography.xl` bold blanc |
+| Sous-titre | `typography.sm` semibold `rgba(255,255,255,0.88)`, `marginTop: 4`, `numberOfLines: 2` (Dynamic Type) |
+
+### Fichiers
+
+- `src/components/MarketplaceTabHeader.tsx` (+ test layout parity)
+- `FavoritesScreenHeader.tsx`, `MessagesScreenHeader.tsx` (wrappers métier)
+- `src/components/index.ts` (export)
+- Tests : `MarketplaceTabHeader.test.tsx`, mises à jour headers Favoris/Messages
+
+### Tests exécutés (préflight P0 headers)
+
+| Commande | Résultat |
+|----------|----------|
+| `npx tsc --noEmit` | **PASS** |
+| ESLint ciblé headers + composant | **PASS** |
+| Vitest `MarketplaceTabHeader` + headers Favoris/Messages + `FavoritesScreen.test` | **PASS** — 15 tests |
+| `git diff --check` | **PASS** |
+
+### Recette iPhone (obligatoire — réserves)
+
+| Scénario | Statut |
+|----------|--------|
+| Favoris 0 / 1 / N annonces — même hauteur bandeau | **Réserve QA** |
+| Messages vide / non lus — même hauteur bandeau | **Réserve QA** |
+| Alternance onglets Favoris ↔ Messages | **Réserve QA** |
+| Alignement titre + bord inférieur vert | **Réserve QA** |
+| Dynamic Type iOS | **Réserve QA** |
+
+**Git** : HEAD `be0876b` · **staging précédent invalidé** (ne pas réutiliser l’ancien index) · **sans commit**
+
+## PRÉFLIGHT CONSOLIDÉ — UI-ACCOUNT-01 + UI-CONSISTENCY-01 — 5 novembre 2026
+
+### Identité Git (contrôle initial)
+
+| Élément | Valeur |
+|---------|--------|
+| Worktree | `/Users/tommy/APP TESKA/YOUMBIA/youmbia-ui-home` |
+| Branche | `feat/ui-home-first-slice` ✓ |
+| HEAD | `be0876b006cf5b6c93e3da5e19515a6ed57428b8` ✓ |
+| Commit exécuté | **Non** |
+
+### Périmètre indexé (lot consolidé)
+
+Compte premium, clipping P0, tuiles + partage, menus, hook `useProSellerActivation` (UI), `MarketplaceTabHeader`, headers Favoris/Messages, padding liste Favoris, tests associés, `STATUS.md` **sans** section H2 UI-SHOP-01.
+
+### Hors commit (préservé en local)
+
+`app/shop/[slug].tsx`, `ShopCard.tsx`, `shopMediaUrl.ts`, `createProShop.ts`, `shopMediaUrl.test.ts`, artefacts QA, `.cursor/`, Metro local.
+
+### Validations automatiques
+
+| Contrôle | Résultat |
+|----------|----------|
+| `npx tsc --noEmit` | **PASS** |
+| ESLint lot TS/TSX (24 fichiers indexés + tests) | **PASS** (0 erreur ; 1 avertissement `@typescript-eslint/array-type` sur test AccountPriorityActions) |
+| Vitest : account, favorites, MarketplaceTabHeader, Messages header, ProSeller, releaseCritical, ListingFeed | **PASS** — **11 fichiers / 65 tests** |
+| `git diff --check` | **PASS** |
+| `git diff --cached --check` | **PASS** |
+
+### Validations iPhone
+
+Captures antérieures : direction Compte / headers OK. **Réserve QA** : alternance Favoris↔Messages, Dynamic Type max, scroll bas, share sheet, Favoris 0/1/N — **non attestées** sur ce préflight.
+
+### Index consolidé (24 fichiers staged)
+
+Voir rapport CTO ; **UI-SHOP-01 absent** (`shop/[slug]`, `ShopCard`, `shopMediaUrl`, `createProShop` non indexés). Ancien index partiel (19 fichiers, sans `MarketplaceTabHeader` / Messages) **invalidé** via `git reset HEAD` puis re-staging.
+
+### Verdict préflight
+
+**GO commit proposé** — sous réserve recette iPhone (réserves ci-dessus) et **autorisation CTO explicite** avant `git commit`.
+
+**STOP avant `git commit`.**

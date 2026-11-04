@@ -1,7 +1,7 @@
 import React from 'react';
 import { act, create } from 'react-test-renderer';
 import { describe, expect, it, vi } from 'vitest';
-import { MessagesScreenHeader } from './MessagesScreenHeader';
+import { MessagesScreenHeader, messagesSubtitle } from './MessagesScreenHeader';
 
 vi.mock('react-native', () => ({
   View: 'View',
@@ -14,10 +14,18 @@ vi.mock('react-native-safe-area-context', () => ({
 vi.mock('@/context/AppUpdateBannerInsetContext', () => ({
   useAppUpdateBannerInset: () => 0,
 }));
-vi.mock('@/theme', () => ({
-  spacing: { screenHorizontal: 16, xs: 4 },
-  typography: { xl: {}, sm: {} },
-  fontWeights: { bold: '700', semibold: '600' },
+vi.mock('@/components/MarketplaceTabHeader', () => ({
+  MarketplaceTabHeader: ({
+    title,
+    subtitle,
+    subtitleAccessibilityLabel,
+  }: {
+    title: string;
+    subtitle: string;
+    subtitleAccessibilityLabel?: string;
+  }) =>
+    React.createElement('MarketplaceTabHeader', { title, subtitle, subtitleAccessibilityLabel }),
+  MARKETPLACE_TAB_SURFACE: '#0B4D3C',
 }));
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -28,34 +36,22 @@ describe('MessagesScreenHeader', () => {
     act(() => {
       tree = create(<MessagesScreenHeader unreadConversationsCount={2} />);
     });
-    const label = (node: { props: { children?: unknown } }) =>
-      Array.isArray(node.props.children)
-        ? node.props.children.join('')
-        : String(node.props.children ?? '');
-    const texts = tree.root.findAllByType('Text' as unknown as React.ComponentType);
-    expect(texts.some((n) => label(n).includes('Messages'))).toBe(true);
-    expect(texts.some((n) => label(n).includes('2 conversations non lues'))).toBe(true);
+    const header = tree.root.findByType('MarketplaceTabHeader' as unknown as React.ComponentType);
+    expect(header.props.title).toBe('Messages');
+    expect(header.props.subtitle).toBe('2 conversations non lues');
   });
 
-  it('hides subtitle when zero unread conversations', () => {
+  it('reserves subtitle line when zero unread conversations', () => {
     let tree!: ReturnType<typeof create>;
     act(() => {
       tree = create(<MessagesScreenHeader unreadConversationsCount={0} />);
     });
-    const texts = tree.root.findAllByType('Text' as unknown as React.ComponentType);
-    expect(texts).toHaveLength(1);
+    const header = tree.root.findByType('MarketplaceTabHeader' as unknown as React.ComponentType);
+    expect(header.props.subtitle).toBe('Aucune conversation non lue');
+    expect(header.props.subtitleAccessibilityLabel).toBe('Aucune conversation non lue');
   });
 
   it('uses singular copy for one unread conversation', () => {
-    let tree!: ReturnType<typeof create>;
-    act(() => {
-      tree = create(<MessagesScreenHeader unreadConversationsCount={1} />);
-    });
-    const label = (node: { props: { children?: unknown } }) =>
-      Array.isArray(node.props.children)
-        ? node.props.children.join('')
-        : String(node.props.children ?? '');
-    const texts = tree.root.findAllByType('Text' as unknown as React.ComponentType);
-    expect(texts.some((n) => label(n).includes('1 conversation non lue'))).toBe(true);
+    expect(messagesSubtitle(1)).toBe('1 conversation non lue');
   });
 });

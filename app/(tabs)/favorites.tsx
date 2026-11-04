@@ -162,7 +162,8 @@ export default function FavoritesScreen() {
     ({ item }: { item: HomeFeedGridRow }) => {
       const cellCount = item.kind === 'cells' ? item.cells.length : 0;
       return (
-        <View style={[styles.homeGridRow, { gap: HOME_FEED_GRID_COLUMN_GAP }]}>
+        <View style={styles.gridRowShell}>
+          <View style={[styles.homeGridRow, { gap: HOME_FEED_GRID_COLUMN_GAP }]}>
           {item.kind === 'cells'
             ? item.cells.map((cell) => {
                 const cellLayout = getHomeFeedGridCellLayout(gridInnerWidth, columnCount, cellCount);
@@ -176,6 +177,7 @@ export default function FavoritesScreen() {
                 );
               })
             : null}
+          </View>
         </View>
       );
     },
@@ -183,7 +185,9 @@ export default function FavoritesScreen() {
   );
 
   const renderSingleColumnItem = useCallback(
-    ({ item }: { item: PublicListing }) => renderListingCard(item),
+    ({ item }: { item: PublicListing }) => (
+      <View style={styles.listItemShell}>{renderListingCard(item)}</View>
+    ),
     [renderListingCard]
   );
 
@@ -346,6 +350,12 @@ const styles = StyleSheet.create({
   screenSurface: {
     backgroundColor: colors.surface,
   },
+  gridRowShell: {
+    paddingHorizontal: spacing.screenHorizontal,
+  },
+  listItemShell: {
+    paddingHorizontal: spacing.screenHorizontal,
+  },
   emptyWrap: {
     flex: 1,
     justifyContent: 'center',
@@ -358,8 +368,7 @@ const styles = StyleSheet.create({
     maxWidth: 760,
     width: '100%',
     alignSelf: 'center',
-    paddingHorizontal: spacing.screenHorizontal,
-    paddingTop: spacing.xs,
+    paddingTop: 0,
     paddingBottom: spacing['3xl'],
     flexGrow: 1,
   },
@@ -399,6 +408,7 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     gap: spacing.sm,
     marginTop: spacing.lg,
+    marginHorizontal: spacing.screenHorizontal,
     padding: spacing.md,
     borderRadius: 16,
     backgroundColor: colors.background,

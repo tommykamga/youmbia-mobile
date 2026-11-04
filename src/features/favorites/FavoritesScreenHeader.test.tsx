@@ -1,7 +1,7 @@
 import React from 'react';
 import { act, create } from 'react-test-renderer';
 import { describe, expect, it, vi } from 'vitest';
-import { FavoritesScreenHeader } from './FavoritesScreenHeader';
+import { FavoritesScreenHeader, favoritesSubtitle } from './FavoritesScreenHeader';
 
 vi.mock('react-native', () => ({
   View: 'View',
@@ -14,10 +14,18 @@ vi.mock('react-native-safe-area-context', () => ({
 vi.mock('@/context/AppUpdateBannerInsetContext', () => ({
   useAppUpdateBannerInset: () => 0,
 }));
-vi.mock('@/theme', () => ({
-  spacing: { screenHorizontal: 16, md: 12, xs: 4 },
-  typography: { xl: {}, sm: {} },
-  fontWeights: { bold: '700', semibold: '600' },
+vi.mock('@/components/MarketplaceTabHeader', () => ({
+  MarketplaceTabHeader: ({
+    title,
+    subtitle,
+    subtitleAccessibilityLabel,
+  }: {
+    title: string;
+    subtitle: string;
+    subtitleAccessibilityLabel?: string;
+  }) =>
+    React.createElement('MarketplaceTabHeader', { title, subtitle, subtitleAccessibilityLabel }),
+  MARKETPLACE_TAB_SURFACE: '#0B4D3C',
 }));
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -28,21 +36,23 @@ describe('FavoritesScreenHeader', () => {
     act(() => {
       tree = create(<FavoritesScreenHeader count={3} />);
     });
-    const label = (node: { props: { children?: unknown } }) =>
-      Array.isArray(node.props.children)
-        ? node.props.children.join('')
-        : String(node.props.children ?? '');
-    const texts = tree.root.findAllByType('Text' as unknown as React.ComponentType);
-    expect(texts.some((node) => label(node).includes('Favoris'))).toBe(true);
-    expect(texts.some((node) => label(node).includes('3 annonces'))).toBe(true);
+    const header = tree.root.findByType('MarketplaceTabHeader' as unknown as React.ComponentType);
+    expect(header.props.title).toBe('Favoris');
+    expect(header.props.subtitle).toBe('3 annonces');
   });
 
-  it('hides the counter line when count is zero', () => {
+  it('reserves subtitle line when count is zero', () => {
     let tree!: ReturnType<typeof create>;
     act(() => {
       tree = create(<FavoritesScreenHeader count={0} />);
     });
-    const texts = tree.root.findAllByType('Text' as unknown as React.ComponentType);
-    expect(texts).toHaveLength(1);
+    const header = tree.root.findByType('MarketplaceTabHeader' as unknown as React.ComponentType);
+    expect(header.props.subtitle).toBe('0 annonce');
+    expect(header.props.subtitleAccessibilityLabel).toBe('0 annonces');
+  });
+
+  it('formats subtitle copy', () => {
+    expect(favoritesSubtitle(1)).toBe('1 annonce');
+    expect(favoritesSubtitle(2)).toBe('2 annonces');
   });
 });

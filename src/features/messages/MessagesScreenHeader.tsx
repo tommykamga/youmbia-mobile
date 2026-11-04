@@ -1,55 +1,35 @@
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useAppUpdateBannerInset } from '@/context/AppUpdateBannerInsetContext';
-import { spacing, typography, fontWeights } from '@/theme';
+import { MarketplaceTabHeader, MARKETPLACE_TAB_SURFACE } from '@/components/MarketplaceTabHeader';
 
-/** Vert profond aligné Favoris / accueil marketplace. */
-export const MESSAGES_MARKETPLACE_SURFACE = '#0B4D3C';
+/** @deprecated Préférer `MARKETPLACE_TAB_SURFACE` — alias Messages. */
+export const MESSAGES_MARKETPLACE_SURFACE = MARKETPLACE_TAB_SURFACE;
 
 type MessagesScreenHeaderProps = {
   /** Conversations avec au moins un message non lu (dérivé des lignes inbox, pas du badge onglet). */
   unreadConversationsCount: number;
 };
 
+function messagesSubtitle(unreadConversationsCount: number): string {
+  if (unreadConversationsCount === 0) return 'Aucune conversation non lue';
+  return `${unreadConversationsCount} ${
+    unreadConversationsCount === 1 ? 'conversation non lue' : 'conversations non lues'
+  }`;
+}
+
 export function MessagesScreenHeader({ unreadConversationsCount }: MessagesScreenHeaderProps) {
-  const insets = useSafeAreaInsets();
-  const appUpdateBannerInset = useAppUpdateBannerInset();
-  const topInset = appUpdateBannerInset > 0 ? spacing.xs : insets.top + 2;
+  const subtitle = messagesSubtitle(unreadConversationsCount);
+  const subtitleA11y =
+    unreadConversationsCount === 0
+      ? 'Aucune conversation non lue'
+      : `${unreadConversationsCount} conversation${unreadConversationsCount === 1 ? '' : 's'} non lue${unreadConversationsCount === 1 ? '' : 's'}`;
 
   return (
-    <View style={[styles.wrap, { paddingTop: topInset }]}>
-      <Text style={styles.title} accessibilityRole="header">
-        Messages
-      </Text>
-      {unreadConversationsCount > 0 ? (
-        <Text
-          style={styles.subtitle}
-          accessibilityLabel={`${unreadConversationsCount} conversation${unreadConversationsCount === 1 ? '' : 's'} non lue${unreadConversationsCount === 1 ? '' : 's'}`}
-        >
-          {unreadConversationsCount}{' '}
-          {unreadConversationsCount === 1 ? 'conversation non lue' : 'conversations non lues'}
-        </Text>
-      ) : null}
-    </View>
+    <MarketplaceTabHeader
+      title="Messages"
+      subtitle={subtitle}
+      subtitleAccessibilityLabel={subtitleA11y}
+    />
   );
 }
 
-const styles = StyleSheet.create({
-  wrap: {
-    backgroundColor: MESSAGES_MARKETPLACE_SURFACE,
-    paddingHorizontal: spacing.screenHorizontal,
-    paddingBottom: 6,
-  },
-  title: {
-    ...typography.xl,
-    fontWeight: fontWeights.bold,
-    color: '#FFFFFF',
-  },
-  subtitle: {
-    ...typography.sm,
-    fontWeight: fontWeights.semibold,
-    color: 'rgba(255,255,255,0.88)',
-    marginTop: 4,
-  },
-});
+export { messagesSubtitle };
