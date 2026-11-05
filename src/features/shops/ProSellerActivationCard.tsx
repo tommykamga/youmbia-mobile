@@ -1,65 +1,30 @@
-/**
- * CTA activation vendeur pro — Compte / Mes annonces.
- */
-
-import React, { useCallback, useState } from 'react';
+import React from 'react';
 import { View, Text, StyleSheet, Pressable, Platform } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useRouter, useFocusEffect } from 'expo-router';
+import { useRouter } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Button } from '@/components';
-import { shareShop } from '@/lib/shareShop';
-import { getMySellerProStatus } from '@/services/shops';
+import { useProSellerActivation } from './useProSellerActivation';
 import { colors, spacing, typography, fontWeights, radius } from '@/theme';
 
 type Props = {
-  variant?: 'account' | 'listings';
+  /** `accountCompact` : dashboard Compte (densité réduite). `listings` : Mes annonces (inchangé). */
+  variant?: 'account' | 'accountCompact' | 'listings';
 };
 
 export function ProSellerActivationCard({ variant = 'account' }: Props) {
   const router = useRouter();
-  const [loading, setLoading] = useState(true);
-  const [hasShop, setHasShop] = useState(false);
-  const [shopSlug, setShopSlug] = useState<string | null>(null);
-  const [shopName, setShopName] = useState<string | null>(null);
-  const [isVerified, setIsVerified] = useState(false);
-  const [shopCity, setShopCity] = useState<string | null>(null);
-  const [sharing, setSharing] = useState(false);
-
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const result = await getMySellerProStatus();
-      if (result.error || !result.data) {
-        setHasShop(false);
-        return;
-      }
-      const shop = result.data.shop;
-      setHasShop(!!shop);
-      setShopSlug(shop?.slug ?? null);
-      setShopName(shop?.name ?? null);
-      setShopCity(shop?.city ?? null);
-      setIsVerified(shop?.is_verified === true);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useFocusEffect(
-    useCallback(() => {
-      void load();
-    }, [load])
-  );
-
-  const handleShare = useCallback(async () => {
-    if (!shopSlug || !shopName || sharing) return;
-    setSharing(true);
-    try {
-      await shareShop({ slug: shopSlug, name: shopName, city: shopCity });
-    } finally {
-      setSharing(false);
-    }
-  }, [shopCity, shopName, shopSlug, sharing]);
+  const isListings = variant === 'listings';
+  const isAccountCompact = variant === 'accountCompact';
+  const {
+    loading,
+    hasShop,
+    shopSlug,
+    shopName,
+    isVerified,
+    sharing,
+    handleShare,
+  } = useProSellerActivation();
 
   if (loading) {
     return null;
@@ -67,19 +32,27 @@ export function ProSellerActivationCard({ variant = 'account' }: Props) {
 
   if (hasShop && shopSlug) {
     return (
-      <View style={[styles.card, variant === 'listings' && styles.cardListings]}>
-        <View style={styles.iconWrap}>
-          <Ionicons name="storefront" size={22} color={colors.primary} />
+      <View
+        style={[
+          styles.card,
+          isListings && styles.cardListings,
+          isAccountCompact && styles.cardAccountCompact,
+        ]}
+      >
+        <View style={[styles.iconWrap, isAccountCompact && styles.iconWrapCompact]}>
+          <Ionicons name="storefront" size={isAccountCompact ? 18 : 22} color={colors.primary} />
         </View>
         <View style={styles.textSlot}>
-          <Text style={styles.title}>{shopName ?? 'Ma boutique'}</Text>
-          <Text style={styles.subtitle}>
+          <Text style={[styles.title, isAccountCompact && styles.titleCompact]}>
+            {shopName ?? 'Ma boutique'}
+          </Text>
+          <Text style={[styles.subtitle, isAccountCompact && styles.subtitleCompact]}>
             {isVerified
               ? 'Boutique vérifiée — partagez votre lien pour attirer vos clients.'
               : 'Partagez votre boutique avec vos clients et publiez vos produits en quelques secondes.'}
           </Text>
         </View>
-        <View style={styles.shopActions}>
+        <View style={[styles.shopActions, isAccountCompact && styles.shopActionsCompact]}>
           <Button
             size="sm"
             variant="outline"
@@ -110,48 +83,58 @@ export function ProSellerActivationCard({ variant = 'account' }: Props) {
       onPress={() => router.push('/account/pro-shop')}
       style={({ pressed }) => [
         styles.promoWrap,
-        variant === 'listings' && styles.cardListings,
+        isListings && styles.cardListings,
+        isAccountCompact && styles.promoWrapAccountCompact,
         pressed && styles.cardPressed,
       ]}
     >
-      <View style={styles.promoCard}>
-        <View style={styles.promoGlow} pointerEvents="none" />
+      <View style={[styles.promoCard, isAccountCompact && styles.promoCardAccountCompact]}>
+        {!isAccountCompact ? <View style={styles.promoGlow} pointerEvents="none" /> : null}
 
-        <View style={styles.promoHeader}>
-          <View style={styles.promoIconCircle}>
-            <Ionicons name="storefront" size={20} color={colors.primary} />
+        <View style={[styles.promoHeader, isAccountCompact && styles.promoHeaderCompact]}>
+          <View style={[styles.promoIconCircle, isAccountCompact && styles.promoIconCircleCompact]}>
+            <Ionicons name="storefront" size={isAccountCompact ? 17 : 20} color={colors.primary} />
           </View>
-          <View style={styles.proBadge}>
+          <View style={[styles.proBadge, isAccountCompact && styles.proBadgeCompact]}>
             <Text style={styles.proBadgeText}>PRO</Text>
           </View>
         </View>
 
-        <View style={styles.promoBody}>
+        <View style={[styles.promoBody, isAccountCompact && styles.promoBodyAccountCompact]}>
           <View style={styles.promoTextSlot}>
-            <Text style={styles.promoTitle}>
+            <Text style={[styles.promoTitle, isAccountCompact && styles.promoTitleCompact]}>
               Créez votre boutique{'\n'}et{' '}
               <Text style={styles.promoTitleAccent}>développez</Text> vos ventes
             </Text>
-            <Text style={styles.promoSubtitle} numberOfLines={2}>
+            <Text
+              style={[styles.promoSubtitle, isAccountCompact && styles.promoSubtitleCompact]}
+              numberOfLines={2}
+            >
               Boutique dédiée, statistiques et visibilité professionnelle.
             </Text>
           </View>
-          <StoreIllustration />
+          {!isAccountCompact ? <StoreIllustration /> : null}
         </View>
 
-        <View style={styles.benefitsRow}>
+        <View style={[styles.benefitsRow, isAccountCompact && styles.benefitsRowAccountCompact]}>
           <View style={styles.benefitItem}>
-            <Ionicons name="checkmark-circle" size={15} color={colors.primary} />
-            <Text style={styles.benefitText} numberOfLines={1}>Boutique Pro</Text>
+            <Ionicons name="checkmark-circle" size={isAccountCompact ? 13 : 15} color={colors.primary} />
+            <Text style={[styles.benefitText, isAccountCompact && styles.benefitTextCompact]} numberOfLines={1}>
+              Boutique Pro
+            </Text>
           </View>
           <View style={styles.benefitItem}>
-            <Ionicons name="checkmark-circle" size={15} color={colors.primary} />
-            <Text style={styles.benefitText} numberOfLines={1}>Lien partageable</Text>
+            <Ionicons name="checkmark-circle" size={isAccountCompact ? 13 : 15} color={colors.primary} />
+            <Text style={[styles.benefitText, isAccountCompact && styles.benefitTextCompact]} numberOfLines={1}>
+              Lien partageable
+            </Text>
           </View>
         </View>
 
-        <View style={styles.ctaBtnPromo}>
-          <Text style={styles.ctaBtnPromoText}>Créer ma boutique</Text>
+        <View style={[styles.ctaBtnPromo, isAccountCompact && styles.ctaBtnPromoAccountCompact]}>
+          <Text style={[styles.ctaBtnPromoText, isAccountCompact && styles.ctaBtnPromoTextCompact]}>
+            Créer ma boutique
+          </Text>
         </View>
       </View>
     </Pressable>
@@ -213,6 +196,79 @@ const styles = StyleSheet.create({
   cardListings: {
     marginHorizontal: 0,
     marginTop: 0,
+  },
+  cardAccountCompact: {
+    marginHorizontal: spacing.screenHorizontal,
+    marginTop: spacing.xs,
+    marginBottom: spacing.xs,
+    padding: spacing.sm,
+    gap: spacing.xs,
+    borderRadius: radius.lg,
+  },
+  iconWrapCompact: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+  },
+  titleCompact: {
+    ...typography.sm,
+    fontWeight: fontWeights.bold,
+  },
+  subtitleCompact: {
+    ...typography.xs,
+    lineHeight: 16,
+  },
+  shopActionsCompact: {
+    gap: spacing.xs,
+  },
+  promoWrapAccountCompact: {
+    marginHorizontal: spacing.screenHorizontal,
+    marginTop: spacing.xs,
+    marginBottom: spacing.xs,
+    borderRadius: radius.xl,
+  },
+  promoCardAccountCompact: {
+    borderRadius: radius.xl,
+    paddingHorizontal: spacing.base,
+    paddingVertical: spacing.sm,
+    gap: spacing.sm,
+  },
+  promoHeaderCompact: {
+    marginBottom: -spacing.xs,
+  },
+  promoIconCircleCompact: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+  },
+  proBadgeCompact: {
+    height: 22,
+    paddingHorizontal: 8,
+  },
+  promoBodyAccountCompact: {
+    gap: 0,
+  },
+  promoTitleCompact: {
+    fontSize: 16,
+    lineHeight: 20,
+    letterSpacing: -0.3,
+  },
+  promoSubtitleCompact: {
+    fontSize: 12,
+    lineHeight: 16,
+  },
+  benefitsRowAccountCompact: {
+    gap: spacing.sm,
+  },
+  benefitTextCompact: {
+    fontSize: 12,
+  },
+  ctaBtnPromoAccountCompact: {
+    height: 40,
+    borderRadius: 20,
+  },
+  ctaBtnPromoTextCompact: {
+    ...typography.xs,
   },
   cardPressed: {
     opacity: 0.96,

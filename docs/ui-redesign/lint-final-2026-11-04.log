@@ -1,0 +1,30 @@
+
+> youmbia-mobile@1.0.0 lint
+> eslint .
+
+
+/Users/tommy/APP TESKA/YOUMBIA/youmbia-ui-home/scripts/send-lifecycle-template-previews.mjs
+  14:7  warning  'require' is assigned a value but never used  no-unused-vars
+
+/Users/tommy/APP TESKA/YOUMBIA/youmbia-ui-home/src/features/listings/ListingFeed.tsx
+  42:42  warning  Array type using 'Array<T>' is forbidden. Use 'T[]' instead  @typescript-eslint/array-type
+  47:14  warning  Array type using 'Array<T>' is forbidden. Use 'T[]' instead  @typescript-eslint/array-type
+
+/Users/tommy/APP TESKA/YOUMBIA/youmbia-ui-home/src/lib/avatarImageUrl.ts
+  119:12  warning  Array type using 'Array<T>' is forbidden. Use 'T[]' instead  @typescript-eslint/array-type
+
+/Users/tommy/APP TESKA/YOUMBIA/youmbia-ui-home/src/lib/supabase.ts
+   1:22  warning  'SupabasePlatform' is defined but never used                                                                 @typescript-eslint/no-unused-vars
+   1:46  warning  '/Users/tommy/APP TESKA/YOUMBIA/youmbia-ui-home/node_modules/react-native/index.js' imported multiple times  import/no-duplicates
+  12:26  warning  '/Users/tommy/APP TESKA/YOUMBIA/youmbia-ui-home/node_modules/react-native/index.js' imported multiple times  import/no-duplicates
+
+/Users/tommy/APP TESKA/YOUMBIA/youmbia-ui-home/src/services/shops/getShopBySlug.test.ts
+  18:33  warning  Array type using 'Array<T>' is forbidden. Use 'T[]' instead  @typescript-eslint/array-type
+  19:18  warning  Array type using 'Array<T>' is forbidden. Use 'T[]' instead  @typescript-eslint/array-type
+  20:14  warning  Array type using 'Array<T>' is forbidden. Use 'T[]' instead  @typescript-eslint/array-type
+  21:12  warning  Array type using 'Array<T>' is forbidden. Use 'T[]' instead  @typescript-eslint/array-type
+  26:35  warning  Array type using 'Array<T>' is forbidden. Use 'T[]' instead  @typescript-eslint/array-type
+  26:74  warning  Array type using 'Array<T>' is forbidden. Use 'T[]' instead  @typescript-eslint/array-type
+
+✖ 13 problems (0 errors, 13 warnings)
+  0 errors and 10 warnings potentially fixable with the `--fix` option.

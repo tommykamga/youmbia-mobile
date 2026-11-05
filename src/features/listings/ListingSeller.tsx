@@ -4,12 +4,13 @@
  */
 
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet, Pressable } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Button, UserAvatar } from '@/components';
-import { colors, spacing, typography, fontWeights, radius, shadows } from '@/theme';
+import { colors, spacing, typography, fontWeights, radius } from '@/theme';
 import { formatJoinDate } from '@/lib/format';
 import { getUserDisplayName } from '@/services/profile';
+import { isShopPubliclyActive, shouldShowProSellerBadge, shouldShowVerifiedShopBadge } from '@/lib/shopSeller';
 import { SellerBadge } from './SellerBadge';
 import { ProSellerBadge } from '@/features/shops/ProSellerBadge';
 import type { ListingDetail } from '@/services/listings';
@@ -20,13 +21,20 @@ type ListingSellerProps = {
   listingCount?: number | null;
   /** When provided, a discreet CTA navigates to public seller profile. */
   onPress?: () => void;
+  /** Boutique publique déjà chargée sur l’annonce. */
+  onShopPress?: () => void;
 };
 
 const TRUST_SCORE_HIGH_THRESHOLD = 70;
 
-export function ListingSeller({ listing, memberSince, listingCount, onPress }: ListingSellerProps) {
+export function ListingSeller({ listing, memberSince, listingCount, onPress, onShopPress }: ListingSellerProps) {
   const seller = listing.seller;
   const name = getUserDisplayName({ full_name: seller?.full_name }, 'Vendeur');
+  const shop = listing.shop;
+  const shopName = shop?.name?.trim() ?? '';
+  const showShop = Boolean(shopName && shop?.slug && isShopPubliclyActive(shop) && onShopPress);
+  const headline = showShop ? shopName : name;
+  const personLine = showShop && name && name !== shopName ? name : null;
   const joinDate = formatJoinDate(memberSince ?? seller?.created_at ?? null);
   const isVerified = seller?.is_verified === true;
   const isPhoneVerified = seller?.phone_verified === true;
@@ -42,42 +50,62 @@ export function ListingSeller({ listing, memberSince, listingCount, onPress }: L
   const listingCountLabel =
     safeListingCount == null ? null : `${safeListingCount} annonce${safeListingCount > 1 ? 's' : ''}`;
 
+  const showProSellerBadge = shouldShowProSellerBadge({
+    listingShopId: listing.shop_id,
+    sellerType: listing.seller_type,
+  });
+  const showVerifiedShopBadge =
+    shouldShowVerifiedShopBadge(listing.shop) && isShopPubliclyActive(listing.shop);
+  const hasProBadgeRow = showProSellerBadge || showVerifiedShopBadge;
+  const hasStatsRow = Boolean(listingCountLabel || isReliable);
+  const hasExtendedPresentation =
+    Boolean(personLine) ||
+    Boolean(joinDate) ||
+    hasStatsRow ||
+    isBanned ||
+    Boolean(seller?.response_hint?.trim()) ||
+    hasAnyBadge ||
+    showShop ||
+    hasProBadgeRow;
+  const isCompactPresentation = !hasExtendedPresentation;
+  const avatarSize = isCompactPresentation ? 40 : 48;
 
   const content = (
     <>
-      <View style={styles.header}>
+      <View style={[styles.header, isCompactPresentation && styles.headerCompact]}>
         <UserAvatar
-          name={name}
+          name={headline}
           avatarUrl={seller?.avatar_url}
           avatarVersion={seller?.avatar_version}
           displayUrl={seller?.avatar_display_url}
-          size={42}
+          size={avatarSize}
           style={styles.avatar}
         />
         <View style={styles.headerInfo}>
-          <Text style={styles.name} numberOfLines={1} ellipsizeMode="tail">
-            {name}
-          </Text>
+          <Text style={styles.name}>{headline}</Text>
+          {personLine ? <Text style={styles.personLine}>{personLine}</Text> : null}
           {joinDate ? (
             <Text style={styles.joinDate}>Membre depuis {joinDate}</Text>
           ) : null}
         </View>
       </View>
 
-      <View style={styles.statsRow}>
-        {listingCountLabel && (
-          <View style={styles.statItem}>
-            <Ionicons name="list" size={16} color={colors.textMuted} />
-            <Text style={styles.statValue}>{listingCountLabel}</Text>
-          </View>
-        )}
-        {isReliable && (
-          <View style={styles.statItem}>
-            <Ionicons name="star" size={16} color={colors.warning} />
-            <Text style={styles.statValue}>Profil fiable</Text>
-          </View>
-        )}
-      </View>
+      {hasStatsRow ? (
+        <View style={styles.statsRow}>
+          {listingCountLabel ? (
+            <View style={styles.statItem}>
+              <Ionicons name="list" size={16} color={colors.textMuted} />
+              <Text style={styles.statValue}>{listingCountLabel}</Text>
+            </View>
+          ) : null}
+          {isReliable ? (
+            <View style={styles.statItem}>
+              <Ionicons name="star" size={16} color={colors.warning} />
+              <Text style={styles.statValue}>Profil fiable</Text>
+            </View>
+          ) : null}
+        </View>
+      ) : null}
 
       {isBanned && (
         <Text style={styles.restrictedNotice}>Ce vendeur ne peut pas être contacté.</Text>
@@ -91,13 +119,16 @@ export function ListingSeller({ listing, memberSince, listingCount, onPress }: L
         </View>
       )}
 
-      <View style={styles.proBadgeWrap}>
-        <ProSellerBadge
-          listingShopId={listing.shop_id}
-          sellerType={listing.seller_type}
-          shop={listing.shop}
-        />
-      </View>
+      {hasProBadgeRow ? (
+        <View style={styles.proBadgeWrap}>
+          <ProSellerBadge
+            listingShopId={listing.shop_id}
+            sellerType={listing.seller_type}
+            shop={listing.shop}
+            compact={isCompactPresentation}
+          />
+        </View>
+      ) : null}
 
       {hasAnyBadge && (
         <View style={styles.badges}>
@@ -113,6 +144,19 @@ export function ListingSeller({ listing, memberSince, listingCount, onPress }: L
         </View>
       )}
 
+      {showShop && onShopPress ? (
+        <Pressable
+          onPress={onShopPress}
+          accessibilityRole="button"
+          accessibilityLabel={`Voir la boutique ${shopName}`}
+          style={({ pressed }) => [styles.shopLink, pressed && styles.shopLinkPressed]}
+        >
+          <Ionicons name="storefront-outline" size={18} color={colors.primary} />
+          <Text style={styles.shopLinkText}>Voir la boutique</Text>
+          <Ionicons name="chevron-forward" size={18} color={colors.textTertiary} />
+        </Pressable>
+      ) : null}
+
       {onPress && !isBanned ? (
         <Button
           variant="secondary"
@@ -127,7 +171,7 @@ export function ListingSeller({ listing, memberSince, listingCount, onPress }: L
   );
 
   return (
-    <View style={styles.card}>
+    <View style={[styles.card, isCompactPresentation && styles.cardCompact]}>
       {content}
     </View>
   );
@@ -138,16 +182,23 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
     padding: spacing.base,
     borderRadius: radius.xl,
-    marginTop: spacing.base,
+    marginTop: spacing.xs,
     marginBottom: spacing.lg,
     borderWidth: 1,
     borderColor: colors.borderLight,
-    ...shadows.sm,
+  },
+  cardCompact: {
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    marginBottom: spacing.md,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     marginBottom: spacing.sm,
+  },
+  headerCompact: {
+    marginBottom: 0,
   },
   avatar: {
     marginRight: spacing.md,
@@ -159,6 +210,11 @@ const styles = StyleSheet.create({
     ...typography.base,
     fontWeight: fontWeights.bold,
     color: colors.text,
+    marginBottom: 2,
+  },
+  personLine: {
+    ...typography.sm,
+    color: colors.textSecondary,
     marginBottom: 2,
   },
   joinDate: {
@@ -215,5 +271,22 @@ const styles = StyleSheet.create({
   ctaButton: {
     alignSelf: 'stretch',
     borderRadius: radius.full,
+    minHeight: 44,
+  },
+  shopLink: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    minHeight: 44,
+    marginBottom: spacing.sm,
+  },
+  shopLinkPressed: {
+    opacity: 0.75,
+  },
+  shopLinkText: {
+    ...typography.base,
+    flex: 1,
+    color: colors.primary,
+    fontWeight: fontWeights.semibold,
   },
 });

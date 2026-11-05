@@ -14,6 +14,8 @@ export type PublicShop = {
   phone: string | null;
   city: string | null;
   is_verified: boolean;
+  /** Only an explicit policy-backed server receipt permits a verification badge. */
+  verification_proven?: boolean;
   is_featured: boolean;
   created_at: string;
 };
@@ -25,6 +27,8 @@ export type ShopSummary = {
   name: string;
   logo_url: string | null;
   is_verified: boolean;
+  /** Only an explicit policy-backed server receipt permits a verification badge. */
+  verification_proven?: boolean;
   status: ShopStatus;
 };
 

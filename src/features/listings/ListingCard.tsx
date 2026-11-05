@@ -5,6 +5,7 @@ import {
   StyleSheet,
   Pressable,
   ImageBackground,
+  type ImageSourcePropType,
   useWindowDimensions,
 } from 'react-native';
 import Animated, {
@@ -39,8 +40,8 @@ export const LISTING_CARD_RAIL_STRIDE_FEATURED =
 
 /** Zone image home : ratio largeur/hauteur ≈ 1 / 1.2 (image plus haute). */
 const HOME_IMAGE_ASPECT_RATIO = 1 / 1.2;
-/** Home feed : ratio premium constant (image moins haute, densité). */
-const HOME_FEED_IMAGE_ASPECT_RATIO = 1 / 1.0;
+/** Home feed : ratio photo commun 4:3 (width / height). */
+const HOME_FEED_IMAGE_ASPECT_RATIO = 4 / 3;
 
 const IMAGE_HEIGHT = 146;
 /** Fils rail standard (hauteur fixe). */
@@ -55,6 +56,9 @@ const OVERLAY_INSET = spacing.sm;
 export type ListingCardVariant = 'feed' | 'rail';
 
 export type ListingCardProps = {
+  /** Local preview replaces navigation, photo and favorite control together. */
+  preview?: { image?: ImageSourcePropType; onOpen: () => void; favorite: React.ReactNode };
+
   listing: PublicListing;
   variant?: ListingCardVariant;
   /** Rail « À la une » : carte plus large + image plus haute. */
@@ -64,6 +68,8 @@ export type ListingCardProps = {
    * Ne pas utiliser hors ListingFeed home pour garder les autres écrans inchangés.
    */
   feedPresentation?: 'standard' | 'home';
+  /** Grille 2 colonnes accueil : typographie légèrement plus compacte. */
+  homeGridCell?: boolean;
   source?: ListingViewSource;
 };
 
@@ -84,8 +90,10 @@ function listingCardCoverImageKey(listing: PublicListing): string {
 }
 
 function listingCardPropsAreEqual(prev: ListingCardProps, next: ListingCardProps): boolean {
+  if (prev.preview !== next.preview) return false;
   if ((prev.railPresentation ?? 'default') !== (next.railPresentation ?? 'default')) return false;
   if (prev.feedPresentation !== next.feedPresentation) return false;
+  if (prev.homeGridCell !== next.homeGridCell) return false;
   if (prev.variant !== next.variant) return false;
   if ((prev.source ?? '') !== (next.source ?? '')) return false;
   const a = prev.listing;
@@ -105,6 +113,7 @@ function listingCardPropsAreEqual(prev: ListingCardProps, next: ListingCardProps
   if ((a.shop_id ?? '') !== (b.shop_id ?? '')) return false;
   if ((a.shop?.name ?? '') !== (b.shop?.name ?? '')) return false;
   if (Boolean(a.shop?.is_verified) !== Boolean(b.shop?.is_verified)) return false;
+  if (Boolean(a.shop?.verification_proven) !== Boolean(b.shop?.verification_proven)) return false;
   const ps = (a as unknown as { status?: string | null }).status ?? null;
   const ns = (b as unknown as { status?: string | null }).status ?? null;
   if (ps !== ns) return false;
@@ -114,10 +123,12 @@ function listingCardPropsAreEqual(prev: ListingCardProps, next: ListingCardProps
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
 function ListingCardInner({
+  preview,
   listing,
   variant = 'feed',
   railPresentation = 'default',
   feedPresentation = 'standard',
+  homeGridCell = false,
   source,
 }: ListingCardProps) {
   const router = useRouter();
@@ -131,6 +142,7 @@ function ListingCardInner({
 
   const coverKey = listingCardCoverImageKey(listing);
   const firstImage = coverKey.length > 0 ? coverKey : undefined;
+  const imageSource = preview ? preview.image : firstImage ? { uri: firstImage } : undefined;
 
   useEffect(() => {
     // Si l’URL change (refresh / nouvelles signed URLs), on retente le chargement.
@@ -165,11 +177,12 @@ function ListingCardInner({
   const priceLabel = formatPrice(listing.price);
 
   const handlePress = useCallback(() => {
+    if (preview) { preview.onOpen(); return; }
     const resolvedSource: ListingViewSource =
       source ?? (feedPresentation === 'home' ? 'home' : 'other');
     setListingViewSource(resolvedSource);
     router.push(`/listing/${listing.id}`);
-  }, [feedPresentation, listing.id, router, source]);
+  }, [feedPresentation, listing.id, router, source, preview]);
 
   const onPressIn = () => {
     scale.value = withTiming(0.97, { duration: 100, easing: Easing.out(Easing.quad) });
@@ -214,6 +227,7 @@ function ListingCardInner({
     );
 
   const isHomeFeed = feedPresentation === 'home' && variant === 'feed';
+  const isHomeGrid = isHomeFeed && homeGridCell;
   const isFeaturedRail = variant === 'rail' && railPresentation === 'featured';
   /**
    * Entering FadeInDown + FlatList removeClippedSubviews (iOS) crée des blancs entre items.
@@ -239,21 +253,14 @@ function ListingCardInner({
       <View style={[styles.topRow, isHomeFeed && styles.topRowHome]}>
         {renderBadges()}
         <View style={[styles.heartSlot, isHomeFeed && styles.heartSlotHome]}>
-          <FavoriteButton
+          {preview ? preview.favorite : <FavoriteButton
             listingId={listing.id}
             size={isHomeFeed ? HEART_SIZE_HOME : HEART_SIZE}
             surface={isHomeFeed ? 'home' : 'default'}
             source={source ?? (feedPresentation === 'home' ? 'home' : 'listing_card')}
-          />
+          />}
         </View>
       </View>
-      {priceLabel && isHomeFeed ? (
-        <View style={styles.priceOverlayHome} pointerEvents="none">
-          <Text style={styles.priceOverlayHomeText} numberOfLines={1} ellipsizeMode="tail">
-            {priceLabel}
-          </Text>
-        </View>
-      ) : null}
       {priceLabel && !isHomeFeed && !isFeaturedRail ? (
         <View style={styles.priceOverlay}>
           <Text style={styles.priceText}>{priceLabel}</Text>
@@ -261,6 +268,9 @@ function ListingCardInner({
       ) : null}
     </>
   );
+
+  // A fixture must never fall through to the real detail or FavoriteButton.
+  if (listing.id.startsWith('home-demo-') && !preview) return null;
 
   return (
     <AnimatedPressable
@@ -277,9 +287,10 @@ function ListingCardInner({
         animatedStyle,
       ]}
     >
-      {firstImage && !imageFailed ? (
+      {imageSource && !imageFailed ? (
         <ImageBackground
-          source={{ uri: firstImage }}
+          source={imageSource}
+          resizeMode="cover"
           style={[
             styles.imageBase,
             !isHomeFeed && !isFeaturedRail && styles.imageHeightFeed,
@@ -333,12 +344,24 @@ function ListingCardInner({
 
       <View style={[styles.info, isHomeFeed && styles.infoHome, isFeaturedRail && styles.infoRailFeatured]}>
         {isFeaturedRail && priceLabel ? (
-          <Text style={styles.priceRailFeatured} numberOfLines={1} ellipsizeMode="tail">
+          <Text style={styles.priceRailFeatured}>
+            {priceLabel}
+          </Text>
+        ) : null}
+        {isHomeFeed && priceLabel ? (
+          <Text
+            style={[styles.priceHomePrimary, isHomeGrid && styles.priceHomePrimaryGrid]}
+          >
             {priceLabel}
           </Text>
         ) : null}
         <Text
-          style={[styles.title, isHomeFeed && styles.titleHome, isFeaturedRail && styles.titleRailFeatured]}
+          style={[
+            styles.title,
+            isHomeFeed && styles.titleHome,
+            isHomeGrid && styles.titleHomeGrid,
+            isFeaturedRail && styles.titleRailFeatured,
+          ]}
           numberOfLines={2}
           ellipsizeMode="tail"
         >
@@ -591,6 +614,19 @@ const styles = StyleSheet.create({
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 2,
   },
+  priceHomePrimary: {
+    fontSize: 16,
+    lineHeight: 21,
+    fontWeight: fontWeights.black,
+    color: colors.primaryDark,
+    letterSpacing: -0.35,
+    marginBottom: 4,
+    maxWidth: '100%',
+  },
+  priceHomePrimaryGrid: {
+    fontSize: 15,
+    lineHeight: 20,
+  },
   priceOverlay: {
     position: 'absolute',
     bottom: 10,
@@ -653,6 +689,11 @@ const styles = StyleSheet.create({
     color: ui.colors.textPrimary,
     marginBottom: 3,
     letterSpacing: -0.08,
+  },
+  titleHomeGrid: {
+    fontSize: 12,
+    lineHeight: 16,
+    marginBottom: 2,
   },
   metaHome: {
     fontSize: 11,

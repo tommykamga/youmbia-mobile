@@ -1,0 +1,10 @@
+{
+  "pass": 4,
+  "fail": 0,
+  "cases": [
+    "sale prevents stale renewal",
+    "suspension prevents stale reactivation",
+    "double sale changes one row",
+    "99 + two concurrent first publications yields 100, second rejected"
+  ]
+}

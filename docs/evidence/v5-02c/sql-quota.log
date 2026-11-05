@@ -1,0 +1,78 @@
+BEGIN
+CREATE FUNCTION
+CREATE TABLE
+GRANT
+INSERT 0 1
+ALTER TABLE
+UPDATE 1
+ALTER TABLE
+SET
+SET
+ assert_v5c
+------------
+
+(1 row)
+
+UPDATE 1
+ assert_v5c
+------------
+
+(1 row)
+
+UPDATE 1
+ assert_v5c
+------------
+
+(1 row)
+
+UPDATE 1
+UPDATE 1
+ assert_v5c
+------------
+
+(1 row)
+
+DO
+SET
+ assert_v5c
+------------
+
+(1 row)
+
+SET
+DELETE 1
+ assert_v5c
+------------
+
+(1 row)
+
+RESET
+INSERT 0 99
+SET
+DO
+RESET
+UPDATE 100
+SET
+INSERT 0 1
+ assert_v5c
+------------
+
+(1 row)
+
+ assert_v5c
+------------
+
+(1 row)
+
+RESET
+ROLLBACK
+psql:<mobile>/supabase/scripts/v5_02c_quota_tests.sql:18: NOTICE:  PASS draft excluded
+psql:<mobile>/supabase/scripts/v5_02c_quota_tests.sql:20: NOTICE:  PASS old draft counted at publication
+psql:<mobile>/supabase/scripts/v5_02c_quota_tests.sql:22: NOTICE:  PASS first timestamp immutable
+psql:<mobile>/supabase/scripts/v5_02c_quota_tests.sql:25: NOTICE:  PASS reactivation not recounted
+psql:<mobile>/supabase/scripts/v5_02c_quota_tests.sql:29: NOTICE:  PASS ledger writes forbidden
+psql:<mobile>/supabase/scripts/v5_02c_quota_tests.sql:31: NOTICE:  PASS other owner cannot read facts
+psql:<mobile>/supabase/scripts/v5_02c_quota_tests.sql:34: NOTICE:  PASS deletion preserves quota fact
+psql:<mobile>/supabase/scripts/v5_02c_quota_tests.sql:43: NOTICE:  PASS 101st legacy insert rejected
+psql:<mobile>/supabase/scripts/v5_02c_quota_tests.sql:48: NOTICE:  PASS rolling window expires at 24h
+psql:<mobile>/supabase/scripts/v5_02c_quota_tests.sql:49: NOTICE:  PASS legacy active insert creates one server fact

@@ -1,3 +1,4 @@
+import { supabase } from '@/lib/supabase';
 import type { ListingDetail } from './getListingById';
 import type { ListingDynamicAttributeDisplay } from './getListingDynamicAttributesForDisplay';
 
@@ -9,6 +10,7 @@ export type ListingDetailSessionEntry = {
 
 const cache = new Map<string, ListingDetailSessionEntry>();
 const TTL_MS = 90_000;
+supabase.auth.onAuthStateChange?.(() => cache.clear());
 
 function cloneListingDetail(listing: ListingDetail): ListingDetail {
   return {
@@ -41,6 +43,7 @@ export function putListingDetailSession(
   listing: ListingDetail,
   dynamicAttributes: ListingDynamicAttributeDisplay[]
 ): void {
+  if (listing.status !== 'active') { cache.delete(id); return; }
   cache.set(id, {
     listing: cloneListingDetail(listing),
     dynamicAttributes: dynamicAttributes.slice(),

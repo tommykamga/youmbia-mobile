@@ -1,0 +1,31 @@
+{
+  "tables": [
+    {
+      "schema": "public",
+      "name": "listings",
+      "fields": [
+        "triggers"
+      ]
+    }
+  ],
+  "functions": {
+    "added": 1,
+    "removed": 0
+  },
+  "policies": {
+    "added": 1,
+    "removed": 0
+  },
+  "grants": {
+    "added": 0,
+    "removed": 0
+  },
+  "roles": {
+    "added": 0,
+    "removed": 0
+  },
+  "enums": {
+    "added": 0,
+    "removed": 0
+  }
+}

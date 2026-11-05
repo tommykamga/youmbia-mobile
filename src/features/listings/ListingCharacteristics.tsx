@@ -1,12 +1,13 @@
 /**
- * Blocs « Détails de l’article » (legacy) + « Caractéristiques » (dynamiques),
- * avec dédoublonnage visuel aligné sur le web (priorité dynamique pour condition/brand/model).
+ * Grille premium de caractéristiques — attributs dynamiques + champs legacy dédupliqués.
  */
 
-import React from 'react';
+import React, { useMemo } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { colors, spacing, typography, fontWeights, radius } from '@/theme';
 import type { ListingDynamicAttributeDisplay } from '@/services/listings/getListingDynamicAttributesForDisplay';
+import { getListingAttributeIcon } from '@/lib/listingAttributeIcon';
 import {
   buildDynamicKeySetForLegacyDedup,
   shouldShowLegacyListingDetailField,
@@ -19,57 +20,67 @@ type Props = {
   dynamicItems: ListingDynamicAttributeDisplay[];
 };
 
-export function ListingCharacteristics({ condition, brand, model, dynamicItems }: Props) {
-  const dynamicKeySet = buildDynamicKeySetForLegacyDedup(dynamicItems);
-  const showCondition = shouldShowLegacyListingDetailField('condition', condition, dynamicKeySet);
-  const showBrand = shouldShowLegacyListingDetailField('brand', brand, dynamicKeySet);
-  const showModel = shouldShowLegacyListingDetailField('model', model, dynamicKeySet);
-  const showLegacyBlock = showCondition || showBrand || showModel;
-  const showDynamicBlock = dynamicItems.length > 0;
+type SpecCell = {
+  id: string;
+  label: string;
+  value: string;
+  iconKey: string;
+};
 
-  if (!showLegacyBlock && !showDynamicBlock) return null;
+function SpecTile({ cell }: { cell: SpecCell }) {
+  const icon = getListingAttributeIcon(cell.iconKey, cell.label);
+  return (
+    <View style={styles.tile}>
+      <View style={styles.iconWrap}>
+        <Ionicons name={icon} size={18} color={colors.primary} />
+      </View>
+      <Text style={styles.tileLabel} numberOfLines={2}>
+        {cell.label}
+      </Text>
+      <Text style={styles.tileValue}>{cell.value}</Text>
+    </View>
+  );
+}
+
+export function ListingCharacteristics({ condition, brand, model, dynamicItems }: Props) {
+  const cells = useMemo(() => {
+    const dynamicKeySet = buildDynamicKeySetForLegacyDedup(dynamicItems);
+    const list: SpecCell[] = [];
+
+    if (shouldShowLegacyListingDetailField('condition', condition, dynamicKeySet) && condition?.trim()) {
+      list.push({ id: 'legacy-condition', label: 'État', value: condition.trim(), iconKey: 'condition' });
+    }
+    if (shouldShowLegacyListingDetailField('brand', brand, dynamicKeySet) && brand?.trim()) {
+      list.push({ id: 'legacy-brand', label: 'Marque', value: brand.trim(), iconKey: 'brand' });
+    }
+    if (shouldShowLegacyListingDetailField('model', model, dynamicKeySet) && model?.trim()) {
+      list.push({ id: 'legacy-model', label: 'Modèle', value: model.trim(), iconKey: 'model' });
+    }
+
+    for (const item of dynamicItems) {
+      const value = item.displayValue?.trim();
+      if (!value) continue;
+      list.push({
+        id: item.attributeDefinitionId,
+        label: item.label_fr,
+        value,
+        iconKey: item.key,
+      });
+    }
+
+    return list;
+  }, [brand, condition, dynamicItems, model]);
+
+  if (cells.length === 0) return null;
 
   return (
     <View style={styles.wrapper}>
-      {showLegacyBlock ? (
-        <View style={styles.card}>
-          <Text style={styles.sectionTitle}>Détails de l&apos;article</Text>
-          <View style={styles.grid}>
-            {showCondition ? (
-              <View style={styles.cell}>
-                <Text style={styles.dt}>État</Text>
-                <Text style={styles.dd}>{condition}</Text>
-              </View>
-            ) : null}
-            {showBrand ? (
-              <View style={styles.cell}>
-                <Text style={styles.dt}>Marque</Text>
-                <Text style={styles.dd}>{brand}</Text>
-              </View>
-            ) : null}
-            {showModel ? (
-              <View style={styles.cell}>
-                <Text style={styles.dt}>Modèle</Text>
-                <Text style={styles.dd}>{model}</Text>
-              </View>
-            ) : null}
-          </View>
-        </View>
-      ) : null}
-
-      {showDynamicBlock ? (
-        <View style={[styles.card, showLegacyBlock && styles.cardSpacing]}>
-          <Text style={styles.sectionTitle}>Caractéristiques</Text>
-          <View style={styles.grid}>
-            {dynamicItems.map((item) => (
-              <View key={item.attributeDefinitionId} style={styles.cell}>
-                <Text style={styles.dt}>{item.label_fr}</Text>
-                <Text style={styles.dd}>{item.displayValue}</Text>
-              </View>
-            ))}
-          </View>
-        </View>
-      ) : null}
+      <Text style={styles.sectionTitle}>Caractéristiques</Text>
+      <View style={styles.grid}>
+        {cells.map((cell) => (
+          <SpecTile key={cell.id} cell={cell} />
+        ))}
+      </View>
     </View>
   );
 }
@@ -78,50 +89,47 @@ const styles = StyleSheet.create({
   wrapper: {
     marginBottom: spacing.lg,
   },
-  card: {
-    backgroundColor: colors.surface,
-    borderRadius: radius['2xl'],
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: spacing.base,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-    elevation: 2,
-  },
-  cardSpacing: {
-    marginTop: spacing.lg,
-  },
   sectionTitle: {
-    ...typography.sm,
-    fontWeight: fontWeights.bold,
-    color: colors.textSecondary,
-    marginBottom: spacing.base,
-    textTransform: 'uppercase',
-    letterSpacing: 0.6,
+    ...typography.base,
+    fontWeight: fontWeights.semibold,
+    color: colors.text,
+    marginBottom: spacing.sm,
   },
   grid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    columnGap: spacing['2xl'],
-    rowGap: spacing.base,
+    gap: spacing.sm,
   },
-  cell: {
-    width: '47%',
-    minWidth: 120,
+  tile: {
+    flexGrow: 1,
+    flexBasis: '47%',
+    minWidth: 0,
+    maxWidth: '100%',
+    backgroundColor: colors.surfaceSubtle,
+    borderRadius: radius.xl,
+    borderWidth: 1,
+    borderColor: colors.borderLight,
+    padding: spacing.sm,
+    minHeight: 88,
   },
-  dt: {
-    ...typography.xs,
-    fontWeight: fontWeights.bold,
-    color: colors.textTertiary,
-    textTransform: 'uppercase',
-    letterSpacing: 0.8,
+  iconWrap: {
+    width: 32,
+    height: 32,
+    borderRadius: radius.full,
+    backgroundColor: colors.primaryLight,
+    alignItems: 'center',
+    justifyContent: 'center',
     marginBottom: spacing.xs,
   },
-  dd: {
-    ...typography.base,
-    fontWeight: fontWeights.bold,
+  tileLabel: {
+    ...typography.xs,
+    fontWeight: fontWeights.medium,
+    color: colors.textMuted,
+    marginBottom: 2,
+  },
+  tileValue: {
+    ...typography.sm,
+    fontWeight: fontWeights.semibold,
     color: colors.text,
   },
 });

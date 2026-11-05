@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createListingDraft, updateListingDraft, hasListingDraftContent } from './createListingDraft';
 import { publishListingDraft } from './publishListingDraft';
 import { createListing } from './createListing';
+import { buildListingResumeDraft } from './buildListingResumeDraft';
 import { LISTING_STATUS } from '@/lib/listingStatus';
 import {
   LISTING_PUBLISH_QUOTA_REACHED_MESSAGE,
@@ -12,6 +13,7 @@ const mocks = vi.hoisted(() => ({
   getUser: vi.fn(),
   from: vi.fn(),
   checkQuota: vi.fn(),
+  getListingForEdit: vi.fn(),
 }));
 
 vi.mock('@/lib/supabase', () => ({
@@ -19,6 +21,11 @@ vi.mock('@/lib/supabase', () => ({
     auth: { getUser: mocks.getUser },
     from: mocks.from,
   },
+}));
+
+vi.mock('./getListingForEdit', () => ({ getListingForEdit: mocks.getListingForEdit }));
+vi.mock('./getListingDynamicAttributeValuesForForm', () => ({
+  getListingDynamicAttributeValuesForForm: vi.fn().mockResolvedValue({}),
 }));
 
 vi.mock('./listingDetailSessionCache', () => ({
@@ -210,5 +217,50 @@ describe('createListing quota', () => {
     expect(result.error?.message).toBe(LISTING_PUBLISH_QUOTA_REACHED_MESSAGE);
     expect(mocks.checkQuota).toHaveBeenCalledWith(USER_ID);
     expect(mocks.from).not.toHaveBeenCalled();
+  });
+});
+
+// Service integration with an in-memory Supabase double, not a PostgreSQL/RLS test.
+describe('V5-02A incomplete draft lifecycle', () => {
+  it.each([
+    { title: 'Titre seul' },
+    { categoryId: 20 },
+    { title: 'Titre', description: '' },
+    { title: 'Titre', description: '   ' },
+    { title: 'Titre', description: null },
+  ])('saves, resumes and publishes the same id: %j', async (payload) => {
+    mocks.getUser.mockResolvedValue({ data: { user: { id: USER_ID } }, error: null });
+    let stored: Record<string, unknown> = {};
+    const filters: Record<string, unknown> = {};
+    const chain = {
+      eq: (key: string, value: unknown) => { filters[key] = value; return chain; },
+      select: () => chain,
+      single: async () => ({ data: { id: DRAFT_ID }, error: null }),
+      maybeSingle: async () => ({ data: { id: DRAFT_ID, status: stored.status }, error: null }),
+    };
+    mocks.from.mockReturnValue({
+      insert: (row: Record<string, unknown>) => { stored = { ...row, id: DRAFT_ID }; return chain; },
+      update: (row: Record<string, unknown>) => { stored = { ...stored, ...row }; return chain; },
+    });
+    expect((await createListingDraft(payload)).data?.id).toBe(DRAFT_ID);
+    expect(stored.description).toBe('');
+    expect(stored.status).toBe('draft');
+    expect((await updateListingDraft(DRAFT_ID, payload)).data?.id).toBe(DRAFT_ID);
+    expect(stored.description).toBe('');
+    mocks.getListingForEdit.mockResolvedValue({ data: stored, error: null });
+    const resumed = await buildListingResumeDraft(DRAFT_ID);
+    expect(resumed.success).toBe(true);
+    if (resumed.success) {
+      expect(resumed.data.description).toBe('');
+      expect(resumed.data.listingId).toBe(DRAFT_ID);
+    }
+    const published = await publishListingDraft(DRAFT_ID, {
+      title: 'Titre complet', price: 1000, categoryId: 20,
+      description: 'Description de publication complète.', city: 'Douala',
+    });
+    expect(published.data?.id).toBe(DRAFT_ID);
+    expect(stored.status).toBe('active');
+    expect(filters).toMatchObject({ id: DRAFT_ID, user_id: USER_ID, status: 'draft' });
+    expect(stored).not.toHaveProperty('created_at');
   });
 });

@@ -1,0 +1,59 @@
+BEGIN
+SET
+DO
+SELECT 1
+DO
+GRANT
+CREATE TABLE
+INSERT 0 5
+INSERT 0 5
+GRANT
+INSERT 0 5
+SET
+                                 set_config
+----------------------------------------------------------------------------
+ {"sub" : "10000000-0000-4000-8000-000000000001", "role" : "authenticated"}
+(1 row)
+
+DO
+DO
+DO
+RESET
+ALTER TABLE
+UPDATE 1
+ALTER TABLE
+SET
+DO
+                                 set_config
+----------------------------------------------------------------------------
+ {"sub" : "20000000-0000-4000-8000-000000000002", "role" : "authenticated"}
+(1 row)
+
+DO
+RESET
+SET
+ set_config
+------------
+ {}
+(1 row)
+
+DO
+RESET
+                                                      set_config
+-----------------------------------------------------------------------------------------------------------------------
+ {"sub" : "30000000-0000-4000-8000-000000000003", "email" : "moderator@v5-02a.example.test", "role" : "authenticated"}
+(1 row)
+
+SET
+DO
+RESET
+ROLLBACK
+psql:<mobile>/supabase/scripts/v5_02a_listing_lifecycle_tests.sql:80: NOTICE:  PASS owner transition matrix: 25 cases
+psql:<mobile>/supabase/scripts/v5_02a_listing_lifecycle_tests.sql:80: NOTICE:  PASS owner photo metadata: 5 statuses
+psql:<mobile>/supabase/scripts/v5_02a_listing_lifecycle_tests.sql:102: NOTICE:  PASS owner initial status matrix: 5 cases
+psql:<mobile>/supabase/scripts/v5_02a_listing_lifecycle_tests.sql:139: NOTICE:  PASS legacy writes, draft same-id publication, creation and cooldown
+psql:<mobile>/supabase/scripts/v5_02a_listing_lifecycle_tests.sql:165: NOTICE:  PASS 72h renewal and immediate replay rejection
+psql:<mobile>/supabase/scripts/v5_02a_listing_lifecycle_tests.sql:177: NOTICE:  PASS cross-user RLS
+psql:<mobile>/supabase/scripts/v5_02a_listing_lifecycle_tests.sql:185: NOTICE:  PASS anonymous photo RLS
+psql:<mobile>/supabase/scripts/v5_02a_listing_lifecycle_tests.sql:212: NOTICE:  PASS authenticated moderator transition matrix: 25 cases
+psql:<mobile>/supabase/scripts/v5_02a_listing_lifecycle_tests.sql:212: NOTICE:  PASS authenticated moderator restoration and suspension

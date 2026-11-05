@@ -1,6 +1,6 @@
 /**
  * Bande catégories — scroll horizontal, états actif/inactif (tuiles compactes type Leboncoin).
- * Icônes rendues directement dans la tuile : pas de wrapper, pas de fond / radius sous l’icône.
+ * Variante accueil : pictogrammes sur support menthe, libellés dessous ; mêmes données métier.
  */
 
 import React, { useMemo } from 'react';
@@ -15,8 +15,9 @@ import {
 import Ionicons from '@expo/vector-icons/Ionicons';
 import type { WindowSizeBucket } from '@/lib/responsiveLayout';
 import { getRootMarketplaceCategories, getSellParentIcon } from '@/lib/marketplaceCategories';
+import type { MarketplaceCategory } from '@/services/categories';
 import { useMarketplaceCategories } from '@/hooks/useMarketplaceCategories';
-import { colors, getShadowStyle } from '@/theme';
+import { colors, getShadowStyle, semantic } from '@/theme';
 
 const AUTRES_LABEL = 'Autres';
 
@@ -36,21 +37,9 @@ const STRIP = {
   labelInactive: 'rgba(15, 23, 42, 0.72)',
 } as const;
 
-/** Libellés courts affichés (pas de troncature sur ces chaînes). */
-const STRIP_LABEL_BY_SLUG: Record<string, string> = {
-  vehicules: 'Auto',
-  electronique: 'Téléphones',
-  'maison-decoration': 'Maison',
-  'mode-beaute': 'Mode',
-  immobilier: 'Immo',
-  services: 'Services',
-  informatique: 'Info',
-  alimentation: 'Food',
-  'loisirs-sports': 'Sport',
-};
-
-function stripLabel(category: { slug: string; name: string }): string {
-  return STRIP_LABEL_BY_SLUG[category.slug] ?? category.name;
+/** The displayed label must describe the full category branch selected by its ID. */
+function stripLabel(category: { name: string }): string {
+  return category.name;
 }
 
 function stripIcon(category: { slug: string }, active: boolean): keyof typeof Ionicons.glyphMap {
@@ -99,18 +88,27 @@ export type HomeCategoryStripProps = {
   insetHorizontal?: number;
   parentContentPad?: number;
   selectedCategoryId?: number | null;
+  /** Variante compacte activée uniquement par l’accueil. */
+  compact?: boolean;
 };
 
-export function HomeCategoryStrip({
+export function HomeCategoryStrip(props: HomeCategoryStripProps) {
+  const { categories } = useMarketplaceCategories();
+  return <HomeCategoryStripContent {...props} categories={categories} />;
+}
+
+/** Shared visual component; callers supply the same business taxonomy. */
+export function HomeCategoryStripContent({
   bucket,
   onCategoryPress,
   onAutresPress,
   insetHorizontal,
   parentContentPad,
   selectedCategoryId = null,
-}: HomeCategoryStripProps) {
-  const { categories } = useMarketplaceCategories();
-  const rootCategories = useMemo(() => getRootMarketplaceCategories(categories), [categories]);
+  compact = false,
+  categories,
+}: HomeCategoryStripProps & { categories: readonly MarketplaceCategory[] }) {
+  const rootCategories = useMemo(() => getRootMarketplaceCategories([...categories]), [categories]);
   const insetTarget = targetScreenInset(bucket);
 
   const outerStyle = useMemo(() => {
@@ -127,13 +125,36 @@ export function HomeCategoryStrip({
     return { paddingHorizontal: insetTarget };
   }, [parentContentPad, insetHorizontal, insetTarget]);
 
-  const { itemWidth, minHeight, iconSize } = stripDimensions(bucket);
+  const { itemWidth, minHeight, iconSize } = compact
+    ? { itemWidth: 68, minHeight: 52, iconSize: 18 }
+    : stripDimensions(bucket);
 
   /** Pas de `foreground: true` (évite une plaque / carré clair derrière le glyphe sur Android). */
   const ripple =
     Platform.OS === 'android'
       ? { color: 'rgba(15, 23, 42, 0.08)', borderless: false }
       : undefined;
+
+  if (compact) {
+    const options = rootCategories.filter(category => category.slug !== 'autres');
+    return <View style={[styles.wrap, outerStyle]}><ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.homeScroll}>
+      {options.map(category => {
+        const active = selectedCategoryId === category.id;
+        return <Pressable key={category.id} accessibilityRole="button" accessibilityLabel={category.name}
+          accessibilityState={{ selected: active }} style={styles.homeCell}
+          onPress={() => onCategoryPress(String(category.id), category.name)}>
+          <View style={[styles.homeIcon, active && styles.homeIconActive]}>
+            <Ionicons name={stripIcon(category, active)} size={25} color="#0B4D3C" />
+          </View>
+          <Text style={[styles.homeLabel, active && styles.homeLabelActive]}>{stripLabel(category)}</Text>
+        </Pressable>;
+      })}
+      <Pressable accessibilityRole="button" accessibilityLabel={AUTRES_LABEL} style={styles.homeCell} onPress={onAutresPress}>
+        <View style={styles.homeIcon}><Ionicons name="grid-outline" size={25} color="#0B4D3C" /></View>
+        <Text style={styles.homeLabel}>{AUTRES_LABEL}</Text>
+      </Pressable>
+    </ScrollView></View>;
+  }
 
   return (
     <View style={[styles.wrap, outerStyle]}>
@@ -156,17 +177,17 @@ export function HomeCategoryStrip({
               hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
               style={({ pressed }) => [
                 styles.cell,
-                cellShadow,
+                !compact && cellShadow,
                 {
                   width: itemWidth,
-                  marginRight: STRIP.itemGap,
+                  marginRight: compact ? 8 : STRIP.itemGap,
                   minHeight,
-                  paddingVertical: 9,
+                  paddingVertical: compact ? 6 : 9,
                   paddingHorizontal: 7,
-                  backgroundColor: isActive ? STRIP.activeBg : STRIP.inactiveBg,
+                  backgroundColor: compact ? (isActive ? STRIP.activeBg : 'transparent') : isActive ? STRIP.activeBg : STRIP.inactiveBg,
                   borderColor: isActive ? STRIP.activeBorder : STRIP.inactiveBorder,
-                  borderWidth: isActive ? STRIP.activeBorderWidth : STRIP.inactiveBorderWidth,
-                  borderRadius: STRIP.radius,
+                  borderWidth: compact ? 0 : isActive ? STRIP.activeBorderWidth : STRIP.inactiveBorderWidth,
+                  borderRadius: compact ? 12 : STRIP.radius,
                 },
                 pressed && styles.cellPressed,
               ]}
@@ -178,7 +199,7 @@ export function HomeCategoryStrip({
               <Ionicons
                 name={iconName}
                 size={iconSize}
-                color={isActive ? STRIP.iconActive : STRIP.iconInactive}
+                color={compact ? semantic.successText : isActive ? STRIP.iconActive : STRIP.iconInactive}
                 style={androidIconStyle ?? undefined}
               />
               <Text
@@ -200,17 +221,17 @@ export function HomeCategoryStrip({
           hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
           style={({ pressed }) => [
             styles.cell,
-            cellShadow,
+            !compact && cellShadow,
             {
               width: itemWidth,
               marginRight: 0,
               minHeight,
-              paddingVertical: 9,
+              paddingVertical: compact ? 6 : 9,
               paddingHorizontal: 7,
-              backgroundColor: STRIP.inactiveBg,
+              backgroundColor: compact ? 'transparent' : STRIP.inactiveBg,
               borderColor: STRIP.inactiveBorder,
-              borderWidth: STRIP.inactiveBorderWidth,
-              borderRadius: STRIP.radius,
+              borderWidth: compact ? 0 : STRIP.inactiveBorderWidth,
+              borderRadius: compact ? 12 : STRIP.radius,
             },
             pressed && styles.cellPressed,
           ]}
@@ -221,7 +242,7 @@ export function HomeCategoryStrip({
           <Ionicons
             name="grid-outline"
             size={iconSize}
-            color={STRIP.iconInactive}
+            color={compact ? semantic.successText : STRIP.iconInactive}
             style={androidIconStyle ?? undefined}
           />
           <Text
@@ -239,6 +260,12 @@ export function HomeCategoryStrip({
 }
 
 const styles = StyleSheet.create({
+  homeScroll: { gap: 4, paddingVertical: 8, alignItems: 'flex-start' },
+  homeCell: { width: 76, minHeight: 80, alignItems: 'center', gap: 6 },
+  homeIcon: { width: 48, height: 48, borderRadius: 14, backgroundColor: '#E9F5EF', borderWidth: 1.5, borderColor: 'transparent', alignItems: 'center', justifyContent: 'center' },
+  homeIconActive: { backgroundColor: '#CFEBDF', borderColor: '#0B4D3C' },
+  homeLabel: { width: '100%', fontSize: 12, lineHeight: 16, textAlign: 'center', color: '#334155', fontWeight: '500' },
+  homeLabelActive: { color: '#0B4D3C', fontWeight: '700' },
   wrap: {
     marginBottom: 0,
   },

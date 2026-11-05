@@ -99,32 +99,71 @@ function mapRow(row: ListingRow, signedMap: Map<string, string>): PublicListing 
 }
 
 export type GetPublicListingsResult =
-  | { data: PublicListing[]; error: null }
+  | { data: PublicListing[]; error: null; pagination: { nextOffset: number; hasMore: boolean } }
   | { data: null; error: { message: string } };
 
 /**
- * Fetches active listings for the feed, ordered by last_published_at desc
- * (COALESCE(renewed_at, created_at)). Never updated_at.
+ * Fetches active listings in global discovery RPC order (seller diversity).
+ * Before backend rollout only, missing RPC falls back to last_published_at.
  */
 export async function getPublicListings(
   offset: number = 0,
   limit: number = PAGE_SIZE
 ): Promise<GetPublicListingsResult> {
   const from = Math.max(0, offset);
-  const to = from + Math.max(1, limit) - 1;
+  // Match the RPC per-call bound; this is not a total catalogue limit.
+  const pageSize = Math.min(50, Math.max(1, limit));
+  const to = from + pageSize - 1;
 
-  const { data, error } = await supabase
+  // V5-03B : classement global et pagination côté PostgreSQL.
+  // Fallback legacy uniquement si la RPC n'est pas encore déployée.
+  const { data: ranked, error: rankingError } = await supabase.rpc(
+    'get_v5_discovery_listing_ids',
+    { p_offset: from, p_limit: pageSize }
+  );
+
+  if (!rankingError && !Array.isArray(ranked)) {
+    return { data: null, error: { message: 'Réponse RPC Découverte invalide' } };
+  }
+
+  const rankingRows = ranked ?? [];
+
+  const rpcUnavailable =
+    rankingError?.code === 'PGRST202' ||
+    rankingError?.code === '42883';
+
+  if (rankingError && !rpcUnavailable) {
+    return { data: null, error: { message: rankingError.message } };
+  }
+
+  const rankedIds = rpcUnavailable
+    ? null
+    : rankingRows.map((item) => item.listing_id);
+
+  const query = supabase
     .from('listings')
     .select(listingPublicListSelect(false))
-    .eq('status', 'active')
-    .order(LISTING_DISCOVERY_ORDER_COLUMN, { ascending: false })
-    .range(from, to);
+    .eq('status', 'active');
+
+  const { data, error } = rankedIds === null
+    ? await query
+        .order(LISTING_DISCOVERY_ORDER_COLUMN, { ascending: false })
+        .order('id', { ascending: false })
+        .range(from, to)
+    : rankedIds.length === 0
+      ? { data: [], error: null }
+      : await query.in('id', rankedIds);
 
   if (error) {
     return { data: null, error: { message: error.message } };
   }
 
-  const list = (data ?? []) as unknown as ListingRow[];
+  const fetched = (data ?? []) as unknown as ListingRow[];
+  const list = rankedIds === null
+    ? fetched
+    : [...fetched].sort(
+        (a, b) => rankedIds.indexOf(a.id) - rankedIds.indexOf(b.id)
+      );
   const allImagePaths = list.flatMap((row) => listingStoragePathsForCardCover(row.listing_images));
   const imageSignedMap = await getSignedUrlsMap(allImagePaths);
   const results = list.map((row) => mapRow(row, imageSignedMap));
@@ -175,5 +214,11 @@ export async function getPublicListings(
     return { ...listing, shop };
   });
 
-  return { data: dataWithFallback, error: null };
+  // Hydration can lose a row (e.g. listing withdrawn between the two reads).
+  // Advance by RPC rows consumed, even when fewer cards remain visible.
+  const consumed = rankedIds === null ? fetched.length : rankedIds.length;
+  return {
+    data: dataWithFallback, error: null,
+    pagination: { nextOffset: from + consumed, hasMore: consumed === pageSize },
+  };
 }

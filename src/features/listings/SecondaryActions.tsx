@@ -16,10 +16,16 @@ type SecondaryActionsProps = {
   /** Si défini, remplace l’appel direct (ex. gate auth). */
   onCallPress?: () => void | Promise<void>;
   onSmsPress?: () => void | Promise<void>;
+  /** Le cœur de la galerie porte le favori quand ce drapeau est faux. */
+  showFavorite?: boolean;
+  /** Faux quand Appeler / SMS sont déjà dans la barre fixe. */
+  showPhoneActions?: boolean;
+  /** Faux lorsque le partage est porté par la galerie. */
+  showShare?: boolean;
 };
 
-const BTN_TEXT_COMPACT = { fontSize: 11 } as const;
-const BTN_TEXT_REGULAR = { fontSize: 12 } as const;
+const BTN_TEXT_COMPACT = { fontSize: 14, lineHeight: 18 } as const;
+const BTN_TEXT_REGULAR = { fontSize: 15, lineHeight: 20 } as const;
 
 export function SecondaryActions({
   listing,
@@ -28,6 +34,9 @@ export function SecondaryActions({
   sellerPhone,
   onCallPress,
   onSmsPress,
+  showFavorite = true,
+  showPhoneActions = true,
+  showShare = true,
 }: SecondaryActionsProps) {
   const [sharing, setSharing] = React.useState(false);
   const { width } = useWindowDimensions();
@@ -90,7 +99,7 @@ export function SecondaryActions({
     </Button>
   );
 
-  const shareBtn = (
+  const shareBtn = showShare ? (
     <Button
       variant="secondary"
       size="sm"
@@ -102,9 +111,9 @@ export function SecondaryActions({
     >
       Partager
     </Button>
-  );
+  ) : null;
 
-  const callBtn = sellerPhone ? (
+  const callBtn = showPhoneActions && sellerPhone ? (
     <Button
       variant="secondary"
       size="sm"
@@ -117,7 +126,7 @@ export function SecondaryActions({
     </Button>
   ) : null;
 
-  const smsBtn = sellerPhone ? (
+  const smsBtn = showPhoneActions && sellerPhone ? (
     <Button
       variant="secondary"
       size="sm"
@@ -134,10 +143,10 @@ export function SecondaryActions({
     return (
       <View style={styles.gridWrap}>
         <View style={styles.gridRow}>
-          <View style={styles.gridCell}>{favBtn}</View>
+          {showFavorite ? <View style={styles.gridCell}>{favBtn}</View> : null}
           <View style={styles.gridCell}>{shareBtn}</View>
         </View>
-        {sellerPhone ? (
+        {showPhoneActions && sellerPhone ? (
           <View style={styles.gridRow}>
             <View style={styles.gridCell}>{callBtn}</View>
             <View style={styles.gridCell}>{smsBtn}</View>
@@ -149,9 +158,9 @@ export function SecondaryActions({
 
   return (
     <View style={styles.rowWrap}>
-      {favBtn}
+      {showFavorite ? favBtn : null}
       {shareBtn}
-      {sellerPhone ? (
+      {showPhoneActions && sellerPhone ? (
         <>
           {callBtn}
           {smsBtn}

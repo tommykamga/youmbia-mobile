@@ -3,17 +3,23 @@
  */
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { View, StyleSheet, FlatList } from 'react-native';
+import { View, StyleSheet, FlatList, type ImageSourcePropType } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { AppSectionHeader } from '@/components';
 import { getPopularShopsCached } from '@/services/shops/popularShopsCache';
 import type { PopularShop } from '@/services/shops/getPopularShops';
 import { useHomeMarketplaceGridInset } from '@/lib/responsiveLayout';
-import { ShopCard, SHOP_CARD_RAIL_MARGIN_END, SHOP_CARD_RAIL_STRIDE } from './ShopCard';
+import { ShopCard, SHOP_CARD_RAIL_MARGIN_END, SHOP_CARD_HOME_STRIDE } from './ShopCard';
 import { ShopsRailSkeleton } from './ShopsRailSkeleton';
 import { spacing, ui } from '@/theme';
 
-export function PopularShopsSection() {
+export type PopularShopsPreview = {
+  shops: readonly PopularShop[];
+  onOpen: (shop: PopularShop) => void;
+  banners?: Readonly<Record<string, ImageSourcePropType>>;
+};
+
+export function PopularShopsSection({ preview }: { preview?: PopularShopsPreview } = {}) {
   const gridInset = useHomeMarketplaceGridInset();
   const railContentStyle = useMemo(
     () => [
@@ -30,6 +36,7 @@ export function PopularShopsSection() {
   const [loading, setLoading] = useState(true);
 
   const load = useCallback(async () => {
+    if (preview) return;
     setLoading(true);
     try {
       const result = await getPopularShopsCached();
@@ -37,7 +44,7 @@ export function PopularShopsSection() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [preview]);
 
   useEffect(() => {
     void load();
@@ -46,26 +53,30 @@ export function PopularShopsSection() {
   const keyExtractor = useCallback((item: PopularShop) => item.id, []);
 
   const renderItem = useCallback(
-    ({ item }: { item: PopularShop }) => <ShopCard shop={item} />,
-    []
+    ({ item }: { item: PopularShop }) => <ShopCard variant="home" shop={item} preview={preview ? {
+      onOpen: () => preview.onOpen(item), bannerSource: preview.banners?.[item.id],
+    } : undefined} />,
+    [preview]
   );
 
-  if (loading) {
+  const displayedShops = preview?.shops ?? shops;
+
+  if (!preview && loading) {
     return (
-      <View style={styles.section} accessibilityLabel="Chargement des boutiques populaires">
+      <View style={styles.section} accessibilityLabel="Chargement des boutiques à découvrir">
         <View style={[styles.headerRow, headerInsetStyle]}>
           <AppSectionHeader
             dense
-            title="Boutiques populaires"
-            subtitle="Commerçants professionnels YOUMBIA"
+            title="Boutiques à découvrir"
+            subtitle={preview ? 'Démonstration · destinations simulées' : undefined}
           />
         </View>
-        <ShopsRailSkeleton contentInset={gridInset} />
+        <ShopsRailSkeleton home contentInset={gridInset} />
       </View>
     );
   }
 
-  if (shops.length === 0) {
+  if (displayedShops.length === 0) {
     return null;
   }
 
@@ -81,19 +92,19 @@ export function PopularShopsSection() {
         <View style={styles.headerTextSlot}>
           <AppSectionHeader
             dense
-            title="Boutiques populaires"
-            subtitle="Commerçants professionnels YOUMBIA"
+            title="Boutiques à découvrir"
+            subtitle={preview ? 'Démonstration · destinations simulées' : undefined}
           />
         </View>
       </View>
       <FlatList
-        data={shops}
+        data={displayedShops}
         keyExtractor={keyExtractor}
         horizontal
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={railContentStyle}
         style={styles.scroll}
-        snapToInterval={SHOP_CARD_RAIL_STRIDE}
+        snapToInterval={SHOP_CARD_HOME_STRIDE}
         snapToAlignment="start"
         decelerationRate="fast"
         renderItem={renderItem}

@@ -4,7 +4,7 @@
 
 import { Share, Linking, Platform } from 'react-native';
 
-const SHOP_URL_BASE = 'https://www.youmbia.com/shop';
+import { publicContentUrl } from './publicContentUrl';
 const WHATSAPP_PREFIX = 'https://wa.me';
 
 export type ShareShopPayload = {
@@ -18,7 +18,7 @@ export type ShareShopPayload = {
 export function getPublicShopUrl(slug: string | null | undefined): string | null {
   const safe = String(slug ?? '').trim().toLowerCase();
   if (!safe) return null;
-  return `${SHOP_URL_BASE}/${safe}`;
+  return publicContentUrl('shop', safe);
 }
 
 /** Extrait un slogan court depuis la description boutique. */

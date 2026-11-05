@@ -1,3 +1,5 @@
+import { createPublicContentNavigationGuard } from '@/lib/publicContentNavigation';
+import { getPublicContentHref } from '@/lib/publicContentDeepLink';
 import {
   Stack,
   useGlobalSearchParams,
@@ -38,7 +40,7 @@ import {
   getComparableTargetKey,
   getLastNotificationResponseAsyncSafe,
   getNotificationOpenMeta,
-  initializeNotifications,
+  initializeNotificationsAsync,
   isPushNotificationsAvailable,
   syncPushTokenIfGranted,
   type NotificationOpenMeta,
@@ -109,7 +111,7 @@ function RootLayout() {
   const segments = useSegments();
   const pathname = usePathname();
   const globalParams = useGlobalSearchParams();
-  const lastHandledUrlRef = useRef<string | null>(null);
+  const publicContentNavigationRef = useRef(createPublicContentNavigationGuard());
   const pathnameRef = useRef(pathname);
   const routeKeyRef = useRef(getComparableRouteKey(pathname, globalParams));
   const consumeNotificationRef = useRef<(notification: PendingNotificationOpen) => void>(() => {});
@@ -124,6 +126,7 @@ function RootLayout() {
 
   useEffect(() => {
     routeKeyRef.current = getComparableRouteKey(pathname, globalParams);
+    publicContentNavigationRef.current.observeRoute(pathname, globalParams);
   }, [pathname, globalParams]);
 
   useEffect(() => {
@@ -184,7 +187,7 @@ function RootLayout() {
 
   useEffect(() => {
     if (!isPushNotificationsAvailable()) return;
-    initializeNotifications();
+    void initializeNotificationsAsync();
   }, []);
 
   // Persiste côté serveur le token push d'un utilisateur ayant DÉJÀ accordé la
@@ -297,14 +300,10 @@ function RootLayout() {
         return;
       }
 
-      const target = getListingHrefFromUrl(raw);
+      // Attribution is an idempotent setter, preserved even after a system rewrite.
+      const target = getListingHrefFromUrl(raw) ?? getPublicContentHref(raw);
       if (!target) return;
-      if (raw && lastHandledUrlRef.current === raw) return;
-      if (getComparableTargetKey(target) === routeKeyRef.current) {
-        lastHandledUrlRef.current = raw || target;
-        return;
-      }
-      lastHandledUrlRef.current = raw || target;
+      if (!publicContentNavigationRef.current.reserve(target)) return;
       router.replace(target as never);
     },
     [router]
@@ -481,6 +480,7 @@ function RootLayout() {
         >
           <Stack.Screen name="index" />
           <Stack.Screen name="(auth)" options={{ headerShown: false }} />
+          <Stack.Screen name="auth" options={{ headerShown: false }} />
           <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
           <Stack.Screen name="listing/[id]" options={{ headerShown: false }} />
           <Stack.Screen name="shop/[slug]" options={{ headerShown: false }} />

@@ -5,6 +5,7 @@
  */
 
 import { supabase } from '@/lib/supabase';
+import { buildCanonicalCityOrClause, cityFilterPattern } from '@/lib/canonicalCity';
 import {
   getSignedUrlsMap,
   listingStoragePathsForCardCover,
@@ -175,15 +176,25 @@ export async function searchListings(options: SearchOptions = {}): Promise<Searc
           request = request.eq('category_id', filter.id);
         }
       } catch {
-        request = request.eq('category_id', catId);
+        // Do not present an incomplete parent-category result as exhaustive.
+        return {
+          data: null,
+          total: 0,
+          error: { message: 'Impossible de charger les catégories. Veuillez réessayer.' },
+        };
       }
     }
   }
 
-  // City filter (explicite, inchangé)
+  // V5-01: expand accent variants while preserving legacy city inclusion.
   if (city?.trim()) {
-    const cityPattern = `%${city.trim().replace(/[%_\\]/g, '')}%`;
-    request = request.ilike('city', cityPattern);
+    const canonicalClause = buildCanonicalCityOrClause(city);
+    if (canonicalClause) {
+      request = request.or(canonicalClause);
+    } else {
+      const cityPattern = cityFilterPattern(city.trim());
+      request = request.ilike('city', cityPattern);
+    }
   }
 
   // Price range filters
@@ -194,11 +205,13 @@ export async function searchListings(options: SearchOptions = {}): Promise<Searc
     request = request.lte('price', maxPrice);
   }
 
-  // Sorting — la pertinence texte est appliquée côté UI (cache hors tri).
+  // Sorting before pagination; text relevance remains applied by the UI.
   if (sortBy === 'price_asc') {
     request = request.order('price', { ascending: true });
   } else if (sortBy === 'price_desc') {
     request = request.order('price', { ascending: false });
+  } else if (sortBy === 'recent') {
+    request = request.order('created_at', { ascending: false }).order('id', { ascending: false });
   } else {
     request = request.order(LISTING_DISCOVERY_ORDER_COLUMN, { ascending: false });
   }

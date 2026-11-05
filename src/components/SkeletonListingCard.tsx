@@ -10,8 +10,8 @@ import { SkeletonPulse } from '@/components/SkeletonPulse';
 const IMAGE_HEIGHT = 160;
 const CARD_RADIUS = 16;
 const CARD_RADIUS_HOME = 20;
-/** Aligné sur ListingCard (home) — image plus haute (~1.2). */
-const HOME_IMAGE_ASPECT_RATIO = 1 / 1.2;
+/** Aligné sur ListingCard (home) — ratio photo 4:3. */
+const HOME_IMAGE_ASPECT_RATIO = 4 / 3;
 
 export type SkeletonListingCardProps = {
   feedPresentation?: 'standard' | 'home';

@@ -11,8 +11,7 @@ import {
   type ShareChannel,
 } from '@/lib/analytics';
 
-const LISTING_URL_BASE = 'https://www.youmbia.com/annonce';
-const SELLER_URL_BASE = 'https://www.youmbia.com/vendeur';
+import { publicContentUrl } from './publicContentUrl';
 const WHATSAPP_PREFIX = 'https://wa.me';
 
 export type ShareListingPayload = {
@@ -31,13 +30,13 @@ export type ShareSellerPayload = {
 export function getPublicListingUrl(id: string | null | undefined): string | null {
   const safeId = String(id ?? '').trim();
   if (!safeId) return null;
-  return `${LISTING_URL_BASE}/${safeId}`;
+  return publicContentUrl('annonce', safeId);
 }
 
 export function getPublicSellerUrl(id: string | null | undefined): string | null {
   const safeId = String(id ?? '').trim();
   if (!safeId) return null;
-  return `${SELLER_URL_BASE}/${safeId}`;
+  return publicContentUrl('seller', safeId);
 }
 
 export function buildListingShareMessage(payload: ShareListingPayload): string {

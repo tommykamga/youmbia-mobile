@@ -1,0 +1,248 @@
+BEGIN
+CREATE FUNCTION
+CREATE TABLE
+INSERT 0 6
+INSERT 0 6
+CREATE TABLE
+INSERT 0 1
+GRANT
+SET
+SET
+       record_v5_contact_intent
+--------------------------------------
+ 46e97856-5c1a-4e6f-97b6-92eebe132785
+(1 row)
+
+       record_v5_contact_intent
+--------------------------------------
+ 46e97856-5c1a-4e6f-97b6-92eebe132785
+(1 row)
+
+ check_v4
+----------
+
+(1 row)
+
+ check_v4
+----------
+
+(1 row)
+
+DO
+SET
+ check_v4
+----------
+
+(1 row)
+
+DO
+ declare_v5_listing_availability
+---------------------------------
+ available
+(1 row)
+
+ check_v4
+----------
+
+(1 row)
+
+ declare_v5_listing_availability
+---------------------------------
+ unknown
+(1 row)
+
+ check_v4
+----------
+
+(1 row)
+
+ declare_v5_listing_availability
+---------------------------------
+ sold
+(1 row)
+
+ check_v4
+----------
+
+(1 row)
+
+SET
+SET
+ check_v4
+----------
+
+(1 row)
+
+SET
+SET
+UPDATE 1
+ check_v4
+----------
+
+(1 row)
+
+RESET
+INSERT 0 59
+SET
+SET
+DO
+ check_v4
+----------
+
+(1 row)
+
+RESET
+UPDATE 1
+SET
+ check_v4
+----------
+
+(1 row)
+
+RESET
+SET
+DO
+ check_v4
+----------
+
+(1 row)
+
+RESET
+INSERT 0 1
+SET
+ check_v4
+----------
+
+(1 row)
+
+ check_v4
+----------
+
+(1 row)
+
+DO
+RESET
+UPDATE 1
+ check_v4
+----------
+
+(1 row)
+
+CREATE TABLE
+INSERT 0 5
+GRANT
+SET
+SET
+INSERT 0 4
+DO
+ check_v4
+----------
+
+(1 row)
+
+DO
+SET
+INSERT 0 3
+RESET
+ALTER TABLE
+UPDATE 7
+INSERT 0 1
+INSERT 0 1
+UPDATE 9
+ALTER TABLE
+UPDATE 3
+ check_v4
+----------
+
+(1 row)
+
+SET
+SET
+ check_v4
+----------
+
+(1 row)
+
+ check_v4
+----------
+
+(1 row)
+
+ check_v4
+----------
+
+(1 row)
+
+ check_v4
+----------
+
+(1 row)
+
+ check_v4
+----------
+
+(1 row)
+
+ check_v4
+----------
+
+(1 row)
+
+RESET
+SET
+SET
+UPDATE 1
+SET
+ check_v4
+----------
+
+(1 row)
+
+SET
+INSERT 0 1
+INSERT 0 1
+SET
+ check_v4
+----------
+
+(1 row)
+
+RESET
+ROLLBACK
+psql:<mobile>/supabase/scripts/v5_04_contacts_trust_tests.sql:16: NOTICE:  PASS same event replay counted once
+psql:<mobile>/supabase/scripts/v5_04_contacts_trust_tests.sql:17: NOTICE:  PASS server time and listing dimensions
+psql:<mobile>/supabase/scripts/v5_04_contacts_trust_tests.sql:23: NOTICE:  PASS direct event writes denied
+psql:<mobile>/supabase/scripts/v5_04_contacts_trust_tests.sql:23: NOTICE:  PASS conflicting replay denied
+psql:<mobile>/supabase/scripts/v5_04_contacts_trust_tests.sql:23: NOTICE:  PASS invalid channel denied
+psql:<mobile>/supabase/scripts/v5_04_contacts_trust_tests.sql:23: NOTICE:  PASS other owner declaration denied
+psql:<mobile>/supabase/scripts/v5_04_contacts_trust_tests.sql:25: NOTICE:  PASS contact RLS cross-user isolation
+psql:<mobile>/supabase/scripts/v5_04_contacts_trust_tests.sql:30: NOTICE:  PASS self contact excluded
+psql:<mobile>/supabase/scripts/v5_04_contacts_trust_tests.sql:30: NOTICE:  PASS another actor cannot replay an existing UUID
+psql:<mobile>/supabase/scripts/v5_04_contacts_trust_tests.sql:30: NOTICE:  PASS stale availability refused
+psql:<mobile>/supabase/scripts/v5_04_contacts_trust_tests.sql:32: NOTICE:  PASS availability server confirmation
+psql:<mobile>/supabase/scripts/v5_04_contacts_trust_tests.sql:34: NOTICE:  PASS unknown is explicit and non-forced
+psql:<mobile>/supabase/scripts/v5_04_contacts_trust_tests.sql:36: NOTICE:  PASS sold uses existing lifecycle transition
+psql:<mobile>/supabase/scripts/v5_04_contacts_trust_tests.sql:39: NOTICE:  PASS non-public availability hidden from anonymous
+psql:<mobile>/supabase/scripts/v5_04_contacts_trust_tests.sql:43: NOTICE:  PASS legacy reactivation clears previous declaration
+psql:<mobile>/supabase/scripts/v5_04_contacts_trust_tests.sql:51: NOTICE:  PASS 60 per minute rate limit
+psql:<mobile>/supabase/scripts/v5_04_contacts_trust_tests.sql:52: NOTICE:  PASS idempotent retry allowed at rate cap
+psql:<mobile>/supabase/scripts/v5_04_contacts_trust_tests.sql:56: NOTICE:  PASS explicit 30 day retention purge
+psql:<mobile>/supabase/scripts/v5_04_contacts_trust_tests.sql:62: NOTICE:  PASS anonymous journal writes denied
+psql:<mobile>/supabase/scripts/v5_04_contacts_trust_tests.sql:62: NOTICE:  PASS anonymous contact reads denied
+psql:<mobile>/supabase/scripts/v5_04_contacts_trust_tests.sql:63: NOTICE:  PASS no proof no verification claim
+psql:<mobile>/supabase/scripts/v5_04_contacts_trust_tests.sql:68: NOTICE:  PASS explicit proof enables boolean receipt
+psql:<mobile>/supabase/scripts/v5_04_contacts_trust_tests.sql:69: NOTICE:  PASS anonymous batch exposes boolean proof receipt only
+psql:<mobile>/supabase/scripts/v5_04_contacts_trust_tests.sql:72: NOTICE:  PASS proof references never public
+psql:<mobile>/supabase/scripts/v5_04_contacts_trust_tests.sql:75: NOTICE:  PASS revocation removes badge receipt
+psql:<mobile>/supabase/scripts/v5_04_contacts_trust_tests.sql:87: NOTICE:  PASS buyer cannot forge a seller message
+psql:<mobile>/supabase/scripts/v5_04_contacts_trust_tests.sql:88: NOTICE:  PASS legacy message insert uses trusted receive timestamp
+psql:<mobile>/supabase/scripts/v5_04_contacts_trust_tests.sql:91: NOTICE:  PASS response aggregates admin only
+psql:<mobile>/supabase/scripts/v5_04_contacts_trust_tests.sql:106: NOTICE:  PASS receive timestamp immutable on update
+psql:<mobile>/supabase/scripts/v5_04_contacts_trust_tests.sql:109: NOTICE:  PASS response denominator requires real buyer message
+psql:<mobile>/supabase/scripts/v5_04_contacts_trust_tests.sql:110: NOTICE:  PASS strictly later first seller replies only
+psql:<mobile>/supabase/scripts/v5_04_contacts_trust_tests.sql:111: NOTICE:  PASS unanswered conversations separate
+psql:<mobile>/supabase/scripts/v5_04_contacts_trust_tests.sql:112: NOTICE:  PASS historical untrusted timestamps excluded
+psql:<mobile>/supabase/scripts/v5_04_contacts_trust_tests.sql:113: NOTICE:  PASS median uses first internal response after buyer
+psql:<mobile>/supabase/scripts/v5_04_contacts_trust_tests.sql:114: NOTICE:  PASS insufficient response data is null not zero delay
+psql:<mobile>/supabase/scripts/v5_04_contacts_trust_tests.sql:120: NOTICE:  PASS mutated conversation context cannot contaminate response metric
+psql:<mobile>/supabase/scripts/v5_04_contacts_trust_tests.sql:127: NOTICE:  PASS seller must match listing owner for trusted metric

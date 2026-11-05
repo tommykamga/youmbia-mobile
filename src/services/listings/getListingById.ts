@@ -1,3 +1,4 @@
+import { getListingAvailability, verifiedSubject, type Availability } from './listingTrust';
 /**
  * Single listing by id for the detail screen.
  * Same Supabase listings + listing_images as web; image paths resolved via signed URLs (bucket listing-images).
@@ -31,6 +32,7 @@ export type ListingDetail = {
   seller_id: string;
   /** Statut brut (owner sold uniquement hors discovery). */
   status?: string;
+  availability?: Availability;
   images: string[];
   /** Chemins `listing_images.url` restants : signés à la demande par la galerie (moins d’egress au chargement). */
   galleryLazySourcePaths?: string[];
@@ -148,6 +150,8 @@ export async function getListingById(id: string): Promise<GetListingByIdResult> 
   }
 
   const sellerId = row.user_id ?? null;
+  const availabilityPromise = getListingAvailability(id);
+  const verificationPromise = sellerId ? verifiedSubject('profile', sellerId) : Promise.resolve(false);
 
   const sortedImages = [...(row.listing_images ?? [])].sort(
     (a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0)
@@ -198,7 +202,7 @@ export async function getListingById(id: string): Promise<GetListingByIdResult> 
         created_at: p.created_at ?? null,
         phone: p.phone ?? null,
         phone_verified: p.phone_verified ?? null,
-        is_verified: p.is_verified ?? null,
+        is_verified: await verificationPromise,
         is_flagged: p.is_flagged ?? null,
         trust_score: p.trust_score ?? null,
         reports_count: p.reports_count ?? null,
@@ -218,6 +222,7 @@ export async function getListingById(id: string): Promise<GetListingByIdResult> 
   let shop: ShopSummary | null = null;
   if (shopIdForSummary) {
     shop = await getShopSummaryById(shopIdForSummary);
+    if (shop) shop.verification_proven = await verifiedSubject('shop', shop.id);
   }
 
   const { boosted, district, urgent } = normalizeListingSchemaFeatures(row);
@@ -235,6 +240,7 @@ export async function getListingById(id: string): Promise<GetListingByIdResult> 
     views_count: row.views_count ?? 0,
     seller_id: row.user_id ?? '',
     status: listingStatus,
+    availability: await availabilityPromise,
     images: firstDisplay ? [firstDisplay] : [],
     ...(lazyRest.length > 0 ? { galleryLazySourcePaths: lazyRest } : {}),
     district,

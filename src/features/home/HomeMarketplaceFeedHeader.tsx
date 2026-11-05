@@ -60,6 +60,7 @@ export function useAuthStateForHome(): AuthState {
 }
 
 export type HomeMarketplaceFeedHeaderProps = {
+  homePresentation?: boolean;
   authState: AuthState;
   bucket: WindowSizeBucket;
   onBoostedVoirTout: () => void;
@@ -74,6 +75,7 @@ export type HomeMarketplaceFeedHeaderProps = {
 
 export function HomeMarketplaceFeedHeader({
   authState,
+  homePresentation = false,
   bucket,
   onBoostedVoirTout,
   onCategoryPress,
@@ -149,8 +151,8 @@ export function HomeMarketplaceFeedHeader({
       <View style={feedIntroStyle}>
         <AppSectionHeader
           dense
-          title="Explorez les annonces disponibles"
-          subtitle="Découvrez les dernières opportunités publiées"
+          title={homePresentation ? 'À découvrir' : 'Explorez les annonces disponibles'}
+          subtitle={homePresentation ? undefined : 'Découvrez les dernières opportunités publiées'}
         />
       </View>
     </View>

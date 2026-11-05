@@ -190,7 +190,7 @@ describe('migration + contrats hide-for-me', () => {
   it('inbox / unread filtrent via conversationsVisibleForUserOrFilter', () => {
     const inbox = read('src/services/conversations/getConversations.ts');
     const unread = read('src/services/conversations/getUnreadConversationsCount.ts');
-    const messagesUi = read('app/(tabs)/messages.tsx');
+    const messagesUi = read('src/features/messages/MessagesInboxScreen.tsx');
     expect(inbox).toMatch(/conversationsVisibleForUserOrFilter/);
     expect(unread).toMatch(/conversationsVisibleForUserOrFilter/);
     expect(messagesUi).toMatch(/hideConversationForMe/);

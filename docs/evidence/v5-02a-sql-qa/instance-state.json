@@ -1,0 +1,13 @@
+{
+  "container": "youmbia-v5-02a-qa-20261101",
+  "state": "exited",
+  "final_empty_counts": {
+    "listings": 0,
+    "listing_images": 0,
+    "email_outbox": 0,
+    "http_queue": 0,
+    "http_responses": 0,
+    "cron_jobs": 0
+  },
+  "migration_suite_runner_unchanged": true
+}

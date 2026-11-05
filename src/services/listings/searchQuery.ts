@@ -4,6 +4,7 @@
  */
 
 import { listingPublishedAtMs } from '@/lib/listingPublishedAt';
+import { cityFilterTerms } from '@/lib/canonicalCity';
 import {
   collectCategoryBranchIds,
   type MarketplaceCategoryIdentity,
@@ -135,9 +136,9 @@ export function listingMatchesCityFilter(
   listingCity: string | null | undefined,
   cityFilter: string | null | undefined
 ): boolean {
-  const needle = normalizeSearchText(cityFilter);
-  if (!needle) return true;
-  return normalizeSearchText(listingCity).includes(needle);
+  if (!cityFilter?.trim()) return true;
+  const stored = (listingCity ?? '').toLowerCase();
+  return cityFilterTerms(cityFilter).some(term => stored.includes(term.toLowerCase()));
 }
 
 export function listingMatchesPriceFilter(

@@ -1,0 +1,42 @@
+
+ RUN  v3.2.7 /Users/tommy/APP TESKA/YOUMBIA/youmbia-ui-home
+
+ ✓ src/features/listings/discoveryFeedController.test.ts (14 tests) 10ms
+ ✓ src/features/search/searchFilterHelpers.test.ts (3 tests) 2ms
+ ✓ src/services/releaseCritical.contract.test.ts (9 tests) 6ms
+ ✓ src/features/home/demo/demoProvider.test.ts (4 tests) 18ms
+ ✓ src/services/listings/getPublicListings.test.ts (8 tests) 4ms
+stderr | src/features/listings/ListingCard.preview.test.tsx > uses a bundled photo and local detail/favorite controls without touching real navigation or favorite APIs
+react-test-renderer is deprecated. See https://react.dev/warnings/react-test-renderer
+
+stderr | src/features/listings/ListingCard.preview.test.tsx > retains the no-photo state in a preview with no bundled image
+react-test-renderer is deprecated. See https://react.dev/warnings/react-test-renderer
+
+stderr | src/features/listings/ListingCard.preview.test.tsx > fails closed if a fixture is accidentally rendered without its local controls
+react-test-renderer is deprecated. See https://react.dev/warnings/react-test-renderer
+
+ ✓ src/features/listings/ListingCard.preview.test.tsx (3 tests) 24ms
+stderr | src/features/listings/ListingFeed.test.tsx > wires cached pagination to a virtualized stable list and serializes endReached
+react-test-renderer is deprecated. See https://react.dev/warnings/react-test-renderer
+
+stderr | src/features/listings/ListingFeed.test.tsx > revalidates a legacy cache in StrictMode and ignores the old next page after unmount
+react-test-renderer is deprecated. See https://react.dev/warnings/react-test-renderer
+
+stderr | src/features/listings/ListingFeed.test.tsx > presents a readable next-page error and keeps the same list through an explicit retry
+react-test-renderer is deprecated. See https://react.dev/warnings/react-test-renderer
+
+stderr | src/features/listings/ListingFeed.test.tsx > cancels the old home page when leaving for criteria and keeps a fresh feed intact on return
+react-test-renderer is deprecated. See https://react.dev/warnings/react-test-renderer
+
+stderr | src/features/listings/ListingFeed.test.tsx > isolates preview pagination from network and cache, then restores the normal service when removed
+react-test-renderer is deprecated. See https://react.dev/warnings/react-test-renderer
+
+ ✓ src/features/listings/ListingFeed.test.tsx (5 tests) 31ms
+ ✓ src/features/search/searchSession.test.ts (3 tests) 2ms
+ ✓ src/lib/link01.contract.test.ts (2 tests) 1ms
+ ✓ src/lib/responsiveLayout.test.ts (3 tests) 1ms
+
+ Test Files  10 passed (10)
+      Tests  54 passed (54)
+   Start at  14:25:31
+   Duration  894ms (transform 918ms, setup 105ms, collect 2.04s, tests 99ms, environment 6ms, prepare 961ms)

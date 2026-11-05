@@ -5,8 +5,17 @@
  * Aligné produit : petit téléphone < 380 ; moyen [380, 430) ; grand ≥ 430.
  */
 import { useMemo } from 'react';
-import { useWindowDimensions } from 'react-native';
+import { PixelRatio, useWindowDimensions } from 'react-native';
 import { spacing } from '@/theme';
+
+/** Espacement horizontal entre cartes du fil accueil (grille 2 colonnes). */
+export const HOME_FEED_GRID_COLUMN_GAP = spacing.sm;
+
+/**
+ * Au-delà de ce ratio de police système, le fil accueil repasse en 1 colonne
+ * (Dynamic Type / texte agrandi iOS & Android).
+ */
+export const HOME_FEED_GRID_MAX_FONT_SCALE = 1.2;
 
 export type WindowSizeBucket = 'compact' | 'regular' | 'large';
 
@@ -86,6 +95,58 @@ export function getHomeMarketplaceHorizontalPadding(_width?: number): number {
   return spacing.screenHorizontal;
 }
 
+/** Colonnes du fil d’accueil (cartes) : 2 si largeur suffisante et texte OS normal, sinon 1. */
+export function getHomeFeedColumnCount(
+  width: number,
+  fontScale: number = PixelRatio.getFontScale()
+): 1 | 2 {
+  if (width < WIDTH_COMPACT_BOUND) return 1;
+  if (fontScale > HOME_FEED_GRID_MAX_FONT_SCALE) return 1;
+  return 2;
+}
+
+const HOME_FEED_LIST_MAX_WIDTH = 760;
+
+/** Largeur utile du conteneur liste (aligné maxWidth des onglets marketplace). */
+export function getHomeFeedListContentWidth(windowWidth: number): number {
+  return Math.min(windowWidth, HOME_FEED_LIST_MAX_WIDTH);
+}
+
+/** Largeur intérieure d’une rangée grille après gouttières `screenHorizontal`. */
+export function getHomeFeedGridInnerWidth(windowWidth: number): number {
+  return getHomeFeedListContentWidth(windowWidth) - spacing.screenHorizontal * 2;
+}
+
+/** Largeur d’une cellule en grille 2 colonnes (inter-colonne = `HOME_FEED_GRID_COLUMN_GAP`). */
+export function getHomeFeedTwoColumnCellWidth(gridInnerWidth: number): number {
+  return (gridInnerWidth - HOME_FEED_GRID_COLUMN_GAP) / 2;
+}
+
+export type HomeFeedGridCellLayoutStyle = {
+  flex: number;
+  width?: number;
+  minWidth: number;
+};
+
+/**
+ * Évite qu’une carte seule en grille 2 col. s’étire sur toute la rangée (dernière ligne impaire).
+ */
+export function getHomeFeedGridCellLayout(
+  gridInnerWidth: number,
+  columnCount: 1 | 2,
+  cellsInRow: number
+): HomeFeedGridCellLayoutStyle {
+  const minWidth = 0;
+  if (columnCount === 1 || cellsInRow >= 2) {
+    return { flex: 1, minWidth };
+  }
+  return {
+    flex: 0,
+    width: getHomeFeedTwoColumnCellWidth(gridInnerWidth),
+    minWidth,
+  };
+}
+
 /** @deprecated Alias — préférer `getHomeMarketplaceHorizontalPadding`. */
 export const getHomeFeedListingCardInset = getHomeMarketplaceHorizontalPadding;
 
@@ -104,10 +165,13 @@ export function useResponsiveLayout() {
   const { width, height } = useWindowDimensions();
   const bucket = getWindowSizeBucket(width);
   const phone = getPhoneSizeFlags(width);
+  const fontScale = PixelRatio.getFontScale();
   return {
     width,
     height,
     bucket,
+    fontScale,
+    homeFeedColumns: getHomeFeedColumnCount(width, fontScale),
     isCompact: bucket === 'compact',
     isRegular: bucket === 'regular',
     isLarge: bucket === 'large',

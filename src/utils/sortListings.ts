@@ -2,7 +2,7 @@
  * Client-side sort for listings. Does not mutate the original array.
  * Used by ListingFeed (Home) and Search.
  *
- * - recent: boosted first (si flag), puis last_published_at desc (COALESCE(renewed_at, created_at)).
+ * - recent: boosted first (si flag), puis created_at desc, id desc.
  *   Jamais updated_at. Jamais de pertinence.
  * - relevance: score décroissant, puis last_published_at desc (tie-breaker). Search uniquement.
  * - price_asc / price_desc: inchangés.
@@ -11,7 +11,6 @@ import type { PublicListing } from '@/services/listings';
 import { getDisplayBoosted } from '@/lib/listingSchemaFeatures';
 import type { MarketplaceCategoryIdentity } from '@/lib/marketplaceCategories';
 import { compareSearchRelevance } from '@/services/listings/searchQuery';
-import { listingPublishedAtMs } from '@/lib/listingPublishedAt';
 
 export type SortOption = 'recent' | 'relevance' | 'price_asc' | 'price_desc';
 
@@ -25,7 +24,9 @@ function sortByRecent(listings: PublicListing[]): PublicListing[] {
     const aBoost = getDisplayBoosted(a) ? 1 : 0;
     const bBoost = getDisplayBoosted(b) ? 1 : 0;
     if (bBoost !== aBoost) return bBoost - aBoost;
-    return listingPublishedAtMs(b) - listingPublishedAtMs(a);
+    const dateOrder = (Date.parse(b.created_at) || 0) - (Date.parse(a.created_at) || 0);
+    if (dateOrder !== 0) return dateOrder;
+    return a.id === b.id ? 0 : a.id > b.id ? -1 : 1;
   });
 }
 

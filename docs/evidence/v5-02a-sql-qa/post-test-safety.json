@@ -1,0 +1,19 @@
+{
+  "synthetic_users": 3,
+  "listings_after_rollback": 0,
+  "images_after_rollback": 0,
+  "cron_jobs": 0,
+  "vault_secrets": 0,
+  "runtime_flags": 0,
+  "outbox": 0,
+  "http_queue": 0,
+  "http_responses": 0,
+  "role_authenticated": {
+    "superuser": false,
+    "bypassrls": false
+  },
+  "role_anon": {
+    "superuser": false,
+    "bypassrls": false
+  }
+}

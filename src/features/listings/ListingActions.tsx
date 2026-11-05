@@ -1,16 +1,16 @@
 /**
- * ListingActions – sticky contact bar: Message (primary) + WhatsApp (secondary), then Favoris / Partager / Appeler.
- * Bar stays visible when scrolling. WhatsApp: wa.me/PHONE or wa.me/?text=…; phone CTA when seller.phone provided.
+ * ListingActions – barre fixe : Contacter le vendeur, puis les canaux réellement disponibles.
+ * Le propriétaire ne se contacte pas lui-même (le parent passe isOwnListing).
  */
 
 import React, { useCallback, useMemo, useState } from 'react';
 import { View, Text, StyleSheet, Pressable, ActivityIndicator } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import * as Haptics from 'expo-haptics';
-import Animated, { 
-  useAnimatedStyle, 
-  useSharedValue, 
-  withSpring
+import Animated, {
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
 } from 'react-native-reanimated';
 import { colors, spacing, radius, typography, fontWeights, getShadowStyle } from '@/theme';
 import { normalizePhoneForWhatsApp, openWhatsAppForListing } from '@/lib/sellerContact';
@@ -27,7 +27,7 @@ type ListingActionsProps = {
   safeBottom?: number;
   isFavorite?: boolean;
   onFavorisPress?: () => void;
-  /** Opens internal messaging thread (conversation). When provided, shows "Message" CTA. */
+  /** Opens internal messaging thread (conversation). When provided, shows the primary CTA. */
   onMessagePress?: () => void;
   /** When true, shows auth hint copy (UI only). */
   showAuthHint?: boolean;
@@ -39,6 +39,12 @@ type ListingActionsProps = {
    * Si défini (ex. gate auth sur la fiche), remplace l’ouverture WhatsApp par défaut.
    */
   onWhatsAppPress?: () => void | Promise<void>;
+  onCallPress?: () => void | Promise<void>;
+  onSmsPress?: () => void | Promise<void>;
+  /** Le propriétaire ne voit pas la barre de contact. */
+  isOwnListing?: boolean;
+  /** Hauteur réelle, safe area comprise, pour dégager le contenu. */
+  onBarHeight?: (height: number) => void;
 };
 
 export function ListingActions({
@@ -47,9 +53,13 @@ export function ListingActions({
   safeBottom = 0,
   onMessagePress,
   onWhatsAppPress,
+  onCallPress,
+  onSmsPress,
   showAuthHint = false,
   maskedPhone = null,
   messageLoading = false,
+  isOwnListing = false,
+  onBarHeight,
 }: ListingActionsProps) {
   const [openingWhatsApp, setOpeningWhatsApp] = useState(false);
   const [whatsAppConfirmed, setWhatsAppConfirmed] = useState(false);
@@ -60,9 +70,12 @@ export function ListingActions({
   const hasContact = !!listing.seller && !sellerRestricted;
   const canWhatsApp = hasContact && !!whatsappNumber;
   const canMessage = hasContact && !!onMessagePress;
+  const canCall = hasContact && !!sellerPhone && !!onCallPress;
+  const canSms = hasContact && !!sellerPhone && !!onSmsPress;
+  void canCall;
+  void canSms;
 
   const messageScale = useSharedValue(1);
-  const whatsappScale = useSharedValue(1);
 
   const handleWhatsApp = useCallback(async () => {
     if (openingWhatsApp) return;
@@ -95,21 +108,26 @@ export function ListingActions({
     transform: [{ scale: messageScale.value }],
   }));
 
-  const whatsappAnimatedStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: whatsappScale.value }],
-  }));
-
-  const handlePressIn = (scale: any) => {
-    scale.value = withSpring(0.97, { damping: 10, stiffness: 300 });
+  const handlePressIn = () => {
+    messageScale.value = withSpring(0.97, { damping: 10, stiffness: 300 });
   };
 
-  const handlePressOut = (scale: any) => {
-    scale.value = withSpring(1, { damping: 10, stiffness: 300 });
+  const handlePressOut = () => {
+    messageScale.value = withSpring(1, { damping: 10, stiffness: 300 });
   };
+
+  const reportBarHeight = (height: number) => {
+    onBarHeight?.(height);
+  };
+
+  if (isOwnListing) return null;
 
   if (!canMessage && !canWhatsApp) {
     return (
-      <View style={[styles.footer, { paddingBottom: spacing.lg + safeBottom }]}>
+      <View
+        style={[styles.footer, { paddingBottom: spacing.lg + safeBottom }]}
+        onLayout={(event) => reportBarHeight(event.nativeEvent.layout.height)}
+      >
         <View style={styles.unavailableWrap}>
           <Text style={styles.unavailableText}>
             {sellerRestricted ? 'Contact du vendeur indisponible' : 'Contact non disponible'}
@@ -119,8 +137,14 @@ export function ListingActions({
     );
   }
 
+  const whatsAppLabel = openingWhatsApp ? 'Ouverture…' : whatsAppConfirmed ? 'Ouvert' : 'WhatsApp';
+  const messageLabel = messageLoading ? 'Ouverture…' : 'Envoyer un message';
+
   return (
-    <View style={[styles.footer, { paddingBottom: spacing.base + safeBottom }]}>
+    <View
+      style={[styles.footer, { paddingBottom: spacing.base + safeBottom }]}
+      onLayout={(event) => reportBarHeight(event.nativeEvent.layout.height)}
+    >
       {showAuthHint ? (
         <View style={styles.authHint}>
           <View style={styles.authHintRow}>
@@ -128,60 +152,58 @@ export function ListingActions({
             <Text style={styles.authHintText}>Connecte-toi pour contacter le vendeur</Text>
           </View>
           {maskedPhone ? (
-            <Text style={styles.authHintPhone} numberOfLines={1}>
-              Numéro: {maskedPhone}
+            <Text style={styles.authHintPhone}>
+              Numéro : {maskedPhone}
             </Text>
           ) : null}
         </View>
       ) : null}
-      <View style={styles.container}>
-        {canMessage && (
-          <Animated.View style={[styles.flex, messageAnimatedStyle]}>
+      <View style={styles.dualRow}>
+        {canWhatsApp ? (
+          <Pressable
+            onPress={() => { void handleWhatsApp(); }}
+            disabled={openingWhatsApp}
+            accessibilityRole="button"
+            accessibilityLabel="Contacter sur WhatsApp"
+            style={({ pressed }) => [
+              styles.dualBtn,
+              styles.dualBtnOutline,
+              !canMessage && styles.dualBtnSolo,
+              pressed && styles.btnPressed,
+            ]}
+          >
+            {openingWhatsApp ? (
+              <ActivityIndicator color={colors.primary} />
+            ) : (
+              <Ionicons name="logo-whatsapp" size={20} color={colors.primary} style={styles.btnIcon} />
+            )}
+            <Text style={styles.dualBtnTextOutline}>{whatsAppLabel}</Text>
+          </Pressable>
+        ) : null}
+        {canMessage ? (
+          <Animated.View style={[styles.dualBtnWrap, messageAnimatedStyle, !canWhatsApp && styles.dualBtnSolo]}>
             <Pressable
               onPress={handleMessage}
-              onPressIn={() => handlePressIn(messageScale)}
-              onPressOut={() => handlePressOut(messageScale)}
+              onPressIn={handlePressIn}
+              onPressOut={handlePressOut}
               style={({ pressed }) => [
-                styles.btn,
-                styles.btnPrimary,
-                pressed && styles.btnPressed
+                styles.dualBtn,
+                styles.dualBtnPrimary,
+                pressed && styles.btnPressed,
               ]}
               disabled={messageLoading}
+              accessibilityRole="button"
+              accessibilityLabel="Envoyer un message au vendeur"
             >
               {messageLoading ? (
                 <ActivityIndicator color={colors.surface} style={styles.btnIcon} />
               ) : (
                 <Ionicons name="chatbubble" size={20} color={colors.surface} style={styles.btnIcon} />
               )}
-              <Text style={styles.btnTextPrimary}>{messageLoading ? 'Ouverture…' : 'Message'}</Text>
+              <Text style={styles.dualBtnTextPrimary}>{messageLabel}</Text>
             </Pressable>
           </Animated.View>
-        )}
-
-        {canWhatsApp && (
-          <Animated.View style={[styles.flex, whatsappAnimatedStyle]}>
-            <Pressable
-              onPress={handleWhatsApp}
-              onPressIn={() => handlePressIn(whatsappScale)}
-              onPressOut={() => handlePressOut(whatsappScale)}
-              style={({ pressed }) => [
-                styles.btn,
-                styles.btnSecondary,
-                pressed && styles.btnPressed
-              ]}
-              disabled={openingWhatsApp}
-            >
-              {openingWhatsApp ? (
-                <ActivityIndicator color={colors.primary} style={styles.btnIcon} />
-              ) : (
-                <Ionicons name="logo-whatsapp" size={20} color={colors.primary} style={styles.btnIcon} />
-              )}
-              <Text style={styles.btnTextSecondary}>
-                {openingWhatsApp ? 'Ouverture…' : whatsAppConfirmed ? 'Ouvert' : 'WhatsApp'}
-              </Text>
-            </Pressable>
-          </Animated.View>
-        )}
+        ) : null}
       </View>
     </View>
   );
@@ -195,7 +217,7 @@ const styles = StyleSheet.create({
     right: 0,
     backgroundColor: colors.surface,
     paddingHorizontal: spacing.screenHorizontal,
-    paddingTop: spacing.base,
+    paddingTop: spacing.sm,
     borderTopWidth: 1,
     borderTopColor: colors.borderLight,
     ...getShadowStyle('sticky'),
@@ -226,29 +248,51 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
     fontWeight: fontWeights.medium,
   },
-  container: {
+  dualRow: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'stretch',
     gap: spacing.sm,
   },
-  flex: {
+  dualBtnWrap: {
     flex: 1,
+    minWidth: 0,
   },
-  btn: {
+  dualBtnSolo: {
+    flex: 1,
+    width: '100%',
+  },
+  dualBtn: {
+    flex: 1,
+    minWidth: 0,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    height: 56,
+    minHeight: 52,
     borderRadius: radius.full,
     paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
   },
-  btnPrimary: {
+  dualBtnPrimary: {
     backgroundColor: colors.primary,
   },
-  btnSecondary: {
+  dualBtnOutline: {
     backgroundColor: colors.surface,
     borderWidth: 1.5,
     borderColor: colors.primary,
+  },
+  dualBtnTextPrimary: {
+    ...typography.base,
+    flexShrink: 1,
+    fontWeight: fontWeights.bold,
+    color: colors.surface,
+    textAlign: 'center',
+  },
+  dualBtnTextOutline: {
+    ...typography.base,
+    flexShrink: 1,
+    fontWeight: fontWeights.bold,
+    color: colors.primary,
+    textAlign: 'center',
   },
   btnPressed: {
     opacity: 0.9,
@@ -256,28 +300,21 @@ const styles = StyleSheet.create({
   btnIcon: {
     marginRight: spacing.sm,
   },
-  btnTextPrimary: {
-    ...typography.base,
-    fontWeight: fontWeights.bold,
-    color: colors.surface,
-  },
-  btnTextSecondary: {
-    ...typography.base,
-    fontWeight: fontWeights.bold,
-    color: colors.primary,
-  },
   unavailableWrap: {
-    height: 56,
+    minHeight: 52,
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: colors.surfaceSubtle,
     borderRadius: radius.lg,
     borderWidth: 1,
     borderColor: colors.borderLight,
+    paddingHorizontal: spacing.base,
+    paddingVertical: spacing.sm,
   },
   unavailableText: {
     ...typography.sm,
     color: colors.textMuted,
     fontWeight: fontWeights.medium,
+    textAlign: 'center',
   },
 });

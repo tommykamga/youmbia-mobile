@@ -35,6 +35,8 @@ function runHook(directory: string, source: string) {
     cwd: directory,
     env: {
       ...process.env,
+      APP_ENV: 'production',
+      EXPO_PUBLIC_APP_ENV: 'production',
       EAS_BUILD_PLATFORM: 'android',
       GOOGLE_SERVICES_JSON: source,
     },
@@ -89,6 +91,8 @@ describe('prepare-google-services EAS hook', () => {
       cwd: directory,
       env: {
         ...process.env,
+      APP_ENV: 'production',
+      EXPO_PUBLIC_APP_ENV: 'production',
         EAS_BUILD_PLATFORM: 'android',
         GOOGLE_SERVICES_JSON: source,
       },

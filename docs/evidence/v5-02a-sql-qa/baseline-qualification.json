@@ -1,0 +1,32 @@
+{
+  "status": "QUALIFIED_FOR_V5_02A_POSTGRES_RLS_ONLY",
+  "container": "youmbia-v5-02a-qa-20261101",
+  "host": "127.0.0.1",
+  "port": 55432,
+  "database": "postgres",
+  "image": "public.ecr.aws/supabase/postgres:17.6.1.063",
+  "image_digest": "sha256:178f0976b54a39237096bfa310c1a352dbc82fb1b08dda45cdb8acb5d40c1426",
+  "source_project": "ainzxommczlyjhymuwgu",
+  "source_method": "read-only catalog SELECT; no table data",
+  "tables": 76,
+  "functions": 127,
+  "policies": 65,
+  "exact_catalog_checks": 460,
+  "catalog_checks": 461,
+  "equivalent_difference": "profiles_shop_slug_format_check: AND grouping only; 12 evaluations equal; not a lifecycle dependency",
+  "ledger": "source versions captured for provenance, not replayed or marked applied locally",
+  "safety_empty_checks": "0|0|0|0|0|0",
+  "exclusions": [
+    "Full historical migration replay",
+    "PostgREST/GoTrue HTTP authentication",
+    "Storage HTTP signing",
+    "Native released 4.7.x binaries",
+    "Production jobs, flags, vault secrets and user rows are not imported"
+  ],
+  "hashes": {
+    "production-schema-only.json": "dee9b6b5fa48dfaf335cf2ed6af7e9786fc4ed200ac7e4720e959f92fef5ef4a",
+    "production-schema-extra.json": "8dce20b1ce1f250accfd74c2993cdaadd8a850ca0696e2f2dfd199838ad8352b",
+    "baseline-reconstructed.sql": "2df1e4217b618963931afeef055890517e2292c989d652172a232fb24ddea0dd",
+    "catalog-comparison.json": "782f3349afb0128abf1ef858550c43e95af3fa6898c07d162a303a3e16f0381e"
+  }
+}

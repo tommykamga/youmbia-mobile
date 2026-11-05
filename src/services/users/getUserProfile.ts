@@ -1,3 +1,4 @@
+import { verifiedSubject } from '@/services/listings/listingTrust';
 /**
  * Get public profile and active listings for a user (seller profile page).
  * Sprint 5.2 – Profil public vendeur.
@@ -132,7 +133,7 @@ export async function getUserProfile(userId: string): Promise<GetUserProfileResu
     city: safeProfileRow.city ?? null,
     bio: safeProfileRow.bio ?? null,
     created_at: safeProfileRow.created_at ?? null,
-    is_verified: safeProfileRow.is_verified ?? null,
+    is_verified: await verifiedSubject('profile', userId),
     phone_verified: safeProfileRow.phone_verified ?? null,
     trust_score: safeProfileRow.trust_score ?? null,
     reports_count: safeProfileRow.reports_count ?? null,

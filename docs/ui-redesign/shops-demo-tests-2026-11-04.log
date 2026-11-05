@@ -1,0 +1,48 @@
+
+ RUN  v3.2.7 /Users/tommy/APP TESKA/YOUMBIA/youmbia-ui-home
+
+ ✓ src/features/listings/discoveryFeedController.test.ts (14 tests) 5ms
+ ✓ src/features/home/demo/demoProvider.test.ts (5 tests) 30ms
+stderr | src/features/shops/PopularShopsSection.preview.test.tsx > reuses the real rail and cards with local shops, banners and destinations without loading real shops
+react-test-renderer is deprecated. See https://react.dev/warnings/react-test-renderer
+
+stderr | src/features/shops/PopularShopsSection.preview.test.tsx > reuses the real rail and cards with local shops, banners and destinations without loading real shops
+react-test-renderer is deprecated. See https://react.dev/warnings/react-test-renderer
+
+stderr | src/features/shops/PopularShopsSection.preview.test.tsx > retains the normal empty-data condition and real shop navigation without preview
+react-test-renderer is deprecated. See https://react.dev/warnings/react-test-renderer
+
+stderr | src/features/shops/PopularShopsSection.preview.test.tsx > retains the normal empty-data condition and real shop navigation without preview
+react-test-renderer is deprecated. See https://react.dev/warnings/react-test-renderer
+
+stderr | src/features/shops/PopularShopsSection.preview.test.tsx > retains the normal empty-data condition and real shop navigation without preview
+react-test-renderer is deprecated. See https://react.dev/warnings/react-test-renderer
+
+stderr | src/features/shops/PopularShopsSection.preview.test.tsx > never routes a fictitious shop accidentally rendered without its preview destination
+react-test-renderer is deprecated. See https://react.dev/warnings/react-test-renderer
+
+ ✓ src/features/shops/PopularShopsSection.preview.test.tsx (3 tests) 14ms
+stderr | src/features/listings/ListingFeed.test.tsx > wires cached pagination to a virtualized stable list and serializes endReached
+react-test-renderer is deprecated. See https://react.dev/warnings/react-test-renderer
+
+stderr | src/features/listings/ListingFeed.test.tsx > revalidates a legacy cache in StrictMode and ignores the old next page after unmount
+react-test-renderer is deprecated. See https://react.dev/warnings/react-test-renderer
+
+stderr | src/features/listings/ListingFeed.test.tsx > presents a readable next-page error and keeps the same list through an explicit retry
+react-test-renderer is deprecated. See https://react.dev/warnings/react-test-renderer
+
+stderr | src/features/listings/ListingFeed.test.tsx > cancels the old home page when leaving for criteria and keeps a fresh feed intact on return
+react-test-renderer is deprecated. See https://react.dev/warnings/react-test-renderer
+
+stderr | src/features/listings/ListingFeed.test.tsx > isolates preview pagination from network and cache, then restores the normal service when removed
+react-test-renderer is deprecated. See https://react.dev/warnings/react-test-renderer
+
+stderr | src/features/listings/ListingFeed.test.tsx > keeps the shops block as one full-width row after six listings across following lots
+react-test-renderer is deprecated. See https://react.dev/warnings/react-test-renderer
+
+ ✓ src/features/listings/ListingFeed.test.tsx (6 tests) 24ms
+
+ Test Files  4 passed (4)
+      Tests  28 passed (28)
+   Start at  14:48:33
+   Duration  491ms (transform 226ms, setup 40ms, collect 427ms, tests 73ms, environment 0ms, prepare 249ms)

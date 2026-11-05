@@ -25,17 +25,20 @@ export async function deleteListing(listingId: string): Promise<DeleteListingRes
       return { success: false, error: 'Non connecté' };
     }
 
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from('listings')
       .delete()
       .eq('id', id)
-      .eq('user_id', user.id);
+      .eq('user_id', user.id)
+      .select('id')
+      .maybeSingle();
 
     if (error) {
       console.warn('[deleteListing]', error);
       return { success: false, error: error.message || "Impossible de supprimer l'annonce." };
     }
 
+    if (!data) return { success: false, error: 'Annonce introuvable ou mutation concurrente.' };
     return { success: true };
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e ?? '');

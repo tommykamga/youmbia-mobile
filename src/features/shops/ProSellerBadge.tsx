@@ -12,7 +12,7 @@ import type { ShopSummary } from '@/types/shops';
 type ProSellerBadgeProps = {
   listingShopId?: string | null;
   sellerType?: string | null;
-  shop?: Pick<ShopSummary, 'is_verified' | 'status'> | null;
+  shop?: Pick<ShopSummary, 'is_verified' | 'status' | 'verification_proven'> | null;
   compact?: boolean;
 };
 
@@ -31,7 +31,7 @@ export function ProSellerBadge({
 
   return (
     <View style={[styles.row, compact && styles.rowCompact]}>
-      {showPro ? <SellerBadge variant="pro" label="Vendeur Pro" dense={compact} /> : null}
+      {showPro ? <SellerBadge variant="pro" label="Vendeur Pro · déclaré" dense={compact} /> : null}
       {showVerified ? (
         <SellerBadge variant="verifiedShop" label="Boutique vérifiée" dense={compact} />
       ) : null}

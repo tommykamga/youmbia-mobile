@@ -2,7 +2,7 @@
   "expo": {
     "name": "YOUMBIA",
     "slug": "youmbia-mobile",
-    "version": "4.6.1",
+    "version": "5.0.0",
     "orientation": "default",
     "icon": "./assets/images/icon.png",
     "scheme": "youmbiamobile",
@@ -10,10 +10,11 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.youmbia.mobile",
-      "buildNumber": "5",
+      "buildNumber": "7",
       "usesAppleSignIn": true,
       "associatedDomains": [
-        "applinks:www.youmbia.com"
+        "applinks:www.youmbia.com",
+        "applinks:youmbia.com"
       ],
       "splash": {
         "image": "./assets/images/splash.png",
@@ -31,7 +32,7 @@
     },
     "android": {
       "package": "com.youmbia.mobile",
-      "versionCode": 38,
+      "versionCode": 41,
       "softwareKeyboardLayoutMode": "resize",
       "splash": {
         "image": "./assets/images/splash.png",
@@ -62,6 +63,56 @@
               "scheme": "https",
               "host": "youmbia.com",
               "pathPrefix": "/annonce"
+            },
+            {
+              "scheme": "https",
+              "host": "www.youmbia.com",
+              "pathPrefix": "/shop"
+            },
+            {
+              "scheme": "https",
+              "host": "youmbia.com",
+              "pathPrefix": "/shop"
+            },
+            {
+              "scheme": "https",
+              "host": "www.youmbia.com",
+              "pathPrefix": "/auth/confirm"
+            },
+            {
+              "scheme": "https",
+              "host": "youmbia.com",
+              "pathPrefix": "/auth/confirm"
+            },
+            {
+              "scheme": "https",
+              "host": "www.youmbia.com",
+              "pathPrefix": "/auth/callback"
+            },
+            {
+              "scheme": "https",
+              "host": "youmbia.com",
+              "pathPrefix": "/auth/callback"
+            },
+            {
+              "scheme": "https",
+              "host": "www.youmbia.com",
+              "pathPrefix": "/seller/"
+            },
+            {
+              "scheme": "https",
+              "host": "www.youmbia.com",
+              "pathPrefix": "/vendeur/"
+            },
+            {
+              "scheme": "https",
+              "host": "youmbia.com",
+              "pathPrefix": "/seller/"
+            },
+            {
+              "scheme": "https",
+              "host": "youmbia.com",
+              "pathPrefix": "/vendeur/"
             }
           ]
         }
@@ -95,7 +146,9 @@
           "url": "https://sentry.io/",
           "note": "Use SENTRY_AUTH_TOKEN, SENTRY_ORG and SENTRY_PROJECT env vars. Never commit tokens or DSN in source."
         }
-      ]
+      ],
+      "./plugins/with-ios-scene-delegate",
+      "./plugins/with-ios27-pods"
     ]
   }
 }

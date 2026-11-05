@@ -1,3 +1,4 @@
+import { getMyContactIntentStats } from '@/services/listings/getMyContactIntentStats';
 /**
  * Mes annonces – list of listings published by the current user.
  * Shows status, view entry, and deactivate/reactivate (Sprint 6.2: redirection si non connecté, erreur claire).
@@ -101,23 +102,29 @@ function getListingQualityBadge(
   const hasImages = Array.isArray(listing.images) && listing.images.length > 0;
   const hasPrice = Number.isFinite(Number(listing.price)) && Number(listing.price) > 0;
   const hasCity = String(listing.city ?? '').trim().length > 0;
-  const description = typeof listing.description === 'string' ? listing.description.trim() : null;
-  const hasShortDescription = description != null && description.length < 30;
+  const description =
+    typeof listing.description === 'string' ? listing.description.trim() : '';
   const ageInDays = listingAgeInDays(listing);
   const views = Math.max(0, Number(stats.views ?? 0) || 0);
 
-  if (!hasImages || hasShortDescription || !hasPrice || !hasCity) {
+  const improvements: string[] = [];
+  if (!hasImages) improvements.push('ajoutez une photo');
+  if (!hasCity) improvements.push('renseignez la ville');
+  if (!hasPrice) improvements.push('vérifiez le prix');
+  if (description.length < 30) improvements.push('complétez la description');
+
+  if (improvements.length > 0) {
     return {
       title: 'Annonce à compléter',
-      subtitle: 'Ajoutez des photos ou une description pour recevoir plus de contacts',
+      subtitle: improvements.join(' · '),
       tone: 'warning',
     };
   }
 
   if (views === 0 && ageInDays != null && ageInDays > 3) {
     return {
-      title: 'Relancer l’annonce',
-      subtitle: 'Renouvelez-la pour la remettre en tête du fil',
+      title: 'Améliorer la visibilité',
+      subtitle: 'Partagez votre annonce pour la faire découvrir',
       tone: 'warning',
     };
   }
@@ -125,7 +132,7 @@ function getListingQualityBadge(
   if (ageInDays != null && ageInDays > 30) {
     return {
       title: 'Annonce ancienne',
-      subtitle: 'Renouvelez-la pour la remettre en avant',
+      subtitle: 'Vérifiez les informations et la disponibilité',
       tone: 'neutral',
     };
   }
@@ -679,6 +686,40 @@ function formatAverageTimeToSale(days: number | null): string {
   return `${Math.round(days)} j`;
 }
 
+function SellerContactIntentCard() {
+  const [result, setResult] = useState<{
+    status: 'loading' | 'ready' | 'error';
+    count?: number;
+  }>({ status: 'loading' });
+
+  useEffect(() => {
+    let active = true;
+    getMyContactIntentStats().then((response) => {
+      if (!active) return;
+      setResult(response.data !== null
+        ? { status: 'ready', count: response.data.total }
+        : { status: 'error' });
+    });
+    return () => { active = false; };
+  }, []);
+
+  return (
+    <View>
+      <Text style={styles.sellerStatsFooter}>
+        Intentions de contact enregistrées (30 j) :{' '}
+        {result.status === 'loading'
+          ? 'Chargement…'
+          : result.status === 'error'
+            ? 'Indisponibles'
+            : result.count}
+      </Text>
+      <Text style={styles.sellerStatsFooter}>
+        Collecte partielle : ni messages envoyés ni ventes confirmées.
+      </Text>
+    </View>
+  );
+}
+
 function SellerStatsCard({ state }: { state: SellerStatsState }) {
   if (state.status === 'idle') return null;
 
@@ -731,6 +772,7 @@ function SellerStatsCard({ state }: { state: SellerStatsState }) {
             </View>
           </View>
 
+          <SellerContactIntentCard />
           <Text style={styles.sellerStatsFooter}>
             Vendues (30 j) : {state.data.soldLast30Days}
           </Text>

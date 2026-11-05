@@ -15,8 +15,8 @@ export function shouldShowProSellerBadge(options: {
   return isProSellerType(options.sellerType);
 }
 
-export function shouldShowVerifiedShopBadge(shop?: Pick<ShopSummary, 'is_verified'> | null): boolean {
-  return shop?.is_verified === true;
+export function shouldShowVerifiedShopBadge(shop?: Pick<ShopSummary, 'is_verified' | 'verification_proven'> | null): boolean {
+  return shop?.is_verified === true && shop.verification_proven === true;
 }
 
 export function isShopPubliclyActive(

@@ -16,6 +16,12 @@ export type Json =
 export type Database = {
   public: {
     Tables: {
+      listing_first_publications: {
+        Row: { listing_id: string; user_id: string; published_at: string };
+        Insert: { listing_id: string; user_id: string; published_at: string };
+        Update: { listing_id?: string; user_id?: string; published_at?: string };
+        Relationships: [];
+      };
       admin_users: {
         Row: {
           email: string;
@@ -431,6 +437,7 @@ export type Database = {
           condition: string | null;
           contact_clicks_count: number;
           created_at: string;
+          first_published_at: string | null;
           description: string | null;
           district: string | null;
           id: string;
@@ -442,6 +449,8 @@ export type Database = {
           sale_cycle_started_at: string | null;
           sold_at: string | null;
           status: Database['public']['Enums']['listing_status'];
+          publication_managed: boolean;
+          publication_finalized_at: string | null;
           title: string;
           updated_at: string;
           urgent: boolean;
@@ -456,6 +465,7 @@ export type Database = {
           condition?: string | null;
           contact_clicks_count?: number;
           created_at?: string;
+          first_published_at?: never;
           description?: string | null;
           district?: string | null;
           id?: string;
@@ -467,6 +477,7 @@ export type Database = {
           sale_cycle_started_at?: string | null;
           sold_at?: string | null;
           status?: Database['public']['Enums']['listing_status'];
+          publication_managed?: boolean;
           title: string;
           updated_at?: string;
           urgent?: boolean;
@@ -481,6 +492,7 @@ export type Database = {
           condition?: string | null;
           contact_clicks_count?: number;
           created_at?: string;
+          first_published_at?: never;
           description?: string | null;
           district?: string | null;
           id?: string;
@@ -492,6 +504,7 @@ export type Database = {
           sale_cycle_started_at?: string | null;
           sold_at?: string | null;
           status?: Database['public']['Enums']['listing_status'];
+          publication_managed?: boolean;
           title?: string;
           updated_at?: string;
           urgent?: boolean;
@@ -623,6 +636,8 @@ export type Database = {
           body: string;
           conversation_id: string;
           created_at: string;
+          server_received_at: string | null;
+          server_context_key: string | null;
           id: string;
           read_at: string | null;
           sender_id: string;
@@ -631,6 +646,8 @@ export type Database = {
           body: string;
           conversation_id: string;
           created_at?: string;
+          server_received_at?: never;
+          server_context_key?: never;
           id?: string;
           read_at?: string | null;
           sender_id: string;
@@ -639,6 +656,8 @@ export type Database = {
           body?: string;
           conversation_id?: string;
           created_at?: string;
+          server_received_at?: never;
+          server_context_key?: never;
           id?: string;
           read_at?: string | null;
           sender_id?: string;
@@ -786,6 +805,7 @@ export type Database = {
           marketing_opt_in: boolean;
           marketing_opt_in_at: string | null;
           marketing_opt_in_source: string | null;
+          marketing_opt_in_version: string | null;
           unsubscribed_at: string | null;
           optional_draft_reminders_opt_out: boolean;
           draft_reminders_notice_acknowledged_at: string | null;
@@ -796,6 +816,7 @@ export type Database = {
           marketing_opt_in?: boolean;
           marketing_opt_in_at?: string | null;
           marketing_opt_in_source?: string | null;
+          marketing_opt_in_version?: string | null;
           unsubscribed_at?: string | null;
           optional_draft_reminders_opt_out?: boolean;
           draft_reminders_notice_acknowledged_at?: string | null;
@@ -806,10 +827,38 @@ export type Database = {
           marketing_opt_in?: boolean;
           marketing_opt_in_at?: string | null;
           marketing_opt_in_source?: string | null;
+          marketing_opt_in_version?: string | null;
           unsubscribed_at?: string | null;
           optional_draft_reminders_opt_out?: boolean;
           draft_reminders_notice_acknowledged_at?: string | null;
           updated_at?: string;
+        };
+        Relationships: [];
+      };
+      marketing_consent_admin_attestations: {
+        Row: {
+          id: string;
+          cohort_source: string;
+          active_preference_count: number;
+          recorded_by_admin_id: string;
+          attested_at: string;
+          attestation: string;
+        };
+        Insert: {
+          id?: string;
+          cohort_source: string;
+          active_preference_count: number;
+          recorded_by_admin_id: string;
+          attested_at?: string;
+          attestation: string;
+        };
+        Update: {
+          id?: string;
+          cohort_source?: string;
+          active_preference_count?: number;
+          recorded_by_admin_id?: string;
+          attested_at?: string;
+          attestation?: string;
         };
         Relationships: [];
       };
@@ -911,6 +960,12 @@ export type Database = {
           },
         ];
       };
+      transactional_push_preferences: {
+        Row: { user_id: string; favorites_enabled: boolean };
+        Insert: { user_id: string; favorites_enabled?: boolean };
+        Update: { user_id?: string; favorites_enabled?: boolean };
+        Relationships: [];
+      };
       user_push_tokens: {
         Row: {
           id: string;
@@ -947,6 +1002,42 @@ export type Database = {
     };
     Views: Record<string, never>;
     Functions: {
+      get_v5_verified_subjects: {
+        Args: { p_subject_type: string; p_subject_ids: string[] };
+        Returns: { subject_id: string; verification_proven: boolean }[];
+      };
+      record_v5_contact_intent: {
+        Args: { p_event_id: string; p_listing_id: string; p_channel: string; p_platform: string; p_source: string; p_entry_point: string; p_session_key: string };
+        Returns: string;
+      };
+      declare_v5_listing_availability: {
+        Args: { p_listing_id: string; p_state: string; p_expected_status: string };
+        Returns: string;
+      };
+      get_v5_listing_availability: {
+        Args: { p_listing_id: string };
+        Returns: { state: string; confirmed_at: string | null }[];
+      };
+      is_v5_verified_subject: {
+        Args: { p_subject_type: string; p_subject_id: string };
+        Returns: boolean;
+      };
+      get_v5_seller_response_metrics: {
+        Args: { p_seller_id: string };
+        Returns: { eligible_conversations: number; responded_conversations: number; unanswered_conversations: number; excluded_legacy_conversations: number; median_first_response_seconds: number | null }[];
+      };
+      get_v5_discovery_listing_ids: {
+        Args: { p_offset?: number; p_limit?: number };
+        Returns: { listing_id: string; rank_position: number }[];
+      };
+      prepare_listing_publication: {
+        Args: { p_listing_id: string };
+        Returns: { id: string; status: string; already_published: boolean }[];
+      };
+      finalize_listing_publication: {
+        Args: { p_listing_id: string };
+        Returns: { id: string; status: string; already_published: boolean }[];
+      };
       claim_my_push_token: {
         Args: {
           p_expo_push_token: string;
@@ -1049,6 +1140,51 @@ export type Database = {
       acknowledge_lifecycle_draft_reminders_notice: {
         Args: Record<PropertyKey, never>;
         Returns: boolean;
+      };
+      set_marketing_consent_from_signup: {
+        Args: {
+          p_opted_in: boolean;
+          p_consent_version: string;
+        };
+        Returns: {
+          marketing_opt_in: boolean;
+          marketing_opt_in_at: string | null;
+          marketing_opt_in_source: string | null;
+          marketing_opt_in_version: string | null;
+          unsubscribed_at: string | null;
+          optional_draft_reminders_opt_out: boolean;
+          draft_reminders_notice_acknowledged_at: string | null;
+        }[];
+      };
+      set_marketing_consent_from_settings: {
+        Args: { p_opted_in: boolean; p_consent_version: string };
+        Returns: Database['public']['Functions']['set_marketing_consent_from_signup']['Returns'];
+      };
+      set_marketing_consent_from_home_prompt: {
+        Args: { p_opted_in: boolean; p_consent_version: string };
+        Returns: Database['public']['Functions']['set_marketing_consent_from_signup']['Returns'];
+      };
+      admin_record_phone_consent_cohort_attestation: {
+        Args: Record<PropertyKey, never>;
+        Returns: {
+          attestation_id: string;
+          cohort_source: string;
+          active_preference_count: number;
+          recorded_by_admin_id: string;
+          attested_at: string;
+        }[];
+      };
+      admin_get_marketing_consent_cohort_summary: {
+        Args: Record<PropertyKey, never>;
+        Returns: {
+          cohort_source: string;
+          active_declared_preferences: number;
+          verified_mobile_opt_ins: number;
+          suppressed_declared_preferences: number;
+          frequency_capped_declared_preferences: number;
+          declaration_count: number;
+          last_declaration_recorded_at: string | null;
+        }[];
       };
     };
     Enums: {

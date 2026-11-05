@@ -32,7 +32,7 @@ describe('sortListings', () => {
     expect(sortListings([newer, olderBoosted], 'recent').map((item) => item.id)).toEqual(['b', 'n']);
   });
 
-  it('recent trie sur last_published_at, pas created_at ni updated_at', () => {
+  it('recent trie sur created_at, sans promotion par renouvellement ou édition', () => {
     const newerRenewed = listing({
       id: 'renewed',
       title: 'Ancien renouvelé',
@@ -47,9 +47,29 @@ describe('sortListings', () => {
       updated_at: '2026-09-02T00:00:00.000Z',
     });
     expect(sortListings([createdYesterday, newerRenewed], 'recent').map((item) => item.id)).toEqual([
-      'renewed',
       'created',
+      'renewed',
     ]);
+  });
+
+  it('départage les dates égales par id décroissant, indépendamment de l’ordre reçu', () => {
+    const a = listing({ id: '00000000-0000-4000-8000-000000000001', title: 'A' });
+    const b = listing({ id: '00000000-0000-4000-8000-000000000002', title: 'B' });
+    for (const input of [[a, b], [b, a]]) {
+      expect(sortListings(input, 'recent')).toEqual([b, a]);
+    }
+  });
+
+  it('reste stable à clé identique et ne modifie pas le tableau source', () => {
+    const first = listing({ id: 'same', title: 'Premier' });
+    const second = listing({ id: 'same', title: 'Second' });
+    const input = [first, second];
+    const sorted = sortListings(input, 'recent');
+    expect(sorted).not.toBe(input);
+    expect(sorted[0]).toBe(first);
+    expect(sorted[1]).toBe(second);
+    expect(input).toEqual([first, second]);
+    expect(sortListings(sorted, 'recent')).toEqual(sorted);
   });
 
   it('relevance privilégie un match titre à un match description', () => {

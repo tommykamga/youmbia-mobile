@@ -1,0 +1,57 @@
+
+ RUN  v3.2.7 /Users/tommy/APP TESKA/YOUMBIA/youmbia-ui-home
+
+ ✓ src/features/search/searchFilterHelpers.test.ts (3 tests) 6ms
+ ✓ src/lib/marketplaceCategories.test.ts (9 tests) 5ms
+stderr | src/components/CityPickerSheet.test.tsx > has one title and keeps suggestions/drafts, apply, reset and close independent
+react-test-renderer is deprecated. See https://react.dev/warnings/react-test-renderer
+
+ ✓ src/components/CityPickerSheet.test.tsx (1 test) 10ms
+stderr | src/components/HomeCategoryStrip.test.tsx > shares the same visual output and business IDs between the normal wrapper and supplied demo taxonomy
+react-test-renderer is deprecated. See https://react.dev/warnings/react-test-renderer
+react-test-renderer is deprecated. See https://react.dev/warnings/react-test-renderer
+
+ ✓ src/components/HomeCategoryStrip.test.tsx (1 test) 10ms
+stderr | src/features/listings/ListingCard.preview.test.tsx > uses a bundled photo and local detail/favorite controls without touching real navigation or favorite APIs
+react-test-renderer is deprecated. See https://react.dev/warnings/react-test-renderer
+
+stderr | src/features/listings/ListingCard.preview.test.tsx > retains the no-photo state in a preview with no bundled image
+react-test-renderer is deprecated. See https://react.dev/warnings/react-test-renderer
+
+stderr | src/features/listings/ListingCard.preview.test.tsx > fails closed if a fixture is accidentally rendered without its local controls
+react-test-renderer is deprecated. See https://react.dev/warnings/react-test-renderer
+
+stderr | src/features/home/demo/HomeDemoScreen.test.tsx > keeps developer commands collapsed, exposes them explicitly, resets business filters and exits locally
+react-test-renderer is deprecated. See https://react.dev/warnings/react-test-renderer
+
+ ✓ src/features/listings/ListingCard.preview.test.tsx (3 tests) 12ms
+stderr | src/features/home/demo/HomeDemoScreen.test.tsx > keeps city draft cancellation separate from applied criteria and resets only the city
+react-test-renderer is deprecated. See https://react.dev/warnings/react-test-renderer
+
+ ✓ src/features/home/demo/HomeDemoScreen.test.tsx (2 tests) 24ms
+stderr | src/features/listings/ListingFeed.test.tsx > wires cached pagination to a virtualized stable list and serializes endReached
+react-test-renderer is deprecated. See https://react.dev/warnings/react-test-renderer
+
+ ✓ src/utils/formatPrice.test.ts (9 tests) 3ms
+stderr | src/features/listings/ListingFeed.test.tsx > revalidates a legacy cache in StrictMode and ignores the old next page after unmount
+react-test-renderer is deprecated. See https://react.dev/warnings/react-test-renderer
+
+stderr | src/features/listings/ListingFeed.test.tsx > presents a readable next-page error and keeps the same list through an explicit retry
+react-test-renderer is deprecated. See https://react.dev/warnings/react-test-renderer
+
+stderr | src/features/listings/ListingFeed.test.tsx > cancels the old home page when leaving for criteria and keeps a fresh feed intact on return
+react-test-renderer is deprecated. See https://react.dev/warnings/react-test-renderer
+
+stderr | src/features/listings/ListingFeed.test.tsx > isolates preview pagination from network and cache, then restores the normal service when removed
+react-test-renderer is deprecated. See https://react.dev/warnings/react-test-renderer
+
+ ✓ src/features/search/searchSession.test.ts (3 tests) 2ms
+stderr | src/features/listings/ListingFeed.test.tsx > keeps the shops block as one full-width row after six listings across following lots
+react-test-renderer is deprecated. See https://react.dev/warnings/react-test-renderer
+
+ ✓ src/features/listings/ListingFeed.test.tsx (6 tests) 25ms
+
+ Test Files  9 passed (9)
+      Tests  37 passed (37)
+   Start at  15:46:51
+   Duration  663ms (transform 548ms, setup 59ms, collect 1.27s, tests 96ms, environment 1ms, prepare 927ms)

@@ -56,7 +56,6 @@ import {
   getAttributeHintsForCategory,
 } from '@/lib/listingPublishMemory';
 import { useMarketplaceCategories } from '@/hooks/useMarketplaceCategories';
-import { shouldUseDynamicAttributesPilot } from '@/lib/vehicleDynamicPilot';
 import type {
   CategoryAttributeOption,
   EffectiveCategoryAttributeDefinitionResolved,
@@ -65,14 +64,13 @@ import {
   getEffectiveCategoryAttributeDefinitionsResolved,
   getCategoryAttributeOptionsByDefinitionIds,
 } from '@/services/categoryAttributes';
-import { buildListingDynamicAttributeRows } from '@/lib/listingDynamicAttributesPayload';
+import { collectEmptyDynamicAttributeDefinitionIds, buildListingDynamicAttributeRows } from '@/lib/listingDynamicAttributesPayload';
 import { DynamicCategoryAttributesFields } from '@/features/sell/DynamicCategoryAttributesFields';
 import { colors, spacing, typography, fontWeights, radius } from '@/theme';
 import {
-  createListing,
   createListingDraft,
   updateListingDraft,
-  publishListingDraft,
+  publishListingSafely,
   buildListingResumeDraft,
   copyListingImagesToListing,
   uploadListingImages,
@@ -80,11 +78,8 @@ import {
   deleteListing,
   getListingForEdit,
   saveListingDynamicAttributeValues,
-  MAX_LISTINGS_PER_24H,
-  LISTING_PUBLISH_QUOTA_CHECK_FAILED_MESSAGE,
-  LISTING_PUBLISH_QUOTA_REACHED_MESSAGE,
+  deleteListingDynamicAttributeValuesForDefinitions,
   LISTING_IMAGE_COPY_FAILED_MESSAGE,
-  checkListingPublishDailyQuota,
   type ListingResumeDraftData,
 } from '@/services/listings';
 import { getSellerShop } from '@/services/shops';
@@ -106,6 +101,7 @@ import {
   validateListingTitle,
 } from '@/lib/listingPublishFormValidation';
 import { computeListingQualityScore } from '@/lib/listingQualityScore';
+import { canonicalCityInputValue, canonicalCityLabel, resolveCanonicalCity } from '@/lib/canonicalCity';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import * as Haptics from 'expo-haptics';
 import {
@@ -187,15 +183,7 @@ type PickedImage = { uri: string; base64: string | null; mimeType?: string | nul
 
 type PublishState =
   | { status: 'idle' }
-  | { status: 'success'; listingId: string; title: string; price: number; city: string }
-  | {
-      status: 'partial';
-      listingId: string;
-      uploadedCount: number;
-      failedCount: number;
-      totalCount: number;
-      message: string;
-    };
+  | { status: 'success'; listingId: string; title: string; price: number; city: string };
 
 type PrequalStatus = 'loading' | 'ready';
 
@@ -288,13 +276,15 @@ export default function SellScreen() {
   >(() => new Map());
   const [dynamicValues, setDynamicValues] = useState<Record<string, string>>({});
   const [dynamicLoading, setDynamicLoading] = useState(false);
-  /** Pilote Véhicules + Électronique : `form_profile` ou repli ids racines (voir `shouldUseDynamicAttributesPilot`). */
+  /** Render every effective definition required by the server publication contract. */
   const [dynamicAttributesPilotActive, setDynamicAttributesPilotActive] = useState(false);
 
   const [submitLoading, setSubmitLoading] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [validationAttempted, setValidationAttempted] = useState(false);
-  const [retryUploadLoading, setRetryUploadLoading] = useState(false);
+  const publicationBusyRef = useRef(false);
+  const publicationDraftIdRef = useRef<string | null>(null);
+  const publicationPhotoSlotsRef = useRef(new Map<string, number>());
   const [sharingWhatsApp, setSharingWhatsApp] = useState(false);
   const [slowPublishHint, setSlowPublishHint] = useState(false);
   const postPublishViewedRef = useRef<string | null>(null);
@@ -322,6 +312,7 @@ export default function SellScreen() {
   const descriptionError = useMemo(() => validateListingDescription(description), [description]);
   const priceError = useMemo(() => validateListingPrice(priceStr), [priceStr]);
   const cityError = useMemo(() => validateListingCity(city), [city]);
+  const cityResolution = useMemo(() => resolveCanonicalCity(city), [city]);
 
   const showTitleError = shouldShowListingFieldError(title, titleError, validationAttempted);
   const showDescriptionError = shouldShowListingFieldError(
@@ -335,13 +326,14 @@ export default function SellScreen() {
   const listingQuality = useMemo(
     () =>
       computeListingQualityScore({
+        categoryId: publishCategoryId ?? 0,
         title,
         description,
         priceStr,
         city,
         imageCount: existingDraftImages.length + images.length,
       }),
-    [title, description, priceStr, city, existingDraftImages.length, images.length]
+    [publishCategoryId, title, description, priceStr, city, existingDraftImages.length, images.length]
   );
 
   const totalPhotoCount = existingDraftImages.length + images.length;
@@ -378,13 +370,13 @@ export default function SellScreen() {
   }, []);
 
   useEffect(() => {
-    if (!submitLoading && !retryUploadLoading) {
+    if (!submitLoading) {
       setSlowPublishHint(false);
       return;
     }
     const timer = setTimeout(() => setSlowPublishHint(true), 8000);
     return () => clearTimeout(timer);
-  }, [submitLoading, retryUploadLoading]);
+  }, [submitLoading]);
 
   const goBackOrHome = useCallback(() => {
     const canGoBack =
@@ -441,7 +433,7 @@ export default function SellScreen() {
       listingId,
       title: title.trim(),
       price: Number.isFinite(parsed) ? Math.round(parsed) : 0,
-      city: city.trim(),
+      city: canonicalCityInputValue(city),
     });
   }, [city, priceStr, title]);
 
@@ -641,16 +633,8 @@ export default function SellScreen() {
     }
     let cancelled = false;
     (async () => {
-      const pilot = await shouldUseDynamicAttributesPilot(publishCategoryId);
-      if (cancelled) return;
-      setDynamicAttributesPilotActive(pilot);
-      if (!pilot) {
-        setDynamicDefs([]);
-        setDynamicOptionsByDef(new Map());
-        setDynamicValues({});
-        setDynamicLoading(false);
-        return;
-      }
+      setDynamicAttributesPilotActive(true);
+      setDynamicDefs([]);
       setDynamicLoading(true);
       const defs = await getEffectiveCategoryAttributeDefinitionsResolved(publishCategoryId);
       if (cancelled) return;
@@ -658,6 +642,7 @@ export default function SellScreen() {
       const optsMap = await getCategoryAttributeOptionsByDefinitionIds(selectIds);
       if (cancelled) return;
       setDynamicDefs(defs);
+      setDynamicAttributesPilotActive(defs.length > 0);
       setDynamicOptionsByDef(optsMap);
       const duplicateValues = pendingDuplicateDynamicRef.current;
       if (duplicateValues && Object.keys(duplicateValues).length > 0) {
@@ -691,21 +676,6 @@ export default function SellScreen() {
   const handleDynamicChange = useCallback((key: string, value: string) => {
     setDynamicValues((prev) => ({ ...prev, [key]: value }));
   }, []);
-
-  const buildPartialPublishState = (
-    listingId: string,
-    uploadedCount: number,
-    failedCount: number,
-    totalCount: number,
-    message: string
-  ): PublishState => ({
-    status: 'partial',
-    listingId,
-    uploadedCount,
-    failedCount,
-    totalCount,
-    message,
-  });
 
   const pickImages = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -835,7 +805,7 @@ export default function SellScreen() {
         title: title.trim(),
         price: Number.isFinite(parsedPrice) && parsedPrice > 0 ? Math.round(parsedPrice) : null,
         categoryId: publishCategoryId,
-        city: city.trim(),
+        city: canonicalCityInputValue(city),
         description: description.trim() || '',
         shopId: publishShopId,
       };
@@ -940,8 +910,11 @@ export default function SellScreen() {
   };
 
   const handleSubmit = async () => {
+    if (publicationBusyRef.current) return;
     if (submitLoading || draftSaveLoading) return;
     setSubmitError(null);
+    publicationBusyRef.current = true;
+    publicationDraftIdRef.current = editingDraftId;
     setSubmitLoading(true);
 
     try {
@@ -1028,31 +1001,8 @@ export default function SellScreen() {
         return;
       }
       const cityValidationError = validateListingCity(city);
-      if (cityValidationError) {
-        setSubmitError(cityValidationError);
-        return;
-      }
-
-      // Limite publications / 24h (même helper que createListing / publishListingDraft).
-      // Les brouillons restant en draft ne consomment pas le quota.
-      const sessionUserId = session.user.id;
-      const quota = await checkListingPublishDailyQuota(sessionUserId);
-      if (!quota.ok) {
-        const message =
-          quota.error.message === LISTING_PUBLISH_QUOTA_REACHED_MESSAGE
-            ? LISTING_PUBLISH_QUOTA_REACHED_MESSAGE
-            : LISTING_PUBLISH_QUOTA_CHECK_FAILED_MESSAGE;
-        console.warn('[SellScreen] dailyLimitCheck', quota.error.message, {
-          count: quota.count,
-          max: MAX_LISTINGS_PER_24H,
-        });
-        setSubmitError(message);
-        Alert.alert(
-          quota.error.message === LISTING_PUBLISH_QUOTA_REACHED_MESSAGE
-            ? 'Limite atteinte'
-            : 'Vérification impossible',
-          message
-        );
+      if (cityValidationError || city.trim().length < 2) {
+        setSubmitError(cityValidationError ?? "Indiquez la ville pour publier (2 caractères minimum).");
         return;
       }
 
@@ -1060,142 +1010,69 @@ export default function SellScreen() {
         title: title.trim(),
         price: Math.round(price),
         categoryId: publishCategoryId,
-        city: city.trim(),
+        city: canonicalCityInputValue(city),
         description: description.trim() || '',
         shopId: publishShopId,
       };
 
-      const createdNewListing = editingDraftId == null;
-      const { data, error } = editingDraftId
-        ? await publishListingDraft(editingDraftId, publishPayload)
-        : await createListing(publishPayload);
-
-      if (error) {
-        if (error.message === 'Non connecté') {
-          router.replace(buildAuthGateHref('sell'));
-          return;
-        }
-        setSubmitError(error.message);
-        return;
-      }
-
-      const listingId = data?.id;
-      if (!listingId) {
-        setSubmitError("Impossible de publier l'annonce");
-        return;
-      }
-      if (listingId === duplicateSourceId) {
-        setSubmitError("Impossible de dupliquer : nouvel identifiant identique à la source.");
-        return;
-      }
-
-      const copyMeta = await persistPendingCopiedImages(listingId);
-      if (copyMeta.status !== 'ok') {
-        await rollbackNewListingIfNeeded(listingId, createdNewListing);
-        setSubmitError("Impossible de copier les photos. L'annonce n'a pas été publiée.");
-        return;
-      }
-
-      if (duplicateSourceId) {
-        trackListingDuplicatePublished({
-          source_listing_id: duplicateSourceId,
-          listing_id: listingId,
+      const result = await publishListingSafely({
+        listingId: editingDraftId,
+        payload: publishPayload,
+        onPrepared: (id) => { publicationDraftIdRef.current = id; setEditingDraftId(id); },
+        persistAttributes: async (id) => {
+          const empty = collectEmptyDynamicAttributeDefinitionIds(dynamicDefs, dynamicValues);
+          if (empty.length) {
+            const removed = await deleteListingDynamicAttributeValuesForDefinitions(id, empty);
+            if (!removed.success) throw new Error(removed.error);
+          }
+          const rows = buildListingDynamicAttributeRows(dynamicDefs, dynamicValues, dynamicOptionsByDef);
+          const saved = await saveListingDynamicAttributeValues(id, rows);
+          if (!saved.success) throw new Error(saved.error);
+        },
+        persistPhotos: async (id) => {
+          const copied = await persistPendingCopiedImages(id);
+          if (copied.status !== 'ok') throw new Error("Brouillon conservé. Réessayez la copie des photos.");
+          const uploadable = filterUploadableListingPhotos(images);
+          if (uploadable.length !== images.length) throw new Error('Préparez à nouveau les photos manquantes.');
+          if (uploadable.length) {
+            // Stable slots make uncertain network responses and partial upload retries safe.
+            const slots = publicationPhotoSlotsRef.current;
+            const occupied = [...existingDraftImages.map((i) => i.sort_order ?? -1), ...slots.values()];
+            let next = Math.max(-1, ...occupied) + 1;
+            const orders = uploadable.map((photo) => {
+              const key = `${id}:${photo.uri}`;
+              if (!slots.has(key)) slots.set(key, next++);
+              return slots.get(key)!;
+            });
+            const uploaded = await uploadListingImages(id, uploadable, { sortOrders: orders });
+            if (uploaded.status !== 'ok') throw new Error(uploaded.error.message);
+          }
+          const refreshed = await getListingForEdit(id);
+          if (refreshed.error) throw new Error(refreshed.error.message);
+          setExistingDraftImages(refreshed.data.imageItems ?? []);
+          setImages([]);
+          publicationPhotoSlotsRef.current.clear();
+        },
+      });
+      if (!result.alreadyPublished) {
+        if (duplicateSourceId) trackListingDuplicatePublished({ source_listing_id: duplicateSourceId, listing_id: result.id });
+        trackListingCreationCompleted({
+          listing_id: result.id, has_photos: true,
+          category: resolveMarketplaceCategoryLabel(marketplaceCategories, publishCategoryId),
+          city: canonicalCityInputValue(city),
         });
       }
-
-      trackListingCreationCompleted({
-        listing_id: listingId,
-        has_photos: totalPhotoCount > 0,
-        category: resolveMarketplaceCategoryLabel(marketplaceCategories, publishCategoryId),
-        city: city.trim(),
-      });
-
-      const dynamicRows = buildListingDynamicAttributeRows(
-        dynamicDefs,
-        dynamicValues,
-        dynamicOptionsByDef
-      );
-      if (dynamicRows.length > 0) {
-        const dynRes = await saveListingDynamicAttributeValues(listingId, dynamicRows);
-        if (!dynRes.success) {
-          console.warn('[SellScreen] saveListingDynamicAttributeValues', dynRes.error);
-        }
-      }
-
-      const uploadable = filterUploadableListingPhotos(images);
-      const missingSourceCount = Math.max(0, images.length - uploadable.length);
-
-      if (uploadable.length > 0) {
-        const sortOrders = nextListingImageSortOrders(
-          existingDraftImages.map((img) => img.sort_order),
-          uploadable.length
-        );
-        const uploadResult = await uploadListingImages(
-          listingId,
-          uploadable.map((img) => ({
-            base64: img.base64,
-            uri: img.uri,
-            mimeType: img.mimeType ?? null,
-          })),
-          { sortOrders }
-        );
-
-        const uploadedCount = uploadResult.data.uploadedCount + existingDraftImages.length;
-        const failedCount = uploadResult.data.failedCount + missingSourceCount;
-        const totalCount = totalPhotoCount;
-
-        if (uploadResult.status === 'ok' && missingSourceCount === 0) {
-          void saveListingPublishMemory({
-            city: city.trim(),
-            parentCategoryId: selectedParentCategoryId,
-            childCategoryId: selectedChildCategoryId,
-            publishCategoryId,
-            dynamicValues,
-          });
-          setEditingDraftId(null);
-          markPublishSuccess(listingId);
-          return;
-        }
-
-        setPublishState(
-          buildPartialPublishState(
-            listingId,
-            uploadedCount,
-            failedCount,
-            totalCount,
-            missingSourceCount > 0 && !uploadResult.error
-              ? "Annonce créée, mais certaines photos n'ont pas pu être préparées."
-              : uploadResult.error?.message ?? "Annonce créée, mais certaines photos n'ont pas pu être ajoutées."
-          )
-        );
-        return;
-      }
-
-      if (missingSourceCount > 0 && existingDraftImages.length === 0) {
-        setPublishState(
-          buildPartialPublishState(
-            listingId,
-            0,
-            missingSourceCount,
-            images.length,
-            "Annonce créée, mais certaines photos n'ont pas pu être préparées."
-          )
-        );
-        return;
-      }
-
-      void saveListingPublishMemory({
-        city: city.trim(),
-        parentCategoryId: selectedParentCategoryId,
-        childCategoryId: selectedChildCategoryId,
-        publishCategoryId,
-        dynamicValues,
-      });
+      void saveListingPublishMemory({ city: canonicalCityInputValue(city), parentCategoryId: selectedParentCategoryId,
+        childCategoryId: selectedChildCategoryId, publishCategoryId, dynamicValues });
       setEditingDraftId(null);
-      markPublishSuccess(listingId);
+      markPublishSuccess(result.id);
     } catch (e) {
-      setSubmitError(e instanceof Error ? e.message : "Impossible de publier l'annonce");
+      const message = e instanceof Error ? e.message : "Impossible de confirmer la publication";
+      setSubmitError(publicationDraftIdRef.current
+        ? `${message} Retrouvez votre annonce dans Mes annonces pour reprendre ou vérifier sa publication.`
+        : message);
     } finally {
+      publicationBusyRef.current = false;
       setSubmitLoading(false);
     }
   };
@@ -1206,61 +1083,6 @@ export default function SellScreen() {
     postPublishViewedRef.current = publishState.listingId;
     trackPostPublishViewed({ listing_id: publishState.listingId });
   }, [publishState]);
-
-  const handleRetryImageUpload = async () => {
-    if (publishState.status !== 'partial' || retryUploadLoading) return;
-
-    const uploadable = filterUploadableListingPhotos(images);
-    const missingSourceCount = Math.max(0, images.length - uploadable.length);
-
-    if (uploadable.length === 0) {
-      setPublishState(
-        buildPartialPublishState(
-          publishState.listingId,
-          0,
-          missingSourceCount,
-          images.length,
-          "Annonce créée, mais aucune photo exploitable n'a pu être ajoutée."
-        )
-      );
-      return;
-    }
-
-    setRetryUploadLoading(true);
-    try {
-      const uploadResult = await uploadListingImages(
-        publishState.listingId,
-        uploadable.map((img) => ({
-          base64: img.base64,
-          uri: img.uri,
-          mimeType: img.mimeType ?? null,
-        }))
-      );
-
-      const uploadedCount = uploadResult.data.uploadedCount;
-      const failedCount = uploadResult.data.failedCount + missingSourceCount;
-      const totalCount = images.length;
-
-      if (uploadResult.status === 'ok' && missingSourceCount === 0) {
-        markPublishSuccess(publishState.listingId);
-        return;
-      }
-
-      setPublishState(
-        buildPartialPublishState(
-          publishState.listingId,
-          uploadedCount,
-          failedCount,
-          totalCount,
-          missingSourceCount > 0 && !uploadResult.error
-            ? "Annonce créée, mais certaines photos n'ont pas pu être préparées."
-            : uploadResult.error?.message ?? "Annonce créée, mais certaines photos n'ont pas pu être ajoutées."
-        )
-      );
-    } finally {
-      setRetryUploadLoading(false);
-    }
-  };
 
   const handleViewPublishedListing = () => {
     if (publishState.status !== 'success' || !publishState.listingId) return;
@@ -1314,53 +1136,6 @@ export default function SellScreen() {
               Partager sur WhatsApp
             </Button>
             <Button variant="ghost" size="lg" onPress={resetForm} style={styles.successBtn}>
-              Publier une autre annonce
-            </Button>
-          </View>
-        </View>
-      </Screen>
-    );
-  }
-
-  if (publishState.status === 'partial') {
-    return (
-      <Screen>
-        <View style={styles.successBlock}>
-          <Text style={styles.partialTitle}>Annonce créée</Text>
-          <Text style={styles.successSubtitle}>
-            {publishState.message}
-          </Text>
-          <Text style={styles.partialMeta}>
-            Photos ajoutées : {publishState.uploadedCount}/{publishState.totalCount}
-          </Text>
-          {slowPublishHint ? (
-            <Text style={styles.slowPublishHint}>
-              La connexion est lente. Votre annonce est déjà créée ; les photos peuvent être réessayées.
-            </Text>
-          ) : null}
-          <View style={styles.successActions}>
-            <Button
-              size="lg"
-              onPress={handleRetryImageUpload}
-              loading={retryUploadLoading}
-              disabled={retryUploadLoading}
-              style={styles.successBtn}
-            >
-              Réessayer les photos
-            </Button>
-            <Button
-              variant="secondary"
-              size="lg"
-              onPress={() => router.push(`/listing/${publishState.listingId}`)}
-            >
-              {"Voir l'annonce"}
-            </Button>
-            <Button
-              variant="ghost"
-              size="lg"
-              onPress={resetForm}
-              style={styles.successBtn}
-            >
               Publier une autre annonce
             </Button>
           </View>
@@ -1748,15 +1523,18 @@ export default function SellScreen() {
             />
 
             <Input
-              label="Ville (optionnel)"
+              label="Ville *"
               placeholder="Ex. Douala"
               value={city}
               onChangeText={handleCityChange}
               maxLength={20}
               error={showCityError ? (cityError ?? undefined) : undefined}
             />
+            {city.trim() && cityResolution.kind === 'canonical' ? (
+              <Text style={styles.fieldHint}>Ville reconnue : {canonicalCityLabel(cityResolution.code)}</Text>
+            ) : null}
 
-            <Text style={styles.requiredLegend}>* Champ obligatoire</Text>
+            <Text style={styles.requiredLegend}>* Requis pour publier ; brouillon incomplet accepté</Text>
 
             {submitError ? <Text style={styles.submitErrorForm}>{submitError}</Text> : null}
             {slowPublishHint ? (
@@ -1780,6 +1558,10 @@ export default function SellScreen() {
                 <Text style={styles.qualityCardCompactTitle}>Qualité de l&apos;annonce</Text>
                 <Text style={styles.qualityCardCompactScore}>{listingQuality.score}/100</Text>
               </View>
+              <Text style={styles.fieldHint}>
+                {listingQuality.explanation.map((row) => `${({ title: 'Titre', description: 'Description', city: 'Ville', photos: 'Photos', price: 'Prix', category: 'Catégorie', district: 'Quartier', availability: 'Disponibilité' } as Record<string, string>)[row.field]} ${row.earned}/${row.possible}`).join(' · ')}
+                {' · Disponibilité non confirmée : hors score'}
+              </Text>
               <Text style={styles.qualityCardCompactAdvice} numberOfLines={2}>
                 {listingQuality.priorityTip ?? listingQuality.label}
               </Text>

@@ -1,6 +1,10 @@
+import { recordContactIntent } from '@/services/listings/contactIntent';
+import { declareListingAvailability, availabilityLabel, UNKNOWN_AVAILABILITY } from '@/services/listings/listingTrust';
+import { supabase } from '@/lib/supabase';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
+  AppState,
   ScrollView,
   StyleSheet,
   Pressable,
@@ -12,8 +16,8 @@ import {
   type NativeScrollEvent,
 } from 'react-native';
 import { useLocalSearchParams, useRouter, useFocusEffect, type Href } from 'expo-router';
-import Ionicons from '@expo/vector-icons/Ionicons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useAppUpdateBannerInset } from '@/context/AppUpdateBannerInsetContext';
 import { Screen, Button, Loader, EmptyState, AppHeader } from '@/components';
 import {
   getListingById,
@@ -26,7 +30,7 @@ import {
   type ListingDynamicAttributeDisplay,
   type PublicListing,
 } from '@/services/listings';
-import { getFavoriteIds, toggleFavorite } from '@/services/favorites';
+import { useFavorites } from '@/context/FavoritesContext';
 import { addRecentlyViewedListingId } from '@/services/recentlyViewed';
 import { resolveMarketplaceCategoryLabel } from '@/lib/marketplaceCategories';
 import { useMarketplaceCategories } from '@/hooks/useMarketplaceCategories';
@@ -59,6 +63,7 @@ import {
   openWhatsAppForListing,
 } from '@/lib/sellerContact';
 import { useResponsiveLayout } from '@/lib/responsiveLayout';
+import { shareListing } from '@/lib/shareListing';
 import { FF_SIMILAR_LISTINGS } from '@/lib/featureFlags';
 import { peekListingDetailSession, putListingDetailSession } from '@/services/listings/listingDetailSessionCache';
 import {
@@ -138,6 +143,19 @@ function getListingErrorDisplay(message: string): { title: string; body: string 
   if (message === 'Identifiant manquant') {
     return { title: 'Erreur', body: message };
   }
+  const lowered = message.toLowerCase();
+  if (
+    lowered.includes('network') ||
+    lowered.includes('fetch') ||
+    lowered.includes('réseau') ||
+    lowered.includes('internet') ||
+    lowered.includes('failed to')
+  ) {
+    return {
+      title: 'Connexion indisponible',
+      body: 'Vérifiez votre connexion, puis réessayez.',
+    };
+  }
   return { title: 'Erreur', body: message };
 }
 
@@ -172,19 +190,47 @@ export default function ListingDetailScreen() {
   const contactParam = useMemo(() => coalesceRouteParam(params.contact), [params.contact]);
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const appUpdateBannerInset = useAppUpdateBannerInset();
   const [state, setState] = useState<State>({ status: 'loading' });
-  const [isFavorite, setIsFavorite] = useState(false);
-  const lastFavoriteIdsFetchAtRef = useRef<number>(0);
-  const FAVORITES_FETCH_TTL_MS = 120_000;
+  const [reloadNonce, setReloadNonce] = useState(0);
+  const [contactBarHeight, setContactBarHeight] = useState(0);
+  const [shareLoading, setShareLoading] = useState(false);
+  const { isFavorite: isListingFavorite, toggleFavorite: toggleFavoriteContext } = useFavorites();
+  const [favoriteLoading, setFavoriteLoading] = useState(false);
   const [reportModalVisible, setReportModalVisible] = useState(false);
   const [reportLoading, setReportLoading] = useState(false);
   const [reportReason, setReportReason] = useState<ReportReasonCode | null>(null);
   const [reportComment, setReportComment] = useState('');
-  const [favoriteLoading, setFavoriteLoading] = useState(false);
   const [messageLoading, setMessageLoading] = useState(false);
   const [markSoldLoading, setMarkSoldLoading] = useState(false);
   const [reactivateLoading, setReactivateLoading] = useState(false);
   const [renewLoading, setRenewLoading] = useState(false);
+  const authEpochRef = useRef(0);
+  useEffect(() => {
+    let alive = true;
+    const { data } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event !== 'SIGNED_OUT' && event !== 'SIGNED_IN') return;
+      const epoch = ++authEpochRef.current;
+      setSessionStatus(session?.user ? 'authed' : 'guest');
+      setSessionUserId(session?.user?.id ?? null);
+      setReportModalVisible(false);
+      setReportComment('');
+      setReportReason(null);
+      setReportedListingId(null);
+      setState({ status: 'loading' });
+      setTimeout(() => {
+        if (!alive || !id) return;
+        void Promise.all([getListingById(id), getListingDynamicAttributesForDisplay(id)]).then(([result, dynamicAttributes]) => {
+          if (!alive || epoch !== authEpochRef.current) return;
+          setState(result.error ? { status: 'error', message: result.error.message }
+            : { status: 'success', listing: result.data, dynamicAttributes });
+        }).catch(() => {
+          if (alive && epoch === authEpochRef.current) setState({ status: 'error', message: 'Impossible de vérifier cette annonce.' });
+        });
+      }, 0);
+    });
+    return () => { alive = false; data.subscription.unsubscribe(); };
+  }, [id]);
   const [sessionStatus, setSessionStatus] = useState<'loading' | 'authed' | 'guest'>('loading');
   const [sessionUserId, setSessionUserId] = useState<string | null>(null);
   const [sellerStats, setSellerStats] = useState<{ memberSince: string | null; listingCount: number | null }>({
@@ -237,45 +283,17 @@ export default function ListingDetailScreen() {
     }
     setSellerStats({ memberSince: null, listingCount: null });
     let cancelled = false;
-
+    const authEpoch = authEpochRef.current;
     const cached = peekListingDetailSession(id);
-    if (cached) {
-      setState({
-        status: 'success',
-        listing: cached.listing,
-        dynamicAttributes: cached.dynamicAttributes,
-      });
-      addRecentlyViewedListingId(id);
-      void (async () => {
-        const favResult = await getFavoriteIds();
-        if (cancelled) return;
-        if (favResult.data && id) {
-          setIsFavorite(favResult.data.includes(id));
-        }
-        lastFavoriteIdsFetchAtRef.current = Date.now();
-        const sellerId = cached.listing.seller_id;
-        if (sellerId) {
-          const statsResult = await getSellerStats(sellerId);
-          if (!cancelled && !statsResult.error) {
-            setSellerStats({
-              memberSince: statsResult.data.memberSince,
-              listingCount: statsResult.data.listingCount,
-            });
-          }
-        }
-      })();
-      return () => {
-        cancelled = true;
-      };
-    }
+    if (cached) setState({ status: 'success', listing: cached.listing, dynamicAttributes: cached.dynamicAttributes });
+    else setState({ status: 'loading' });
 
     (async () => {
-      const [listingResult, favResult, dynamicAttributes] = await Promise.all([
+      const [listingResult, dynamicAttributes] = await Promise.all([
         getListingById(id),
-        getFavoriteIds(),
         getListingDynamicAttributesForDisplay(id),
       ]);
-      if (cancelled) return;
+      if (cancelled || authEpoch !== authEpochRef.current) return;
       if (listingResult.error) {
         setState({ status: 'error', message: listingResult.error.message });
         return;
@@ -284,10 +302,6 @@ export default function ListingDetailScreen() {
       setState({ status: 'success', listing, dynamicAttributes });
       putListingDetailSession(id, listing, dynamicAttributes);
       addRecentlyViewedListingId(id);
-      if (favResult.data && id) {
-        setIsFavorite(favResult.data.includes(id));
-      }
-      lastFavoriteIdsFetchAtRef.current = Date.now();
       if (listing.seller_id) {
         const statsResult = await getSellerStats(listing.seller_id);
         if (!cancelled && !statsResult.error) {
@@ -301,7 +315,7 @@ export default function ListingDetailScreen() {
     return () => {
       cancelled = true;
     };
-  }, [id]);
+  }, [id, reloadNonce]);
 
   const tryBeginSimilarLoad = useCallback(() => {
     if (!FF_SIMILAR_LISTINGS) return;
@@ -354,31 +368,41 @@ export default function ListingDetailScreen() {
     [tryBeginSimilarLoad]
   );
 
-  /** Refresh favorite state when screen gains focus (e.g. return from Favorites tab). */
-  useFocusEffect(
-    useCallback(() => {
-      if (state.status !== 'success' || !id) return;
-      const now = Date.now();
-      if (now - lastFavoriteIdsFetchAtRef.current < FAVORITES_FETCH_TTL_MS) return;
-      lastFavoriteIdsFetchAtRef.current = now;
-      getFavoriteIds().then((res) => {
-        if (res.data) setIsFavorite(res.data.includes(id));
-      });
-    }, [id, state.status])
-  );
+  useFocusEffect(useCallback(() => {
+    let active = true;
+    let pending = false;
+    const refresh = async () => {
+      if (!id || pending || AppState.currentState !== 'active') return;
+      pending = true;
+      const epoch = authEpochRef.current;
+      try {
+        const result = await getListingById(id);
+        if (!active || epoch !== authEpochRef.current) return;
+        if (result.error) setState({ status: 'error', message: result.error.message });
+        else setState((previous) => previous.status === 'success' ? { ...previous, listing: result.data } : previous);
+      } catch {
+        if (active && epoch === authEpochRef.current) setState({ status: 'error', message: 'Impossible de vérifier cette annonce.' });
+      } finally { pending = false; }
+    };
+    void refresh();
+    const timer = setInterval(() => { void refresh(); }, 60_000);
+    const subscription = AppState.addEventListener('change', (state) => { if (state === 'active') void refresh(); });
+    return () => { active = false; clearInterval(timer); subscription.remove(); };
+  }, [id]));
 
   useFocusEffect(
     useCallback(() => {
       let active = true;
+      const epoch = authEpochRef.current;
       setSessionStatus('loading');
       getSession()
         .then((s) => {
-          if (!active) return;
+          if (!active || epoch !== authEpochRef.current) return;
           setSessionStatus(s?.user ? 'authed' : 'guest');
           setSessionUserId(s?.user?.id ?? null);
         })
         .catch(() => {
-          if (!active) return;
+          if (!active || epoch !== authEpochRef.current) return;
           setSessionStatus('guest');
           setSessionUserId(null);
         });
@@ -388,34 +412,62 @@ export default function ListingDetailScreen() {
     }, [])
   );
 
+  const handleBack = useCallback(() => {
+    const navigation = router as {
+      canGoBack?: () => boolean;
+      back: () => void;
+      replace: (href: Href) => void;
+    };
+    if (typeof navigation.canGoBack === 'function' && navigation.canGoBack()) {
+      navigation.back();
+      return;
+    }
+    router.replace('/(tabs)/home');
+  }, [router]);
+
+  const retryListing = useCallback(() => {
+    setState({ status: 'loading' });
+    setReloadNonce((value) => value + 1);
+  }, []);
+
+  const handleSharePress = useCallback(async () => {
+    if (state.status !== 'success' || shareLoading) return;
+    const current = state.listing;
+    setShareLoading(true);
+    try {
+      const result = await shareListing({
+        id: current.id,
+        title: current.title,
+        price: current.price,
+        city: current.city,
+      });
+      if (!result.success && result.error) {
+        Alert.alert('Partage', result.error);
+      }
+    } catch {
+      Alert.alert('Partage', 'Impossible de partager cette annonce.');
+    } finally {
+      setShareLoading(false);
+    }
+  }, [shareLoading, state]);
+
+  const isFavorite = Boolean(id && isListingFavorite(id));
+
   const handleFavoritePress = useCallback(async () => {
     if (!id || favoriteLoading) return;
-    const nextFavorite = !isFavorite;
-    setIsFavorite(nextFavorite);
     setFavoriteLoading(true);
     try {
-      const result = await toggleFavorite(id, { source: 'listing_detail' });
-      if (!result.error) return;
-
-      setIsFavorite(!nextFavorite);
-      if (result.error.message === 'Non connecté') {
-        router.replace(buildAuthGateHref('favorites', { redirect: `/listing/${id}` }));
-        return;
-      }
-      Alert.alert(
-        'Erreur',
-        getActionErrorMessage(result.error.message, 'Impossible de mettre à jour le favori.')
-      );
-    } catch {
-      setIsFavorite(!nextFavorite);
-      Alert.alert('Erreur', 'Impossible de mettre à jour le favori.');
+      await toggleFavoriteContext(id, 'listing_detail');
     } finally {
       setFavoriteLoading(false);
     }
-  }, [favoriteLoading, id, isFavorite, router]);
+  }, [favoriteLoading, id, toggleFavoriteContext]);
 
-  const openConversationForListing = useCallback(async (): Promise<boolean> => {
+  const openConversationForListing = useCallback(async (entryPoint: 'listing_detail' | 'auth_return' = 'listing_detail'): Promise<boolean> => {
     if (!id) return false;
+    const available = await getListingById(id);
+    if (available.error || available.data.status !== 'active') { Alert.alert('Annonce indisponible'); return false; }
+    void recordContactIntent(available.data, 'message', entryPoint);
     const result = await getOrCreateConversation(id);
     if (result.error) {
       if (result.error.message === 'Non connecté') {
@@ -468,7 +520,10 @@ export default function ListingDetailScreen() {
       );
       return;
     }
-    await openWhatsAppForListing(state.listing);
+    const current = await getListingById(id);
+    if (current.error || current.data.status !== 'active') { Alert.alert('Annonce indisponible'); return; }
+    void recordContactIntent(current.data, 'whatsapp');
+    await openWhatsAppForListing(current.data);
     trackSellerContactInitiated({ listing_id: id, contact_method: 'whatsapp' });
   }, [id, state, router]);
 
@@ -479,7 +534,10 @@ export default function ListingDetailScreen() {
       router.push(buildAuthGateHref('messages', { redirect: `/listing/${id}`, contact: 'call' }));
       return;
     }
-    await openSellerPhoneCall(state.listing);
+    const current = await getListingById(id);
+    if (current.error || current.data.status !== 'active') { Alert.alert('Annonce indisponible'); return; }
+    void recordContactIntent(current.data, 'call');
+    await openSellerPhoneCall(current.data);
     trackSellerContactInitiated({ listing_id: id, contact_method: 'call' });
   }, [id, state, router]);
 
@@ -490,15 +548,16 @@ export default function ListingDetailScreen() {
       router.push(buildAuthGateHref('messages', { redirect: `/listing/${id}`, contact: 'sms' }));
       return;
     }
-    await openSellerSms(state.listing);
+    const current = await getListingById(id);
+    if (current.error || current.data.status !== 'active') { Alert.alert('Annonce indisponible'); return; }
+    void recordContactIntent(current.data, 'sms');
+    await openSellerSms(current.data);
     trackSellerContactInitiated({ listing_id: id, contact_method: 'sms' });
   }, [id, state, router]);
 
   useEffect(() => {
     const contact = contactParam;
     if (!contact || !isSellerContactAction(contact) || state.status !== 'success' || !id) return;
-
-    const listing = state.listing;
 
     const key = `${id}:${contact}`;
     if (contactHandledRef.current === key) return;
@@ -520,21 +579,27 @@ export default function ListingDetailScreen() {
       if (ac.signal.aborted) return;
 
       try {
+        const current = await getListingById(id);
+        if (current.error || current.data.status !== 'active') { Alert.alert('Annonce indisponible'); return; }
+        const listing = current.data;
         switch (contact) {
           case 'whatsapp':
+            void recordContactIntent(listing, 'whatsapp', 'auth_return');
             await openWhatsAppForListing(listing);
             trackSellerContactInitiated({ listing_id: id, contact_method: 'whatsapp' });
             break;
           case 'call':
+            void recordContactIntent(listing, 'call', 'auth_return');
             await openSellerPhoneCall(listing);
             trackSellerContactInitiated({ listing_id: id, contact_method: 'call' });
             break;
           case 'sms':
+            void recordContactIntent(listing, 'sms', 'auth_return');
             await openSellerSms(listing);
             trackSellerContactInitiated({ listing_id: id, contact_method: 'sms' });
             break;
           case 'message':
-            await openConversationForListing();
+            await openConversationForListing('auth_return');
             break;
           default:
             break;
@@ -548,6 +613,20 @@ export default function ListingDetailScreen() {
       ac.abort();
     };
   }, [contactParam, state, id, router, openConversationForListing]);
+
+  const [availabilitySaving, setAvailabilitySaving] = useState(false);
+  const handleAvailability = useCallback(async (value: 'available' | 'unknown') => {
+    if (!id || state.status !== 'success' || availabilitySaving) return;
+    const epoch = authEpochRef.current;
+    setAvailabilitySaving(true);
+    try {
+      const saved = await declareListingAvailability(id, value, state.listing.status ?? '');
+      if (epoch !== authEpochRef.current) return;
+      if (!saved) { Alert.alert('Disponibilité non enregistrée', 'Actualisez l’annonce puis réessayez.'); return; }
+      const fresh = await getListingById(id);
+      if (!fresh.error && epoch === authEpochRef.current) setState(previous => previous.status === 'success' ? { ...previous, listing: fresh.data } : previous);
+    } finally { setAvailabilitySaving(false); }
+  }, [id, state, availabilitySaving]);
 
   const handleMarkSold = useCallback(() => {
     if (!id || markSoldLoading) return;
@@ -721,9 +800,12 @@ export default function ListingDetailScreen() {
             title={title}
             message={body}
             action={
-              <Button variant="secondary" onPress={() => router.back()}>
-                Retour
-              </Button>
+              <View style={styles.errorActions}>
+                <Button onPress={retryListing}>Réessayer</Button>
+                <Button variant="secondary" onPress={handleBack}>
+                  Retour
+                </Button>
+              </View>
             }
           />
         </View>
@@ -743,6 +825,16 @@ export default function ListingDetailScreen() {
     isOwnListing && canSellerRenewListing(listing.status) && isListingRenewalDue(listing);
   const ownerMutating = markSoldLoading || reactivateLoading || renewLoading;
   const maskedPhone = maskPhoneForPreview(listing.seller?.phone ?? null);
+  const showContactBar = !isSoldListing && sessionStatus !== 'loading' && !isOwnListing;
+  const showPhoneInBody =
+    !isOwnListing && Boolean(listing.seller?.phone) && sessionStatus !== 'loading';
+  const categoryLabel = resolveMarketplaceCategoryLabel(marketplaceCategories, listing.category_id);
+  const publishedAt = listing.last_published_at || listing.created_at;
+  const galleryChromeTop = appUpdateBannerInset > 0 ? spacing.xs : insets.top + 2;
+  const footerPad = showContactBar
+    ? (contactBarHeight > 0 ? contactBarHeight + spacing.base : 220 + insets.bottom)
+    : spacing['3xl'] + insets.bottom;
+  const publicShop = listing.shop?.slug && isShopPubliclyActive(listing.shop) ? listing.shop : null;
 
   const renderSimilarItem = ({ item }: { item: PublicListing }) => (
     <View style={{ width: CARD_WIDTH }}>
@@ -760,12 +852,11 @@ export default function ListingDetailScreen() {
 
   return (
     <Screen scroll={false} noPadding safe={false}>
-      <AppHeader title="Annonce" showBack density="compact" />
       <ScrollView
         style={styles.scroll}
         contentContainerStyle={[
           styles.scrollContent,
-          { paddingBottom: 120 + insets.bottom },
+          { paddingBottom: footerPad },
         ]}
         showsVerticalScrollIndicator={false}
         onLayout={(ev) => {
@@ -780,37 +871,37 @@ export default function ListingDetailScreen() {
           listingId={listing.id}
           images={listing.images}
           lazySourcePaths={listing.galleryLazySourcePaths}
+          onBackPress={handleBack}
+          isFavorite={isFavorite}
+          onFavoritePress={() => { void handleFavoritePress(); }}
+          onSharePress={() => { void handleSharePress(); }}
+          shareLoading={shareLoading}
+          overlayTopInset={galleryChromeTop}
         />
+        <View style={[styles.contentSheet, isCompact && styles.contentSheetCompact]}>
         <View style={[styles.body, isCompact && styles.bodyCompact]}>
           <ListingMeta
             title={listing.title}
             price={listing.price}
             city={listing.city}
-            created_at={listing.created_at}
+            created_at={publishedAt}
             views_count={listing.views_count}
-            isFavorite={isFavorite}
-            onFavoritePress={handleFavoritePress}
             district={listing.district}
             urgent={listing.urgent}
             boosted={listing.boosted}
+            categoryLabel={categoryLabel}
           />
           <ListingSeller
             listing={listing}
             memberSince={sellerStats.memberSince}
             listingCount={sellerStats.listingCount}
             onPress={listing.seller_id ? () => router.push(`/user/${listing.seller_id}` as const) : undefined}
+            onShopPress={
+              publicShop
+                ? () => router.push(`/shop/${publicShop.slug}` as Href)
+                : undefined
+            }
           />
-          {listing.shop?.slug && isShopPubliclyActive(listing.shop) ? (
-            <Button
-              variant="outline"
-              size="md"
-              onPress={() => router.push(`/shop/${listing.shop!.slug}` as Href)}
-              leftIcon={<Ionicons name="storefront-outline" size={18} color={colors.primary} />}
-              style={styles.shopLinkBtn}
-            >
-              Voir la boutique
-            </Button>
-          ) : null}
           <ListingCharacteristics
             condition={listing.condition}
             brand={listing.brand}
@@ -818,6 +909,13 @@ export default function ListingDetailScreen() {
             dynamicItems={dynamicAttributes}
           />
           <ListingDescription description={listing.description} />
+          <Text accessibilityRole="text">{availabilityLabel(isSoldListing ? { state: 'sold', confirmed_at: null } : listing.availability ?? UNKNOWN_AVAILABILITY)}</Text>
+          {isOwnListing && listing.status === 'active' ? (
+            <View style={styles.ownerSoldAction}>
+              <Button variant="outline" disabled={availabilitySaving || ownerMutating} onPress={() => { void handleAvailability('available'); }}>Toujours disponible</Button>
+              <Button variant="outline" disabled={availabilitySaving || ownerMutating} onPress={() => { void handleAvailability('unknown'); }}>Disponibilité inconnue</Button>
+            </View>
+          ) : null}
           <MarketplaceTrustTips compact />
 
           <SecondaryActions
@@ -827,6 +925,9 @@ export default function ListingDetailScreen() {
             sellerPhone={listing.seller?.phone}
             onCallPress={handleSecureCall}
             onSmsPress={handleSecureSms}
+            showFavorite={false}
+            showShare={false}
+            showPhoneActions={showPhoneInBody}
           />
           {FF_SIMILAR_LISTINGS && (similarLoading || similarListings.length > 0) ? (
             <View style={styles.similarSection}>
@@ -893,6 +994,7 @@ export default function ListingDetailScreen() {
             </View>
           ) : null}
         </View>
+        </View>
       </ScrollView>
       <ReportComposerModal
         visible={reportModalVisible}
@@ -906,20 +1008,20 @@ export default function ListingDetailScreen() {
         onCancel={() => !reportLoading && setReportModalVisible(false)}
         onSubmit={handleReportSubmit}
       />
-      {!isSoldListing ? (
+      {showContactBar ? (
       <ListingActions
         listing={listing}
         sellerId={listing.seller_id}
         sellerName={listing.seller?.full_name ?? null}
         sellerPhone={listing.seller?.phone ?? null}
         safeBottom={insets.bottom}
-        isFavorite={isFavorite}
-        onFavorisPress={handleFavoritePress}
         onMessagePress={handleMessagePress}
         onWhatsAppPress={handleSecureWhatsApp}
         messageLoading={messageLoading}
         showAuthHint={isGuest}
         maskedPhone={maskedPhone}
+        isOwnListing={isOwnListing}
+        onBarHeight={setContactBarHeight}
       />
       ) : null}
     </Screen>
@@ -935,26 +1037,40 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.xl,
     paddingBottom: spacing.xl,
   },
-  scroll: { flex: 1 },
+  errorActions: {
+    width: 280,
+    maxWidth: '100%',
+    gap: spacing.sm,
+    marginTop: spacing.sm,
+  },
+  scroll: { flex: 1, backgroundColor: colors.surfaceMuted },
   scrollContent: {
     paddingBottom: FOOTER_HEIGHT_ESTIMATE + spacing['4xl'],
+  },
+  contentSheet: {
+    marginTop: -spacing['2xl'],
+    borderTopLeftRadius: radius['3xl'],
+    borderTopRightRadius: radius['3xl'],
+    backgroundColor: colors.surface,
+    paddingTop: spacing.lg,
+    overflow: 'hidden',
+  },
+  contentSheetCompact: {
+    marginTop: -spacing.xl,
+    paddingTop: spacing.base,
   },
   body: {
     maxWidth: 900,
     width: '100%',
     alignSelf: 'center',
     paddingHorizontal: spacing.screenHorizontal,
-    paddingTop: spacing.sm,
+    paddingTop: 0,
     paddingBottom: spacing.base,
   },
   bodyCompact: {
     paddingHorizontal: spacing.sm,
     paddingTop: spacing.xs,
     paddingBottom: spacing.sm,
-  },
-  shopLinkBtn: {
-    marginBottom: spacing.base,
-    alignSelf: 'flex-start',
   },
   similarSection: {
     marginTop: spacing.lg,

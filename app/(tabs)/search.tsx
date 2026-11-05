@@ -20,6 +20,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useAppUpdateBannerInset } from '@/context/AppUpdateBannerInsetContext';
 import { useFocusEffect, useLocalSearchParams, useRouter, type Href } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
+import { CityPickerSheet } from '@/components/CityPickerSheet';
 import { Screen, Button, HomeBrandHeader, HomeCategoryStrip, KeyboardSafeView, LoadingState } from '@/components';
 import { ListingCard, ListingFeed } from '@/features/listings';
 import {
@@ -30,7 +31,7 @@ import { PopularShopsSection } from '@/features/shops';
 import { searchListings } from '@/services/listings';
 import { appendUniqueSearchListings } from '@/services/listings/searchQuery';
 import { getFavoriteIds as getFavIds } from '@/services/favorites';
-import { sortListings, type SortOption } from '@/utils/sortListings';
+import { type SortOption } from '@/utils/sortListings';
 import {
   buildSavedSearchHref,
   getSavedSearches,
@@ -51,6 +52,7 @@ import { formatPrice } from '@/lib/format';
 import type { PublicListing } from '@/services/listings';
 import { colors, spacing, typography, fontWeights, radius } from '@/theme';
 import { getSession } from '@/services/auth';
+import { MarketingConsentBanner } from '@/features/home/MarketingConsentBanner';
 import { buildAuthGateHref } from '@/lib/authGateNavigation';
 import { useResponsiveLayout, getScrollBottomReserveForTabBar } from '@/lib/responsiveLayout';
 import { trackListingSearched, trackRecentSearchSelected } from '@/lib/analytics';
@@ -70,6 +72,7 @@ import {
   SEARCH_INITIAL_PAGE_SIZE,
   SEARCH_NAV_PARAMS_RUN_COOLDOWN_MS,
   buildSearchPage1SessionKey,
+  getSearchDisplayListings,
   searchSessionPage1Cache,
   type SearchState,
 } from '@/features/search/searchSession';
@@ -81,9 +84,23 @@ import {
   SearchFilteredEmptyPanel,
 } from '@/features/search/SearchStatusPanels';
 
+import { isHomeDemoEnabled } from '@/features/home/demo/demoProvider';
+
+const HomeDemo = React.lazy(() => import('@/features/home/demo/HomeDemoScreen').then(m => ({ default: m.HomeDemoScreen })));
+
 const SEARCH_FIELD_PLACEHOLDER = 'Rechercher un téléphone, une voiture…';
 
 export default function SearchScreen() {
+  const [demoActive, setDemoActive] = useState(() => isHomeDemoEnabled(__DEV__, process.env.EXPO_PUBLIC_HOME_DEMO));
+  if (__DEV__ && demoActive) {
+    return <React.Suspense fallback={<LoadingState message="Chargement de la démonstration…" />}>
+      <HomeDemo onExit={() => setDemoActive(false)} />
+    </React.Suspense>;
+  }
+  return <MarketplaceSearchScreen onOpenDemo={__DEV__ ? () => setDemoActive(true) : undefined} />;
+}
+
+function MarketplaceSearchScreen({ onOpenDemo }: { onOpenDemo?: () => void }) {
   const router = useRouter();
   const params = useLocalSearchParams<{
     q?: string;
@@ -120,6 +137,8 @@ export default function SearchScreen() {
   const [recentSearches, setRecentSearches] = useState<RecentSearch[]>([]);
   const [savedSearchFeedback, setSavedSearchFeedback] = useState<string | null>(null);
   const [filtersOpen, setFiltersOpen] = useState(false);
+  const [cityPickerOpen, setCityPickerOpen] = useState(false);
+  const [cityPickerDraft, setCityPickerDraft] = useState('');
   const [searchOverlayOpen, setSearchOverlayOpen] = useState(false);
   const [overlayDraft, setOverlayDraft] = useState('');
   const { overlaySuggestions, setOverlaySuggestions } = useSearchOverlaySuggestions(
@@ -130,7 +149,7 @@ export default function SearchScreen() {
   const mainSearchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastDisplayedPage1KeyRef = useRef<string | null>(null);
   const searchSeqRef = useRef(0);
-  const runSearchRef = useRef<(q: string, filters?: Partial<AppliedSearchFilters & AppliedPriceFilters>) => Promise<void>>(
+  const runSearchRef = useRef<(q: string, filters?: Partial<AppliedSearchFilters & AppliedPriceFilters>, requestedSort?: SortOption) => Promise<void>>(
     async () => {}
   );
   const resultsListRef = useRef<FlatList<PublicListing> | null>(null);
@@ -200,7 +219,8 @@ export default function SearchScreen() {
     }, [loadFavorites, loadSavedSearches])
   );
 
-  const runSearch = useCallback(async (q: string, filters?: Partial<AppliedSearchFilters & AppliedPriceFilters>) => {
+  const runSearch = useCallback(async (q: string, filters?: Partial<AppliedSearchFilters & AppliedPriceFilters>, requestedSort?: SortOption) => {
+    const searchSort = requestedSort ?? sortBy;
     const trimmed = q.trim();
     const browseFromHome = browseFromHomeFooterRef.current;
     if (browseFromHome) {
@@ -215,7 +235,7 @@ export default function SearchScreen() {
     const searchMaxPrice = filters?.max !== undefined ? filters.max : appliedPriceFilters.max;
 
     const hasSearchIntent =
-      browseFromHome ||
+      browseFromHome || requestedSort != null ||
       trimmed.length >= 2 ||
       searchCategoryId != null ||
       (searchCity != null && String(searchCity).trim() !== '') ||
@@ -255,7 +275,9 @@ export default function SearchScreen() {
       min: searchMinPrice,
       max: searchMaxPrice,
       pageSize,
+      sortBy: searchSort,
     });
+    const seq = ++searchSeqRef.current;
 
     if (page1Key === lastDisplayedPage1KeyRef.current) {
       setSubmittedQuery(trimmed);
@@ -291,8 +313,8 @@ export default function SearchScreen() {
       return;
     }
 
-    const seq = ++searchSeqRef.current;
     setSubmittedQuery(trimmed);
+    lastDisplayedPage1KeyRef.current = null;
     setState({ status: 'loading' });
 
     const result = await searchListings({
@@ -301,7 +323,7 @@ export default function SearchScreen() {
       city: searchCity,
       minPrice: searchMinPrice,
       maxPrice: searchMaxPrice,
-      sortBy: sortBy,
+      sortBy: searchSort,
       page: 1,
       pageSize,
     });
@@ -356,6 +378,12 @@ export default function SearchScreen() {
   }, [appliedSearchFilters, appliedPriceFilters, sortBy]);
 
   runSearchRef.current = runSearch;
+  const previousSortRef = useRef(sortBy);
+  useEffect(() => {
+    if (previousSortRef.current === sortBy) return;
+    previousSortRef.current = sortBy;
+    if (state.status !== 'idle') void runSearchRef.current(submittedQuery, undefined, sortBy);
+  }, [sortBy, state.status, submittedQuery]);
 
   /** When navigating with query params, pre-fill and run search once. */
   useEffect(() => {
@@ -432,6 +460,7 @@ export default function SearchScreen() {
     if (state.status !== 'success' || !state.hasMore || loadingMoreSearch) return;
     setLoadingMoreSearch(true);
     const nextPage = state.page + 1;
+    const seq = searchSeqRef.current;
     try {
       const result = await searchListings({
         query: state.query,
@@ -443,13 +472,13 @@ export default function SearchScreen() {
         page: nextPage,
         pageSize: state.pageSize ?? SEARCH_INITIAL_PAGE_SIZE,
       });
-      if (result.error) {
+      if (result.error || seq !== searchSeqRef.current) {
         return;
       }
       const batch = result.data ?? [];
       const nextTotal = result.total ?? 0;
       setState((prev) => {
-        if (prev.status !== 'success') return prev;
+        if (seq !== searchSeqRef.current || prev.status !== 'success') return prev;
         return {
           status: 'success',
           data: appendUniqueSearchListings(prev.data, batch),
@@ -709,7 +738,7 @@ export default function SearchScreen() {
   const successSearchData = state.status === 'success' ? state.data : null;
   const sortedListings = useMemo(() => {
     const list = successSearchData ?? [];
-    return sortListings(
+    return getSearchDisplayListings(
       list,
       sortBy,
       sortBy === 'relevance'
@@ -833,6 +862,31 @@ export default function SearchScreen() {
 
   const closeFilters = useCallback(() => setFiltersOpen(false), []);
 
+  const openCityPicker = useCallback(() => {
+    Keyboard.dismiss();
+    setCityPickerDraft(appliedSearchFilters.city ?? '');
+    setCityPickerOpen(true);
+  }, [appliedSearchFilters.city]);
+
+  const closeCityPicker = useCallback(() => {
+    Keyboard.dismiss();
+    setCityPickerOpen(false);
+  }, []);
+
+  const applyCityPicker = useCallback((value: string) => {
+    const nextCity = normalizeFilterText(value);
+    clearPendingMainSearchDebounce();
+    setCity(nextCity ?? '');
+    setAppliedSearchFilters({ ...appliedSearchFilters, city: nextCity });
+    Keyboard.dismiss();
+    setCityPickerOpen(false);
+    void runSearch(submittedQuery, {
+      ...appliedSearchFilters,
+      ...appliedPriceFilters,
+      city: nextCity,
+    });
+  }, [appliedSearchFilters, appliedPriceFilters, submittedQuery, runSearch, clearPendingMainSearchDebounce]);
+
   const openSaved = useCallback(() => {
     Keyboard.dismiss();
     setSavedOpen(true);
@@ -844,7 +898,7 @@ export default function SearchScreen() {
     router.push('/notifications' as Href);
   }, [router]);
 
-  const { width, bucket } = useResponsiveLayout();
+  const { width, bucket, fontScale } = useResponsiveLayout();
   const insets = useSafeAreaInsets();
   const appUpdateBannerInset = useAppUpdateBannerInset();
   const marketplaceSafeEdges = useMemo(
@@ -1014,6 +1068,7 @@ export default function SearchScreen() {
         onCategoryPress={handleQuickCategoryPress}
         onCategoriesVoirTout={handleCategoriesVoirTout}
         onSellPress={handleSellPress}
+        homePresentation
         showCategoryStrip={false}
         showSellCta={false}
       />
@@ -1421,17 +1476,24 @@ export default function SearchScreen() {
   return (
     <Screen noPadding safe={false}>
       <KeyboardSafeView style={styles.keyboard}>
-        <SafeAreaView style={styles.safeMarketplace} edges={marketplaceSafeEdges}>
+        <SafeAreaView style={[styles.safeMarketplace, showMarketplaceHomeFeed && styles.homeSurface]} edges={marketplaceSafeEdges}>
           <View style={styles.marketplaceColumn}>
-            <View style={styles.topStackMarketplace}>
+            <View style={[styles.topStackMarketplace, showMarketplaceHomeFeed && styles.homeTopStack]}>
               <HomeBrandHeader
                 onNotificationsPress={handleNotificationsPress}
                 unreadCount={0}
                 searchTabLayout
+                homePresentation={showMarketplaceHomeFeed}
+                location={{ label: appliedSearchFilters.city || 'Ville', onPress: openCityPicker }}
               />
+              {onOpenDemo && <Pressable onPress={onOpenDemo} accessibilityRole="button" style={{ minHeight: 44, justifyContent: 'center', paddingHorizontal: 16 }}>
+                <Text style={{ color: showMarketplaceHomeFeed ? '#FFF' : '#0B4D3C' }}>Ouvrir la démonstration locale</Text>
+              </Pressable>}
+              <MarketingConsentBanner />
               <View
                 style={[
                   styles.searchStripMarketplace,
+                  showMarketplaceHomeFeed && styles.homeSearchStrip,
                   {
                     paddingHorizontal: searchChrome.hPad,
                     paddingTop: searchChrome.stripPadTop,
@@ -1442,14 +1504,15 @@ export default function SearchScreen() {
                   style={[
                     styles.searchRow,
                     searchChrome.rowShadow,
+                    showMarketplaceHomeFeed && fontScale > 1.2 && styles.homeSearchExpanded,
                     {
-                      minHeight: searchChrome.searchMinH,
-                      paddingVertical: searchChrome.searchPadV,
+                      minHeight: showMarketplaceHomeFeed ? 56 : searchChrome.searchMinH,
+                      paddingVertical: showMarketplaceHomeFeed ? 5 : searchChrome.searchPadV,
                       paddingHorizontal: Math.min(searchChrome.hPad, 18),
-                      backgroundColor: searchChrome.searchBg,
+                      backgroundColor: showMarketplaceHomeFeed ? colors.surface : searchChrome.searchBg,
                       borderColor: searchChrome.borderColor,
                       borderWidth: 1,
-                      borderRadius: searchChrome.searchRadius,
+                      borderRadius: showMarketplaceHomeFeed ? 16 : searchChrome.searchRadius,
                     },
                   ]}
                 >
@@ -1460,7 +1523,7 @@ export default function SearchScreen() {
                     style={styles.searchIcon}
                   />
                   <Pressable
-                    style={styles.searchFieldPressable}
+                    style={[styles.searchFieldPressable, showMarketplaceHomeFeed && styles.homeSearchTarget]}
                     onPress={openSearchOverlay}
                     accessibilityRole="button"
                     accessibilityLabel="Ouvrir la recherche"
@@ -1468,15 +1531,27 @@ export default function SearchScreen() {
                     <Text
                       style={[
                         styles.searchFieldText,
+                        showMarketplaceHomeFeed && styles.homeSearchText,
                         !(searchOverlayOpen ? overlayDraft : query).trim() && styles.searchFieldPlaceholder,
                       ]}
-                      numberOfLines={1}
+                      numberOfLines={showMarketplaceHomeFeed ? undefined : 1}
                     >
                       {(searchOverlayOpen ? overlayDraft : query).trim()
                         ? (searchOverlayOpen ? overlayDraft : query).trim()
-                        : SEARCH_FIELD_PLACEHOLDER}
+                        : showMarketplaceHomeFeed ? 'Que cherchez-vous ?' : SEARCH_FIELD_PLACEHOLDER}
                     </Text>
                   </Pressable>
+                  {showMarketplaceHomeFeed ? (
+                    <Pressable
+                      onPress={openFilters}
+                      style={[styles.homeFilter, fontScale > 1.2 && styles.homeFilterExpanded]}
+                      accessibilityRole="button"
+                      accessibilityLabel="Ouvrir les filtres"
+                    >
+                      <Ionicons name="options-outline" size={20} color="#0B4D3C" />
+                      <Text style={styles.homeFilterText}>Filtres</Text>
+                    </Pressable>
+                  ) : null}
                   {query.trim().length > 0 ? (
                     <Pressable
                       onPress={() => {
@@ -1498,15 +1573,18 @@ export default function SearchScreen() {
                     </Pressable>
                   ) : null}
                 </View>
-                <HomeCategoryStrip
-                  bucket={bucket}
-                  onCategoryPress={handleQuickCategoryPress}
-                  onAutresPress={handleCategoriesVoirTout}
-                  insetHorizontal={screenHorizontal}
-                  selectedCategoryId={appliedSearchFilters.categoryId}
-                />
+                <View style={showMarketplaceHomeFeed ? [styles.homeCategories, { marginHorizontal: -searchChrome.hPad }] : undefined}>
+                  <HomeCategoryStrip
+                    bucket={bucket}
+                    compact={showMarketplaceHomeFeed}
+                    onCategoryPress={handleQuickCategoryPress}
+                    onAutresPress={handleCategoriesVoirTout}
+                    insetHorizontal={screenHorizontal}
+                    selectedCategoryId={appliedSearchFilters.categoryId}
+                  />
+                </View>
                 {savedSearches.length > 0 ? (
-                  <View style={styles.savedQuickRow}>
+                  <View style={[styles.savedQuickRow, showMarketplaceHomeFeed && styles.homeSavedRow]}>
                     <Pressable
                       style={({ pressed }) => [
                         styles.savedQuickBtn,
@@ -1530,28 +1608,9 @@ export default function SearchScreen() {
                   listHeaderComponent={marketplaceListHeader}
                   extraComponent={<PopularShopsSection />}
                   extraComponentIndex={HOME_FEED_PAGE_SIZE}
-                  limit={HOME_FEED_PAGE_SIZE}
                   fetchPageSize={HOME_FEED_PAGE_SIZE}
                   skipNetworkRevalidateWithinMs={HOME_LISTING_FEED_NETWORK_COOLDOWN_MS}
-                  disableInfiniteScroll
                   listInitialNumToRender={4}
-                  footerAction={{
-                    label: LABEL_VOIR_PLUS_ANNONCES,
-                    onPress: () => {
-                      clearPendingMainSearchDebounce();
-                      lastDisplayedPage1KeyRef.current = null;
-                      setQuery('');
-                      setOverlayDraft('');
-                      browseFromHomeFooterRef.current = true;
-                      void runSearchRef.current('', {
-                        categoryId: appliedSearchFilters.categoryId,
-                        category: appliedSearchFilters.category,
-                        city: appliedSearchFilters.city,
-                        min: appliedPriceFilters.min,
-                        max: appliedPriceFilters.max,
-                      });
-                    },
-                  }}
                   contentPaddingHorizontal={0}
                   homeFeedCardInset={screenHorizontal}
                   listingCardFeedPresentation="home"
@@ -1742,6 +1801,10 @@ export default function SearchScreen() {
           </Pressable>
         </Modal>
 
+        <CityPickerSheet visible={cityPickerOpen} value={cityPickerDraft}
+          onChangeText={setCityPickerDraft} onApply={applyCityPicker}
+          onReset={() => applyCityPicker('')} onClose={closeCityPicker} suggestions={availableCities} />
+
         {/* Bottom sheet: filtres */}
         <Modal
           visible={filtersOpen}
@@ -1749,11 +1812,19 @@ export default function SearchScreen() {
           animationType="slide"
           onRequestClose={closeFilters}
         >
-          <Pressable style={styles.sheetOverlay} onPress={closeFilters}>
-            <Pressable style={styles.sheet} onPress={(e) => e.stopPropagation()}>
-              {filtersSheetContent}
+          <KeyboardSafeView androidInsetPadding subtractSafeAreaBottom={false}>
+            <Pressable style={styles.sheetOverlay} onPress={closeFilters}>
+              <Pressable style={styles.sheet} onPress={(e) => e.stopPropagation()}>
+                <ScrollView
+                  style={styles.filtersScroll}
+                  keyboardShouldPersistTaps="handled"
+                  keyboardDismissMode="on-drag"
+                >
+                  {filtersSheetContent}
+                </ScrollView>
+              </Pressable>
             </Pressable>
-          </Pressable>
+          </KeyboardSafeView>
         </Modal>
 
         {/* Bottom sheet: recherches enregistrées */}
@@ -1797,6 +1868,17 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.surface,
   },
+  homeSurface: { backgroundColor: '#0B4D3C' },
+  homeTopStack: { backgroundColor: '#0B4D3C', borderBottomWidth: 0 },
+  homeFilter: { flexShrink: 0, minWidth: 44, minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: spacing.xs, borderLeftWidth: 1, borderLeftColor: colors.border, marginLeft: spacing.sm, paddingLeft: spacing.sm },
+  homeFilterText: { ...typography.sm, fontWeight: fontWeights.semibold, color: '#0B4D3C' },
+  homeSearchExpanded: { flexWrap: 'wrap' },
+  homeFilterExpanded: { width: '100%', borderLeftWidth: 0, borderTopWidth: 1, borderTopColor: colors.border, marginLeft: 0, paddingLeft: 0, justifyContent: 'center' },
+  homeSearchText: { ...typography.sm },
+  homeSearchTarget: { minHeight: 44 },
+  homeSearchStrip: { paddingBottom: 0 },
+  homeSavedRow: { backgroundColor: colors.surface, borderRadius: radius.lg, paddingHorizontal: spacing.sm },
+  homeCategories: { backgroundColor: colors.background, marginTop: spacing.md, paddingVertical: spacing.sm },
   marketplaceColumn: {
     flex: 1,
   },
@@ -2153,6 +2235,10 @@ const styles = StyleSheet.create({
     borderTopRightRadius: radius['2xl'],
     paddingBottom: spacing.lg,
     maxHeight: '84%',
+  },
+  filtersScroll: {
+    flexGrow: 0,
+    flexShrink: 1,
   },
   sheetCard: {
     paddingHorizontal: spacing.screenHorizontal,

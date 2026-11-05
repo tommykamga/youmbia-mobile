@@ -1,0 +1,32 @@
+✔ status action confirms mutation: changed (63.334791ms)
+✔ status action confirms mutation: missing (15.991041ms)
+✔ status action confirms mutation: denied (12.659208ms)
+✔ status action confirms mutation: wrong (11.553042ms)
+✔ already sold is an explicit idempotent no-op (9.6055ms)
+✔ stale renewal cannot claim success (12.45775ms)
+✔ fresh contact availability: active (33.532916ms)
+✔ fresh contact availability: sold (3.657667ms)
+✔ fresh contact availability: hidden (3.199958ms)
+✔ fresh contact availability: suspended (2.953ms)
+✔ fresh contact availability: draft (2.779334ms)
+✔ fresh contact availability: missing (5.086917ms)
+✔ fresh contact availability: denied (2.666583ms)
+✔ fresh contact availability: offline (2.392875ms)
+▶ listingLifecycle
+  ✔ edit sold ne pose pas status active (0.434583ms)
+  ✔ edit suspended ne change pas le statut (0.11775ms)
+  ✔ edit active peut rester active ou passer en pause via brouillon (0.071125ms)
+  ✔ active -> sold autorisé ; sold -> active est une transition explicite (0.125625ms)
+  ✔ pause ne part pas de sold (0.071291ms)
+  ✔ renew : active uniquement (0.080875ms)
+  ✔ interdit d’écrire sold_at / last_published_at depuis le client (1.510667ms)
+  ✔ draft : pas de pause/sold/reactivate via lifecycle ; publish dédié (0.133667ms)
+✔ listingLifecycle (3.125167ms)
+ℹ tests 22
+ℹ suites 1
+ℹ pass 22
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 525.978542

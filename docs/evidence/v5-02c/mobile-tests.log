@@ -1,0 +1,20 @@
+
+ RUN  v3.2.4 <mobile>
+
+ ✓ src/services/listings/checkListingPublishDailyQuota.test.ts (3 tests) 4ms
+ ✓ src/lib/listingImageUrl.test.ts (7 tests) 4ms
+ ✓ src/lib/listingQualityScore.test.ts (4 tests) 2ms
+ ✓ src/services/listings/listingReliability.test.ts (8 tests) 4ms
+ ✓ src/services/listings/renewListing.test.ts (10 tests) 6ms
+ ✓ src/services/listings/updateListingStatus.test.ts (25 tests) 9ms
+
+ Test Files  6 passed (6)
+      Tests  57 passed (57)
+   Start at  11:36:20
+   Duration  324ms (transform 306ms, setup 48ms, collect 437ms, tests 28ms, environment 1ms, prepare 326ms)
+
+stderr | src/services/listings/listingReliability.test.ts > verified mutations > update: denied
+[updateListing] { message: 'denied' }
+
+stderr | src/services/listings/listingReliability.test.ts > verified mutations > delete: denied
+[deleteListing] { message: 'denied' }

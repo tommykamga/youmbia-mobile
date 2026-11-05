@@ -43,7 +43,7 @@ function normalizeDraftFields(payload: SaveListingDraftPayload): {
   price: number;
   categoryId: number | null;
   city: string;
-  description: string | null;
+  description: string;
   shopId: string | null;
 } {
   const titleRaw = payload.title?.trim() ?? '';
@@ -57,7 +57,8 @@ function normalizeDraftFields(payload: SaveListingDraftPayload): {
   const categoryId =
     categoryRaw != null && Number.isInteger(categoryRaw) && categoryRaw > 0 ? categoryRaw : null;
   const city = payload.city?.trim() || '';
-  const description = payload.description?.trim() || null;
+  // An incomplete draft is valid, but listings.description is NOT NULL.
+  const description = payload.description?.trim() || '';
   const shopId = payload.shopId?.trim() || null;
   return { title, price, categoryId, city, description, shopId };
 }
@@ -105,6 +106,7 @@ export async function createListingDraft(
       description: fields.description,
       user_id: user.id,
       status: LISTING_STATUS.draft,
+      publication_managed: true,
       views_count: 0,
       ...(fields.shopId ? { shop_id: fields.shopId } : {}),
     };

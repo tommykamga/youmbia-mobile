@@ -63,3 +63,18 @@ screenshots
 # Misc
 *.tmp
 *.temp
+
+# Release gate: CNG must use versioned app.config.js, never local Dev native projects.
+/ios/
+/android/
+
+# All local environment variants/backups; values come from the selected EAS environment.
+.env*
+credentials.json
+*.p12
+*.p8
+*.mobileprovision
+*.pem
+*.jks
+*.keystore
+*firebase-adminsdk*.json

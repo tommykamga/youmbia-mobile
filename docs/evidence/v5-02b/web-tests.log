@@ -1,0 +1,94 @@
+▶ listingDraftContract
+  ✔ hasListingDraftContent exige au moins un champ utile (0.579417ms)
+  ✔ normalizeDraftFields pose un titre par défaut et un prix 0 sans publier (0.12675ms)
+  ✔ insert draft : status draft, user_id owner, jamais active (0.137ms)
+  ✔ update draft ne pose pas status active (2.039125ms)
+  ✔ publish est une transition explicite draft → active (0.18475ms)
+  ✔ nextListingImageSortOrders évite les collisions (0.513666ms)
+  ✔ chemin storage aligné listing-images/{user}/{listing}/{n} (0.065292ms)
+  ✔ Mes annonces : draft n’est plus mélangé à la pause (0.099833ms)
+  ✔ titre sentinelle Brouillon → champ vide à la reprise (0.067292ms)
+✔ listingDraftContract (9.222584ms)
+▶ V5-02A incomplete draft description
+  ✔ stores empty description for {"title":"Titre seul"} (0.946833ms)
+  ✔ stores empty description for {"categoryId":20} (0.062584ms)
+  ✔ stores empty description for {"title":"Titre","description":""} (0.046459ms)
+  ✔ stores empty description for {"title":"Titre","description":"   "} (0.053792ms)
+  ✔ stores empty description for {"title":"Titre","description":null} (0.040625ms)
+✔ V5-02A incomplete draft description (1.257959ms)
+▶ TOM-98 Lot A — contrat brouillons Web
+  ✔ aucune écriture listing_drafts dans le code applicatif (1.93875ms)
+  ✔ create/update/publish/delete filtrent owner + status draft ; publish → active (0.253375ms)
+  ✔ autosave persiste listings, pas localStorage (0.105ms)
+  ✔ draft hors discovery / SEO indexable / stats sans listing_drafts (0.613916ms)
+  ✔ lifecycle TOM-99 inchangé : pause/sold/renew refusés sur draft (0.130792ms)
+  ✔ draft visible owner, invisible visiteur (0.105875ms)
+  ✔ pas de nouvelle migration Web (1.058292ms)
+✔ TOM-98 Lot A — contrat brouillons Web (5.055125ms)
+▶ TOM-98 Lot B — contrat duplication Web
+  ✔ sources autorisées alignées Mobile : active/sold/hidden, pas draft/suspended (0.475084ms)
+  ✔ orchestration : nouveau draft owner, copie images, rollback dest, jamais publish (0.568209ms)
+  ✔ copie Storage vers user/newId/n.jpg + rollback dest-only (0.49725ms)
+  ✔ Mes annonces : Dupliquer → /vendre?draftId= (0.910708ms)
+  ✔ insert duplication réutilise le contrat draft Lot A (0.236375ms)
+  ✔ pas de régression TOM-98 Lot A / TOM-99 / discovery (3.74625ms)
+  ✔ aucune nouvelle migration dans le lot duplication (0.666125ms)
+✔ TOM-98 Lot B — contrat duplication Web (7.772167ms)
+▶ listingDuplicate payload
+  ✔ copie les champs produit et suffixe (copie), sans lifecycle (0.398792ms)
+  ✔ insert draft : nouvel owner session, status draft, compteurs reset, timestamps non copiés (0.259666ms)
+  ✔ source sold → insert sans sold_at ni status sold (0.07375ms)
+  ✔ appendCopySuffix respecte 80 caractères et conserve (copie) (0.090458ms)
+  ✔ attributs : nouvelles lignes dest, sans id source (0.099458ms)
+✔ listingDuplicate payload (1.417958ms)
+▶ listingLifecycle
+  ✔ edit sold ne pose pas status active (0.456166ms)
+  ✔ edit suspended ne change pas le statut (0.065917ms)
+  ✔ edit active peut rester active ou passer en pause via brouillon (0.067917ms)
+  ✔ active -> sold autorisé ; sold -> active est une transition explicite (0.124709ms)
+  ✔ pause ne part pas de sold (0.064875ms)
+  ✔ renew : active uniquement (0.081625ms)
+  ✔ interdit d’écrire sold_at / last_published_at depuis le client (4.820708ms)
+  ✔ draft : pas de pause/sold/reactivate via lifecycle ; publish dédié (0.142917ms)
+✔ listingLifecycle (6.411916ms)
+▶ V5-02B Web publication protocol (transport double)
+  ✔ persists current fields before finalization and never returns success early (0.746042ms)
+  ✔ does not rewrite an already published receipt (0.079041ms)
+  ✔ preserves a retryable error at prepare (0.265834ms)
+  ✔ preserves a retryable error at save (0.08575ms)
+  ✔ preserves a retryable error at finalize (0.072959ms)
+  ✔ rejects an incorrect server receipt (0.088958ms)
+✔ V5-02B Web publication protocol (transport double) (1.936459ms)
+▶ content-addressed draft photos
+  ✔ converges on the same path and id after a retry or rename (7.336917ms)
+  ✔ isolates different listings and content (2.973333ms)
+✔ content-addressed draft photos (10.491208ms)
+▶ listingPublishedAt
+  ✔ legacy sans renewal utilise created_at (1.3335ms)
+  ✔ privilégie last_published_at puis renewed_at, jamais updated_at (0.289917ms)
+  ✔ compare les instants en ms pour le ranking (0.196417ms)
+✔ listingPublishedAt (3.018167ms)
+▶ isListingRenewalDue
+  ✔ refuse une annonce trop récente (0.189291ms)
+  ✔ autorise après 3 jours depuis la dernière publication, pas created_at (0.122209ms)
+  ✔ autorise à partir de 3 jours révolus (aligné SQL now() >= last + 3 days) (0.065334ms)
+✔ isListingRenewalDue (0.494709ms)
+▶ listingStatus
+  ✔ distingue sold de hidden et suspended (0.424ms)
+  ✔ exclut sold de la visibilité publique (0.08475ms)
+  ✔ autorise le vendeur à marquer vendue depuis active ou hidden, pas suspended/sold (0.067125ms)
+  ✔ owner sold => réactivation disponible ; suspended => non réactivable (0.057791ms)
+  ✔ pause : active uniquement (0.057791ms)
+  ✔ renouvellement manuel : active uniquement ; sold/hidden restent sur réactivation (0.076584ms)
+  ✔ après passage à sold, le badge devient Vendue et l’action disparaît (0.072708ms)
+  ✔ draft : badge Brouillon, hors public, owner only (0.083333ms)
+  ✔ duplication : active/sold/hidden oui ; draft/suspended non (0.068708ms)
+✔ listingStatus (1.535666ms)
+ℹ tests 64
+ℹ suites 11
+ℹ pass 64
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 449.573667
