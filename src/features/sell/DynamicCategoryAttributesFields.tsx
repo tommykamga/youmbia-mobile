@@ -2,7 +2,7 @@
  * Champs attributs dynamiques — création d’annonce (pilotes Véhicules + Électronique).
  */
 
-import React, { useMemo, useState, useCallback } from 'react';
+import React, { useMemo, useState, useCallback, useEffect } from 'react';
 import {
   View,
   Text,
@@ -29,6 +29,8 @@ type Props = {
   loading: boolean;
   values: DynamicAttributeValues;
   onChange: (key: string, value: string) => void;
+  /** Réduit le bruit : bloc repliable lorsque plusieurs champs. */
+  progressive?: boolean;
 };
 
 function fieldLabel(def: EffectiveCategoryAttributeDefinitionResolved): string {
@@ -41,8 +43,17 @@ export function DynamicCategoryAttributesFields({
   loading,
   values,
   onChange,
+  progressive = false,
 }: Props) {
   const [selectOpen, setSelectOpen] = useState(false);
+  const [expanded, setExpanded] = useState(() => !progressive || definitions.length <= 1);
+
+  const definitionKeys = useMemo(() => definitions.map((d) => d.key).join('|'), [definitions]);
+
+  useEffect(() => {
+    if (!progressive) return;
+    setExpanded(definitions.length <= 1);
+  }, [definitions.length, progressive, definitionKeys]);
   const [activeSelectKey, setActiveSelectKey] = useState<string | null>(null);
   const [activeSelectDefId, setActiveSelectDefId] = useState<string | null>(null);
   const [activeSelectLabel, setActiveSelectLabel] = useState<string>('');
@@ -93,14 +104,10 @@ export function DynamicCategoryAttributesFields({
 
   if (definitions.length === 0) return null;
 
-  return (
-    <View style={styles.wrapper}>
-      <Text style={styles.sectionTitle}>Caractéristiques</Text>
-      <Text style={styles.sectionHint}>
-        Complétez les caractéristiques pour une meilleure visibilité.
-      </Text>
+  const filledCount = definitions.filter((def) => (values[def.key] ?? '').trim().length > 0).length;
+  const showCollapsed = progressive && !expanded;
 
-      {definitions.map((def) => {
+  const fields = definitions.map((def) => {
         const v = values[def.key] ?? '';
         const label = fieldLabel(def);
 
@@ -211,7 +218,40 @@ export function DynamicCategoryAttributesFields({
           default:
             return null;
         }
-      })}
+      });
+
+  return (
+    <View style={[styles.wrapper, progressive && styles.wrapperProgressive]}>
+      {progressive ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityState={{ expanded: !showCollapsed }}
+          accessibilityLabel={`Caractéristiques, ${filledCount} sur ${definitions.length} renseignées`}
+          onPress={() => setExpanded((v) => !v)}
+          style={({ pressed }) => [styles.progressiveHeader, pressed && styles.progressiveHeaderPressed]}
+        >
+          <View style={styles.progressiveHeaderText}>
+            <Text style={styles.sectionTitleCompact}>Caractéristiques</Text>
+            <Text style={styles.progressiveMeta}>
+              {filledCount}/{definitions.length} renseignées
+            </Text>
+          </View>
+          <Ionicons
+            name={showCollapsed ? 'chevron-down' : 'chevron-up'}
+            size={20}
+            color={colors.textSecondary}
+          />
+        </Pressable>
+      ) : (
+        <>
+          <Text style={styles.sectionTitle}>Caractéristiques</Text>
+          <Text style={styles.sectionHint}>
+            Complétez les caractéristiques pour une meilleure visibilité.
+          </Text>
+        </>
+      )}
+
+      {showCollapsed ? null : fields}
 
       <Modal
         visible={selectOpen}
@@ -287,6 +327,34 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.borderLight,
     backgroundColor: colors.background,
+  },
+  wrapperProgressive: {
+    marginBottom: spacing.sm,
+    padding: spacing.sm,
+  },
+  progressiveHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    minHeight: 44,
+    gap: spacing.sm,
+  },
+  progressiveHeaderPressed: {
+    opacity: 0.9,
+  },
+  progressiveHeaderText: {
+    flex: 1,
+    minWidth: 0,
+    gap: 2,
+  },
+  sectionTitleCompact: {
+    ...typography.sm,
+    fontWeight: fontWeights.bold,
+    color: colors.text,
+  },
+  progressiveMeta: {
+    ...typography.xs,
+    color: colors.textMuted,
   },
   sectionTitle: {
     ...typography.lg,
