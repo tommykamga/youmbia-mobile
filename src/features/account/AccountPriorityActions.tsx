@@ -3,73 +3,84 @@ import { View, Text, StyleSheet, Pressable, Platform, ActivityIndicator } from '
 import { useRouter } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useProSellerActivation } from '@/features/shops/useProSellerActivation';
+import { formatActiveListingsCountLabel } from '@/features/account/activeListingsCountLabel';
+import { useSellerActiveListingsCount } from '@/features/account/useSellerActiveListingsCount';
 import { colors, spacing, typography, fontWeights, radius } from '@/theme';
 
 type PriorityTileProps = {
   icon: keyof typeof Ionicons.glyphMap;
-  label: string;
+  title: string;
+  subtitle?: string | null;
+  subtitleLoading?: boolean;
   onPress: () => void;
   accessibilityLabel: string;
 };
 
-function PriorityTile({ icon, label, onPress, accessibilityLabel }: PriorityTileProps) {
+function PriorityTile({
+  icon,
+  title,
+  subtitle,
+  subtitleLoading,
+  onPress,
+  accessibilityLabel,
+}: PriorityTileProps) {
   return (
     <View style={styles.tile}>
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={accessibilityLabel}
         onPress={onPress}
-        style={({ pressed }) => [styles.tileSingle, pressed && styles.tilePressed]}
+        style={({ pressed }) => [styles.tileBody, pressed && styles.tilePressed]}
       >
         <View style={styles.tileIconWrap}>
-          <Ionicons name={icon} size={22} color={colors.primary} />
+          <Ionicons name={icon} size={20} color={colors.primary} />
         </View>
-        <Text style={styles.tileLabel} numberOfLines={2}>
-          {label}
+        <Text style={styles.tileTitle} numberOfLines={2}>
+          {title}
         </Text>
+        {subtitleLoading ? (
+          <ActivityIndicator size="small" color={colors.textMuted} style={styles.subtitleLoader} />
+        ) : subtitle ? (
+          <Text style={styles.tileSubtitle} numberOfLines={2} accessibilityRole="text">
+            {subtitle}
+          </Text>
+        ) : null}
       </Pressable>
     </View>
   );
-};
+}
 
 type ShopTileProps = {
-  shopLabel: string;
   shopName: string | null;
   onOpenShop: () => void;
   onShare: () => void;
   sharing: boolean;
 };
 
-function ShopPriorityTile({
-  shopLabel,
-  shopName,
-  onOpenShop,
-  onShare,
-  sharing,
-}: ShopTileProps) {
+function ShopPriorityTile({ shopName, onOpenShop, onShare, sharing }: ShopTileProps) {
   return (
-    <View style={[styles.tile, styles.tileShop]}>
+    <View style={styles.tile}>
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel={shopLabel}
+        accessibilityLabel="Ma boutique"
         onPress={onOpenShop}
         style={({ pressed }) => [styles.shopMain, pressed && styles.tilePressed]}
       >
         <View style={styles.tileIconWrap}>
-          <Ionicons name="storefront" size={22} color={colors.primary} />
+          <Ionicons name="storefront" size={20} color={colors.primary} />
         </View>
-        <Text style={styles.tileLabel} numberOfLines={2}>
-          {shopLabel}
+        <Text style={styles.tileTitle} numberOfLines={2}>
+          Ma boutique
         </Text>
         {shopName ? (
-          <Text style={styles.tileSubtitle} numberOfLines={1}>
+          <Text style={styles.tileSubtitle} numberOfLines={2}>
             {shopName}
           </Text>
         ) : null}
       </Pressable>
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel="Partager"
+        accessibilityLabel="Partager ma boutique"
         onPress={onShare}
         disabled={sharing}
         style={({ pressed }) => [
@@ -95,27 +106,38 @@ function ShopPriorityTile({
 export function AccountPriorityActions() {
   const router = useRouter();
   const { loading, hasShop, shopSlug, shopName, sharing, handleShare } = useProSellerActivation();
+  const {
+    loading: countLoading,
+    count,
+    error: countError,
+  } = useSellerActiveListingsCount();
 
   if (loading) {
     return null;
   }
 
-  const shopLabel = hasShop ? 'Ma boutique' : 'Créer ma boutique';
-  const shopRoute =
-    hasShop && shopSlug ? `/shop/${shopSlug}` : '/account/pro-shop';
+  const listingsSubtitle =
+    countError && count == null
+      ? 'Compteur indisponible'
+      : count != null
+        ? formatActiveListingsCountLabel(count)
+        : null;
+
+  const shopRoute = hasShop && shopSlug ? `/shop/${shopSlug}` : '/account/pro-shop';
 
   return (
     <View style={styles.wrap}>
       <View style={styles.row}>
         <PriorityTile
           icon="list"
-          label="Mes annonces"
+          title="Mes annonces"
+          subtitle={listingsSubtitle}
+          subtitleLoading={countLoading && count == null && !countError}
           onPress={() => router.push('/account/listings')}
           accessibilityLabel="Mes annonces"
         />
         {hasShop && shopSlug ? (
           <ShopPriorityTile
-            shopLabel={shopLabel}
             shopName={shopName}
             onOpenShop={() => router.push(shopRoute)}
             onShare={() => void handleShare()}
@@ -124,9 +146,9 @@ export function AccountPriorityActions() {
         ) : (
           <PriorityTile
             icon="storefront"
-            label={shopLabel}
+            title="Créer ma boutique"
             onPress={() => router.push('/account/pro-shop')}
-            accessibilityLabel={shopLabel}
+            accessibilityLabel="Créer ma boutique"
           />
         )}
       </View>
@@ -147,11 +169,11 @@ const tileShadow = Platform.select({
 
 const styles = StyleSheet.create({
   wrap: {
-    marginHorizontal: spacing.screenHorizontal,
-    marginBottom: spacing.sm,
-    maxWidth: 760,
     width: '100%',
+    maxWidth: 760,
     alignSelf: 'center',
+    paddingHorizontal: spacing.screenHorizontal,
+    marginBottom: spacing.sm,
   },
   row: {
     flexDirection: 'row',
@@ -168,37 +190,35 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     ...tileShadow,
   },
-  tileSingle: {
+  tileBody: {
     flex: 1,
-    minHeight: 72,
-    padding: spacing.sm,
+    minHeight: 64,
+    paddingHorizontal: spacing.sm,
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.xs,
     alignItems: 'flex-start',
-    justifyContent: 'flex-start',
-    gap: 4,
-  },
-  tileShop: {
-    flex: 1,
+    gap: 2,
   },
   tilePressed: {
     backgroundColor: colors.surfaceSubtle,
   },
   shopMain: {
-    flex: 1,
-    padding: spacing.sm,
+    paddingHorizontal: spacing.sm,
+    paddingTop: spacing.sm,
     paddingBottom: spacing.xs,
     alignItems: 'flex-start',
-    gap: 4,
-    minHeight: 48,
+    gap: 2,
+    minHeight: 56,
   },
   tileIconWrap: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     backgroundColor: colors.surfaceSubtle,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  tileLabel: {
+  tileTitle: {
     ...typography.sm,
     fontWeight: fontWeights.bold,
     color: colors.text,
@@ -209,12 +229,16 @@ const styles = StyleSheet.create({
     alignSelf: 'stretch',
     maxWidth: '100%',
   },
+  subtitleLoader: {
+    alignSelf: 'flex-start',
+    marginTop: 2,
+  },
   shareAction: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 4,
-    minHeight: 48,
+    minHeight: 44,
     paddingHorizontal: spacing.sm,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: colors.borderLight,

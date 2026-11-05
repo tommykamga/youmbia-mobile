@@ -26,6 +26,8 @@ export { saveListingDynamicAttributeValues } from './saveListingDynamicAttribute
 export { uploadListingImages } from './uploadListingImages';
 export { deleteListingImage } from './deleteListingImage';
 export { getMyListings } from './getMyListings';
+export { countMyActiveListings } from './countMyActiveListings';
+export type { CountMyActiveListingsResult } from './countMyActiveListings';
 export {
   getMySellerStats,
   computeAverageTimeToSaleDays,
