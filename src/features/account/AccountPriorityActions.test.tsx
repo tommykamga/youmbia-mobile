@@ -8,6 +8,11 @@ const m = vi.hoisted(() => ({
   getMySellerProStatus: vi.fn(),
   handleShare: vi.fn(),
   shopName: 'Boutique QA',
+  countState: {
+    loading: false,
+    count: 2 as number | null,
+    error: false,
+  },
 }));
 
 vi.mock('react-native', () => ({
@@ -38,6 +43,12 @@ vi.mock('expo-router', () => ({
 }));
 
 vi.mock('@expo/vector-icons/Ionicons', () => ({ default: 'Icon' }));
+
+vi.mock('@/features/account/useSellerActiveListingsCount', () => ({
+  useSellerActiveListingsCount: () => m.countState,
+  formatActiveListingsCountLabel: (count: number) =>
+    count === 0 ? 'Aucune annonce active' : `${count} annonces actives`,
+}));
 
 vi.mock('@/features/shops/useProSellerActivation', () => ({
   useProSellerActivation: () => {
@@ -79,6 +90,7 @@ vi.mock('@/theme', () => ({
     surface: '#fff',
     text: '#111',
     textSecondary: '#666',
+    textMuted: '#999',
     borderLight: '#eee',
     surfaceSubtle: '#f4f4f5',
   },
@@ -107,6 +119,7 @@ describe('AccountPriorityActions', () => {
     vi.clearAllMocks();
     m.getMySellerProStatus.mockReturnValue('noShop');
     m.shopName = 'Boutique QA';
+    m.countState = { loading: false, count: 2, error: false };
   });
 
   it('returns null while loading', async () => {
@@ -115,13 +128,25 @@ describe('AccountPriorityActions', () => {
     expect(tree.toJSON()).toBeNull();
   });
 
-  it('shows Mes annonces and Créer ma boutique when no shop', async () => {
+  it('shows Mes annonces with active count and Créer ma boutique when no shop', async () => {
     const tree = await renderActions();
     const json = JSON.stringify(tree.toJSON());
     expect(json).toContain('Mes annonces');
+    expect(json).toContain('2 annonces actives');
     expect(json).toContain('Créer ma boutique');
     expect(json).not.toContain('Partager');
     expect(pressables(tree)).toHaveLength(2);
+  });
+
+  it('uses paddingHorizontal wrap without marginHorizontal overflow pattern', async () => {
+    const tree = await renderActions();
+    const wrap = tree.root.findAllByType('View' as unknown as React.ComponentType)[0];
+    expect(wrap.props.style).toMatchObject({
+      paddingHorizontal: 16,
+      width: '100%',
+      maxWidth: 760,
+    });
+    expect(wrap.props.style).not.toHaveProperty('marginHorizontal');
   });
 
   it('navigates listings and pro-shop from tiles when no shop', async () => {
@@ -135,13 +160,13 @@ describe('AccountPriorityActions', () => {
     expect(m.push).toHaveBeenCalledWith('/account/pro-shop');
   });
 
-  it('uses separate shop navigation and Partager actions when shop exists', async () => {
+  it('uses separate shop navigation and Partager when shop exists', async () => {
     m.getMySellerProStatus.mockReturnValue('shop');
     const tree = await renderActions();
     const json = JSON.stringify(tree.toJSON());
     expect(json).toContain('Ma boutique');
     expect(json).toContain('Partager');
-    expect(json).not.toContain('Partager ma boutique');
+    expect(json).not.toContain('Modifier');
     const buttons = pressables(tree);
     expect(buttons.length).toBe(3);
     await act(async () => {
@@ -155,15 +180,26 @@ describe('AccountPriorityActions', () => {
     expect(m.push).toHaveBeenCalledTimes(1);
   });
 
-  it('truncates long shop name on one line', async () => {
+  it('shows unavailable counter label on error without count', async () => {
+    m.countState = { loading: false, count: null, error: true };
+    const tree = await renderActions();
+    const json = JSON.stringify(tree.toJSON());
+    expect(json).toContain('Compteur indisponible');
+    expect(json).not.toContain('0 annonce');
+  });
+
+  it('truncates long shop name', async () => {
     m.getMySellerProStatus.mockReturnValue('shop');
     m.shopName =
       'Boutique avec un nom extrêmement long pour valider la largeur compacte';
     const tree = await renderActions();
     const subtitle = tree.root
       .findAllByType('Text' as unknown as React.ComponentType)
-      .find((node) => node.props.numberOfLines === 1);
-    expect(subtitle?.props.children).toContain('extrêmement long');
-    expect(subtitle?.props.numberOfLines).toBe(1);
+      .find(
+        (node) =>
+          node.props.numberOfLines === 2 &&
+          String(node.props.children).includes('extrêmement long')
+      );
+    expect(subtitle).toBeTruthy();
   });
 });
