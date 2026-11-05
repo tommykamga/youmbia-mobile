@@ -18,7 +18,13 @@ vi.mock('@/lib/responsiveLayout', () => ({ getWindowSizeBucket: () => 'regular' 
 vi.mock('@/hooks/useMarketplaceCategories', () => ({ useMarketplaceCategories: () => ({ categories: [
   { id: 987, name: 'Électronique', slug: 'electronique', parent_id: null, level: 0, icon: null, form_profile: null },
 ] }) }));
-vi.mock('@/theme', () => ({ colors: { surface: '#FFF' } }));
+vi.mock('@/theme', () => ({
+  colors: { surface: '#FFF', primary: '#16a34a', text: '#111', textSecondary: '#666', border: '#ccc', background: '#fafafa' },
+  spacing: { xs: 4, sm: 8, base: 16, md: 20, lg: 24, xl: 32 },
+  typography: { xs: { fontSize: 12 }, sm: { fontSize: 14 }, base: { fontSize: 16 }, lg: { fontSize: 18 } },
+  fontWeights: { medium: '500', semibold: '600', bold: '700' },
+  radius: { md: 8, lg: 12, xl: 16 },
+}));
 vi.mock('./demoImages', () => ({ DEMO_IMAGES: {} }));
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 it('keeps developer commands collapsed, exposes them explicitly, resets business filters and exits locally', () => {
