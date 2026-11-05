@@ -5,7 +5,19 @@ import { PopularShopsSection } from './PopularShopsSection';
 import { ShopCard } from './ShopCard';
 import { DEMO_SHOPS } from '@/features/home/demo/demoProvider';
 const m = vi.hoisted(() => ({ load: vi.fn(), push: vi.fn() }));
-vi.mock('react-native', () => ({ View: 'View', Text: 'Text', FlatList: 'FlatList', Pressable: 'Pressable', Image: 'Image', StyleSheet: { create: (s: unknown) => s } }));
+vi.mock('react-native', () => ({
+  View: 'View',
+  Text: 'Text',
+  FlatList: 'FlatList',
+  Pressable: 'Pressable',
+  Image: 'Image',
+  Platform: { OS: 'ios', Version: '17' },
+  NativeModules: { BlobModule: { getConstants: () => ({}) } },
+  StyleSheet: { create: (s: unknown) => s },
+}));
+vi.mock('@/lib/shopMediaUrl', () => ({
+  isDisplayableShopMediaUrl: (url: string | null | undefined) => Boolean(url && String(url).trim()),
+}));
 vi.mock('expo-router', () => ({ useRouter: () => ({ push: m.push }) }));
 vi.mock('@expo/vector-icons/Ionicons', () => ({ default: 'Icon' }));
 vi.mock('@/components', () => ({ AppSectionHeader: 'Header' }));

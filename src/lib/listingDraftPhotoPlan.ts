@@ -19,15 +19,32 @@ export function filterUploadableListingPhotos<T extends ListingPhotoCandidate>(i
   return images.filter(isUploadableListingPhoto);
 }
 
-/** Prochains sort_order après les images déjà persistées (ordre stable, pas de collision). */
+/** Nombre de slots `sort_order` valides (aligné sur `uploadListingImages`). */
+export const LISTING_IMAGE_SORT_ORDER_SLOTS = 4;
+
+/**
+ * Prochains sort_order pour de nouvelles photos : réutilise les emplacements libres
+ * dans [0, slotCount) afin d’éviter un index ≥ slotCount après suppression intermédiaire.
+ */
 export function nextListingImageSortOrders(
   existingSortOrders: (number | null | undefined)[],
-  newCount: number
+  newCount: number,
+  slotCount: number = LISTING_IMAGE_SORT_ORDER_SLOTS
 ): number[] {
   if (newCount <= 0) return [];
-  const start =
-    existingSortOrders.reduce<number>((max, order) => Math.max(max, order ?? -1), -1) + 1;
-  return Array.from({ length: newCount }, (_, i) => start + i);
+  const occupied = new Set<number>();
+  for (const order of existingSortOrders) {
+    if (typeof order === 'number' && Number.isInteger(order) && order >= 0 && order < slotCount) {
+      occupied.add(order);
+    }
+  }
+  const next: number[] = [];
+  for (let slot = 0; slot < slotCount && next.length < newCount; slot++) {
+    if (!occupied.has(slot)) {
+      next.push(slot);
+    }
+  }
+  return next;
 }
 
 /** Ligne `listing_images` déjà persistée (UUID). Les copies en attente n’ont pas d’id. */
