@@ -8,6 +8,7 @@ import { useRouter } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { ProSellerBadge } from './ProSellerBadge';
 import { getShopInitials } from '@/lib/shopSeller';
+import { isDisplayableShopMediaUrl } from '@/lib/shopMediaUrl';
 import type { PopularShop } from '@/services/shops/getPopularShops';
 import { colors, spacing, typography, fontWeights, radius, cardStyles, getShadowStyle } from '@/theme';
 
@@ -34,7 +35,12 @@ function ShopCardInner({ shop, preview, variant = 'default' }: ShopCardProps) {
       ? `${shop.active_listings_count} annonce${shop.active_listings_count > 1 ? 's' : ''}`
       : 'Boutique pro';
 
-  const bannerSource = preview ? preview.bannerSource : shop.banner_url ? { uri: shop.banner_url } : undefined;
+  const bannerSource =
+    preview
+      ? preview.bannerSource
+      : isDisplayableShopMediaUrl(shop.banner_url)
+        ? { uri: shop.banner_url! }
+        : undefined;
 
   const onPress = () => {
     if (preview) { preview.onOpen(); return; }
@@ -79,8 +85,13 @@ function ShopCardInner({ shop, preview, variant = 'default' }: ShopCardProps) {
       ]}
     >
       <View style={[styles.banner, isCompact && styles.bannerCompact]}>
-        {bannerSource ? (
-          <Image source={bannerSource} style={styles.bannerImage} resizeMode="cover" />
+        {bannerSource && !coverFailed ? (
+          <Image
+            source={bannerSource}
+            style={styles.bannerImage}
+            resizeMode="cover"
+            onError={() => setCoverFailed(true)}
+          />
         ) : (
           <View style={styles.bannerFallback} />
         )}
@@ -89,9 +100,9 @@ function ShopCardInner({ shop, preview, variant = 'default' }: ShopCardProps) {
 
       <View style={[styles.body, isCompact && styles.bodyCompact]}>
         <View style={styles.logoRow}>
-          {!preview && shop.logo_url && !logoFailed ? (
+          {!preview && isDisplayableShopMediaUrl(shop.logo_url) && !logoFailed ? (
             <Image
-              source={{ uri: shop.logo_url }}
+              source={{ uri: shop.logo_url! }}
               style={[styles.logo, isCompact && styles.logoCompact]}
               onError={() => setLogoFailed(true)}
             />

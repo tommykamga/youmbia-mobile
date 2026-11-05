@@ -39,6 +39,7 @@ import { normalizePhoneForWhatsApp, openSellerPhoneCallRaw } from '@/lib/sellerC
 import { getShopInitials } from '@/lib/shopSeller';
 import { buildAuthGateHref } from '@/lib/authGateNavigation';
 import { formatJoinDate } from '@/lib/format';
+import { isDisplayableShopMediaUrl } from '@/lib/shopMediaUrl';
 import { REPORT_OWN_CONTENT_MESSAGE, REPORT_SUCCESS_MESSAGE } from '@/constants/reportMessages';
 import type { ReportReasonCode } from '@/constants/reportReasons';
 import { ReportComposerModal } from '@/features/reports';
@@ -72,8 +73,10 @@ export default function ShopScreen() {
   const [reportedShopId, setReportedShopId] = useState<string | null>(null);
   const [sessionUserId, setSessionUserId] = useState<string | null>(null);
   const [logoFailed, setLogoFailed] = useState(false);
+  const [bannerFailed, setBannerFailed] = useState(false);
 
   const logoKey = state.status === 'ready' ? String(state.shop.logo_url ?? '').trim() : '';
+  const bannerKey = state.status === 'ready' ? String(state.shop.banner_url ?? '').trim() : '';
 
   const loadShop = useCallback(async (isRefresh = false) => {
     if (!slug?.trim()) {
@@ -143,6 +146,10 @@ export default function ShopScreen() {
   useEffect(() => {
     setLogoFailed(false);
   }, [logoKey]);
+
+  useEffect(() => {
+    setBannerFailed(false);
+  }, [bannerKey]);
 
   useEffect(() => {
     void loadShop();
@@ -306,6 +313,8 @@ export default function ShopScreen() {
   const shopStatus = (shop.status ?? 'active') as string;
   const visibility = resolveShopVisibilityFlags(shop);
   const initials = getShopInitials(shop.name);
+  const logoUri = isDisplayableShopMediaUrl(shop.logo_url) ? shop.logo_url : null;
+  const bannerUri = isDisplayableShopMediaUrl(shop.banner_url) ? shop.banner_url : null;
   const ownerJoinDate = formatJoinDate(ownerMemberSince);
   const activeListingsCount = listings.length;
   const hasWhatsApp =
@@ -354,8 +363,13 @@ export default function ShopScreen() {
         }
       >
         <View style={styles.banner}>
-          {shop.banner_url ? (
-            <Image source={{ uri: shop.banner_url }} style={styles.bannerImage} resizeMode="cover" />
+          {bannerUri && !bannerFailed ? (
+            <Image
+              source={{ uri: bannerUri }}
+              style={styles.bannerImage}
+              resizeMode="cover"
+              onError={() => setBannerFailed(true)}
+            />
           ) : (
             <ShopBannerFallback />
           )}
@@ -364,8 +378,12 @@ export default function ShopScreen() {
 
         <View style={styles.contentColumn}>
           <View style={styles.profileRow}>
-            {shop.logo_url && !logoFailed ? (
-              <Image source={{ uri: shop.logo_url }} style={styles.logo} onError={() => setLogoFailed(true)} />
+            {logoUri && !logoFailed ? (
+              <Image
+                source={{ uri: logoUri }}
+                style={styles.logo}
+                onError={() => setLogoFailed(true)}
+              />
             ) : (
               <View style={styles.logoFallback}>
                 <Text style={styles.logoInitials}>{initials}</Text>

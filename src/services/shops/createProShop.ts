@@ -172,11 +172,19 @@ export async function createProShop(payload: CreateProShopPayload): Promise<Crea
 
   if (payload.logo?.base64) {
     const up = await uploadShopImage(user.id, shopId, 'logo', payload.logo);
-    if (up.path) logoUrl = up.path;
+    if (up.path) {
+      logoUrl = up.path;
+    } else if (up.error && __DEV__) {
+      console.warn('[createProShop] logo upload failed', up.error);
+    }
   }
   if (payload.banner?.base64) {
     const up = await uploadShopImage(user.id, shopId, 'banner', payload.banner);
-    if (up.path) bannerUrl = up.path;
+    if (up.path) {
+      bannerUrl = up.path;
+    } else if (up.error && __DEV__) {
+      console.warn('[createProShop] banner upload failed', up.error);
+    }
   }
 
   if (logoUrl || bannerUrl) {
