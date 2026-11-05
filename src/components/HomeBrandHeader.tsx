@@ -110,8 +110,18 @@ export function HomeBrandHeader({
       {!homePresentation && !location ? <View style={[styles.sideSlot, styles.sideSlotStart, { width: layout.sideSlot }]} /> : null}
       <View style={[styles.logoWrap, location && styles.logoWithLocation, homePresentation && styles.logoHome]} accessibilityRole="header">
         <Image
-          source={require('../../assets/images/youmbia-logo-header.svg')}
-          style={[styles.logo, { width: homePresentation || location ? 132 : layout.logoWidth, height: homePresentation || location ? 36 : layout.logoHeight }]}
+          source={
+            homePresentation
+              ? require('../../assets/images/youmbia-y-header.png')
+              : require('../../assets/images/youmbia-logo-header.svg')
+          }
+          style={[
+            styles.logo,
+            {
+              width: homePresentation ? 52 : location ? 132 : layout.logoWidth,
+              height: homePresentation ? 52 : location ? 36 : layout.logoHeight,
+            },
+          ]}
           contentFit="contain"
           accessibilityLabel="YOUMBIA"
         />
@@ -172,7 +182,7 @@ const styles = StyleSheet.create({
   },
   rowHome: { backgroundColor: '#0B4D3C', gap: spacing.sm },
   logoWithLocation: { flex: 0 },
-  logoHome: { flex: 0, alignItems: 'flex-start', backgroundColor: colors.surface, borderRadius: 8, paddingHorizontal: 6, paddingVertical: 2 },
+  logoHome: { flex: 0, alignItems: 'center', justifyContent: 'center', backgroundColor: 'transparent', borderRadius: 12, paddingHorizontal: 0, paddingVertical: 0 },
   location: { flex: 1, minWidth: 0, minHeight: 44, flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center', gap: spacing.xs },
   locationText: { color: colors.surface, flexShrink: 1, fontSize: 13, fontWeight: '600' },
   notificationHome: { minWidth: 44, minHeight: 44, backgroundColor: 'transparent', borderWidth: 0, elevation: 0, shadowOpacity: 0 },
