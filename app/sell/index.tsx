@@ -7,12 +7,10 @@ import {
   View,
   Text,
   StyleSheet,
-  Image,
   ScrollView,
   Alert,
   Platform,
   Pressable,
-  useWindowDimensions,
   Keyboard,
 } from 'react-native';
 import { useRouter, useFocusEffect, useLocalSearchParams, type Href } from 'expo-router';
@@ -24,13 +22,13 @@ import {
   isSellerProfileComplete,
 } from '@/lib/sellerProfile';
 import * as ImagePicker from 'expo-image-picker';
-import { Screen, Button, Input, Loader, KeyboardSafeView } from '@/components';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Screen, Button, Loader, KeyboardSafeView } from '@/components';
 import { type ListingCategoryId } from '@/lib/listingCategories';
 import {
   categoryHasChildren,
   getChildMarketplaceCategories,
   getRootMarketplaceCategories,
-  getSellParentIcon,
   resolveMarketplaceCategoryLabel,
   resolveSellCategorySelection,
 } from '@/lib/marketplaceCategories';
@@ -40,7 +38,6 @@ import {
   DRAFT_LISTING_SAVED_ACK_FAILED_SUBTITLE,
   DRAFT_LISTING_SAVED_MESSAGE,
   DRAFT_LISTING_SAVED_SUBTITLE,
-  DRAFT_REMINDERS_NOTICE,
 } from '@/lib/listingStatus';
 import { acknowledgeDraftRemindersNotice } from '@/services/emailPreferences';
 import {
@@ -65,7 +62,19 @@ import {
   getCategoryAttributeOptionsByDefinitionIds,
 } from '@/services/categoryAttributes';
 import { collectEmptyDynamicAttributeDefinitionIds, buildListingDynamicAttributeRows } from '@/lib/listingDynamicAttributesPayload';
-import { DynamicCategoryAttributesFields } from '@/features/sell/DynamicCategoryAttributesFields';
+import { SellFlowHeader } from '@/features/sell/SellFlowHeader';
+import { SellPrequalBanner } from '@/features/sell/SellPrequalBanner';
+import { SellPublishSuccess } from '@/features/sell/SellPublishSuccess';
+import { SellStepDetails } from '@/features/sell/SellStepDetails';
+import { SellStepPhotos, MAX_SELL_LISTING_PHOTOS } from '@/features/sell/SellStepPhotos';
+import { SellStepReview } from '@/features/sell/SellStepReview';
+import {
+  resolveInitialSellFlowStep,
+  sellFlowNextStep,
+  sellFlowPreviousStep,
+  shouldHideSellStickyFooter,
+  type SellFlowStepId,
+} from '@/features/sell/sellFlowSteps';
 import { colors, spacing, typography, fontWeights, radius } from '@/theme';
 import {
   createListingDraft,
@@ -90,8 +99,6 @@ import {
 } from '@/services/profile';
 import { getSellCategoryGuidanceForCategoryId } from '@/lib/sellCategoryGuidance';
 import {
-  LISTING_DESCRIPTION_MAX,
-  LISTING_TITLE_MAX,
   parseListingPrice,
   sanitizeListingPriceDigits,
   shouldShowListingFieldError,
@@ -113,8 +120,7 @@ import {
 import { shareListingPreferWhatsApp } from '@/lib/shareListing';
 
 /** Aligné web : maximum 4 photos par annonce. */
-const MAX_LISTING_IMAGES = 4;
-const YOUMBIA_SELECTED_BG = 'rgba(22, 163, 74, 0.08)';
+const MAX_LISTING_IMAGES = MAX_SELL_LISTING_PHOTOS;
 const YOUMBIA_SELECTED_GLOW = 'rgba(22, 163, 74, 0.18)';
 
 type ExistingDraftImage = {
@@ -124,61 +130,6 @@ type ExistingDraftImage = {
   displayUrl: string;
 };
 
-function getSellCategoryColumnCount(screenWidth: number): number {
-  if (screenWidth >= 900) return 5;
-  if (screenWidth >= 600) return 4;
-  return 3;
-}
-
-function getSellCategoryCardWidth(screenWidth: number, columns: number): number {
-  const contentMaxWidth = 520;
-  const horizontalPadding = spacing.base * 2;
-  const gridGap = 6;
-  const contentWidth = Math.min(screenWidth, contentMaxWidth) - horizontalPadding;
-  const totalGap = gridGap * Math.max(0, columns - 1);
-  return Math.max(56, Math.floor((contentWidth - totalGap) / columns));
-}
-
-function getSellPhotoSlotSize(screenWidth: number): number {
-  const contentMaxWidth = 520;
-  const horizontalPadding = spacing.base * 2;
-  const gridGap = spacing.sm;
-  const contentWidth = Math.min(screenWidth, contentMaxWidth) - horizontalPadding;
-  const totalGap = gridGap * Math.max(0, MAX_LISTING_IMAGES - 1);
-  return Math.max(68, Math.floor((contentWidth - totalGap) / MAX_LISTING_IMAGES));
-}
-
-function RequiredFieldLabel({ children }: { children: string }) {
-  return (
-    <Text style={styles.label}>
-      {children}
-      <Text style={styles.requiredMark}> *</Text>
-    </Text>
-  );
-}
-
-function SellFieldMeta({
-  hint,
-  counter,
-  max,
-}: {
-  hint: string;
-  counter: number;
-  max: number;
-}) {
-  const atLimit = counter >= max;
-  return (
-    <View style={styles.fieldMetaRow}>
-      <Text style={styles.fieldHint} numberOfLines={2}>
-        {hint}
-      </Text>
-      <Text style={[styles.charCounter, atLimit ? styles.charCounterAtLimit : null]}>
-        {counter} / {max}
-      </Text>
-    </View>
-  );
-}
-
 type PickedImage = { uri: string; base64: string | null; mimeType?: string | null };
 
 type PublishState =
@@ -187,47 +138,15 @@ type PublishState =
 
 type PrequalStatus = 'loading' | 'ready';
 
-function ChecklistRow({
-  label,
-  ok,
-  hint,
-}: {
-  label: string;
-  ok: boolean;
-  hint?: string;
-}) {
-  return (
-    <View style={styles.checkRow}>
-      <View style={styles.checkIconSlot}>
-        <Ionicons
-          name={ok ? 'checkmark-circle' : 'warning'}
-          size={20}
-          color={ok ? colors.success : colors.warning}
-        />
-      </View>
-      <View style={styles.checkTextSlot}>
-        <Text style={styles.checkLabel}>{label}</Text>
-        {hint ? <Text style={styles.checkHint}>{hint}</Text> : null}
-      </View>
-    </View>
-  );
-}
-
 export default function SellScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const rawParams = useLocalSearchParams<{ draftId?: string | string[] }>();
   const routeDraftId = useMemo(() => {
     const raw = rawParams.draftId;
     const value = Array.isArray(raw) ? raw[0] : raw;
     return String(value ?? '').trim() || null;
   }, [rawParams.draftId]);
-  const { width: screenWidth } = useWindowDimensions();
-  const categoryColumns = useMemo(() => getSellCategoryColumnCount(screenWidth), [screenWidth]);
-  const categoryCardWidth = useMemo(
-    () => getSellCategoryCardWidth(screenWidth, categoryColumns),
-    [screenWidth, categoryColumns]
-  );
-  const photoSlotSize = useMemo(() => getSellPhotoSlotSize(screenWidth), [screenWidth]);
   const { categories: marketplaceCategories, loading: categoriesLoading, error: categoriesError } =
     useMarketplaceCategories();
   const parentCategories = useMemo(
@@ -235,9 +154,10 @@ export default function SellScreen() {
     [marketplaceCategories]
   );
   const [publishState, setPublishState] = useState<PublishState>({ status: 'idle' });
-  const [showPrequal, setShowPrequal] = useState(false);
   const [prequalStatus, setPrequalStatus] = useState<PrequalStatus>('loading');
   const [profileAny, setProfileAny] = useState<Record<string, unknown> | null>(null);
+  const [flowStep, setFlowStep] = useState<SellFlowStepId>('photos');
+  const flowBootKeyRef = useRef<string | null>(null);
 
   const [title, setTitle] = useState('');
   const [priceStr, setPriceStr] = useState('');
@@ -338,6 +258,38 @@ export default function SellScreen() {
 
   const totalPhotoCount = existingDraftImages.length + images.length;
 
+  const flowCompletionInput = useMemo(
+    () => ({
+      totalPhotoCount,
+      title,
+      description,
+      priceStr,
+      city,
+      publishCategoryId,
+      selectedParentCategoryId,
+      marketplaceCategories,
+    }),
+    [
+      totalPhotoCount,
+      title,
+      description,
+      priceStr,
+      city,
+      publishCategoryId,
+      selectedParentCategoryId,
+      marketplaceCategories,
+    ]
+  );
+
+  const flowBootKey = `${routeDraftId ?? ''}:${duplicateSourceId ?? ''}:${editingDraftId ?? 'new'}`;
+
+  useEffect(() => {
+    if (routeDraftId && draftLoadStatus !== 'ready') return;
+    if (flowBootKeyRef.current === flowBootKey) return;
+    flowBootKeyRef.current = flowBootKey;
+    setFlowStep(resolveInitialSellFlowStep(flowCompletionInput));
+  }, [flowBootKey, routeDraftId, draftLoadStatus, flowCompletionInput]);
+
   const handleTitleChange = useCallback((text: string) => {
     setTitle(text);
     setSubmitError(null);
@@ -390,6 +342,29 @@ export default function SellScreen() {
     router.replace('/(tabs)/home' as Href);
   }, [router]);
 
+  const handleFlowBack = useCallback(() => {
+    const previous = sellFlowPreviousStep(flowStep);
+    if (previous) {
+      setFlowStep(previous);
+      return;
+    }
+    goBackOrHome();
+  }, [flowStep, goBackOrHome]);
+
+  const handleFlowContinue = useCallback(() => {
+    const next = sellFlowNextStep(flowStep);
+    if (next) setFlowStep(next);
+  }, [flowStep]);
+
+  const handleEditFlowStep = useCallback((stepId: SellFlowStepId) => {
+    setFlowStep(stepId);
+  }, []);
+
+  const handleCityChipPress = useCallback((label: string) => {
+    setCity(label);
+    setSubmitError(null);
+  }, []);
+
   const resetForm = () => {
     postPublishViewedRef.current = null;
     setSharingWhatsApp(false);
@@ -422,6 +397,8 @@ export default function SellScreen() {
     setPendingDuplicateCategoryId(null);
     pendingDuplicateDynamicRef.current = null;
     publishMemoryAppliedRef.current = false;
+    flowBootKeyRef.current = null;
+    setFlowStep('photos');
     void loadSellerPrequalProfile();
   };
 
@@ -443,7 +420,6 @@ export default function SellScreen() {
       const session = await getSession();
       if (!session?.user) {
         setProfileAny(null);
-        setShowPrequal(true);
         setPrequalStatus('ready');
         return;
       }
@@ -452,11 +428,9 @@ export default function SellScreen() {
       setProfileAny(any);
       const shopRes = await getSellerShop(session.user.id);
       setPublishShopId(shopRes.data?.id ?? null);
-      setShowPrequal(!isSellerProfileComplete(any));
       setPrequalStatus('ready');
     } catch {
       setProfileAny(null);
-      setShowPrequal(true);
       setPrequalStatus('ready');
     }
   }, []);
@@ -782,6 +756,7 @@ export default function SellScreen() {
     await deleteListing(listingId);
   };
 
+  /** Notice {@link DRAFT_REMINDERS_NOTICE} affichée en scroll (Détails/Vérification) ; ack via acknowledgeDraftRemindersNotice. */
   const handleSaveDraft = async () => {
     if (submitLoading || draftSaveLoading) return;
     setSubmitError(null);
@@ -1112,34 +1087,12 @@ export default function SellScreen() {
   if (publishState.status === 'success') {
     return (
       <Screen>
-        <View style={styles.successBlock}>
-          <Text style={styles.successTitle}>Votre annonce est en ligne</Text>
-          <Text style={styles.successSubtitle}>
-            Consultez-la ou partagez-la avec vos contacts.
-          </Text>
-          <View style={styles.successActions}>
-            <Button
-              size="lg"
-              onPress={handleViewPublishedListing}
-              style={styles.successBtn}
-            >
-              Voir mon annonce
-            </Button>
-            <Button
-              variant="secondary"
-              size="lg"
-              onPress={handleSharePublishedWhatsApp}
-              loading={sharingWhatsApp}
-              disabled={sharingWhatsApp}
-              style={styles.successBtn}
-            >
-              Partager sur WhatsApp
-            </Button>
-            <Button variant="ghost" size="lg" onPress={resetForm} style={styles.successBtn}>
-              Publier une autre annonce
-            </Button>
-          </View>
-        </View>
+        <SellPublishSuccess
+          onViewListing={handleViewPublishedListing}
+          onShareWhatsApp={() => void handleSharePublishedWhatsApp()}
+          onPublishAnother={resetForm}
+          sharingWhatsApp={sharingWhatsApp}
+        />
       </Screen>
     );
   }
@@ -1149,7 +1102,18 @@ export default function SellScreen() {
   const hasProfileSellerName = !!sellerNamePrequal.trim();
   const hasPhone = !!sellerPhonePrequal.trim();
   const isAuthed = prequalStatus === 'ready' ? profileAny != null : false;
-  const sellerProfileComplete = isSellerProfileComplete(profileAny);
+
+  const flowBackLabel =
+    flowStep === 'photos' ? 'Retour ou accueil' : `Retour à l'étape précédente`;
+  const categoryLabelForReview =
+    publishCategoryId != null
+      ? resolveMarketplaceCategoryLabel(marketplaceCategories, publishCategoryId) ?? '—'
+      : '—';
+  const cityRecognizedLabel =
+    city.trim() && cityResolution.kind === 'canonical'
+      ? canonicalCityLabel(cityResolution.code)
+      : null;
+  const showStickyFooter = !shouldHideSellStickyFooter(keyboardVisible, flowStep);
 
   if (prequalStatus === 'loading' || (routeDraftId && draftLoadStatus === 'loading')) {
     return (
@@ -1181,92 +1145,27 @@ export default function SellScreen() {
     );
   }
 
-  if (showPrequal && !sellerProfileComplete) {
-    return (
-      <Screen>
-        <View style={styles.content}>
-          <View style={styles.prequalWrap}>
-          <Text style={styles.prequalTitle}>Avant de publier</Text>
-          <Text style={styles.prequalSubtitle}>
-            Vérifiez ces prérequis pour éviter un refus en fin de parcours.
-          </Text>
-
-          <View style={styles.prequalCard}>
-            <Text style={styles.prequalCardTitle}>Pré‑requis</Text>
-            <ChecklistRow
-              label="Profil vendeur"
-              ok={prequalStatus === 'ready' && isAuthed && hasProfileSellerName}
-              hint={!isAuthed ? 'Connectez‑vous pour vérifier votre profil.' : !hasProfileSellerName ? 'Nom/pseudo manquant (non bloquant ici).' : undefined}
-            />
-            <ChecklistRow
-              label="Téléphone"
-              ok={prequalStatus === 'ready' && isAuthed && hasPhone}
-              hint={!isAuthed ? 'Connectez‑vous pour vérifier votre téléphone.' : !hasPhone ? 'Téléphone manquant (non bloquant ici).' : undefined}
-            />
-            <ChecklistRow
-              label="Photos (1 à 4)"
-              ok={true}
-              hint="Préparez 1 à 4 photos nettes (fond simple, bonne lumière)."
-            />
-          </View>
-
-          {prequalStatus === 'ready' && isAuthed && !hasPhone ? (
-            <View style={styles.softWarning}>
-              <Ionicons name="information-circle-outline" size={18} color={colors.warning} />
-              <Text style={styles.softWarningText}>
-                Conseil: ajoutez un téléphone dans votre profil pour éviter un blocage au moment de publier.
-              </Text>
-            </View>
-          ) : null}
-
-          <View style={styles.prequalActions}>
-            <Button
-              size="lg"
-              onPress={() => {
-                setShowPrequal(false);
-              }}
-            >
-              Continuer
-            </Button>
-            <Button
-              variant="secondary"
-              onPress={() => router.push(buildAccountProfileHref('/sell'))}
-            >
-              Compléter mon profil
-            </Button>
-            <Button variant="ghost" onPress={goBackOrHome}>
-              Annuler
-            </Button>
-          </View>
-          </View>
-        </View>
-      </Screen>
-    );
-  }
-
   return (
-    <Screen scroll={false}>
+    <Screen scroll={false} safe={false} noPadding>
+      <SellFlowHeader
+        activeStepId={flowStep}
+        onBackPress={handleFlowBack}
+        backAccessibilityLabel={flowBackLabel}
+      />
       <KeyboardSafeView style={styles.formLayout}>
         <ScrollView
           style={styles.formScroll}
           contentContainerStyle={[
             styles.formScrollContent,
+            flowStep === 'photos' ? styles.formScrollContentPhotosStep : null,
+            flowStep === 'details' ? styles.formScrollContentDetailsStep : null,
+            flowStep === 'review' ? styles.formScrollContentReviewStep : null,
             keyboardVisible ? styles.formScrollContentKeyboardOpen : null,
           ]}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
           <View style={styles.content}>
-            <Text style={styles.title}>{editingDraftId ? 'Reprendre le brouillon' : 'Vendre'}</Text>
-            <Text style={styles.subtitle}>
-              {editingDraftId
-                ? 'Complétez puis publiez, ou enregistrez à nouveau comme brouillon.'
-                : 'Publiez votre annonce en quelques minutes.'}
-            </Text>
-            <Text style={styles.publishQualityTip}>
-              Quelques détails de plus augmentent vos chances de vendre rapidement.
-            </Text>
-
             {duplicateSourceId ? (
               <View style={styles.duplicateBanner}>
                 <Ionicons name="copy-outline" size={18} color={colors.primary} />
@@ -1280,350 +1179,185 @@ export default function SellScreen() {
               </View>
             ) : null}
 
-            {prequalStatus === 'ready' && isAuthed && !hasPhone ? (
-              <View style={styles.inlineWarning}>
-                <Ionicons name="warning-outline" size={18} color={colors.warning} />
-                <Text style={styles.inlineWarningText}>
-                  Ajoutez un numéro pour publier votre annonce.
-                </Text>
-                <Pressable onPress={() => router.push(buildAccountProfileHref('/sell'))} hitSlop={8}>
-                  <Text style={styles.inlineWarningLink}>Compléter</Text>
-                </Pressable>
-              </View>
-            ) : null}
-
-            <View style={styles.imagesSection}>
-              <RequiredFieldLabel>Photos</RequiredFieldLabel>
-              <Text style={styles.stepHelper}>
-                {duplicateSourceId
-                  ? 'Photos reprises de l’annonce d’origine. Vous pouvez en retirer ou en ajouter jusqu’à 4 — la première sera affichée en couverture.'
-                  : editingDraftId
-                    ? 'Reprenez votre brouillon : conservez les photos déjà ajoutées ou en ajoutez jusqu’à 4.'
-                    : 'Ajoutez jusqu’à 4 photos. La première sera affichée en couverture.'}
-              </Text>
-              <Text style={styles.photoCounter}>
-                {totalPhotoCount} / {MAX_LISTING_IMAGES} photos
-              </Text>
-              {totalPhotoCount === 0 ? (
-                <Text style={styles.photoZeroHint}>Ajoutez au moins une photo pour publier.</Text>
-              ) : null}
-              <View style={styles.photoSlotsRow}>
-                {Array.from({ length: MAX_LISTING_IMAGES }, (_, index) => {
-                  const existing = existingDraftImages[index];
-                  const picked =
-                    index >= existingDraftImages.length
-                      ? images[index - existingDraftImages.length]
-                      : undefined;
-                  const slotStyle = { width: photoSlotSize, height: photoSlotSize };
-                  const displayUri = existing?.displayUrl ?? picked?.uri;
-
-                  if (displayUri) {
-                    return (
-                      <View key={`photo-slot-${index}`} style={[styles.photoSlot, slotStyle]}>
-                        <Image source={{ uri: displayUri }} style={styles.photoSlotImage} resizeMode="cover" />
-                        {index === 0 ? (
-                          <View style={styles.photoCoverBadge} pointerEvents="none">
-                            <Text style={styles.photoCoverBadgeText}>Couverture</Text>
-                          </View>
-                        ) : null}
-                        <Pressable
-                          accessibilityRole="button"
-                          accessibilityLabel="Supprimer la photo"
-                          onPress={() => removeImage(index)}
-                          style={styles.photoSlotRemove}
-                          hitSlop={8}
-                        >
-                          <Ionicons name="close" size={12} color={colors.text} />
-                        </Pressable>
-                      </View>
-                    );
-                  }
-
-                  const isPrimaryAddSlot = totalPhotoCount === 0 && index === 0;
-
-                  return (
-                    <Pressable
-                      key={`photo-slot-${index}`}
-                      accessibilityRole="button"
-                      accessibilityLabel={isPrimaryAddSlot ? 'Ajouter une photo' : 'Ajouter une photo'}
-                      style={({ pressed }) => [
-                        styles.photoSlot,
-                        isPrimaryAddSlot ? styles.photoSlotPrimaryAdd : styles.photoSlotEmpty,
-                        slotStyle,
-                        pressed && (isPrimaryAddSlot ? styles.photoSlotPrimaryAddPressed : styles.photoSlotEmptyPressed),
-                      ]}
-                      onPress={() => {
-                        if (totalPhotoCount < MAX_LISTING_IMAGES) {
-                          void pickImages();
-                        }
-                      }}
-                      disabled={totalPhotoCount >= MAX_LISTING_IMAGES}
-                    >
-                      {isPrimaryAddSlot ? (
-                        <View style={styles.photoSlotPrimaryAddContent}>
-                          <Ionicons name="camera-outline" size={20} color={colors.primary} />
-                          <Text style={styles.photoSlotPrimaryAddTitle}>Ajouter une photo</Text>
-                        </View>
-                      ) : (
-                        <Ionicons name="add" size={20} color={colors.primary} />
-                      )}
-                    </Pressable>
-                  );
-                })}
-              </View>
-              <Text style={styles.photoQualityTip}>
-                Conseil : utilisez des photos nettes, bien éclairées, sans montage.
-              </Text>
-            </View>
-
-            <View style={styles.validatedField}>
-              <Input
-                label="Titre *"
-                placeholder={sellGuidance.titlePlaceholder}
-                value={title}
-                onChangeText={handleTitleChange}
-                maxLength={LISTING_TITLE_MAX}
-                error={showTitleError ? (titleError ?? undefined) : undefined}
-                containerStyle={styles.validatedFieldInput}
-              />
-              <SellFieldMeta
-                hint={sellGuidance.titleHint}
-                counter={title.length}
-                max={LISTING_TITLE_MAX}
-              />
-            </View>
-
-            <View style={styles.validatedField}>
-              <Input
-                label="Description *"
-                placeholder={sellGuidance.descriptionPlaceholder}
-                value={description}
-                onChangeText={handleDescriptionChange}
-                multiline
-                numberOfLines={4}
-                style={styles.descriptionInput}
-                maxLength={LISTING_DESCRIPTION_MAX}
-                error={showDescriptionError ? (descriptionError ?? undefined) : undefined}
-                containerStyle={styles.validatedFieldInput}
-              />
-              <SellFieldMeta
-                hint={sellGuidance.descriptionHint}
-                counter={description.length}
-                max={LISTING_DESCRIPTION_MAX}
-              />
-            </View>
-
-            <View style={styles.categorySection}>
-              <RequiredFieldLabel>Catégorie</RequiredFieldLabel>
-              {categoriesLoading ? (
-                <View style={styles.categoryLoadingSlot}>
-                  <Loader />
-                </View>
-              ) : categoriesError ? (
-                <Text style={styles.categoryLoadError}>{categoriesError}</Text>
-              ) : (
-                <>
-                  <View style={styles.categoryGrid}>
-                    {parentCategories.map((category) => {
-                      const isSelected = selectedParentCategoryId === category.id;
-                      return (
-                        <Pressable
-                          key={category.id}
-                          accessibilityRole="button"
-                          accessibilityState={{ selected: isSelected }}
-                          style={({ pressed }) => [
-                            styles.categoryCard,
-                            { width: categoryCardWidth },
-                            isSelected && styles.categoryCardSelected,
-                            pressed && styles.categoryCardPressed,
-                          ]}
-                          onPress={() => selectParentCategory(category.id)}
-                        >
-                          {isSelected ? (
-                            <View style={styles.categoryCardCheck}>
-                              <Ionicons name="checkmark-circle" size={14} color={colors.primary} />
-                            </View>
-                          ) : null}
-                          <View style={styles.categoryIconSlot}>
-                            <Ionicons
-                              name={getSellParentIcon(category.slug)}
-                              size={isSelected ? 17 : 15}
-                              color={isSelected ? colors.primary : colors.textSecondary}
-                            />
-                          </View>
-                          <Text
-                            style={[
-                              styles.categoryCardLabel,
-                              isSelected && styles.categoryCardLabelSelected,
-                            ]}
-                            numberOfLines={2}
-                            adjustsFontSizeToFit
-                            minimumFontScale={0.9}
-                          >
-                            {category.name}
-                          </Text>
-                        </Pressable>
-                      );
-                    })}
-                  </View>
-                  {subcategoryOptions.length > 0 ? (
-                    <View style={styles.subcategorySection}>
-                      <Text style={styles.subcategoryLabel}>Sous-catégorie</Text>
-                      <View style={styles.subcategoryChipRow}>
-                        {subcategoryOptions.map((subcategory) => {
-                          const isSelected = selectedChildCategoryId === subcategory.id;
-                          return (
-                            <Pressable
-                              key={subcategory.id}
-                              accessibilityRole="button"
-                              accessibilityState={{ selected: isSelected }}
-                              style={({ pressed }) => [
-                                styles.subcategoryChip,
-                                isSelected && styles.subcategoryChipSelected,
-                                pressed && styles.subcategoryChipPressed,
-                              ]}
-                              onPress={() => selectChildCategory(subcategory.id)}
-                            >
-                              <Text
-                                style={[
-                                  styles.subcategoryChipText,
-                                  isSelected && styles.subcategoryChipTextSelected,
-                                ]}
-                                numberOfLines={2}
-                              >
-                                {subcategory.name}
-                              </Text>
-                            </Pressable>
-                          );
-                        })}
-                      </View>
-                    </View>
-                  ) : null}
-                </>
-              )}
-            </View>
-
-            {dynamicAttributesPilotActive ? (
-              <DynamicCategoryAttributesFields
-                definitions={dynamicDefs}
-                optionsByDefinitionId={dynamicOptionsByDef}
-                loading={dynamicLoading}
-                values={dynamicValues}
-                onChange={handleDynamicChange}
+            {flowStep === 'photos' ? (
+              <SellPrequalBanner
+                hasSellerName={hasProfileSellerName}
+                hasPhone={hasPhone}
+                isAuthed={isAuthed}
+                onCompleteProfile={() => router.push(buildAccountProfileHref('/sell'))}
               />
             ) : null}
 
-            <Input
-              label="Prix (FCFA) *"
-              placeholder="50000"
-              value={priceStr}
-              onChangeText={handlePriceChange}
-              keyboardType={Platform.OS === 'web' ? 'numeric' : 'number-pad'}
-              error={showPriceError ? (priceError ?? undefined) : undefined}
-            />
-
-            <Input
-              label="Ville *"
-              placeholder="Ex. Douala"
-              value={city}
-              onChangeText={handleCityChange}
-              maxLength={20}
-              error={showCityError ? (cityError ?? undefined) : undefined}
-            />
-            {city.trim() && cityResolution.kind === 'canonical' ? (
-              <Text style={styles.fieldHint}>Ville reconnue : {canonicalCityLabel(cityResolution.code)}</Text>
+            {flowStep === 'photos' ? (
+              <SellStepPhotos
+                totalPhotoCount={totalPhotoCount}
+                existingDraftImages={existingDraftImages}
+                pickedImages={images}
+                duplicateSourceId={duplicateSourceId}
+                editingDraftId={editingDraftId}
+                onPickImages={() => void pickImages()}
+                onRemoveImage={removeImage}
+              />
             ) : null}
 
-            <Text style={styles.requiredLegend}>* Requis pour publier ; brouillon incomplet accepté</Text>
-
-            {submitError ? <Text style={styles.submitErrorForm}>{submitError}</Text> : null}
-            {slowPublishHint ? (
-              <Text style={styles.slowPublishHint} accessibilityLiveRegion="polite">
-                Connexion lente. Vos informations restent enregistrées, sans republication automatique.
-              </Text>
+            {flowStep === 'details' ? (
+              <SellStepDetails
+                title={title}
+                description={description}
+                priceStr={priceStr}
+                city={city}
+                cityRecognizedLabel={cityRecognizedLabel}
+                sellGuidance={sellGuidance}
+                showTitleError={showTitleError}
+                titleError={titleError}
+                showDescriptionError={showDescriptionError}
+                descriptionError={descriptionError}
+                showPriceError={showPriceError}
+                priceError={priceError}
+                showCityError={showCityError}
+                cityError={cityError}
+                onTitleChange={handleTitleChange}
+                onDescriptionChange={handleDescriptionChange}
+                onPriceChange={handlePriceChange}
+                onCityChange={handleCityChange}
+                onCityChipPress={handleCityChipPress}
+                parentCategories={parentCategories}
+                subcategoryOptions={subcategoryOptions}
+                selectedParentCategoryId={selectedParentCategoryId}
+                selectedChildCategoryId={selectedChildCategoryId}
+                onSelectParent={selectParentCategory}
+                onSelectChild={selectChildCategory}
+                categoriesLoading={categoriesLoading}
+                categoriesError={categoriesError ?? null}
+                dynamicAttributesPilotActive={dynamicAttributesPilotActive}
+                dynamicDefs={dynamicDefs}
+                dynamicOptionsByDef={dynamicOptionsByDef}
+                dynamicLoading={dynamicLoading}
+                dynamicValues={dynamicValues}
+                onDynamicChange={handleDynamicChange}
+              />
             ) : null}
 
-            <View
-              style={styles.qualityCardCompact}
-              accessibilityRole="progressbar"
-              accessibilityLabel={`Qualité de l'annonce : ${listingQuality.score} sur 100. ${listingQuality.label}`}
-              accessibilityValue={{
-                min: 0,
-                max: 100,
-                now: listingQuality.score,
-                text: `${listingQuality.score} sur 100`,
-              }}
-            >
-              <View style={styles.qualityCardCompactHeader}>
-                <Text style={styles.qualityCardCompactTitle}>Qualité de l&apos;annonce</Text>
-                <Text style={styles.qualityCardCompactScore}>{listingQuality.score}/100</Text>
-              </View>
-              <Text style={styles.fieldHint}>
-                {listingQuality.explanation.map((row) => `${({ title: 'Titre', description: 'Description', city: 'Ville', photos: 'Photos', price: 'Prix', category: 'Catégorie', district: 'Quartier', availability: 'Disponibilité' } as Record<string, string>)[row.field]} ${row.earned}/${row.possible}`).join(' · ')}
-                {' · Disponibilité non confirmée : hors score'}
-              </Text>
-              <Text style={styles.qualityCardCompactAdvice} numberOfLines={2}>
-                {listingQuality.priorityTip ?? listingQuality.label}
-              </Text>
-              <View style={styles.qualityCardCompactTrack}>
-                <View
-                  style={[
-                    styles.qualityCardCompactFill,
-                    { width: `${listingQuality.progressRatio * 100}%` },
-                  ]}
-                />
-              </View>
-            </View>
+            {flowStep === 'review' ? (
+              <SellStepReview
+                totalPhotoCount={totalPhotoCount}
+                existingDraftImages={existingDraftImages}
+                pickedImages={images}
+                title={title}
+                description={description}
+                priceStr={priceStr}
+                city={city}
+                categoryLabel={categoryLabelForReview}
+                listingQuality={listingQuality}
+                submitError={submitError}
+                slowPublishHint={slowPublishHint}
+                onEditStep={handleEditFlowStep}
+                dynamicAttributesPilotActive={dynamicAttributesPilotActive}
+                dynamicDefs={dynamicDefs}
+                dynamicValues={dynamicValues}
+                dynamicOptionsByDef={dynamicOptionsByDef}
+              />
+            ) : null}
           </View>
         </ScrollView>
 
-        <View style={styles.stickyFooter}>
-          <View style={[styles.content, styles.stickyFooterActions]}>
-            <Button
-              size="sm"
-              onPress={handleSubmit}
-              loading={submitLoading}
-              disabled={
-                submitLoading ||
-                draftSaveLoading ||
-                (dynamicAttributesPilotActive && dynamicLoading)
-              }
-              leftIcon={
-                submitLoading ? undefined : (
-                  <Ionicons name="paper-plane" size={15} color={colors.surface} />
-                )
-              }
-              style={styles.publishCta}
-            >
-              {"Publier l'annonce"}
-            </Button>
-            <Text style={styles.draftRemindersNotice}>{DRAFT_REMINDERS_NOTICE}</Text>
-            <Button
-              variant="secondary"
-              size="sm"
-              onPress={() => void handleSaveDraft()}
-              loading={draftSaveLoading}
-              disabled={submitLoading || draftSaveLoading}
-              style={styles.publishCta}
-            >
-              {DRAFT_LISTING_SAVE_ACTION}
-            </Button>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Annuler"
-              onPress={goBackOrHome}
-              disabled={submitLoading || draftSaveLoading}
-              hitSlop={{ top: 8, bottom: 8, left: 12, right: 12 }}
-              style={({ pressed }) => [
-                styles.footerCancelPressable,
-                pressed && !submitLoading && !draftSaveLoading ? styles.footerCancelPressed : null,
-                submitLoading || draftSaveLoading ? styles.footerCancelDisabled : null,
+        {showStickyFooter ? (
+          <View style={styles.stickyFooter}>
+            <View
+              style={[
+                styles.content,
+                styles.stickyFooterActions,
+                { paddingBottom: spacing.sm + insets.bottom },
               ]}
             >
-              <Text style={styles.footerCancelText}>Annuler</Text>
-            </Pressable>
+              {flowStep === 'photos' || flowStep === 'details' ? (
+                <Button size="lg" onPress={handleFlowContinue} style={styles.flowCta}>
+                  Continuer
+                </Button>
+              ) : null}
+
+              {flowStep === 'details' ? (
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={DRAFT_LISTING_SAVE_ACTION}
+                  onPress={() => void handleSaveDraft()}
+                  disabled={submitLoading || draftSaveLoading}
+                  hitSlop={{ top: 8, bottom: 8, left: 12, right: 12 }}
+                  style={({ pressed }) => [
+                    styles.detailsDraftLink,
+                    pressed && !submitLoading && !draftSaveLoading ? styles.detailsDraftLinkPressed : null,
+                    submitLoading || draftSaveLoading ? styles.detailsDraftLinkDisabled : null,
+                  ]}
+                >
+                  <Text style={styles.detailsDraftLinkText}>
+                    {draftSaveLoading ? 'Enregistrement…' : DRAFT_LISTING_SAVE_ACTION}
+                  </Text>
+                </Pressable>
+              ) : null}
+
+              {flowStep === 'review' ? (
+                <>
+                  <Button
+                    size="lg"
+                    onPress={handleSubmit}
+                    loading={submitLoading}
+                    disabled={
+                      submitLoading ||
+                      draftSaveLoading ||
+                      (dynamicAttributesPilotActive && dynamicLoading)
+                    }
+                    leftIcon={
+                      submitLoading ? undefined : (
+                        <Ionicons name="paper-plane" size={16} color={colors.surface} />
+                      )
+                    }
+                    style={styles.flowCta}
+                  >
+                    {"Publier l'annonce"}
+                  </Button>
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={DRAFT_LISTING_SAVE_ACTION}
+                    onPress={() => void handleSaveDraft()}
+                    disabled={submitLoading || draftSaveLoading}
+                    hitSlop={{ top: 8, bottom: 8, left: 12, right: 12 }}
+                    style={({ pressed }) => [
+                      styles.detailsDraftLink,
+                      pressed && !submitLoading && !draftSaveLoading ? styles.detailsDraftLinkPressed : null,
+                      submitLoading || draftSaveLoading ? styles.detailsDraftLinkDisabled : null,
+                    ]}
+                  >
+                    <Text style={styles.detailsDraftLinkText}>
+                      {draftSaveLoading ? 'Enregistrement…' : DRAFT_LISTING_SAVE_ACTION}
+                    </Text>
+                  </Pressable>
+                </>
+              ) : null}
+
+              {(flowStep === 'photos' || flowStep === 'details') && !isSellerProfileComplete(profileAny) ? (
+                <Text style={styles.footerHint}>
+                  Vous pouvez préparer l&apos;annonce maintenant. Nom, pseudo et téléphone seront
+                  obligatoires pour publier.
+                </Text>
+              ) : null}
+
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Annuler"
+                onPress={goBackOrHome}
+                disabled={submitLoading || draftSaveLoading}
+                hitSlop={{ top: 8, bottom: 8, left: 12, right: 12 }}
+                style={({ pressed }) => [
+                  styles.footerCancelPressable,
+                  pressed && !submitLoading && !draftSaveLoading ? styles.footerCancelPressed : null,
+                  submitLoading || draftSaveLoading ? styles.footerCancelDisabled : null,
+                ]}
+              >
+                <Text style={styles.footerCancelText}>Annuler</Text>
+              </Pressable>
+            </View>
           </View>
-        </View>
+        ) : null}
       </KeyboardSafeView>
     </Screen>
   );
@@ -1639,6 +1373,15 @@ const styles = StyleSheet.create({
   formScrollContent: {
     flexGrow: 1,
     paddingBottom: spacing.lg,
+  },
+  formScrollContentPhotosStep: {
+    paddingBottom: spacing['3xl'] + spacing.xl,
+  },
+  formScrollContentDetailsStep: {
+    paddingBottom: spacing['2xl'] + spacing.base,
+  },
+  formScrollContentReviewStep: {
+    paddingBottom: spacing['3xl'] + spacing['2xl'],
   },
   formScrollContentKeyboardOpen: {
     paddingBottom: spacing['2xl'],
@@ -1691,53 +1434,36 @@ const styles = StyleSheet.create({
     lineHeight: 18,
   },
   stickyFooterActions: {
-    gap: 2,
-    paddingBottom: 0,
-  },
-  qualityCardCompact: {
-    marginTop: spacing.sm,
-    paddingVertical: spacing.xs,
-    paddingHorizontal: spacing.sm,
-    borderRadius: radius.md,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.borderLight,
-    backgroundColor: colors.surface,
-    gap: 3,
-  },
-  qualityCardCompactHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
     gap: spacing.sm,
   },
-  qualityCardCompactTitle: {
-    ...typography.xs,
-    fontWeight: fontWeights.semibold,
-    color: colors.textSecondary,
-    flex: 1,
+  flowCta: {
+    width: '100%',
   },
-  qualityCardCompactScore: {
-    ...typography.xs,
-    fontWeight: fontWeights.semibold,
-    color: colors.text,
-    fontVariant: ['tabular-nums'],
-  },
-  qualityCardCompactAdvice: {
+  footerHint: {
     ...typography.xs,
     color: colors.textMuted,
-    lineHeight: 15,
+    lineHeight: 18,
+    textAlign: 'center',
+    marginTop: spacing.xs,
   },
-  qualityCardCompactTrack: {
-    height: 2,
-    borderRadius: radius.full,
-    backgroundColor: colors.borderLight,
-    overflow: 'hidden',
-  },
-  qualityCardCompactFill: {
-    height: '100%',
-    borderRadius: radius.full,
-    backgroundColor: colors.primary,
-    minWidth: 0,
+  publishCta: {
+    width: '100%',
+    minHeight: 44,
+    paddingVertical: spacing.xs,
+    ...Platform.select({
+      ios: {
+        shadowColor: colors.primary,
+        shadowOffset: { width: 0, height: 3 },
+        shadowOpacity: 0.18,
+        shadowRadius: 6,
+      },
+      android: {
+        elevation: 3,
+      },
+      default: {
+        boxShadow: `0 6px 14px ${YOUMBIA_SELECTED_GLOW}`,
+      },
+    }),
   },
   footerCancelPressable: {
     alignSelf: 'center',
@@ -1762,179 +1488,13 @@ const styles = StyleSheet.create({
     maxWidth: 520,
     width: '100%',
     alignSelf: 'center',
-  },
-  prequalWrap: {
-    paddingTop: spacing.xl,
-    gap: spacing.base,
-  },
-  prequalTitle: {
-    fontSize: typography['2xl'].fontSize,
-    fontWeight: fontWeights.bold,
-    color: colors.text,
-  },
-  prequalSubtitle: {
-    ...typography.base,
-    color: colors.textSecondary,
-  },
-  prequalCard: {
-    borderWidth: 1,
-    borderColor: colors.borderLight,
-    backgroundColor: colors.surface,
-    borderRadius: radius.xl,
-    padding: spacing.base,
-    gap: spacing.sm,
-  },
-  prequalCardTitle: {
-    ...typography.sm,
-    fontWeight: fontWeights.bold,
-    color: colors.text,
-    marginBottom: spacing.xs,
-    textTransform: 'uppercase',
-    letterSpacing: 0.4,
-  },
-  checkRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: spacing.sm,
-  },
-  checkIconSlot: {
-    width: 24,
-    paddingTop: 1,
-    alignItems: 'center',
-  },
-  checkTextSlot: {
-    flex: 1,
-    gap: 2,
-  },
-  checkLabel: {
-    ...typography.base,
-    color: colors.text,
-    fontWeight: fontWeights.semibold,
-  },
-  checkHint: {
-    ...typography.xs,
-    color: colors.textMuted,
-  },
-  prequalActions: {
-    gap: spacing.sm,
-    marginTop: spacing.sm,
-  },
-  softWarning: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: spacing.sm,
-    padding: spacing.base,
-    borderRadius: radius.xl,
-    backgroundColor: colors.warningLight,
-    borderWidth: 1,
-    borderColor: colors.warning + '33',
-  },
-  softWarningText: {
-    flex: 1,
-    ...typography.sm,
-    color: colors.textSecondary,
-    fontWeight: fontWeights.medium,
-  },
-  inlineWarning: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-    paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.base,
-    borderRadius: radius.xl,
-    borderWidth: 1,
-    borderColor: colors.warning + '33',
-    backgroundColor: colors.warningLight,
-    marginBottom: spacing.base,
-  },
-  inlineWarningText: {
-    flex: 1,
-    ...typography.xs,
-    color: colors.textSecondary,
-    fontWeight: fontWeights.semibold,
-  },
-  inlineWarningLink: {
-    ...typography.xs,
-    color: colors.primary,
-    fontWeight: fontWeights.bold,
-    textDecorationLine: 'underline',
-  },
-  stepHelper: {
-    ...typography.xs,
-    color: colors.textMuted,
-    marginBottom: spacing.xs,
-  },
-  photoCounter: {
-    ...typography.xs,
-    color: colors.textSecondary,
-    fontWeight: fontWeights.semibold,
-    fontVariant: ['tabular-nums'],
-    marginBottom: spacing.xs,
-  },
-  photoZeroHint: {
-    ...typography.xs,
-    color: colors.textMuted,
-    marginBottom: spacing.sm,
-  },
-  photoQualityTip: {
-    ...typography.xs,
-    color: colors.textMuted,
-    marginTop: spacing.sm,
-    lineHeight: 16,
-  },
-  photoCoverBadge: {
-    position: 'absolute',
-    left: 4,
-    bottom: 4,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: radius.sm,
-    backgroundColor: 'rgba(15, 23, 42, 0.62)',
-  },
-  photoCoverBadgeText: {
-    fontSize: 10,
-    lineHeight: 12,
-    fontWeight: fontWeights.semibold,
-    color: colors.surface,
-  },
-  validatedField: {
-    marginBottom: 0,
-  },
-  validatedFieldInput: {
-    marginBottom: spacing.xs,
-  },
-  fieldMetaRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    justifyContent: 'space-between',
-    gap: spacing.sm,
-    marginBottom: spacing.base,
-    marginTop: -spacing.xs,
-  },
-  fieldHint: {
-    flex: 1,
-    ...typography.xs,
-    color: colors.textMuted,
-    lineHeight: 16,
-  },
-  charCounter: {
-    ...typography.xs,
-    color: colors.textMuted,
-    fontVariant: ['tabular-nums'],
-  },
-  charCounterAtLimit: {
-    color: colors.textSecondary,
-    fontWeight: fontWeights.semibold,
+    paddingHorizontal: spacing.screenHorizontal,
+    paddingTop: spacing.base,
   },
   successBlock: {
     paddingTop: spacing['3xl'],
     gap: spacing.lg,
-  },
-  successTitle: {
-    fontSize: typography['2xl'].fontSize,
-    fontWeight: fontWeights.bold,
-    color: colors.primary,
-    marginBottom: spacing.sm,
+    paddingHorizontal: spacing.screenHorizontal,
   },
   partialTitle: {
     fontSize: typography['2xl'].fontSize,
@@ -1955,271 +1515,29 @@ const styles = StyleSheet.create({
     gap: spacing.base,
     marginTop: spacing.lg,
   },
-  successBtn: {
-    alignSelf: 'flex-start',
-  },
-  title: {
-    fontSize: typography['2xl'].fontSize,
-    fontWeight: fontWeights.bold,
-    color: colors.text,
-    marginBottom: spacing.sm,
-  },
-  subtitle: {
-    fontSize: typography.base.fontSize,
-    color: colors.textSecondary,
-    marginBottom: spacing.sm,
-  },
-  publishQualityTip: {
-    ...typography.xs,
-    color: colors.textMuted,
-    lineHeight: 18,
-    marginBottom: spacing.xl,
-  },
-  descriptionInput: {
-    minHeight: 100,
-    textAlignVertical: 'top',
-  },
-  label: {
-    ...typography.sm,
-    fontWeight: fontWeights.semibold,
-    color: colors.text,
-    marginBottom: spacing.xs,
-  },
-  requiredMark: {
-    color: colors.textSecondary,
-    fontWeight: fontWeights.semibold,
-  },
-  requiredLegend: {
-    ...typography.xs,
-    color: colors.textSecondary,
-    marginTop: spacing.sm,
-    marginBottom: spacing.xs,
-  },
-  imagesSection: {
-    marginBottom: spacing.lg,
-  },
-  categorySection: {
-    marginBottom: spacing.lg,
-  },
-  categoryLoadingSlot: {
-    minHeight: 72,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  categoryLoadError: {
-    ...typography.sm,
-    color: colors.error,
-  },
-  categoryGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 6,
-  },
-  categoryCard: {
-    minHeight: 60,
-    paddingVertical: 0,
-    paddingHorizontal: 4,
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    borderColor: colors.borderLight,
-    backgroundColor: colors.surface,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 1,
-    position: 'relative',
-  },
-  categoryCardSelected: {
-    borderWidth: 1.5,
-    borderColor: colors.primary,
-    backgroundColor: YOUMBIA_SELECTED_BG,
-    ...Platform.select({
-      ios: {
-        shadowColor: colors.primary,
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 4,
-      },
-      default: {
-        boxShadow: `0 2px 8px ${YOUMBIA_SELECTED_GLOW}`,
-      },
-    }),
-  },
-  categoryCardPressed: {
-    opacity: 0.9,
-  },
-  categoryCardCheck: {
-    position: 'absolute',
-    top: 4,
-    right: 4,
-    zIndex: 1,
-  },
-  categoryIconSlot: {
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  categoryCardLabel: {
-    fontSize: 11,
-    lineHeight: 14,
-    color: colors.textSecondary,
-    fontWeight: fontWeights.medium,
-    textAlign: 'center',
-  },
-  categoryCardLabelSelected: {
-    color: colors.text,
-    fontWeight: fontWeights.semibold,
-  },
-  subcategorySection: {
-    marginTop: spacing.sm,
-    gap: spacing.xs,
-  },
-  subcategoryLabel: {
-    ...typography.sm,
-    color: colors.textSecondary,
-    fontWeight: fontWeights.medium,
-  },
-  subcategoryChipRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: spacing.xs,
-  },
-  subcategoryChip: {
-    borderRadius: radius.full,
-    borderWidth: 1,
-    borderColor: colors.borderLight,
-    backgroundColor: colors.surface,
-    paddingVertical: 8,
-    paddingHorizontal: spacing.sm,
-    maxWidth: '100%',
-  },
-  subcategoryChipSelected: {
-    borderColor: colors.primary,
-    backgroundColor: YOUMBIA_SELECTED_BG,
-  },
-  subcategoryChipPressed: {
-    opacity: 0.92,
-  },
-  subcategoryChipText: {
-    ...typography.sm,
-    color: colors.textSecondary,
-    fontWeight: fontWeights.medium,
-  },
-  subcategoryChipTextSelected: {
-    color: colors.primary,
-    fontWeight: fontWeights.semibold,
-  },
   draftRemindersNotice: {
     ...typography.xs,
     color: colors.textMuted,
-    lineHeight: 16,
+    lineHeight: 18,
     marginBottom: spacing.xs,
   },
-  publishCta: {
-    width: '100%',
-    minHeight: 40,
+  detailsDraftLink: {
+    alignSelf: 'center',
+    minHeight: 44,
+    justifyContent: 'center',
     paddingVertical: spacing.xs,
-    ...Platform.select({
-      ios: {
-        shadowColor: colors.primary,
-        shadowOffset: { width: 0, height: 3 },
-        shadowOpacity: 0.18,
-        shadowRadius: 6,
-      },
-      android: {
-        elevation: 3,
-      },
-      default: {
-        boxShadow: `0 6px 14px ${YOUMBIA_SELECTED_GLOW}`,
-      },
-    }),
   },
-  photoSlotsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
+  detailsDraftLinkPressed: {
+    opacity: 0.65,
   },
-  photoSlot: {
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    borderColor: colors.borderLight,
-    backgroundColor: colors.surface,
-    overflow: 'hidden',
-    position: 'relative',
+  detailsDraftLinkDisabled: {
+    opacity: 0.4,
   },
-  photoSlotEmpty: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderStyle: 'dashed',
-    borderColor: colors.border,
-    backgroundColor: colors.surfaceSubtle,
-  },
-  photoSlotEmptyPressed: {
-    opacity: 0.92,
-    backgroundColor: colors.primary + '08',
-  },
-  photoSlotPrimaryAdd: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderStyle: 'dashed',
-    borderColor: 'rgba(22, 163, 74, 0.28)',
-    backgroundColor: 'rgba(22, 163, 74, 0.06)',
-    paddingHorizontal: spacing.xs,
-  },
-  photoSlotPrimaryAddPressed: {
-    opacity: 0.94,
-    backgroundColor: 'rgba(22, 163, 74, 0.1)',
-  },
-  photoSlotPrimaryAddContent: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 2,
-    paddingHorizontal: 2,
-  },
-  photoSlotPrimaryAddTitle: {
-    fontSize: 11,
-    lineHeight: 14,
-    fontWeight: fontWeights.semibold,
-    color: colors.primary,
-    textAlign: 'center',
-  },
-  photoSlotImage: {
-    width: '100%',
-    height: '100%',
-  },
-  photoSlotRemove: {
-    position: 'absolute',
-    top: 4,
-    right: 4,
-    width: 22,
-    height: 22,
-    borderRadius: radius.full,
-    backgroundColor: colors.surface,
-    alignItems: 'center',
-    justifyContent: 'center',
-    ...Platform.select({
-      ios: {
-        shadowColor: colors.text,
-        shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: 0.12,
-        shadowRadius: 2,
-      },
-      android: {
-        elevation: 2,
-      },
-      default: {
-        boxShadow: '0 1px 4px rgba(15, 23, 42, 0.12)',
-      },
-    }),
-  },
-  submitErrorForm: {
-    ...typography.xs,
-    color: colors.error,
-    lineHeight: 16,
-    marginTop: spacing.sm,
-  },
-  slowPublishHint: {
+  detailsDraftLinkText: {
     ...typography.sm,
-    color: colors.textSecondary,
-    lineHeight: 20,
-    marginTop: spacing.sm,
+    color: colors.primary,
+    fontWeight: fontWeights.semibold,
+    textDecorationLine: 'underline',
+    textDecorationColor: colors.primary + '66',
   },
 });

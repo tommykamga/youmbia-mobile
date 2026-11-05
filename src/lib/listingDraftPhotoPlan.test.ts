@@ -27,8 +27,27 @@ describe('listingDraftPhotoPlan', () => {
   it('calcule des sort_order stables après images existantes (pas de collision)', () => {
     expect(nextListingImageSortOrders([0, 1], 2)).toEqual([2, 3]);
     expect(nextListingImageSortOrders([], 3)).toEqual([0, 1, 2]);
-    expect(nextListingImageSortOrders([null, 2], 1)).toEqual([3]);
+    expect(nextListingImageSortOrders([null, 2], 1)).toEqual([0]);
     expect(nextListingImageSortOrders([0, 1], 0)).toEqual([]);
+  });
+
+  it('réutilise un emplacement libre après suppression au milieu (4 photos 0–3, retirer 1)', () => {
+    const afterMiddleDelete = [0, 2, 3];
+    expect(nextListingImageSortOrders(afterMiddleDelete, 1)).toEqual([1]);
+    const orders = nextListingImageSortOrders(afterMiddleDelete, 1);
+    expect(orders.every((n) => n >= 0 && n < 4)).toBe(true);
+    expect(new Set([...afterMiddleDelete, ...orders]).size).toBe(4);
+  });
+
+  it('assigne les premiers slots libres après suppression en début ou fin', () => {
+    expect(nextListingImageSortOrders([1, 2, 3], 1)).toEqual([0]);
+    expect(nextListingImageSortOrders([0, 1, 2], 1)).toEqual([3]);
+  });
+
+  it('remplit plusieurs slots libres sans doublon', () => {
+    expect(nextListingImageSortOrders([0, 3], 2)).toEqual([1, 2]);
+    const orders = nextListingImageSortOrders([0, 3], 2);
+    expect(new Set(orders).size).toBe(2);
   });
 
   it('distingue images persistées et copies en attente (sans id source)', () => {
