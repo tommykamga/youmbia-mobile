@@ -1,8 +1,8 @@
 # SHOP-MEDIA-FINAL-01
 
-**Base :** `origin/main` @ `5582991e6fa0cab42bdaedbd735dfae85e10ea06`  
-**Branche :** `fix/shop-media-final-01`  
-**Worktree :** `youmbia-ui-shop-media-final-01`  
+**Base :** `origin/main` @ `5582991e6fa0cab42bdaedbd735dfae85e10ea06`
+**Branche :** `fix/shop-media-final-01`
+**Worktree :** `youmbia-ui-shop-media-final-01`
 **Référence étudiée :** `2a8f81c6f1adee86255403281893dbc054630a85` (sans cherry-pick)
 
 ## Écarts vs `2a8f81c`
