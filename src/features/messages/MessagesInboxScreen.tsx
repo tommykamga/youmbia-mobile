@@ -16,7 +16,7 @@ import type { Conversation } from '@/services/conversations/types';
 import { subscribeMessagingEvents, emitConversationRead } from '@/lib/messagingRealtime';
 import { spacing, colors } from '@/theme';
 import { buildAuthGateHref } from '@/lib/authGateNavigation';
-import { lightCacheKeys, lightCacheRead, lightCacheWrite } from '@/lib/lightCache';
+import { lightCacheKeys, lightCacheRead, lightCacheRemove, lightCacheWrite } from '@/lib/lightCache';
 import { SwipeToDeleteRow } from '@/features/messages/SwipeToDeleteRow';
 import { MessagesScreenHeader } from '@/features/messages/MessagesScreenHeader';
 import {
@@ -85,11 +85,21 @@ export function MessagesInboxScreen({ onRequestDemo }: { onRequestDemo?: () => v
       const cacheKey = lightCacheKeys.conversations(uid);
       const cached = await lightCacheRead<InboxCachePayload>(cacheKey);
       if (cached?.payload?.userId === uid && Array.isArray(cached.payload.conversations)) {
-        const data = [...cached.payload.conversations];
-        sortConversationsInbox(data);
-        setConversations(data);
-        setStatus(data.length > 0 ? 'success' : 'empty');
-        shownFromCacheRef.current = true;
+        let data = [...cached.payload.conversations];
+        /** Cache pré-A2 : fils sans message avec aperçu/compteur vides ; invalider plutôt que réafficher un fantôme. */
+        const stripped = data.filter(
+          (c) => c.last_message_at != null || (c.unread_count ?? 0) > 0
+        );
+        if (stripped.length !== data.length) {
+          await lightCacheRemove(cacheKey);
+          data = stripped;
+          shownFromCacheRef.current = false;
+        } else {
+          sortConversationsInbox(data);
+          setConversations(data);
+          setStatus(data.length > 0 ? 'success' : 'empty');
+          shownFromCacheRef.current = true;
+        }
       }
 
       const result = await getConversations();

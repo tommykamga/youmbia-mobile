@@ -14,6 +14,7 @@ import { supabase } from '@/lib/supabase';
 import { getUserDisplayName, getAvatarVersion } from '@/services/profile';
 import { resolveAvatarDisplayUrls } from '@/lib/avatarImageUrl';
 import { conversationsVisibleForUserOrFilter } from '@/lib/conversationVisibility';
+import { fetchConversationIdsWithAtLeastOneMessage } from '@/services/conversations/getConversationsMessagePresence';
 import type { Conversation } from './types';
 
 export type GetConversationsResult =
@@ -84,7 +85,23 @@ export async function getConversations(): Promise<GetConversationsResult> {
 
     if (list.length === 0) return { data: [], error: null };
 
-    const listingIds = [...new Set(list.map((c) => c.listing_id))];
+    const convIdsAll = list.map((c) => c.id);
+    const presence = await fetchConversationIdsWithAtLeastOneMessage(convIdsAll);
+    if (!presence.ok) {
+      logSupabaseErrorDev('messages.presence', presence.errorMessage);
+      return {
+        data: null,
+        error: {
+          message: `Présence messages: ${presence.errorMessage}`,
+        },
+      };
+    }
+
+    const listWithMessages = list.filter((c) => presence.conversationIds.has(c.id));
+
+    if (listWithMessages.length === 0) return { data: [], error: null };
+
+    const listingIds = [...new Set(listWithMessages.map((c) => c.listing_id))];
     const { data: listings, error: listingsError } = await supabase
       .from('listings')
       .select('id, title, user_id')
@@ -97,7 +114,7 @@ export async function getConversations(): Promise<GetConversationsResult> {
       (listings ?? []).map((l: { id: string; title: string; user_id: string | null }) => [l.id, l])
     );
 
-    const otherIds = list.map((c) => (c.buyer_id === userId ? c.seller_id : c.buyer_id));
+    const otherIds = listWithMessages.map((c) => (c.buyer_id === userId ? c.seller_id : c.buyer_id));
     const { data: profiles, error: profilesError } = await supabase
       .from('profiles')
       .select('id, full_name, avatar_url')
@@ -127,7 +144,7 @@ export async function getConversations(): Promise<GetConversationsResult> {
       }));
     const avatarDisplayMap = await resolveAvatarDisplayUrls(avatarEntries);
 
-    const convIds = list.map((c) => c.id);
+    const convIds = listWithMessages.map((c) => c.id);
     const { data: lastMessages, error: lastMessagesError } = await supabase
       .from('messages')
       .select('conversation_id, body, created_at')
@@ -166,7 +183,7 @@ export async function getConversations(): Promise<GetConversationsResult> {
       unreadByConv.set(cid, (unreadByConv.get(cid) ?? 0) + 1);
     }
 
-    const data: Conversation[] = list.map((c) => {
+    const data: Conversation[] = listWithMessages.map((c) => {
       const listing = listingMap.get(c.listing_id);
       const otherId = c.buyer_id === userId ? c.seller_id : c.buyer_id;
       const peer = profileMap.get(otherId);
