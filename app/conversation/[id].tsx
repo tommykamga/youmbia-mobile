@@ -365,8 +365,15 @@ export default function ConversationThreadScreen() {
     );
   }
 
+  /** Android : quand le clavier est ouvert, combiner inset bas (nav gestuelle / 3 boutons) + marge ; iOS inchangé (KeyboardAvoidingView). */
   const inputPaddingBottom =
-    keyboardInset > 0 ? spacing.sm : insets.bottom > 0 ? insets.bottom : spacing.base;
+    Platform.OS === 'android' && keyboardInset > 0
+      ? Math.max(insets.bottom, spacing.sm)
+      : keyboardInset > 0
+        ? spacing.sm
+        : insets.bottom > 0
+          ? insets.bottom
+          : spacing.base;
 
   return (
     <Screen scroll={false} noPadding safe={false}>

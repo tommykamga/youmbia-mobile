@@ -56,6 +56,15 @@ describe('conversation thread — contrats métier (route)', () => {
     expect(src).not.toMatch(/getListingsByIds/);
   });
 
+  it('paddingle bas du composer Android quand clavier ouvert (insets + marge, sans androidInsetPadding)', () => {
+    const screen = read('app/conversation/[id].tsx');
+    expect(screen).toMatch(/Platform\.OS === 'android' && keyboardInset > 0/);
+    expect(screen).toMatch(/Math\.max\(insets\.bottom,\s*spacing\.sm\)/);
+    expect(screen).not.toMatch(/KeyboardSafeView[\s\S]*androidInsetPadding/);
+    const ksv = read('src/components/KeyboardSafeView.tsx');
+    expect(ksv).toMatch(/androidInsetPadding\s*=\s*false/);
+  });
+
   it('charge présentation annonce via hook dédié (pas service conversations)', () => {
     const hook = read('src/features/conversation/useConversationListingPresentation.ts');
     expect(hook).toMatch(/getListingsByIds/);
