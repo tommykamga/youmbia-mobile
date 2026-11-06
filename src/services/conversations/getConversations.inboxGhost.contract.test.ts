@@ -12,7 +12,8 @@ describe('getConversations — fils fantômes (A2)', () => {
     expect(presence).toMatch(/fetchConversationIdsWithAtLeastOneMessage/);
     expect(presence).toMatch(/\.from\('messages'\)/);
     expect(presence).toMatch(/\.range\(/);
-    expect(presence).toMatch(/ROW_PAGE/);
+    expect(presence).toMatch(/MESSAGE_PRESENCE_ROW_PAGE/);
+    expect(presence).toMatch(/order\('conversation_id'/);
 
     const inbox = read('src/services/conversations/getConversations.ts');
     expect(inbox).toMatch(/fetchConversationIdsWithAtLeastOneMessage/);
@@ -31,5 +32,6 @@ describe('getConversations — fils fantômes (A2)', () => {
     const presence = read('src/services/conversations/getConversationsMessagePresence.ts');
     expect(presence).toMatch(/remaining\.delete/);
     expect(presence).toMatch(/while \(remaining\.size > 0\)/);
+    expect(presence).toMatch(/filterChanged/);
   });
 });
