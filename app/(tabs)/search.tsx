@@ -23,6 +23,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { CityPickerSheet } from '@/components/CityPickerSheet';
 import { Screen, Button, HomeBrandHeader, HomeCategoryStrip, KeyboardSafeView, LoadingState } from '@/components';
 import { ListingCard, ListingFeed } from '@/features/listings';
+import { buildHomeFeedGridRows, type HomeFeedGridRow } from '@/features/listings/homeFeedGridRows';
 import {
   HomeMarketplaceFeedHeader,
   useAuthStateForHome,
@@ -54,7 +55,14 @@ import { colors, spacing, typography, fontWeights, radius } from '@/theme';
 import { getSession } from '@/services/auth';
 import { MarketingConsentBanner } from '@/features/home/MarketingConsentBanner';
 import { buildAuthGateHref } from '@/lib/authGateNavigation';
-import { useResponsiveLayout, getScrollBottomReserveForTabBar } from '@/lib/responsiveLayout';
+import {
+  useResponsiveLayout,
+  getScrollBottomReserveForTabBar,
+  getListingCardGridColumnCount,
+  getListingCardGridInnerWidth,
+  getHomeFeedGridCellLayout,
+  HOME_FEED_GRID_COLUMN_GAP,
+} from '@/lib/responsiveLayout';
 import { trackListingSearched, trackRecentSearchSelected } from '@/lib/analytics';
 import {
   getCategoryIdByLabel,
@@ -152,7 +160,7 @@ function MarketplaceSearchScreen({ onOpenDemo }: { onOpenDemo?: () => void }) {
   const runSearchRef = useRef<(q: string, filters?: Partial<AppliedSearchFilters & AppliedPriceFilters>, requestedSort?: SortOption) => Promise<void>>(
     async () => {}
   );
-  const resultsListRef = useRef<FlatList<PublicListing> | null>(null);
+  const resultsListRef = useRef<FlatList<PublicListing | HomeFeedGridRow> | null>(null);
   const homeFeedListRef = useRef<any>(null);
   const lastResultsScrollOffsetRef = useRef(0);
   const savedSearchFeedbackTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -724,17 +732,6 @@ function MarketplaceSearchScreen({ onOpenDemo }: { onOpenDemo?: () => void }) {
     void clearRecentSearches().then(() => setRecentSearches([]));
   }, []);
 
-  const keyExtractor = useCallback((item: PublicListing) => item.id, []);
-  const renderItem = useCallback(
-    ({ item }: { item: PublicListing }) => (
-      <View style={styles.resultRow}>
-        <ListingCard listing={item} source="search" />
-      </View>
-    ),
-    []
-  );
-  const itemSeparator = useCallback(() => <View style={styles.separator} />, []);
-
   const successSearchData = state.status === 'success' ? state.data : null;
   const sortedListings = useMemo(() => {
     const list = successSearchData ?? [];
@@ -814,6 +811,8 @@ function MarketplaceSearchScreen({ onOpenDemo }: { onOpenDemo?: () => void }) {
     // Cette variable reste pour ne pas casser l'UI, mais elle contient juste sortedListings.
     return sortedListings;
   }, [sortedListings]);
+
+  const itemSeparator = useCallback(() => <View style={styles.separator} />, []);
 
   const handleApplyAllFilters = useCallback(() => {
     const validation = validatePriceFilters(priceMin, priceMax);
@@ -911,6 +910,68 @@ function MarketplaceSearchScreen({ onOpenDemo }: { onOpenDemo?: () => void }) {
     [width, insets.bottom]
   );
   const screenHorizontal = spacing.screenHorizontal;
+
+  const searchResultsGridInnerWidth = useMemo(
+    () => getListingCardGridInnerWidth(width, screenHorizontal),
+    [width, screenHorizontal]
+  );
+  const searchResultsColumnCount = useMemo(
+    () => getListingCardGridColumnCount(searchResultsGridInnerWidth, fontScale),
+    [searchResultsGridInnerWidth, fontScale]
+  );
+  const useSearchResultsGrid = searchResultsColumnCount === 2;
+  const searchResultsGridRows = useMemo(() => {
+    if (!useSearchResultsGrid) return null;
+    return buildHomeFeedGridRows(filteredListings, searchResultsColumnCount);
+  }, [filteredListings, useSearchResultsGrid, searchResultsColumnCount]);
+
+  const searchResultsKeyExtractor = useCallback((item: PublicListing | HomeFeedGridRow) => {
+    if ('kind' in item) return item.key;
+    return item.id;
+  }, []);
+
+  const renderSearchResultItem = useCallback(
+    ({ item }: { item: PublicListing | HomeFeedGridRow }) => {
+      if ('kind' in item) {
+        const row = item;
+        return (
+          <View style={[styles.homeGridRow, { gap: HOME_FEED_GRID_COLUMN_GAP }]}>
+            {row.kind === 'cells'
+              ? row.cells.map((cell) => {
+                  const listing = cell as PublicListing;
+                  const cellLayout = getHomeFeedGridCellLayout(
+                    searchResultsGridInnerWidth,
+                    searchResultsColumnCount,
+                    row.cells.length
+                  );
+                  return (
+                    <View key={listing.id} style={[styles.homeGridCell, cellLayout]}>
+                      <ListingCard
+                        listing={listing}
+                        feedPresentation="home"
+                        homeGridCell
+                        source="search"
+                      />
+                    </View>
+                  );
+                })
+              : null}
+          </View>
+        );
+      }
+      return (
+        <View style={styles.resultRow}>
+          <ListingCard
+            listing={item}
+            feedPresentation="home"
+            homeGridCell={false}
+            source="search"
+          />
+        </View>
+      );
+    },
+    [searchResultsColumnCount, searchResultsGridInnerWidth]
+  );
 
   const searchChrome = useMemo(() => {
     const borderColor = 'rgba(15,23,42,0.08)';
@@ -1632,13 +1693,21 @@ function MarketplaceSearchScreen({ onOpenDemo }: { onOpenDemo?: () => void }) {
                   )}
 
                   {state.status === 'success' && (
-                    <FlatList
+                    <FlatList<PublicListing | HomeFeedGridRow>
                       ref={resultsListRef}
-                      data={filteredListings}
-                      extraData={favoriteIds}
-                      keyExtractor={keyExtractor}
-                      renderItem={renderItem}
-                      ItemSeparatorComponent={itemSeparator}
+                      data={
+                        useSearchResultsGrid && searchResultsGridRows
+                          ? searchResultsGridRows
+                          : filteredListings
+                      }
+                      extraData={{
+                        favorites: favoriteIds,
+                        cols: searchResultsColumnCount,
+                        fs: fontScale,
+                      }}
+                      keyExtractor={searchResultsKeyExtractor}
+                      renderItem={renderSearchResultItem}
+                      ItemSeparatorComponent={useSearchResultsGrid ? undefined : itemSeparator}
                       ListHeaderComponent={resultsHeader}
                       ListFooterComponent={
                         state.hasMore ? (
@@ -1667,8 +1736,14 @@ function MarketplaceSearchScreen({ onOpenDemo }: { onOpenDemo?: () => void }) {
                         lastResultsScrollOffsetRef.current = e.nativeEvent.contentOffset.y ?? 0;
                       }}
                       scrollEventThrottle={16}
-                      initialNumToRender={Platform.OS === 'ios' ? 6 : 8}
-                      maxToRenderPerBatch={Platform.OS === 'ios' ? 4 : 6}
+                      initialNumToRender={
+                        useSearchResultsGrid
+                          ? Math.max(2, Math.ceil((Platform.OS === 'ios' ? 6 : 8) / 2))
+                          : Platform.OS === 'ios'
+                            ? 6
+                            : 8
+                      }
+                      maxToRenderPerBatch={useSearchResultsGrid ? 4 : Platform.OS === 'ios' ? 4 : 6}
                       windowSize={Platform.OS === 'ios' ? 5 : 8}
                       /**
                        * iOS + removeClippedSubviews + entering Reanimated (ListingCard FadeInDown)
@@ -2122,6 +2197,15 @@ const styles = StyleSheet.create({
   /** Conteneur item Search : hauteur = contenu carte uniquement (pas de flexGrow). */
   resultRow: {
     width: '100%',
+  },
+  homeGridRow: {
+    flexDirection: 'row',
+    alignItems: 'stretch',
+    width: '100%',
+    marginBottom: HOME_FEED_GRID_COLUMN_GAP,
+  },
+  homeGridCell: {
+    minWidth: 0,
   },
   separator: {
     height: spacing.base,

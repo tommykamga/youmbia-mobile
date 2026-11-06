@@ -12,10 +12,19 @@ import { spacing } from '@/theme';
 export const HOME_FEED_GRID_COLUMN_GAP = spacing.sm;
 
 /**
- * Au-delà de ce ratio de police système, le fil accueil repasse en 1 colonne
+ * Au-delà de ce ratio de police système, le marketplace repasse en 1 colonne
  * (Dynamic Type / texte agrandi iOS & Android).
  */
-export const HOME_FEED_GRID_MAX_FONT_SCALE = 1.2;
+export const HOME_FEED_GRID_MAX_FONT_SCALE = 1.6;
+
+/**
+ * Largeur minimale d’une cellule carte (home compact) pour autoriser 2 colonnes.
+ * Dérivée du design (titres, prix longs FCFA, badges) + marge sécurité lisibilité.
+ */
+export const LISTING_CARD_GRID_MIN_CELL_WIDTH_DP = 148;
+
+/** Largeur max du contenu liste marketplace (onglets, alignement web). */
+const HOME_FEED_LIST_MAX_WIDTH = 760;
 
 export type WindowSizeBucket = 'compact' | 'regular' | 'large';
 
@@ -95,26 +104,52 @@ export function getHomeMarketplaceHorizontalPadding(_width?: number): number {
   return spacing.screenHorizontal;
 }
 
-/** Colonnes du fil d’accueil (cartes) : 2 si largeur suffisante et texte OS normal, sinon 1. */
-export function getHomeFeedColumnCount(
-  width: number,
-  fontScale: number = PixelRatio.getFontScale()
-): 1 | 2 {
-  if (width < WIDTH_COMPACT_BOUND) return 1;
-  if (fontScale > HOME_FEED_GRID_MAX_FONT_SCALE) return 1;
-  return 2;
-}
-
-const HOME_FEED_LIST_MAX_WIDTH = 760;
-
 /** Largeur utile du conteneur liste (aligné maxWidth des onglets marketplace). */
 export function getHomeFeedListContentWidth(windowWidth: number): number {
   return Math.min(windowWidth, HOME_FEED_LIST_MAX_WIDTH);
 }
 
-/** Largeur intérieure d’une rangée grille après gouttières `screenHorizontal`. */
+/**
+ * Grille marketplace (accueil avec marges cartes = `screenHorizontal`, recherche avec `paddingHorizontal` liste).
+ * 2 colonnes si la largeur utile permet deux cellules ≥ `LISTING_CARD_GRID_MIN_CELL_WIDTH_DP` + gouttière, et fontScale acceptable.
+ *
+ * FlatList : ne pas ajouter de `key` sur la liste quand ce nombre change — le même composant met à jour
+ * `data` / rendus et conserve l’offset de scroll tant que le conteneur n’est pas démonté.
+ */
+export function getListingCardGridColumnCount(
+  gridInnerWidthDp: number,
+  fontScale: number = PixelRatio.getFontScale()
+): 1 | 2 {
+  if (fontScale > HOME_FEED_GRID_MAX_FONT_SCALE) return 1;
+  const minTotal = LISTING_CARD_GRID_MIN_CELL_WIDTH_DP * 2 + HOME_FEED_GRID_COLUMN_GAP;
+  return gridInnerWidthDp + 0.5 >= minTotal ? 2 : 1;
+}
+
+/** Largeur intérieure pour accueil / favoris : liste max 760 − gouttières `screenHorizontal`. */
 export function getHomeFeedGridInnerWidth(windowWidth: number): number {
   return getHomeFeedListContentWidth(windowWidth) - spacing.screenHorizontal * 2;
+}
+
+/**
+ * Recherche (résultats) : padding liste `contentPaddingHorizontal` de chaque côté,
+ * même maxWidth que les autres écrans marketplace.
+ */
+export function getListingCardGridInnerWidth(
+  windowWidth: number,
+  contentPaddingHorizontal: number = spacing.screenHorizontal
+): number {
+  return Math.max(0, getHomeFeedListContentWidth(windowWidth) - contentPaddingHorizontal * 2);
+}
+
+/** Colonnes pour tout fil carte « home compact » (accueil découverte, favoris, recherche). */
+export function getHomeFeedColumnCount(
+  windowWidth: number,
+  fontScale: number = PixelRatio.getFontScale(),
+  gridInnerWidthOverride?: number
+): 1 | 2 {
+  const inner =
+    gridInnerWidthOverride ?? getHomeFeedGridInnerWidth(windowWidth);
+  return getListingCardGridColumnCount(inner, fontScale);
 }
 
 /** Largeur d’une cellule en grille 2 colonnes (inter-colonne = `HOME_FEED_GRID_COLUMN_GAP`). */

@@ -139,8 +139,8 @@ export default function FavoritesScreen() {
 
   const gridRows = useMemo(() => {
     if (!useGrid || display.mode !== 'list') return null;
-    return buildHomeFeedGridRows(display.visibleListings, 2);
-  }, [display.mode, display.visibleListings, useGrid]);
+    return buildHomeFeedGridRows(display.visibleListings, columnCount);
+  }, [display.mode, display.visibleListings, useGrid, columnCount]);
 
   const goDiscover = useCallback(() => {
     router.replace('/(tabs)/home');

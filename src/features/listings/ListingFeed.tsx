@@ -29,6 +29,8 @@ import { trackHomeFeedViewed } from '@/lib/analytics';
 import { createDiscoveryFeedController, type DiscoveryPage, type DiscoveryFeedCache } from './discoveryFeedController';
 import {
   getHomeFeedColumnCount,
+  getHomeFeedGridCellLayout,
+  getHomeFeedGridInnerWidth,
   HOME_FEED_GRID_COLUMN_GAP,
 } from '@/lib/responsiveLayout';
 import { buildHomeFeedGridRows, type HomeFeedGridRow } from './homeFeedGridRows';
@@ -107,6 +109,10 @@ export function ListingFeed({
       ? getHomeFeedColumnCount(windowWidth, fontScale)
       : 1;
   const useHomeGrid = listingCardFeedPresentation === 'home' && homeFeedColumns === 2;
+  const homeGridInnerWidth = useMemo(
+    () => getHomeFeedGridInnerWidth(windowWidth),
+    [windowWidth]
+  );
 
   const listRef = useRef<any>(null);
   useScrollToTop(listRef);
@@ -223,8 +229,8 @@ export function ListingFeed({
 
   const homeGridRows = useMemo(() => {
     if (!useHomeGrid) return null;
-    return buildHomeFeedGridRows(feedData, 2);
-  }, [useHomeGrid, feedData]);
+    return buildHomeFeedGridRows(feedData, homeFeedColumns);
+  }, [useHomeGrid, feedData, homeFeedColumns]);
 
   const renderListingCard = useCallback(
     (listing: PublicListing) => renderPreviewCard ? renderPreviewCard(listing, useHomeGrid) : (
@@ -248,20 +254,35 @@ export function ListingFeed({
       if (item.kind === 'extra') {
         return wrapHomeFeedItem(extraComponent ?? <View />);
       }
+      const cellCount = item.cells.length;
       return wrapHomeFeedItem(
         <View style={[styles.homeGridRow, { gap: HOME_FEED_GRID_COLUMN_GAP }]}>
-          {item.cells.map((cell) => (
-            <View
-              key={typeof cell === 'number' ? `skeleton-${cell}` : cell.id}
-              style={styles.homeGridCell}
-            >
-              {typeof cell === 'number' ? renderSkeletonCard() : renderListingCard(cell)}
-            </View>
-          ))}
+          {item.cells.map((cell) => {
+            const cellLayout = getHomeFeedGridCellLayout(
+              homeGridInnerWidth,
+              homeFeedColumns,
+              cellCount
+            );
+            return (
+              <View
+                key={typeof cell === 'number' ? `skeleton-${cell}` : cell.id}
+                style={[styles.homeGridCell, cellLayout]}
+              >
+                {typeof cell === 'number' ? renderSkeletonCard() : renderListingCard(cell)}
+              </View>
+            );
+          })}
         </View>
       );
     },
-    [extraComponent, renderListingCard, renderSkeletonCard, wrapHomeFeedItem]
+    [
+      extraComponent,
+      homeFeedColumns,
+      homeGridInnerWidth,
+      renderListingCard,
+      renderSkeletonCard,
+      wrapHomeFeedItem,
+    ]
   );
 
   const gridKeyExtractor = useCallback((item: HomeFeedGridRow) => item.key, []);
@@ -487,7 +508,7 @@ const styles = StyleSheet.create({
   },
   homeGridRow: {
     flexDirection: 'row',
-    alignItems: 'stretch',
+    alignItems: 'flex-start',
     width: '100%',
     marginBottom: HOME_FEED_GRID_COLUMN_GAP,
   },
