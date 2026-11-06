@@ -20,6 +20,7 @@ describe('getConversations — erreurs exposées (A3)', () => {
     expect(ui).toMatch(/setStaleFromCache\(true\)/);
     expect(ui).toMatch(/Liste non actualisée/);
     expect(ui).toMatch(/staleFromCache/);
+    expect(ui).toMatch(/testID=\"inbox-stale-retry\"/);
   });
 
   it('fil conversation n’aligne pas le snapshot notifications sur une erreur inbox', () => {

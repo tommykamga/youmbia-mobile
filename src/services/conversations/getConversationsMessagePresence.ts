@@ -27,13 +27,15 @@ export async function fetchConversationIdsWithAtLeastOneMessage(
 
   for (let i = 0; i < conversationIds.length; i += CONV_ID_BATCH) {
     const batch = conversationIds.slice(i, i + CONV_ID_BATCH);
+    /** Conversations dont on n’a pas encore vu de ligne messages ; early-exit dès que le lot est couvert. */
+    const remaining = new Set(batch);
     let from = 0;
 
-    for (;;) {
+    while (remaining.size > 0) {
       const { data: rows, error } = await supabase
         .from('messages')
         .select('conversation_id')
-        .in('conversation_id', batch)
+        .in('conversation_id', [...remaining])
         .range(from, from + ROW_PAGE - 1);
 
       if (error) {
@@ -41,8 +43,13 @@ export async function fetchConversationIdsWithAtLeastOneMessage(
       }
 
       const chunk = rows ?? [];
+      if (chunk.length === 0) {
+        break;
+      }
       for (const r of chunk) {
-        withMessage.add((r as { conversation_id: string }).conversation_id);
+        const cid = (r as { conversation_id: string }).conversation_id;
+        withMessage.add(cid);
+        remaining.delete(cid);
       }
 
       if (chunk.length < ROW_PAGE) break;

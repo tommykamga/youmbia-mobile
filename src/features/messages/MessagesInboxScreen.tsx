@@ -3,6 +3,7 @@ import {
   FlatList,
   View,
   Text,
+  Pressable,
   StyleSheet,
   RefreshControl,
   useWindowDimensions,
@@ -17,7 +18,7 @@ import type { Conversation } from '@/services/conversations/types';
 import { subscribeMessagingEvents, emitConversationRead } from '@/lib/messagingRealtime';
 import { spacing, colors } from '@/theme';
 import { buildAuthGateHref } from '@/lib/authGateNavigation';
-import { lightCacheKeys, lightCacheRead, lightCacheRemove, lightCacheWrite } from '@/lib/lightCache';
+import { lightCacheKeys, lightCacheRead, lightCacheWrite } from '@/lib/lightCache';
 import { SwipeToDeleteRow } from '@/features/messages/SwipeToDeleteRow';
 import { MessagesScreenHeader } from '@/features/messages/MessagesScreenHeader';
 import {
@@ -32,8 +33,11 @@ import {
 } from '@/features/messages/inboxPatches';
 import { useInboxListingThumbs } from '@/features/messages/useInboxListingThumbs';
 import { MessagesInboxDemoEntry } from '@/features/messages/MessagesInboxDemoEntry';
-
-type InboxCachePayload = { userId: string; conversations: Conversation[] };
+import {
+  INBOX_LIGHT_CACHE_SCHEMA,
+  type InboxCachePayload,
+  isInboxLightCacheTrusted,
+} from '@/features/messages/inboxLightCache';
 
 function MessagesInboxSkeleton() {
   return (
@@ -74,15 +78,7 @@ export function MessagesInboxScreen({ onRequestDemo }: { onRequestDemo?: () => v
       ? countUnreadConversations(conversations)
       : 0;
 
-  const StaleCacheBanner = (
-    <View style={styles.staleBanner} accessibilityRole="text">
-      <Ionicons name="time-outline" size={16} color={colors.warning} style={styles.staleIcon} />
-      <Text style={styles.staleText}>Liste non actualisée (hors ligne ou serveur)</Text>
-    </View>
-  );
-
   const fetchInbox = useCallback(async () => {
-    let cacheRowCountShown = 0;
     try {
       const session = await getSession();
       if (!session?.user) {
@@ -99,22 +95,13 @@ export function MessagesInboxScreen({ onRequestDemo }: { onRequestDemo?: () => v
       const cacheKey = lightCacheKeys.conversations(uid);
       const cached = await lightCacheRead<InboxCachePayload>(cacheKey);
       if (cached?.payload?.userId === uid && Array.isArray(cached.payload.conversations)) {
-        let data = [...cached.payload.conversations];
-        /** Cache pré-A2 : fils sans message avec aperçu/compteur vides ; invalider plutôt que réafficher un fantôme. */
-        const stripped = data.filter(
-          (c) => c.last_message_at != null || (c.unread_count ?? 0) > 0
-        );
-        if (stripped.length !== data.length) {
-          await lightCacheRemove(cacheKey);
-          data = stripped;
-          shownFromCacheRef.current = false;
-        } else {
-          sortConversationsInbox(data);
-          setConversations(data);
-          setStatus(data.length > 0 ? 'success' : 'empty');
-          shownFromCacheRef.current = true;
-          cacheRowCountShown = data.length;
-          setStaleFromCache(false);
+        const data = [...cached.payload.conversations];
+        sortConversationsInbox(data);
+        setConversations(data);
+        setStatus(data.length > 0 ? 'success' : 'empty');
+        shownFromCacheRef.current = true;
+        if (!isInboxLightCacheTrusted(cached.payload)) {
+          setStaleFromCache(true);
         }
       }
 
@@ -140,9 +127,13 @@ export function MessagesInboxScreen({ onRequestDemo }: { onRequestDemo?: () => v
           setStaleFromCache(false);
           return;
         }
-        if (shownFromCacheRef.current && cacheRowCountShown > 0) {
+        if (shownFromCacheRef.current) {
           setStaleFromCache(true);
-          setStatus('success');
+          if (msg.includes('network') || msg.includes('réseau') || msg.includes('fetch')) {
+            setStatus('error_network');
+          } else {
+            setStatus('error_generic');
+          }
           return;
         }
         if (msg.includes('network') || msg.includes('réseau') || msg.includes('fetch')) {
@@ -157,14 +148,23 @@ export function MessagesInboxScreen({ onRequestDemo }: { onRequestDemo?: () => v
       setConversations(data);
       setStatus(data.length > 0 ? 'success' : 'empty');
       setStaleFromCache(false);
-      await lightCacheWrite<InboxCachePayload>(cacheKey, { userId: uid, conversations: data });
+      await lightCacheWrite<InboxCachePayload>(cacheKey, {
+        userId: uid,
+        conversations: data,
+        inboxSchema: INBOX_LIGHT_CACHE_SCHEMA,
+      });
     } catch (e: unknown) {
       if (__DEV__) {
         console.warn('[messages/inbox] fetchInbox exception', e);
       }
-      if (shownFromCacheRef.current && cacheRowCountShown > 0) {
+      if (shownFromCacheRef.current) {
         setStaleFromCache(true);
-        setStatus('success');
+        const msg = String(e instanceof Error ? e.message : e).toLowerCase();
+        if (msg.includes('network') || msg.includes('réseau') || msg.includes('fetch')) {
+          setStatus('error_network');
+        } else {
+          setStatus('error_generic');
+        }
         return;
       }
       const msg = String(e instanceof Error ? e.message : e).toLowerCase();
@@ -175,6 +175,24 @@ export function MessagesInboxScreen({ onRequestDemo }: { onRequestDemo?: () => v
       }
     }
   }, []);
+
+  const StaleCacheBanner = (
+    <View style={styles.staleBanner}>
+      <Ionicons name="time-outline" size={16} color={colors.warning} style={styles.staleIcon} />
+      <Text style={styles.staleText} accessibilityRole="text">
+        Liste non actualisée (hors ligne ou serveur)
+      </Text>
+      <Pressable
+        testID="inbox-stale-retry"
+        onPress={() => void fetchInbox()}
+        accessibilityRole="button"
+        accessibilityLabel="Réactualiser la messagerie"
+        style={({ pressed }) => [styles.staleRetry, pressed && styles.staleRetryPressed]}
+      >
+        <Text style={styles.staleRetryText}>Réessayer</Text>
+      </Pressable>
+    </View>
+  );
 
   useFocusEffect(
     useCallback(() => {
@@ -215,6 +233,7 @@ export function MessagesInboxScreen({ onRequestDemo }: { onRequestDemo?: () => v
     await lightCacheWrite<InboxCachePayload>(lightCacheKeys.conversations(uid), {
       userId: uid,
       conversations: data,
+      inboxSchema: INBOX_LIGHT_CACHE_SCHEMA,
     });
   }, []);
 
@@ -430,6 +449,7 @@ export function MessagesInboxScreen({ onRequestDemo }: { onRequestDemo?: () => v
     return (
       <Screen noPadding safe={false}>
         <MessagesScreenHeader unreadConversationsCount={0} />
+        {staleFromCache ? StaleCacheBanner : null}
         <View style={[styles.contentArea, { paddingBottom: tabsBottomPad }]}>
           <EmptyState
             variant="plain"
@@ -504,19 +524,32 @@ const styles = StyleSheet.create({
   staleBanner: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
     paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.base,
+    paddingHorizontal: spacing.sm,
     backgroundColor: colors.warningLight,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: colors.borderLight,
+    gap: spacing.xs,
   },
-  staleIcon: { marginRight: spacing.xs },
+  staleIcon: {},
   staleText: {
     flex: 1,
-    textAlign: 'center',
     fontSize: 13,
     color: colors.badgeWarningText,
+  },
+  staleRetry: {
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    borderRadius: 8,
+    backgroundColor: colors.surface,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.borderLight,
+  },
+  staleRetryPressed: { opacity: 0.85 },
+  staleRetryText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: colors.primary,
   },
   errorFooter: {
     paddingHorizontal: spacing.md,

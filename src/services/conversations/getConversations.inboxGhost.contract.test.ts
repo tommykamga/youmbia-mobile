@@ -20,10 +20,16 @@ describe('getConversations — fils fantômes (A2)', () => {
     expect(inbox).toMatch(/presence\.conversationIds\.has/);
   });
 
-  it('invalide le cache AsyncStorage quand des lignes fantôme typiques sont détectées', () => {
+  it('ne déduit pas l’absence de messages depuis le cache local', () => {
     const ui = read('src/features/messages/MessagesInboxScreen.tsx');
-    expect(ui).toMatch(/lightCacheRemove/);
-    expect(ui).toMatch(/last_message_at != null/);
-    expect(ui).toMatch(/unread_count/);
+    expect(ui).toMatch(/isInboxLightCacheTrusted/);
+    expect(ui).not.toMatch(/lightCacheRemove/);
+    expect(ui).not.toMatch(/last_message_at != null/);
+  });
+
+  it('optimise la présence : retrait des ids couverts pour réduire la pagination', () => {
+    const presence = read('src/services/conversations/getConversationsMessagePresence.ts');
+    expect(presence).toMatch(/remaining\.delete/);
+    expect(presence).toMatch(/while \(remaining\.size > 0\)/);
   });
 });
