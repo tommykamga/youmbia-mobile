@@ -2,8 +2,7 @@
  * Fetch conversations for the current user (inbox).
  * Uses Supabase: conversations + listings for title; messages for last message and unread count.
  *
- * En cas d’erreur serveur (RLS, table, etc.), repli : liste vide + error null pour éviter
- * l’écran d’erreur générique (comportement proche « aucune conversation », même EmptyState qu’un vrai vide).
+ * Toute erreur requête renvoie `{ data: null, error }` pour que l’UI distingue vide réel et défaillance.
  * Logs de diagnostic uniquement en __DEV__.
  *
  * À vérifier côté Supabase si erreurs persistantes : table `conversations` ; RLS SELECT pour
@@ -35,13 +34,21 @@ function logSupabaseErrorDev(context: string, err: unknown) {
   }
 }
 
-/** Liste vide sans erreur : l’UI affiche l’état vide existant (pas d’écran erreur serveur). */
-function fallbackEmptyList(reason: string): GetConversationsResult {
-  if (typeof __DEV__ !== 'undefined' && __DEV__) {
-     
-    console.warn('[getConversations] fallback → liste vide:', reason);
+function failureFromSupabase(context: string, err: unknown): GetConversationsResult {
+  logSupabaseErrorDev(context, err);
+  const detail =
+    err && typeof err === 'object' && 'message' in err && typeof (err as { message: unknown }).message === 'string'
+      ? (err as { message: string }).message
+      : String(err);
+  return { data: null, error: { message: `${context}: ${detail}` } };
+}
+
+function classifyAuthErrorMessage(raw: string): string {
+  const m = raw.toLowerCase();
+  if (m.includes('jwt') || m.includes('auth') || m.includes('session')) {
+    return 'Session expirée ou invalide';
   }
-  return { data: [], error: null };
+  return raw;
 }
 
 export async function getConversations(): Promise<GetConversationsResult> {
@@ -53,7 +60,10 @@ export async function getConversations(): Promise<GetConversationsResult> {
 
     if (userError || !user) {
       logDev('auth', { ok: false, userError: userError?.message ?? null });
-      return { data: null, error: { message: 'Non connecté' } };
+      const msg = userError?.message
+        ? classifyAuthErrorMessage(userError.message)
+        : 'Non connecté';
+      return { data: null, error: { message: msg } };
     }
 
     const userId = user.id;
@@ -71,8 +81,7 @@ export async function getConversations(): Promise<GetConversationsResult> {
       .order('created_at', { ascending: false });
 
     if (error) {
-      logSupabaseErrorDev('conversations.select', error);
-      return fallbackEmptyList(`conversations: ${error.message}`);
+      return failureFromSupabase('conversations', error);
     }
 
     const list = (rows ?? []) as {
@@ -88,13 +97,7 @@ export async function getConversations(): Promise<GetConversationsResult> {
     const convIdsAll = list.map((c) => c.id);
     const presence = await fetchConversationIdsWithAtLeastOneMessage(convIdsAll);
     if (!presence.ok) {
-      logSupabaseErrorDev('messages.presence', presence.errorMessage);
-      return {
-        data: null,
-        error: {
-          message: `Présence messages: ${presence.errorMessage}`,
-        },
-      };
+      return failureFromSupabase('messages.presence', presence.errorMessage);
     }
 
     const listWithMessages = list.filter((c) => presence.conversationIds.has(c.id));
@@ -107,8 +110,7 @@ export async function getConversations(): Promise<GetConversationsResult> {
       .select('id, title, user_id')
       .in('id', listingIds);
     if (listingsError) {
-      logSupabaseErrorDev('listings.select', listingsError);
-      return fallbackEmptyList(`listings: ${listingsError.message}`);
+      return failureFromSupabase('listings', listingsError);
     }
     const listingMap = new Map(
       (listings ?? []).map((l: { id: string; title: string; user_id: string | null }) => [l.id, l])
@@ -120,8 +122,7 @@ export async function getConversations(): Promise<GetConversationsResult> {
       .select('id, full_name, avatar_url')
       .in('id', otherIds);
     if (profilesError) {
-      logSupabaseErrorDev('profiles.select', profilesError);
-      return fallbackEmptyList(`profiles: ${profilesError.message}`);
+      return failureFromSupabase('profiles', profilesError);
     }
     type ProfileRow = { id: string; full_name: string | null; avatar_url: string | null };
     const profileRows = (profiles ?? []) as ProfileRow[];
@@ -151,8 +152,7 @@ export async function getConversations(): Promise<GetConversationsResult> {
       .in('conversation_id', convIds)
       .order('created_at', { ascending: false });
     if (lastMessagesError) {
-      logSupabaseErrorDev('messages.last', lastMessagesError);
-      return fallbackEmptyList(`messages(last): ${lastMessagesError.message}`);
+      return failureFromSupabase('messages.last', lastMessagesError);
     }
 
     const lastByConv = new Map<string, { body: string; created_at: string }>();
@@ -173,8 +173,7 @@ export async function getConversations(): Promise<GetConversationsResult> {
       .neq('sender_id', userId)
       .is('read_at', null);
     if (unreadError) {
-      logSupabaseErrorDev('messages.unread', unreadError);
-      return fallbackEmptyList(`messages(unread): ${unreadError.message}`);
+      return failureFromSupabase('messages.unread', unreadError);
     }
 
     const unreadByConv = new Map<string, number>();
@@ -224,6 +223,6 @@ export async function getConversations(): Promise<GetConversationsResult> {
        
       console.warn('[getConversations] exception', e);
     }
-    return fallbackEmptyList(`exception: ${msg}`);
+    return { data: null, error: { message: `exception: ${msg}` } };
   }
 }

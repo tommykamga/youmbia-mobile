@@ -130,7 +130,9 @@ export default function ConversationThreadScreen() {
       setPeerAvatarVersion(conv.other_party_avatar_version ?? '');
       setPeerAvatarDisplayUrl(conv.other_party_avatar_display_url ?? null);
       setMessages(messagesResult.data ?? []);
-      void syncMessageNotificationSnapshot(convListResult.data ?? []);
+      if (!convListResult.error && convListResult.data) {
+        void syncMessageNotificationSnapshot(convListResult.data);
+      }
       setStatus('success');
       const unreadFromInbox = convListResult.data?.find((item) => item.id === id)?.unread_count;
       const unreadFromMessages = (messagesResult.data ?? []).filter(
