@@ -14,10 +14,13 @@ import {
   Keyboard,
   useWindowDimensions,
   PixelRatio,
+  Dimensions,
+  type KeyboardEvent,
   type NativeScrollEvent,
   type NativeSyntheticEvent,
   type View as RNView,
 } from 'react-native';
+import { useKeyboardInset } from '@/hooks/useKeyboardInset';
 import { useRouter, useFocusEffect, useLocalSearchParams, type Href } from 'expo-router';
 import { buildAuthGateHref } from '@/lib/authGateNavigation';
 import { buildAccountProfileHref } from '@/lib/profileReturnNavigation';
@@ -124,8 +127,9 @@ import {
 } from '@/lib/analytics';
 import { shareListingPreferWhatsApp } from '@/lib/shareListing';
 import {
-  scheduleSellDetailsFieldScroll,
   scrollSellDetailsFieldIntoView,
+  scheduleSellDetailsFieldScroll,
+  sellDetailsAndroidKeyboardContentPadding,
   shouldRunSellDetailsAndroidFocusScroll,
   type SellDetailsKeyboardFieldId,
 } from '@/features/sell/sellDetailsKeyboardFocus';
@@ -223,8 +227,16 @@ export default function SellScreen() {
   const formScrollRef = useRef<ScrollView>(null);
   const formScrollOffsetYRef = useRef(0);
   const lastSellDetailsFocusAnchorRef = useRef<RNView | null>(null);
+  const sellDetailsScrollCancelRef = useRef<(() => void) | null>(null);
+  const keyboardScreenYRef = useRef<number | null>(null);
+  const [baselineWindowHeight, setBaselineWindowHeight] = useState(() =>
+    Dimensions.get('window').height
+  );
   const { height: windowHeight } = useWindowDimensions();
   const fontScale = PixelRatio.getFontScale();
+  const detailsAndroidKeyboard =
+    Platform.OS === 'android' && flowStep === 'details';
+  const keyboardInset = useKeyboardInset(detailsAndroidKeyboard);
 
   const subcategoryOptions = useMemo(() => {
     if (selectedParentCategoryId == null) {
@@ -326,26 +338,59 @@ export default function SellScreen() {
     setSubmitError(null);
   }, []);
 
+  const cancelPendingSellDetailsScroll = useCallback(() => {
+    sellDetailsScrollCancelRef.current?.();
+    sellDetailsScrollCancelRef.current = null;
+  }, []);
+
   const applySellDetailsFocusScroll = useCallback(
     (anchor: RNView) => {
       scrollSellDetailsFieldIntoView({
         scrollRef: formScrollRef,
         anchor,
         currentScrollY: formScrollOffsetYRef.current,
-        viewportHeight: windowHeight,
+        windowHeight,
+        baselineWindowHeight,
+        keyboardInset,
+        keyboardScreenY: keyboardScreenYRef.current,
         fontScale,
       });
     },
-    [fontScale, windowHeight]
+    [baselineWindowHeight, fontScale, keyboardInset, windowHeight]
   );
+
+  const scheduleSellDetailsFocusScroll = useCallback(
+    (anchor: RNView) => {
+      cancelPendingSellDetailsScroll();
+      sellDetailsScrollCancelRef.current = scheduleSellDetailsFieldScroll(() =>
+        applySellDetailsFocusScroll(anchor)
+      );
+    },
+    [applySellDetailsFocusScroll, cancelPendingSellDetailsScroll]
+  );
+
+  const detailsAndroidKeyboardPadding = useMemo(() => {
+    if (!detailsAndroidKeyboard || !keyboardVisible) return 0;
+    return sellDetailsAndroidKeyboardContentPadding({
+      keyboardInset,
+      windowHeight,
+      baselineWindowHeight,
+    });
+  }, [
+    baselineWindowHeight,
+    detailsAndroidKeyboard,
+    keyboardInset,
+    keyboardVisible,
+    windowHeight,
+  ]);
 
   const handleDetailsFieldFocus = useCallback(
     (_fieldId: SellDetailsKeyboardFieldId, anchor: RNView) => {
       if (!shouldRunSellDetailsAndroidFocusScroll(Platform.OS, flowStep)) return;
       lastSellDetailsFocusAnchorRef.current = anchor;
-      applySellDetailsFocusScroll(anchor);
+      scheduleSellDetailsFocusScroll(anchor);
     },
-    [applySellDetailsFocusScroll, flowStep]
+    [flowStep, scheduleSellDetailsFocusScroll]
   );
 
   const handleFormScroll = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
@@ -355,23 +400,38 @@ export default function SellScreen() {
   useEffect(() => {
     const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
     const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
-    const showSub = Keyboard.addListener(showEvent, () => {
+    const showSub = Keyboard.addListener(showEvent, (event: KeyboardEvent) => {
       setKeyboardVisible(true);
+      keyboardScreenYRef.current = event.endCoordinates.screenY;
       if (shouldRunSellDetailsAndroidFocusScroll(Platform.OS, flowStep)) {
         const anchor = lastSellDetailsFocusAnchorRef.current;
         if (anchor) {
-          scheduleSellDetailsFieldScroll(() => applySellDetailsFocusScroll(anchor));
+          scheduleSellDetailsFocusScroll(anchor);
         }
       }
     });
     const hideSub = Keyboard.addListener(hideEvent, () => {
       setKeyboardVisible(false);
+      keyboardScreenYRef.current = null;
+      cancelPendingSellDetailsScroll();
+      lastSellDetailsFocusAnchorRef.current = null;
+      setBaselineWindowHeight(Dimensions.get('window').height);
     });
     return () => {
       showSub.remove();
       hideSub.remove();
     };
-  }, [applySellDetailsFocusScroll, flowStep]);
+  }, [cancelPendingSellDetailsScroll, flowStep, scheduleSellDetailsFocusScroll]);
+
+  useEffect(() => {
+    if (flowStep !== 'details') {
+      cancelPendingSellDetailsScroll();
+      lastSellDetailsFocusAnchorRef.current = null;
+    }
+    return () => {
+      cancelPendingSellDetailsScroll();
+    };
+  }, [cancelPendingSellDetailsScroll, flowStep]);
 
   useEffect(() => {
     if (!submitLoading) {
@@ -1213,7 +1273,10 @@ export default function SellScreen() {
             flowStep === 'photos' ? styles.formScrollContentPhotosStep : null,
             flowStep === 'details' ? styles.formScrollContentDetailsStep : null,
             flowStep === 'review' ? styles.formScrollContentReviewStep : null,
-            keyboardVisible ? styles.formScrollContentKeyboardOpen : null,
+            keyboardVisible && flowStep !== 'details' ? styles.formScrollContentKeyboardOpen : null,
+            detailsAndroidKeyboardPadding > 0
+              ? { paddingBottom: detailsAndroidKeyboardPadding }
+              : null,
           ]}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}

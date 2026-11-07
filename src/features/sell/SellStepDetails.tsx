@@ -19,10 +19,7 @@ import type {
 } from '@/lib/categoryAttributesTypes';
 import { colors, spacing, typography, fontWeights, radius } from '@/theme';
 import { getSellCitySuggestions } from './sellCitySuggestions';
-import {
-  scheduleSellDetailsFieldScroll,
-  type SellDetailsKeyboardFieldId,
-} from './sellDetailsKeyboardFocus';
+import type { SellDetailsKeyboardFieldId } from './sellDetailsKeyboardFocus';
 
 const SELECTED_BG = 'rgba(22, 163, 74, 0.08)';
 
@@ -140,7 +137,7 @@ export function SellStepDetails({
   const notifyFieldFocus = useCallback(
     (fieldId: SellDetailsKeyboardFieldId, anchor: RNView | null) => {
       if (!onDetailsFieldFocus || !anchor) return;
-      scheduleSellDetailsFieldScroll(() => onDetailsFieldFocus(fieldId, anchor));
+      onDetailsFieldFocus(fieldId, anchor);
     },
     [onDetailsFieldFocus]
   );
