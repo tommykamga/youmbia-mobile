@@ -23,7 +23,28 @@ vi.mock('@/context/FavoritesContext', () => ({ useFavorites: () => ({ refresh: m
 vi.mock('@/lib/analytics', () => ({ trackHomeFeedViewed: vi.fn() }));
 vi.mock('@/lib/lightCache', () => ({ lightCacheKeys: { homeFeedPublic: 'home' }, lightCacheRead: m.read, lightCacheWrite: m.write }));
 vi.mock('@/theme', () => ({
-  colors: {}, spacing: {}, radius: {}, typography: {}, fontWeights: {}, ui: { spacing: {} },
+  colors: {
+    primary: '#0B4D3C',
+    error: '#DC2626',
+    textMuted: '#64748B',
+    textTertiary: '#94A3B8',
+    surface: '#FFFFFF',
+  },
+  spacing: {
+    xs: 4,
+    sm: 8,
+    md: 12,
+    base: 16,
+    screenHorizontal: 16,
+    lg: 20,
+    xl: 24,
+    '2xl': 32,
+    '3xl': 40,
+  },
+  radius: { full: 9999 },
+  typography: { sm: {}, xs: {} },
+  fontWeights: { medium: '500', semibold: '600' },
+  ui: { spacing: { md: 12 } },
 }));
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 const result = (ids: string[], nextOffset: number, hasMore: boolean) => ({

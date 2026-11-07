@@ -24,6 +24,8 @@ import { CityPickerSheet } from '@/components/CityPickerSheet';
 import { Screen, Button, HomeBrandHeader, HomeCategoryStrip, KeyboardSafeView, LoadingState } from '@/components';
 import { ListingCard, ListingFeed } from '@/features/listings';
 import { buildHomeFeedGridRows, type HomeFeedGridRow } from '@/features/listings/homeFeedGridRows';
+import { useHomeFeedGridScrollRestore } from '@/features/listings/useHomeFeedGridScrollRestore';
+import { useMeasuredGridInnerWidth } from '@/features/listings/useMeasuredGridInnerWidth';
 import {
   HomeMarketplaceFeedHeader,
   useAuthStateForHome,
@@ -915,6 +917,8 @@ function MarketplaceSearchScreen({ onOpenDemo }: { onOpenDemo?: () => void }) {
     () => getListingCardGridInnerWidth(width, screenHorizontal),
     [width, screenHorizontal]
   );
+  const { gridInnerWidthForLayout: searchGridInnerWidthForLayout, onGridRowLayout: onSearchGridRowLayout } =
+    useMeasuredGridInnerWidth(searchResultsGridInnerWidth);
   const searchResultsColumnCount = useMemo(
     () => getListingCardGridColumnCount(searchResultsGridInnerWidth, fontScale),
     [searchResultsGridInnerWidth, fontScale]
@@ -924,6 +928,15 @@ function MarketplaceSearchScreen({ onOpenDemo }: { onOpenDemo?: () => void }) {
     if (!useSearchResultsGrid) return null;
     return buildHomeFeedGridRows(filteredListings, searchResultsColumnCount);
   }, [filteredListings, useSearchResultsGrid, searchResultsColumnCount]);
+
+  const searchScrollRestore = useHomeFeedGridScrollRestore({
+    enabled: state.status === 'success',
+    listRef: resultsListRef,
+    columnCount: searchResultsColumnCount,
+    useGrid: useSearchResultsGrid,
+    flatData: filteredListings,
+    gridRows: searchResultsGridRows,
+  });
 
   const searchResultsKeyExtractor = useCallback((item: PublicListing | HomeFeedGridRow) => {
     if ('kind' in item) return item.key;
@@ -935,12 +948,15 @@ function MarketplaceSearchScreen({ onOpenDemo }: { onOpenDemo?: () => void }) {
       if ('kind' in item) {
         const row = item;
         return (
-          <View style={[styles.homeGridRow, { gap: HOME_FEED_GRID_COLUMN_GAP }]}>
+          <View
+            style={[styles.homeGridRow, { gap: HOME_FEED_GRID_COLUMN_GAP }]}
+            onLayout={onSearchGridRowLayout}
+          >
             {row.kind === 'cells'
               ? row.cells.map((cell) => {
                   const listing = cell as PublicListing;
                   const cellLayout = getHomeFeedGridCellLayout(
-                    searchResultsGridInnerWidth,
+                    searchGridInnerWidthForLayout,
                     searchResultsColumnCount,
                     row.cells.length
                   );
@@ -970,7 +986,7 @@ function MarketplaceSearchScreen({ onOpenDemo }: { onOpenDemo?: () => void }) {
         </View>
       );
     },
-    [searchResultsColumnCount, searchResultsGridInnerWidth]
+    [onSearchGridRowLayout, searchGridInnerWidthForLayout, searchResultsColumnCount]
   );
 
   const searchChrome = useMemo(() => {
@@ -1751,6 +1767,9 @@ function MarketplaceSearchScreen({ onOpenDemo }: { onOpenDemo?: () => void }) {
                        * Désactivé uniquement sur ce FlatList Search ; Home / Favorites inchangés.
                        */
                       removeClippedSubviews={false}
+                      onViewableItemsChanged={searchScrollRestore.onViewableItemsChanged}
+                      viewabilityConfig={searchScrollRestore.viewabilityConfig}
+                      onScrollToIndexFailed={searchScrollRestore.onScrollToIndexFailed}
                       ListEmptyComponent={
                         <SearchFilteredEmptyPanel onReset={handleResetSearch} />
                       }

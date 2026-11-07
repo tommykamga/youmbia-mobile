@@ -34,6 +34,8 @@ import {
   HOME_FEED_GRID_COLUMN_GAP,
 } from '@/lib/responsiveLayout';
 import { buildHomeFeedGridRows, type HomeFeedGridRow } from './homeFeedGridRows';
+import { useHomeFeedGridScrollRestore } from './useHomeFeedGridScrollRestore';
+import { useMeasuredGridInnerWidth } from './useMeasuredGridInnerWidth';
 
 const PAGE_SIZE = 15;
 const FAVORITES_FOCUS_REFRESH_MIN_INTERVAL_MS = 120_000;
@@ -112,6 +114,9 @@ export function ListingFeed({
   const homeGridInnerWidth = useMemo(
     () => getHomeFeedGridInnerWidth(windowWidth),
     [windowWidth]
+  );
+  const { gridInnerWidthForLayout, onGridRowLayout } = useMeasuredGridInnerWidth(
+    homeGridInnerWidth
   );
 
   const listRef = useRef<any>(null);
@@ -232,6 +237,15 @@ export function ListingFeed({
     return buildHomeFeedGridRows(feedData, homeFeedColumns);
   }, [useHomeGrid, feedData, homeFeedColumns]);
 
+  const gridScrollRestore = useHomeFeedGridScrollRestore({
+    enabled: listingCardFeedPresentation === 'home' && state.status === 'success',
+    listRef,
+    columnCount: homeFeedColumns,
+    useGrid: useHomeGrid,
+    flatData: feedData,
+    gridRows: homeGridRows,
+  });
+
   const renderListingCard = useCallback(
     (listing: PublicListing) => renderPreviewCard ? renderPreviewCard(listing, useHomeGrid) : (
       <ListingCard
@@ -256,10 +270,13 @@ export function ListingFeed({
       }
       const cellCount = item.cells.length;
       return wrapHomeFeedItem(
-        <View style={[styles.homeGridRow, { gap: HOME_FEED_GRID_COLUMN_GAP }]}>
+        <View
+          style={[styles.homeGridRow, { gap: HOME_FEED_GRID_COLUMN_GAP }]}
+          onLayout={onGridRowLayout}
+        >
           {item.cells.map((cell) => {
             const cellLayout = getHomeFeedGridCellLayout(
-              homeGridInnerWidth,
+              gridInnerWidthForLayout,
               homeFeedColumns,
               cellCount
             );
@@ -278,7 +295,8 @@ export function ListingFeed({
     [
       extraComponent,
       homeFeedColumns,
-      homeGridInnerWidth,
+      gridInnerWidthForLayout,
+      onGridRowLayout,
       renderListingCard,
       renderSkeletonCard,
       wrapHomeFeedItem,
@@ -454,11 +472,17 @@ export function ListingFeed({
           tintColor={colors.primary}
         />
       ),
+      onViewableItemsChanged: gridScrollRestore.onViewableItemsChanged,
+      viewabilityConfig: gridScrollRestore.viewabilityConfig,
+      onScrollToIndexFailed: gridScrollRestore.onScrollToIndexFailed,
     }),
     [
       useHomeGrid,
       homeGridRows,
       feedData,
+      gridScrollRestore.onScrollToIndexFailed,
+      gridScrollRestore.onViewableItemsChanged,
+      gridScrollRestore.viewabilityConfig,
       gridKeyExtractor,
       keyExtractor,
       renderGridRow,

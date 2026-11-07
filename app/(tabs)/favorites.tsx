@@ -22,6 +22,8 @@ import { getFavorites } from '@/services/favorites';
 import { getSession } from '@/services/auth';
 import { ListingCard } from '@/features/listings';
 import { buildHomeFeedGridRows, type HomeFeedGridRow } from '@/features/listings/homeFeedGridRows';
+import { useHomeFeedGridScrollRestore } from '@/features/listings/useHomeFeedGridScrollRestore';
+import { useMeasuredGridInnerWidth } from '@/features/listings/useMeasuredGridInnerWidth';
 import { getListingsByIds, type PublicListing } from '@/services/listings';
 import { spacing, colors, typography, fontWeights } from '@/theme';
 import { useFavorites } from '@/context/FavoritesContext';
@@ -64,6 +66,8 @@ export default function FavoritesScreen() {
   const columnCount = getHomeFeedColumnCount(windowWidth, fontScale);
   const useGrid = columnCount === 2;
   const gridInnerWidth = useMemo(() => getHomeFeedGridInnerWidth(windowWidth), [windowWidth]);
+  const { gridInnerWidthForLayout, onGridRowLayout } = useMeasuredGridInnerWidth(gridInnerWidth);
+  const favoritesListRef = useRef<FlatList<PublicListing | HomeFeedGridRow> | null>(null);
 
   const [state, setState] = useState<FavoritesState>({ status: 'loading' });
   const [refreshing, setRefreshing] = useState(false);
@@ -142,6 +146,17 @@ export default function FavoritesScreen() {
     return buildHomeFeedGridRows(display.visibleListings, columnCount);
   }, [display.mode, display.visibleListings, useGrid, columnCount]);
 
+  const favoritesFlatData = display.visibleListings as readonly unknown[];
+
+  const favoritesScrollRestore = useHomeFeedGridScrollRestore({
+    enabled: display.mode === 'list',
+    listRef: favoritesListRef,
+    columnCount,
+    useGrid,
+    flatData: favoritesFlatData,
+    gridRows: useGrid ? gridRows : null,
+  });
+
   const goDiscover = useCallback(() => {
     router.replace('/(tabs)/home');
   }, [router]);
@@ -163,10 +178,17 @@ export default function FavoritesScreen() {
       const cellCount = item.kind === 'cells' ? item.cells.length : 0;
       return (
         <View style={styles.gridRowShell}>
-          <View style={[styles.homeGridRow, { gap: HOME_FEED_GRID_COLUMN_GAP }]}>
+          <View
+            style={[styles.homeGridRow, { gap: HOME_FEED_GRID_COLUMN_GAP }]}
+            onLayout={onGridRowLayout}
+          >
           {item.kind === 'cells'
             ? item.cells.map((cell) => {
-                const cellLayout = getHomeFeedGridCellLayout(gridInnerWidth, columnCount, cellCount);
+                const cellLayout = getHomeFeedGridCellLayout(
+                  gridInnerWidthForLayout,
+                  columnCount,
+                  cellCount
+                );
                 return (
                   <View
                     key={typeof cell === 'number' ? `sk-${cell}` : cell.id}
@@ -181,7 +203,7 @@ export default function FavoritesScreen() {
         </View>
       );
     },
-    [columnCount, gridInnerWidth, renderListingCard]
+    [columnCount, gridInnerWidthForLayout, onGridRowLayout, renderListingCard]
   );
 
   const renderSingleColumnItem = useCallback(
@@ -190,6 +212,21 @@ export default function FavoritesScreen() {
     ),
     [renderListingCard]
   );
+
+  const favoritesKeyExtractor = useCallback(
+    (item: PublicListing | HomeFeedGridRow) => ('kind' in item ? item.key : item.id),
+    []
+  );
+
+  const favoritesRenderItem = useCallback(
+    ({ item }: { item: PublicListing | HomeFeedGridRow }) => {
+      if ('kind' in item) return renderGridRow({ item });
+      return renderSingleColumnItem({ item });
+    },
+    [renderGridRow, renderSingleColumnItem]
+  );
+
+  const favoritesListData = useGrid && gridRows ? gridRows : display.visibleListings;
 
   const listHeader = <FavoritesScreenHeader count={display.headerCount} />;
 
@@ -269,71 +306,39 @@ export default function FavoritesScreen() {
     );
   }
 
-  if (useGrid && gridRows) {
-    return (
-      <Screen noPadding safe={false} style={shellStyle}>
-        <FlatList
-          data={gridRows}
-          keyExtractor={(item) => item.key}
-          renderItem={renderGridRow}
-          ListHeaderComponent={listHeader}
-          ListFooterComponent={
-            display.unavailableCount > 0 ? (
-              <View style={styles.unavailableBanner} accessibilityRole="text">
-                <Ionicons name="information-circle-outline" size={18} color={colors.textSecondary} />
-                <Text style={styles.unavailableBannerText}>
-                  {display.unavailableCount === 1
-                    ? '1 autre favori enregistré n’est pas affiché car l’annonce n’est plus disponible.'
-                    : `${display.unavailableCount} autres favoris enregistrés ne sont pas affichés car les annonces ne sont plus disponibles.`}
-                </Text>
-              </View>
-            ) : null
-          }
-          ItemSeparatorComponent={() => <View style={styles.gridRowSeparator} />}
-          contentContainerStyle={styles.listContent}
-          showsVerticalScrollIndicator={false}
-          initialNumToRender={4}
-          maxToRenderPerBatch={6}
-          windowSize={Platform.OS === 'ios' ? 6 : 10}
-          removeClippedSubviews={Platform.OS === 'ios'}
-          refreshControl={
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={onRefresh}
-              tintColor={FAVORITES_MARKETPLACE_SURFACE}
-            />
-          }
-        />
-      </Screen>
-    );
-  }
+  const unavailableFooter =
+    display.unavailableCount > 0 ? (
+      <View style={styles.unavailableBanner} accessibilityRole="text">
+        <Ionicons name="information-circle-outline" size={18} color={colors.textSecondary} />
+        <Text style={styles.unavailableBannerText}>
+          {display.unavailableCount === 1
+            ? '1 autre favori enregistré n’est pas affiché car l’annonce n’est plus disponible.'
+            : `${display.unavailableCount} autres favoris enregistrés ne sont pas affichés car les annonces ne sont plus disponibles.`}
+        </Text>
+      </View>
+    ) : null;
 
   return (
     <Screen noPadding safe={false} style={shellStyle}>
-      <FlatList
-        data={display.visibleListings}
-        keyExtractor={(item) => item.id}
-        renderItem={renderSingleColumnItem}
+      <FlatList<PublicListing | HomeFeedGridRow>
+        ref={favoritesListRef}
+        data={favoritesListData}
+        keyExtractor={favoritesKeyExtractor}
+        renderItem={favoritesRenderItem}
         ListHeaderComponent={listHeader}
-        ListFooterComponent={
-          display.unavailableCount > 0 ? (
-            <View style={styles.unavailableBanner} accessibilityRole="text">
-              <Ionicons name="information-circle-outline" size={18} color={colors.textSecondary} />
-              <Text style={styles.unavailableBannerText}>
-                {display.unavailableCount === 1
-                  ? '1 autre favori enregistré n’est pas affiché car l’annonce n’est plus disponible.'
-                  : `${display.unavailableCount} autres favoris enregistrés ne sont pas affichés car les annonces ne sont plus disponibles.`}
-              </Text>
-            </View>
-          ) : null
-        }
-        ItemSeparatorComponent={() => <View style={styles.separator} />}
+        ListFooterComponent={unavailableFooter}
+        ItemSeparatorComponent={() => (
+          <View style={useGrid ? styles.gridRowSeparator : styles.separator} />
+        )}
         contentContainerStyle={styles.listContent}
         showsVerticalScrollIndicator={false}
-        initialNumToRender={8}
+        initialNumToRender={useGrid ? 4 : 8}
         maxToRenderPerBatch={6}
         windowSize={Platform.OS === 'ios' ? 6 : 10}
         removeClippedSubviews={Platform.OS === 'ios'}
+        onViewableItemsChanged={favoritesScrollRestore.onViewableItemsChanged}
+        viewabilityConfig={favoritesScrollRestore.viewabilityConfig}
+        onScrollToIndexFailed={favoritesScrollRestore.onScrollToIndexFailed}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
