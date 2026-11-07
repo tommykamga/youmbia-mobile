@@ -1,5 +1,5 @@
-import React, { useMemo, useState, useCallback } from 'react';
-import { View, Text, StyleSheet, Pressable, Platform } from 'react-native';
+import React, { useMemo, useState, useCallback, useRef } from 'react';
+import { View, Text, StyleSheet, Pressable, Platform, type View as RNView } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Input, Loader } from '@/components';
 import { DynamicCategoryAttributesFields } from '@/features/sell/DynamicCategoryAttributesFields';
@@ -19,6 +19,10 @@ import type {
 } from '@/lib/categoryAttributesTypes';
 import { colors, spacing, typography, fontWeights, radius } from '@/theme';
 import { getSellCitySuggestions } from './sellCitySuggestions';
+import {
+  scheduleSellDetailsFieldScroll,
+  type SellDetailsKeyboardFieldId,
+} from './sellDetailsKeyboardFocus';
 
 const SELECTED_BG = 'rgba(22, 163, 74, 0.08)';
 
@@ -86,6 +90,8 @@ type SellStepDetailsProps = {
   dynamicLoading: boolean;
   dynamicValues: Record<string, string>;
   onDynamicChange: (key: string, value: string) => void;
+  /** Android étape Détails : scroll parent après layout + clavier resize. */
+  onDetailsFieldFocus?: (fieldId: SellDetailsKeyboardFieldId, anchor: RNView) => void;
 };
 
 export function SellStepDetails({
@@ -122,9 +128,22 @@ export function SellStepDetails({
   dynamicLoading,
   dynamicValues,
   onDynamicChange,
+  onDetailsFieldFocus,
 }: SellStepDetailsProps) {
   const [categoryPickerOpen, setCategoryPickerOpen] = useState(false);
   const [cityFieldFocused, setCityFieldFocused] = useState(false);
+  const titleAnchorRef = useRef<RNView>(null);
+  const descriptionAnchorRef = useRef<RNView>(null);
+  const priceAnchorRef = useRef<RNView>(null);
+  const cityAnchorRef = useRef<RNView>(null);
+
+  const notifyFieldFocus = useCallback(
+    (fieldId: SellDetailsKeyboardFieldId, anchor: RNView | null) => {
+      if (!onDetailsFieldFocus || !anchor) return;
+      scheduleSellDetailsFieldScroll(() => onDetailsFieldFocus(fieldId, anchor));
+    },
+    [onDetailsFieldFocus]
+  );
 
   const selectedParent = useMemo(
     () => parentCategories.find((c) => c.id === selectedParentCategoryId) ?? null,
@@ -191,7 +210,7 @@ export function SellStepDetails({
       </SellDetailFormGroup>
 
       <SellDetailFormGroup title="Présentation">
-        <View style={styles.fieldStack}>
+        <View style={styles.fieldStack} ref={titleAnchorRef} collapsable={false}>
           <View style={styles.labelCounterRow}>
             <Text style={styles.fieldLabel} maxFontSizeMultiplier={1.35}>
               Titre <Text style={styles.requiredMark}>*</Text>
@@ -202,13 +221,14 @@ export function SellStepDetails({
             placeholder={sellGuidance.titlePlaceholder}
             value={title}
             onChangeText={onTitleChange}
+            onFocus={() => notifyFieldFocus('title', titleAnchorRef.current)}
             maxLength={LISTING_TITLE_MAX}
             error={showTitleError ? (titleError ?? undefined) : undefined}
             containerStyle={styles.fieldInput}
           />
         </View>
 
-        <View style={styles.fieldStack}>
+        <View style={styles.fieldStack} ref={descriptionAnchorRef} collapsable={false}>
           <View style={styles.labelCounterRow}>
             <Text style={styles.fieldLabel} maxFontSizeMultiplier={1.35}>
               Description <Text style={styles.requiredMark}>*</Text>
@@ -219,6 +239,7 @@ export function SellStepDetails({
             placeholder={sellGuidance.descriptionPlaceholder}
             value={description}
             onChangeText={onDescriptionChange}
+            onFocus={() => notifyFieldFocus('description', descriptionAnchorRef.current)}
             multiline
             numberOfLines={4}
             style={styles.descriptionInput}
@@ -241,27 +262,35 @@ export function SellStepDetails({
       </SellDetailFormGroup>
 
       <SellDetailFormGroup title="Prix et localisation">
-        <Input
-          label="Prix (FCFA) *"
-          placeholder="50000"
-          value={priceStr}
-          onChangeText={onPriceChange}
-          keyboardType={Platform.OS === 'web' ? 'numeric' : 'number-pad'}
-          error={showPriceError ? (priceError ?? undefined) : undefined}
-          containerStyle={styles.fieldInput}
-        />
+        <View ref={priceAnchorRef} collapsable={false}>
+          <Input
+            label="Prix (FCFA) *"
+            placeholder="50000"
+            value={priceStr}
+            onChangeText={onPriceChange}
+            onFocus={() => notifyFieldFocus('price', priceAnchorRef.current)}
+            keyboardType={Platform.OS === 'web' ? 'numeric' : 'number-pad'}
+            error={showPriceError ? (priceError ?? undefined) : undefined}
+            containerStyle={styles.fieldInput}
+          />
+        </View>
 
-        <Input
-          label="Ville *"
-          placeholder="Ex. Douala"
-          value={city}
-          onChangeText={onCityChange}
-          onFocus={() => setCityFieldFocused(true)}
-          onBlur={() => setCityFieldFocused(false)}
-          maxLength={20}
-          error={showCityError ? (cityError ?? undefined) : undefined}
-          containerStyle={styles.fieldInput}
-        />
+        <View ref={cityAnchorRef} collapsable={false}>
+          <Input
+            label="Ville *"
+            placeholder="Ex. Douala"
+            value={city}
+            onChangeText={onCityChange}
+            onFocus={() => {
+              setCityFieldFocused(true);
+              notifyFieldFocus('city', cityAnchorRef.current);
+            }}
+            onBlur={() => setCityFieldFocused(false)}
+            maxLength={20}
+            error={showCityError ? (cityError ?? undefined) : undefined}
+            containerStyle={styles.fieldInput}
+          />
+        </View>
         {cityRecognizedLabel ? (
           <Text style={styles.cityRecognized} maxFontSizeMultiplier={1.3}>
             Ville reconnue : {cityRecognizedLabel}

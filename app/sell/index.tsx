@@ -12,6 +12,11 @@ import {
   Platform,
   Pressable,
   Keyboard,
+  useWindowDimensions,
+  PixelRatio,
+  type NativeScrollEvent,
+  type NativeSyntheticEvent,
+  type View as RNView,
 } from 'react-native';
 import { useRouter, useFocusEffect, useLocalSearchParams, type Href } from 'expo-router';
 import { buildAuthGateHref } from '@/lib/authGateNavigation';
@@ -118,6 +123,12 @@ import {
   trackPostPublishViewed,
 } from '@/lib/analytics';
 import { shareListingPreferWhatsApp } from '@/lib/shareListing';
+import {
+  scheduleSellDetailsFieldScroll,
+  scrollSellDetailsFieldIntoView,
+  shouldRunSellDetailsAndroidFocusScroll,
+  type SellDetailsKeyboardFieldId,
+} from '@/features/sell/sellDetailsKeyboardFocus';
 
 /** Aligné web : maximum 4 photos par annonce. */
 const MAX_LISTING_IMAGES = MAX_SELL_LISTING_PHOTOS;
@@ -209,6 +220,11 @@ export default function SellScreen() {
   const [slowPublishHint, setSlowPublishHint] = useState(false);
   const postPublishViewedRef = useRef<string | null>(null);
   const [keyboardVisible, setKeyboardVisible] = useState(false);
+  const formScrollRef = useRef<ScrollView>(null);
+  const formScrollOffsetYRef = useRef(0);
+  const lastSellDetailsFocusAnchorRef = useRef<RNView | null>(null);
+  const { height: windowHeight } = useWindowDimensions();
+  const fontScale = PixelRatio.getFontScale();
 
   const subcategoryOptions = useMemo(() => {
     if (selectedParentCategoryId == null) {
@@ -310,16 +326,52 @@ export default function SellScreen() {
     setSubmitError(null);
   }, []);
 
+  const applySellDetailsFocusScroll = useCallback(
+    (anchor: RNView) => {
+      scrollSellDetailsFieldIntoView({
+        scrollRef: formScrollRef,
+        anchor,
+        currentScrollY: formScrollOffsetYRef.current,
+        viewportHeight: windowHeight,
+        fontScale,
+      });
+    },
+    [fontScale, windowHeight]
+  );
+
+  const handleDetailsFieldFocus = useCallback(
+    (_fieldId: SellDetailsKeyboardFieldId, anchor: RNView) => {
+      if (!shouldRunSellDetailsAndroidFocusScroll(Platform.OS, flowStep)) return;
+      lastSellDetailsFocusAnchorRef.current = anchor;
+      applySellDetailsFocusScroll(anchor);
+    },
+    [applySellDetailsFocusScroll, flowStep]
+  );
+
+  const handleFormScroll = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
+    formScrollOffsetYRef.current = event.nativeEvent.contentOffset.y;
+  }, []);
+
   useEffect(() => {
     const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
     const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
-    const showSub = Keyboard.addListener(showEvent, () => setKeyboardVisible(true));
-    const hideSub = Keyboard.addListener(hideEvent, () => setKeyboardVisible(false));
+    const showSub = Keyboard.addListener(showEvent, () => {
+      setKeyboardVisible(true);
+      if (shouldRunSellDetailsAndroidFocusScroll(Platform.OS, flowStep)) {
+        const anchor = lastSellDetailsFocusAnchorRef.current;
+        if (anchor) {
+          scheduleSellDetailsFieldScroll(() => applySellDetailsFocusScroll(anchor));
+        }
+      }
+    });
+    const hideSub = Keyboard.addListener(hideEvent, () => {
+      setKeyboardVisible(false);
+    });
     return () => {
       showSub.remove();
       hideSub.remove();
     };
-  }, []);
+  }, [applySellDetailsFocusScroll, flowStep]);
 
   useEffect(() => {
     if (!submitLoading) {
@@ -1154,6 +1206,7 @@ export default function SellScreen() {
       />
       <KeyboardSafeView style={styles.formLayout}>
         <ScrollView
+          ref={formScrollRef}
           style={styles.formScroll}
           contentContainerStyle={[
             styles.formScrollContent,
@@ -1164,6 +1217,8 @@ export default function SellScreen() {
           ]}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
+          scrollEventThrottle={16}
+          onScroll={handleFormScroll}
         >
           <View style={styles.content}>
             {duplicateSourceId ? (
@@ -1235,6 +1290,9 @@ export default function SellScreen() {
                 dynamicLoading={dynamicLoading}
                 dynamicValues={dynamicValues}
                 onDynamicChange={handleDynamicChange}
+                onDetailsFieldFocus={
+                  Platform.OS === 'android' ? handleDetailsFieldFocus : undefined
+                }
               />
             ) : null}
 
