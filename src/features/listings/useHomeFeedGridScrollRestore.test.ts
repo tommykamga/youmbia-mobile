@@ -3,19 +3,32 @@ import { buildHomeFeedGridRows } from './homeFeedGridRows';
 import {
   HOME_FEED_SCROLL_INDEX_MAX_ATTEMPTS,
   MISSING_ANCHOR_SCROLL_FALLBACK,
+  HomeFeedScrollRestoreSession,
   createStableOnViewableItemsChanged,
   planScrollIndexFailureRetry,
   resolveAnchorListIndex,
+  viewableItemsIncludeListingId,
 } from './useHomeFeedGridScrollRestore';
 
 const listings = (ids: string[]) => ids.map((id) => ({ id }));
 
+const noopFns = () => ({
+  readPending: (): null => null,
+  readEpoch: () => 0,
+  onConfirmed: () => {},
+  writeAnchor: () => {},
+});
+
 describe('createStableOnViewableItemsChanged', () => {
   it('assigné une fois dans useRef, le callback ne change pas de référence', () => {
+    const { readPending, readEpoch, onConfirmed, writeAnchor } = noopFns();
     const onChange = createStableOnViewableItemsChanged(
       () => true,
       () => false,
-      () => {}
+      readPending,
+      readEpoch,
+      writeAnchor,
+      onConfirmed
     );
     const listRef = { current: onChange };
     expect(listRef.current).toBe(onChange);
@@ -27,9 +40,12 @@ describe('createStableOnViewableItemsChanged', () => {
     const onChange = createStableOnViewableItemsChanged(
       () => enabled,
       () => false,
+      () => null,
+      () => 0,
       (a) => {
         if (a) anchors.push(a.listingId);
-      }
+      },
+      () => {}
     );
 
     onChange({
@@ -46,20 +62,41 @@ describe('createStableOnViewableItemsChanged', () => {
     expect(anchors).toEqual(['a']);
   });
 
-  it('n’écrit pas d’ancre pendant restoring', () => {
-    let anchorId: string | null = null;
+  it('pendant restoring, confirme la cible sans voler l’ancre', () => {
+    let confirmed = 0;
+    let stolen: string | null = 'keep';
+    const pending = {
+      layoutEpoch: 1,
+      listingId: 'target',
+      index: 2,
+      viewPosition: 0,
+      attempts: 0,
+    };
     const onChange = createStableOnViewableItemsChanged(
       () => true,
       () => true,
+      () => pending,
+      () => 1,
       (a) => {
-        anchorId = a?.listingId ?? null;
+        if (a) stolen = a.listingId;
+      },
+      () => {
+        confirmed += 1;
       }
     );
     onChange({
-      viewableItems: [{ item: { id: 'x' }, key: 'x', index: 0, isViewable: true }],
+      viewableItems: [{ item: { id: 'other' }, key: 'o', index: 0, isViewable: true }],
       changed: [],
     });
-    expect(anchorId).toBeNull();
+    expect(confirmed).toBe(0);
+    expect(stolen).toBe('keep');
+
+    onChange({
+      viewableItems: [{ item: { id: 'target' }, key: 't', index: 2, isViewable: true }],
+      changed: [],
+    });
+    expect(confirmed).toBe(1);
+    expect(stolen).toBe('keep');
   });
 });
 
@@ -87,11 +124,13 @@ describe('planScrollIndexFailureRetry', () => {
 
   it('arrête après le plafond — pas de boucle', () => {
     const exhausted = { ...basePending, attempts: HOME_FEED_SCROLL_INDEX_MAX_ATTEMPTS };
-    expect(planScrollIndexFailureRetry(exhausted, 1, {
-      index: 4,
-      averageItemLength: 120,
-      highestMeasuredFrameIndex: 2,
-    })).toEqual({ kind: 'stop' });
+    expect(
+      planScrollIndexFailureRetry(exhausted, 1, {
+        index: 4,
+        averageItemLength: 120,
+        highestMeasuredFrameIndex: 2,
+      })
+    ).toEqual({ kind: 'stop' });
   });
 
   it('ignore si epoch de layout a changé (changement colonnes)', () => {
@@ -103,33 +142,112 @@ describe('planScrollIndexFailureRetry', () => {
       })
     ).toEqual({ kind: 'noop' });
   });
+});
 
-  it('simule failure → retry → même ID d’ancre', () => {
+describe('HomeFeedScrollRestoreSession (FlatList mockée)', () => {
+  const basePending = {
+    layoutEpoch: 1,
+    listingId: 'l3',
+    index: 4,
+    viewPosition: 0,
+    attempts: 0,
+  };
+
+  function makeSession() {
     const list = {
-      scrollToOffset: vi.fn(),
       scrollToIndex: vi.fn(),
+      scrollToOffset: vi.fn(),
     };
-    let pending = basePending;
-    const epoch = 1;
+    const session = new HomeFeedScrollRestoreSession({ current: list });
+    session.layoutEpoch = 1;
+    return { session, list };
+  }
 
-    const first = planScrollIndexFailureRetry(pending, epoch, {
+  it('garde pending après scrollToIndex puis reprise async onScrollToIndexFailed', () => {
+    const { session, list } = makeSession();
+    session.startRestore(basePending);
+    expect(session.pending).toEqual(basePending);
+    expect(list.scrollToIndex).toHaveBeenCalledTimes(1);
+
+    session.handleScrollToIndexFailed({
       index: 4,
       averageItemLength: 100,
       highestMeasuredFrameIndex: 1,
     });
-    expect(first.kind).toBe('retry');
-    if (first.kind !== 'retry') return;
-    pending = first.pending;
-    list.scrollToOffset({ offset: first.offset, animated: false });
+    expect(session.pending?.attempts).toBe(1);
+    expect(list.scrollToOffset).toHaveBeenCalledWith({ offset: 400, animated: false });
+    expect(list.scrollToIndex).toHaveBeenCalledTimes(2);
+    expect(session.restoring).toBe(true);
+  });
 
-    const second = planScrollIndexFailureRetry(pending, epoch, {
+  it('confirme par viewable ID et libère pending', () => {
+    const { session } = makeSession();
+    session.startRestore(basePending);
+    session.handleViewableItemsChanged(
+      {
+        viewableItems: [{ item: { id: 'l3' }, key: 'l3', index: 4, isViewable: true }],
+        changed: [],
+      },
+      true
+    );
+    expect(session.pending).toBeNull();
+    expect(session.restoring).toBe(false);
+  });
+
+  it('trois reprises puis stop sans boucle (4e failure)', () => {
+    const { session, list } = makeSession();
+    session.startRestore(basePending);
+    const fail = {
+      index: 4,
+      averageItemLength: 50,
+      highestMeasuredFrameIndex: 0,
+    };
+    session.handleScrollToIndexFailed(fail);
+    session.handleScrollToIndexFailed(fail);
+    session.handleScrollToIndexFailed(fail);
+    session.handleScrollToIndexFailed(fail);
+    expect(session.pending).toBeNull();
+    expect(session.restoring).toBe(false);
+    expect(list.scrollToIndex.mock.calls.length).toBeLessThanOrEqual(4);
+  });
+
+  it('exception synchrone scrollToIndex : pending conservé', () => {
+    const list = {
+      scrollToIndex: vi.fn(() => {
+        throw new Error('sync');
+      }),
+      scrollToOffset: vi.fn(),
+    };
+    const session = new HomeFeedScrollRestoreSession({ current: list });
+    session.layoutEpoch = 1;
+    session.startRestore(basePending);
+    expect(session.pending).not.toBeNull();
+    session.handleScrollToIndexFailed({
+      index: 4,
+      averageItemLength: 80,
+      highestMeasuredFrameIndex: 0,
+    });
+    expect(session.pending?.attempts).toBe(1);
+  });
+
+  it('unmount annule pending', () => {
+    const { session } = makeSession();
+    session.startRestore(basePending);
+    session.unmounted = true;
+    session.cancelAll();
+    expect(session.pending).toBeNull();
+  });
+
+  it('changement colonnes (epoch) rend noop le failure', () => {
+    const { session } = makeSession();
+    session.startRestore(basePending);
+    session.layoutEpoch = 2;
+    session.handleScrollToIndexFailed({
       index: 4,
       averageItemLength: 100,
-      highestMeasuredFrameIndex: 3,
+      highestMeasuredFrameIndex: 0,
     });
-    expect(second.kind).toBe('retry');
-    expect(pending.listingId).toBe('l3');
-    expect(list.scrollToOffset).toHaveBeenCalledWith({ offset: 400, animated: false });
+    expect(session.pending?.layoutEpoch).toBe(1);
   });
 });
 
@@ -141,29 +259,24 @@ describe('resolveAnchorListIndex / disparition ancre', () => {
   it('transition 1 → 2 → 1 sur le même ID', () => {
     expect(resolveAnchorListIndex(anchor, false, flat, null)).toBe(2);
     expect(resolveAnchorListIndex(anchor, true, flat, rows)).toBe(1);
-    expect(resolveAnchorListIndex(anchor, false, flat, null)).toBe(2);
   });
 
-  it('ancre absente des données : index -1 (fallback preserve-viewport)', () => {
-    const gone = resolveAnchorListIndex(
-      { listingId: 'missing', viewPosition: 0 },
-      false,
-      flat,
-      null
-    );
-    expect(gone).toBe(-1);
+  it('ancre absente : index -1 (preserve-viewport)', () => {
+    expect(
+      resolveAnchorListIndex({ listingId: 'missing', viewPosition: 0 }, false, flat, null)
+    ).toBe(-1);
     expect(MISSING_ANCHOR_SCROLL_FALLBACK).toBe('preserve-viewport');
   });
 });
 
-describe('démontage avant retry', () => {
-  it('annule le pending si epoch incrémenté (unmount simulé)', () => {
+describe('viewableItemsIncludeListingId', () => {
+  it('détecte une cellule grille', () => {
+    const rows = buildHomeFeedGridRows(listings(['a', 'b']), 2);
     expect(
-      planScrollIndexFailureRetry(
-        { layoutEpoch: 1, listingId: 'a', index: 2, viewPosition: 0, attempts: 1 },
-        99,
-        { index: 2, averageItemLength: 50, highestMeasuredFrameIndex: 0 }
+      viewableItemsIncludeListingId(
+        [{ item: rows[0], key: rows[0].key, index: 0, isViewable: true }],
+        'b'
       )
-    ).toEqual({ kind: 'noop' });
+    ).toBe(true);
   });
 });

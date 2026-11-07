@@ -81,16 +81,146 @@ export function planScrollIndexFailureRetry(
 
 type ViewableChangeInfo = { viewableItems: ViewToken[]; changed: ViewToken[] };
 
+function listingIdsFromViewableItem(item: unknown): string[] {
+  if (item == null || typeof item !== 'object') return [];
+  if ('kind' in item) {
+    const row = item as HomeFeedGridRow;
+    if (row.kind !== 'cells') return [];
+    return row.cells
+      .filter((c): c is Exclude<typeof c, number> => typeof c !== 'number')
+      .map((c) => c.id);
+  }
+  if ('id' in item && typeof (item as { id: unknown }).id === 'string') {
+    return [(item as { id: string }).id];
+  }
+  return [];
+}
+
+export function viewableItemsIncludeListingId(
+  viewableItems: readonly ViewToken[],
+  listingId: string
+): boolean {
+  for (const token of viewableItems) {
+    if (token.isViewable === false) continue;
+    if (listingIdsFromViewableItem(token.item).includes(listingId)) return true;
+  }
+  return false;
+}
+
 export function createStableOnViewableItemsChanged(
   readEnabled: () => boolean,
   readRestoring: () => boolean,
-  writeAnchor: (anchor: ListingScrollAnchor | null) => void
+  readPending: () => PendingScrollToAnchor | null,
+  readLayoutEpoch: () => number,
+  writeAnchor: (anchor: ListingScrollAnchor | null) => void,
+  onRestoreConfirmed: () => void
 ): (info: ViewableChangeInfo) => void {
   return (info: ViewableChangeInfo) => {
-    if (!readEnabled() || readRestoring()) return;
+    if (!readEnabled()) return;
+
+    const pending = readPending();
+    const epoch = readLayoutEpoch();
+
+    if (pending && readRestoring() && pending.layoutEpoch === epoch) {
+      if (viewableItemsIncludeListingId(info.viewableItems, pending.listingId)) {
+        onRestoreConfirmed();
+      }
+      return;
+    }
+
+    if (readRestoring()) return;
+
     const anchor = pickListingScrollAnchor(info.viewableItems);
     if (anchor) writeAnchor(anchor);
   };
+}
+
+export type FlatListScrollLike = {
+  scrollToIndex: (opts: {
+    index: number;
+    viewPosition?: number;
+    animated?: boolean;
+  }) => void;
+  scrollToOffset?: (opts: { offset: number; animated?: boolean }) => void;
+};
+
+/** Machine d’état testable (FlatList mockée) — le hook l’alimente via refs. */
+export class HomeFeedScrollRestoreSession {
+  pending: PendingScrollToAnchor | null = null;
+  restoring = false;
+  layoutEpoch = 0;
+  unmounted = false;
+  anchor: ListingScrollAnchor | null = null;
+
+  constructor(private readonly listRef: { current: FlatListScrollLike | null }) {}
+
+  finishRestore(): void {
+    this.pending = null;
+    this.restoring = false;
+  }
+
+  cancelAll(): void {
+    this.layoutEpoch += 1;
+    this.finishRestore();
+  }
+
+  startRestore(pending: PendingScrollToAnchor): void {
+    this.pending = pending;
+    this.restoring = true;
+    this.invokeScrollToIndex();
+  }
+
+  /** Ne termine pas le pending : confirmation via viewables ou failure async. */
+  invokeScrollToIndex(): void {
+    const list = this.listRef.current;
+    const pending = this.pending;
+    if (!list || !pending || this.unmounted || pending.layoutEpoch !== this.layoutEpoch) {
+      this.finishRestore();
+      return;
+    }
+    try {
+      list.scrollToIndex({
+        index: pending.index,
+        viewPosition: pending.viewPosition,
+        animated: false,
+      });
+    } catch {
+      // Garde pending pour onScrollToIndexFailed ou confirmation viewable.
+    }
+  }
+
+  handleScrollToIndexFailed(info: ScrollIndexFailureInfo): void {
+    if (this.unmounted) return;
+
+    const plan = planScrollIndexFailureRetry(this.pending, this.layoutEpoch, info);
+
+    if (plan.kind === 'noop') return;
+    if (plan.kind === 'stop') {
+      this.finishRestore();
+      return;
+    }
+
+    this.pending = plan.pending;
+    const list = this.listRef.current;
+    if (!list) return;
+
+    list.scrollToOffset?.({ offset: plan.offset, animated: false });
+    this.invokeScrollToIndex();
+  }
+
+  handleViewableItemsChanged(info: ViewableChangeInfo, enabled: boolean): void {
+    const onChange = createStableOnViewableItemsChanged(
+      () => enabled,
+      () => this.restoring,
+      () => this.pending,
+      () => this.layoutEpoch,
+      (anchor) => {
+        if (anchor) this.anchor = anchor;
+      },
+      () => this.finishRestore()
+    );
+    onChange(info);
+  }
 }
 
 export function useHomeFeedGridScrollRestore({
@@ -104,26 +234,26 @@ export function useHomeFeedGridScrollRestore({
   const anchorRef = useRef<ListingScrollAnchor | null>(null);
   const prevColumnCountRef = useRef(columnCount);
   const prevUseGridRef = useRef(useGrid);
-  const restoringRef = useRef(false);
   const didMountRef = useRef(false);
   const enabledRef = useRef(enabled);
-  const layoutEpochRef = useRef(0);
-  const pendingScrollRef = useRef<PendingScrollToAnchor | null>(null);
-  const unmountedRef = useRef(false);
+  const sessionRef = useRef<HomeFeedScrollRestoreSession | null>(null);
 
   enabledRef.current = enabled;
+
+  if (!sessionRef.current) {
+    sessionRef.current = new HomeFeedScrollRestoreSession(listRef);
+  }
+
+  const session = sessionRef.current;
 
   const onViewableItemsChangedRef = useRef<
     ((info: ViewableChangeInfo) => void) | null
   >(null);
   if (!onViewableItemsChangedRef.current) {
-    onViewableItemsChangedRef.current = createStableOnViewableItemsChanged(
-      () => enabledRef.current,
-      () => restoringRef.current,
-      (anchor) => {
-        if (anchor) anchorRef.current = anchor;
-      }
-    );
+    onViewableItemsChangedRef.current = (info: ViewableChangeInfo) => {
+      session.handleViewableItemsChanged(info, enabledRef.current);
+      anchorRef.current = session.anchor;
+    };
   }
   const onViewableItemsChanged = onViewableItemsChangedRef.current;
 
@@ -132,72 +262,24 @@ export function useHomeFeedGridScrollRestore({
   >(null);
   if (!onScrollToIndexFailedRef.current) {
     onScrollToIndexFailedRef.current = (info: ScrollIndexFailureInfo) => {
-      const list = listRef.current;
-      if (!list || unmountedRef.current) return;
-
-      const plan = planScrollIndexFailureRetry(
-        pendingScrollRef.current,
-        layoutEpochRef.current,
-        info
-      );
-
-      if (plan.kind === 'noop' || plan.kind === 'stop') {
-        if (plan.kind === 'stop') {
-          pendingScrollRef.current = null;
-          restoringRef.current = false;
-        }
-        return;
-      }
-
-      pendingScrollRef.current = plan.pending;
-      list.scrollToOffset({ offset: plan.offset, animated: false });
-
-      const epochAtRetry = layoutEpochRef.current;
-      const pendingAtRetry = plan.pending;
-
-      requestAnimationFrame(() => {
-        if (unmountedRef.current || epochAtRetry !== layoutEpochRef.current) {
-          pendingScrollRef.current = null;
-          restoringRef.current = false;
-          return;
-        }
-        const liveList = listRef.current;
-        if (!liveList || pendingScrollRef.current?.layoutEpoch !== epochAtRetry) {
-          pendingScrollRef.current = null;
-          restoringRef.current = false;
-          return;
-        }
-        try {
-          liveList.scrollToIndex({
-            index: pendingAtRetry.index,
-            viewPosition: pendingAtRetry.viewPosition,
-            animated: false,
-          });
-        } catch {
-          return;
-        }
-        pendingScrollRef.current = null;
-        restoringRef.current = false;
-      });
+      session.handleScrollToIndexFailed(info);
     };
   }
   const onScrollToIndexFailed = onScrollToIndexFailedRef.current;
 
   useEffect(() => {
-    unmountedRef.current = false;
+    session.unmounted = false;
     return () => {
-      unmountedRef.current = true;
-      pendingScrollRef.current = null;
-      restoringRef.current = false;
-      layoutEpochRef.current += 1;
+      session.unmounted = true;
+      session.cancelAll();
     };
-  }, []);
+  }, [session]);
 
   useLayoutEffect(() => {
     if (!enabled) {
       prevColumnCountRef.current = columnCount;
       prevUseGridRef.current = useGrid;
-      pendingScrollRef.current = null;
+      session.finishRestore();
       return;
     }
 
@@ -216,9 +298,9 @@ export function useHomeFeedGridScrollRestore({
 
     if (!layoutModeChanged) return;
 
-    layoutEpochRef.current += 1;
-    const epoch = layoutEpochRef.current;
-    pendingScrollRef.current = null;
+    session.layoutEpoch += 1;
+    const epoch = session.layoutEpoch;
+    session.finishRestore();
 
     const anchor = anchorRef.current;
     if (!anchor) return;
@@ -228,11 +310,9 @@ export function useHomeFeedGridScrollRestore({
       return;
     }
 
-    const list = listRef.current;
-    if (!list) return;
+    if (!listRef.current) return;
 
-    restoringRef.current = true;
-    pendingScrollRef.current = {
+    const pending: PendingScrollToAnchor = {
       layoutEpoch: epoch,
       listingId: anchor.listingId,
       index: listIndex,
@@ -241,31 +321,13 @@ export function useHomeFeedGridScrollRestore({
     };
 
     requestAnimationFrame(() => {
-      if (unmountedRef.current || epoch !== layoutEpochRef.current) {
-        pendingScrollRef.current = null;
-        restoringRef.current = false;
+      if (session.unmounted || epoch !== session.layoutEpoch) {
+        session.finishRestore();
         return;
       }
-      const liveList = listRef.current;
-      const pending = pendingScrollRef.current;
-      if (!liveList || !pending || pending.layoutEpoch !== epoch) {
-        pendingScrollRef.current = null;
-        restoringRef.current = false;
-        return;
-      }
-      try {
-        liveList.scrollToIndex({
-          index: pending.index,
-          viewPosition: pending.viewPosition,
-          animated: false,
-        });
-        pendingScrollRef.current = null;
-        restoringRef.current = false;
-      } catch {
-        // Attendre onScrollToIndexFailed pour reprise bornée.
-      }
+      session.startRestore(pending);
     });
-  }, [enabled, columnCount, useGrid, flatData, gridRows, listRef]);
+  }, [enabled, columnCount, useGrid, flatData, gridRows, listRef, session]);
 
   return {
     onViewableItemsChanged,
