@@ -37,7 +37,17 @@ async function getEmailRichListing(admin: SupabaseClient, id: string, ownerId?: 
   const { data: images, error: imageError } = await admin.from('listing_images')
     .select('url').eq('listing_id', id).order('position', { ascending: true }).limit(1);
   if (imageError || !images?.[0]?.url) return null;
-  return { id: listing.id, title: listing.title, city: listing.city, price: listing.price, imageUrl: images[0].url };
+  // listing_images.url stores an object key (not an absolute URL).
+  // Build a public HTTPS URL from the existing public listing-images bucket.
+  const objectKey = String(images[0].url).trim();
+  const segments = objectKey.split('/');
+  if (segments.some((part) => !part || part === '.' || part === '..' ||
+      !/^[A-Za-z0-9_.-]+$/.test(part))) return null;
+  const { data: publicImage } = admin.storage.from('listing-images').getPublicUrl(objectKey);
+  const imageUrl = publicImage?.publicUrl ?? null;
+  if (!imageUrl) return null;
+  return { id: listing.id, title: listing.title, city: listing.city,
+    price: listing.price, imageUrl };
 }
 type ClaimedRow = {
   id: string;
