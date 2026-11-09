@@ -14,15 +14,15 @@ export type LifecycleRenderCampaignId =
   | 'listing_published_service';
 
 export const LIFECYCLE_BRAND = {
-  green: '#16A34A',
-  navy: '#0F172A',
-  bg: '#F8FAFC',
+  green: '#16834B',
+  navy: '#172B24',
+  bg: '#F1F6F3',
   muted: '#64748B',
   border: '#E2E8F0',
   bodyMuted: '#475569',
   webOrigin: 'https://www.youmbia.com',
   /** SVG officiel (200 OK). Outlook : fallback alt text. */
-  logoUrl: 'https://www.youmbia.com/brand/youmbia-logo-header.svg',
+  logoUrl: 'https://www.youmbia.com/brand/web-header-logo-1600x400.png',
   slogan: 'Achetez. Vendez. En confiance.',
 } as const;
 
@@ -416,6 +416,19 @@ export function renderLifecycleEmailHtml(input: LifecycleRenderInput): string {
     input.campaignId === 'listing_published_service'
       ? `Cet e-mail confirme la <strong>publication de votre annonce</strong> YOUMBIA (e-mail de service, pas marketing).`
       : `Cet e-mail confirme la <strong>création de votre compte</strong> YOUMBIA (e-mail de service, pas un e-mail de connexion ni marketing).`;
+  const storeFooterHtml =
+    input.campaignId === 'welcome_h0' || input.campaignId === 'listing_published_service' || channel === 'marketing'
+      ? '<table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="width:100%;max-width:600px;background:#0B4D3C;">'
+        + '<tr><td align="center" style="padding:22px 12px;text-align:center;">'
+        + '<p style="font-size:17px;color:#ffffff;font-weight:bold;margin:0 0 5px;">YOUMBIA, toujours à portée de main.</p>'
+        + '<p style="font-size:13px;color:#D5E8DD;margin:0 0 16px;">Retrouvez YOUMBIA sur votre téléphone.</p>'
+        + '<table role="presentation" align="center" cellspacing="0" cellpadding="0" border="0"><tr>'
+        + '<td style="padding:0 3px;"><a href="https://apps.apple.com/fr/app/youmbia/id6774914586">'
+        + '<img src="https://www.youmbia.com/brand/app-store-badge.png" width="128" alt="Télécharger YOUMBIA sur l’App Store" style="display:block;width:128px;height:auto;max-width:100%;border:0;"></a></td>'
+        + '<td style="padding:0 3px;"><a href="https://play.google.com/store/apps/details?id=com.youmbia.mobile">'
+        + '<img src="https://www.youmbia.com/brand/google-play-badge.png" width="128" alt="Télécharger YOUMBIA sur Google Play" style="display:block;width:128px;height:auto;max-width:100%;border:0;"></a></td>'
+        + '</tr></table></td></tr></table>'
+      : '';
   const footerHtml =
     channel === 'service'
       ? `<p style="text-align:center;font-size:12px;line-height:1.5;color:${muted};margin:16px 8px 0;max-width:640px;">
@@ -424,7 +437,7 @@ export function renderLifecycleEmailHtml(input: LifecycleRenderInput): string {
       : `<p style="text-align:center;font-size:12px;line-height:1.5;color:${muted};margin:16px 8px 0;max-width:640px;">
           Cet e-mail est une communication <strong>marketing</strong> YOUMBIA (pas un e-mail de connexion ni de sécurité).
           Vous le recevez car vous avez accepté les communications marketing.
-          <a href="${escapeLifecycleHtml(input.unsubscribeUrl)}" style="color:${muted};">Se désinscrire des e-mails marketing</a>${draftOptOutHtml}
+          <br /><a href="${escapeLifecycleHtml(input.unsubscribeUrl)}" style="display:inline-block;margin-top:12px;padding:12px 20px;border:1px solid ${muted};border-radius:8px;color:${muted};font-size:14px;font-weight:bold;text-decoration:none;">Se désinscrire des e-mails marketing</a>${draftOptOutHtml}
         </p>`;
 
   const ctaBlock =
@@ -455,13 +468,13 @@ export function renderLifecycleEmailHtml(input: LifecycleRenderInput): string {
   <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background:${bg};">
     <tr>
       <td align="center" style="padding:28px 16px;">
-        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="max-width:640px;background:#ffffff;border-radius:18px;border:1px solid ${border};">
+        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="max-width:600px;background:#ffffff;border-radius:18px;border:1px solid ${border};">
           <tr>
             <td style="padding:32px 28px;">
-              <div style="text-align:center;margin-bottom:16px;">
-                <img src="${logoUrl}" alt="YOUMBIA" width="180" height="46" style="height:46px;max-width:180px;border:0;display:inline-block;"/>
+              <div style="text-align:center;padding:23px 12px 15px;margin:-32px -28px 22px;background:#0B4D3C;">
+                <img src="${logoUrl}" alt="YOUMBIA" width="228" height="57" style="width:228px;height:auto;max-width:100%;border:8px solid #ffffff;border-radius:12px;display:inline-block;"/>
               </div>
-              <p style="text-align:center;font-size:13px;letter-spacing:0.04em;color:${muted};margin:0 0 8px;">${escapeLifecycleHtml(slogan)}</p>
+              <p style="text-align:center;font-size:13px;letter-spacing:0.04em;color:#0B4D3C;margin:0 0 8px;">${escapeLifecycleHtml(slogan)}</p>
               <p style="text-align:center;font-size:11px;letter-spacing:0.08em;text-transform:uppercase;color:${muted};margin:0 0 20px;">${channelLabel}</p>
               <p style="font-size:16px;line-height:1.6;margin:0 0 16px;">${greeting(input.fullName)}</p>
               ${bodyParagraphsHtml(input.campaignId, input.listingTitle, input.listingCity, input.discoveryListings)}
@@ -516,3 +529,4 @@ export function renderLifecycleEmailText(input: LifecycleRenderInput): string {
   void subject;
   return lines.join('\n');
 }
+
