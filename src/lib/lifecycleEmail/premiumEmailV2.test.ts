@@ -72,7 +72,7 @@ describe('EMAIL-UX-V2 safe premium lifecycle rendering', () => {
     const html = renderLifecycleEmailHtml({
       ...base, campaignId: 'first_listing_h24',
     });
-    expect(html).toContain('Publier gratuitement');
+    expect(html).toContain('publiez votre annonce gratuitement');
     expect(html).toContain('Se désinscrire');
   });
 });
