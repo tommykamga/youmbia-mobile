@@ -503,12 +503,19 @@ export function renderLifecycleEmailHtml(input: LifecycleRenderInput): string {
       <td align="center" style="padding:28px 16px;">
         <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="max-width:600px;background:#ffffff;border-radius:18px;border:1px solid ${border};">
           <tr>
-            <td style="padding:32px 28px;">
-              <div style="text-align:center;padding:23px 12px 15px;margin:-32px -28px 22px;background:#0B4D3C;">
-                <img src="${logoUrl}" alt="YOUMBIA" width="228" height="57" style="width:228px;height:auto;max-width:100%;border:8px solid #ffffff;border-radius:12px;display:inline-block;"/>
-              </div>
-              <p style="text-align:center;font-size:13px;letter-spacing:0.04em;color:#0B4D3C;margin:0 0 8px;">${escapeLifecycleHtml(slogan)}</p>
-              <p style="text-align:center;font-size:11px;letter-spacing:0.08em;text-transform:uppercase;color:${muted};margin:0 0 20px;">${channelLabel}</p>
+            <td align="center" bgcolor="#0B4D3C" style="background:#0B4D3C;padding:22px 10px 20px;text-align:center;">
+              <table role="presentation" align="center" cellspacing="0" cellpadding="0" border="0">
+                <tr><td align="center" bgcolor="#ffffff" style="padding:8px 10px;background:#ffffff;border-radius:12px;">
+                  <img src="${logoUrl}" alt="YOUMBIA" width="228" style="width:228px;max-width:100%;height:auto;display:block;border:0;"/>
+                </td></tr>
+              </table>
+              <p style="font-size:24px;line-height:30px;color:#ffffff;letter-spacing:1px;font-weight:bold;margin:10px 0 4px;">YOUMBIA</p>
+              <p style="font-size:13px;line-height:19px;color:#D5E8DD;margin:0;">${escapeLifecycleHtml(slogan)}</p>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:24px 22px 26px;">
+              <p style="font-size:11px;letter-spacing:0.08em;text-transform:uppercase;font-weight:bold;color:${green};margin:0 0 20px;">${channelLabel}</p>
               <p style="font-size:16px;line-height:1.6;margin:0 0 16px;">${greeting(input.fullName)}</p>
               ${bodyParagraphsHtml(input.campaignId, input.listingTitle, input.listingCity, input.discoveryListings, input.listingRich)}
               ${ctaBlock}
