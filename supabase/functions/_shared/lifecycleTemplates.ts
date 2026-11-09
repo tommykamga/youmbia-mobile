@@ -522,6 +522,7 @@ export function renderLifecycleEmailHtml(input: LifecycleRenderInput): string {
             </td>
           </tr>
         </table>
+        ${storeFooterHtml}
         ${footerHtml}
       </td>
     </tr>
