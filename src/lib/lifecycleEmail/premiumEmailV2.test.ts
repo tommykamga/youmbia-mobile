@@ -31,6 +31,24 @@ describe('EMAIL-UX-V2 safe premium lifecycle rendering', () => {
     expect(html).toContain('google-play-badge.png');
   });
 
+  it('accepts the real public Supabase listing-images URL and uses table-based header', () => {
+    const storageListing = {
+      ...listing,
+      imageUrl: 'https://ainzxommczlyjhymuwgu.supabase.co/storage/v1/object/public/listing-images/seller/listing/0.jpg',
+    };
+    const html = renderLifecycleEmailHtml({
+      ...base,
+      campaignId: 'weekly_discovery',
+      discoveryListings: [storageListing, storageListing, storageListing],
+    });
+    expect(html).toContain('listing-images/seller/listing/0.jpg');
+    expect(html).toContain('https://www.youmbia.com/annonce/' + id);
+    expect(html).toContain('bgcolor="#0B4D3C"');
+    expect(html).not.toContain('margin:-32px');
+    expect(html).toContain('app-store-badge.png');
+    expect(html).toContain('google-play-badge.png');
+  });
+
   it('refuses private/hostile image URLs and falls back to the legacy list', () => {
     const html = renderLifecycleEmailHtml({
       ...base,
