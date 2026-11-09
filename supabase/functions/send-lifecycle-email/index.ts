@@ -26,6 +26,19 @@ type CampaignId =
   | 'seller_activation'
   | 'listing_published_service';
 
+// EMAIL-UX-V2: only use active listing data and publicly retrievable images.
+async function getEmailRichListing(admin: SupabaseClient, id: string, ownerId?: string) {
+  if (!/^[a-f0-9-]{36}$/i.test(id)) return null;
+  let q = admin.from('listings').select('id,user_id,title,city,price,status,last_published_at')
+    .eq('id', id).eq('status', 'active').not('last_published_at', 'is', null);
+  if (ownerId) q = q.eq('user_id', ownerId);
+  const { data: listing, error } = await q.maybeSingle();
+  if (error || !listing || !Number.isSafeInteger(listing.price) || listing.price < 0) return null;
+  const { data: images, error: imageError } = await admin.from('listing_images')
+    .select('url').eq('listing_id', id).order('position', { ascending: true }).limit(1);
+  if (imageError || !images?.[0]?.url) return null;
+  return { id: listing.id, title: listing.title, city: listing.city, price: listing.price, imageUrl: images[0].url };
+}
 type ClaimedRow = {
   id: string;
   user_id: string;
@@ -327,19 +340,19 @@ Deno.serve(async (req) => {
             ? row.occurrence_key
             : null;
       const discoveryRaw = row.metadata?.listings;
+      // Read-only revalidation at send time; stale/deleted listings are omitted.
       const discoveryListings = Array.isArray(discoveryRaw)
-        ? discoveryRaw
-            .map((it) => {
-              if (!it || typeof it !== 'object') return null;
-              const rec = it as Record<string, unknown>;
-              const title = typeof rec.title === 'string' ? rec.title.trim() : '';
-              if (!title) return null;
-              return {
-                title,
-                city: typeof rec.city === 'string' ? rec.city : null,
-              };
-            })
-            .filter((x): x is { title: string; city: string | null } => x != null)
+        ? await Promise.all(discoveryRaw.slice(0, 3).map(async (item) => {
+            if (!item || typeof item !== 'object') return null;
+            const meta = item as Record<string, unknown>;
+            const id = typeof meta.id === 'string' ? meta.id : '';
+            return getEmailRichListing(admin, id);
+          }))
+        : null;
+      const safeDiscoveryListings = discoveryListings?.filter((x) => x !== null) ?? null;
+      // Service email must never render another user's listing.
+      const listingRich = row.campaign_id === 'listing_published_service' && listingId
+        ? await getEmailRichListing(admin, listingId, row.user_id)
         : null;
 
       // Source prénom : profiles.full_name uniquement (pas de first_name dédié).
@@ -364,7 +377,8 @@ Deno.serve(async (req) => {
         draftRemindersOptOutUrl: channel === 'service' ? null : draftRemindersOptOutUrl,
         listingTitle,
         listingCity,
-        discoveryListings,
+        discoveryListings: safeDiscoveryListings,
+        listingRich,
         webFallbackUrl: cta.webFallbackUrl,
       };
       const html = renderLifecycleEmailHtml(renderInput);
