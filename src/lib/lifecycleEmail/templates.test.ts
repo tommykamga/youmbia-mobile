@@ -48,7 +48,7 @@ describe('lifecycle templates FR brandés', () => {
     expect(pack.category).toBe('marketing');
     expect(pack.subject.length).toBeGreaterThan(5);
     expect(pack.html).toContain('YOUMBIA');
-    expect(pack.html).toContain('#16A34A');
+    expect(pack.html).toContain('#16834B');
     expect(pack.html).toContain('Communication marketing');
     expect(pack.html).toContain('Se désinscrire des e-mails marketing');
     expect(pack.html).not.toContain('magic link');
